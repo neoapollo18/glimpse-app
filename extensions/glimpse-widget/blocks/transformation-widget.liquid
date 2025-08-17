@@ -32,10 +32,11 @@
           <div class="upload-icon">📷</div>
           <p class="upload-text">{{ 'transformation.upload_text' | t: default: 'Upload your photo to see how you will look!' }}</p>
           <p class="upload-subtext">{{ 'transformation.upload_subtext' | t: default: 'Supports JPG, PNG files up to 5MB' }}</p>
-          <input type="file" id="imageUpload" accept="image/*" style="display: none;">
-          <button class="upload-button" type="button">
+          <!-- Simple, reliable file input with label styled as button -->
+          <input type="file" id="imageUpload" accept="image/jpeg,image/jpg,image/png,image/webp" style="position: absolute; opacity: 0; width: 0; height: 0; overflow: hidden;">
+          <label for="imageUpload" class="upload-button" id="uploadButtonLabel">
             {{ 'transformation.choose_photo' | t: default: 'Choose Photo' }}
-          </button>
+          </label>
         </div>
       </div>
 
@@ -152,16 +153,43 @@
   };
   
   window.widgetFunctions.resetTransformation = function() {
-    console.log('Resetting transformation');
-    const imageUpload = document.getElementById('imageUpload');
-    const beforeImage = document.getElementById('beforeImage');
-    const afterImage = document.getElementById('afterImage');
+    console.log('=== RESETTING TRANSFORMATION ===');
     
-    if (imageUpload) imageUpload.value = '';
-    if (beforeImage) beforeImage.src = '';
-    if (afterImage) afterImage.src = '';
-    
-    window.widgetFunctions.showSection('upload');
+    try {
+      const imageUpload = document.getElementById('imageUpload');
+      const beforeImage = document.getElementById('beforeImage');
+      const afterImage = document.getElementById('afterImage');
+      
+      // Clear file input
+      if (imageUpload) {
+        imageUpload.value = '';
+        console.log('File input cleared');
+      }
+      
+      // Clear images safely (remove event handlers first to prevent errors)
+      if (beforeImage) {
+        beforeImage.onload = null;
+        beforeImage.onerror = null;
+        beforeImage.src = '';
+        console.log('Before image cleared');
+      }
+      
+      if (afterImage) {
+        afterImage.onload = null;
+        afterImage.onerror = null;
+        afterImage.src = '';
+        console.log('After image cleared');
+      }
+      
+      // Show upload section
+      window.widgetFunctions.showSection('upload');
+      console.log('Reset to upload section');
+      
+    } catch (error) {
+      console.error('Error during reset:', error);
+      // Even if there's an error, make sure we show the upload section
+      window.widgetFunctions.showSection('upload');
+    }
   };
   
   window.widgetFunctions.addToCartAndClose = function() {
@@ -196,33 +224,63 @@
   };
 
   document.addEventListener('DOMContentLoaded', function() {
-    console.log('Widget loaded');
+    console.log('=== WIDGET INITIALIZING (SIMPLIFIED) ===');
     
     const imageUpload = document.getElementById('imageUpload');
     const beforeImage = document.getElementById('beforeImage');
     const afterImage = document.getElementById('afterImage');
+    const uploadDropzone = document.getElementById('uploadDropzone');
+    const uploadButtonLabel = document.getElementById('uploadButtonLabel');
     
-    // Ensure elements exist before adding event listeners
+    console.log('Elements found:', {
+      imageUpload: !!imageUpload,
+      beforeImage: !!beforeImage,
+      afterImage: !!afterImage,
+      uploadDropzone: !!uploadDropzone,
+      uploadButtonLabel: !!uploadButtonLabel
+    });
+    
+    // Ensure critical elements exist
     if (!imageUpload || !beforeImage || !afterImage) {
       console.error('Required widget elements not found');
       return;
     }
     
-    // Handle file upload
-    imageUpload.addEventListener('change', handleImageUpload);
-    
-    // Handle dropzone clicks and drag-and-drop
-    const uploadDropzone = document.getElementById('uploadDropzone');
-    const uploadButton = document.querySelector('.upload-button');
-    
-    if (uploadDropzone) {
-      uploadDropzone.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        console.log('Dropzone clicked');
-        imageUpload.click();
-      });
+    // SINGLE FILE INPUT HANDLER - Simple and reliable
+    imageUpload.addEventListener('change', function(event) {
+      console.log('=== FILE INPUT CHANGED ===');
+      const files = event.target.files;
+      console.log('Files object:', files);
+      console.log('Number of files:', files ? files.length : 0);
       
+      if (files && files.length > 0) {
+        const file = files[0];
+        console.log('Selected file from input:', {
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          lastModified: file.lastModified
+        });
+        
+        // Process the file - same as drag and drop
+        processSelectedFile(file);
+      } else {
+        console.log('No files selected from input');
+      }
+    });
+    
+    // Add click logging to the label for debugging
+    if (uploadButtonLabel) {
+      uploadButtonLabel.addEventListener('click', function(e) {
+        console.log('=== LABEL CLICKED ===');
+        console.log('Label target:', e.target);
+        console.log('Will trigger file input via for attribute');
+        // Don't prevent default - let the label work naturally
+      });
+    }
+    
+    // DRAG AND DROP HANDLER
+    if (uploadDropzone) {
       // Prevent default drag behaviors
       ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
         uploadDropzone.addEventListener(eventName, (e) => {
@@ -231,7 +289,7 @@
         }, false);
       });
       
-      // Highlight drop area when dragging over it
+      // Visual feedback for drag over
       ['dragenter', 'dragover'].forEach(eventName => {
         uploadDropzone.addEventListener(eventName, () => {
           uploadDropzone.style.borderColor = '#8b5cf6';
@@ -246,43 +304,55 @@
         }, false);
       });
       
-      // Handle dropped files
+      // Handle file drop
       uploadDropzone.addEventListener('drop', (e) => {
+        console.log('=== FILES DROPPED ===');
         const files = Array.from(e.dataTransfer.files);
+        console.log('Dropped files:', files.length);
+        
         if (files.length > 0) {
-          console.log('Files dropped:', files.length);
-          // Simulate file input change event
-          const fakeEvent = {
-            target: {
-              files: [files[0]],
-              value: ''
-            }
-          };
-          handleImageUpload(fakeEvent);
+          const file = files[0];
+          console.log('Processing dropped file:', {
+            name: file.name,
+            size: file.size,
+            type: file.type
+          });
+          
+          // Process the file directly - same as file input
+          processSelectedFile(file);
         }
       }, false);
-    }
-    
-    // Handle upload button clicks specifically
-    if (uploadButton) {
-      uploadButton.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        console.log('Upload button clicked');
-        imageUpload.click();
+      
+      // Handle dropzone clicks (but not label clicks)
+      uploadDropzone.addEventListener('click', (e) => {
+        if (e.target.id === 'uploadButtonLabel' || e.target.classList.contains('upload-button')) {
+          return; // Let label handler deal with it
+        }
+        
+        console.log('=== DROPZONE CLICKED ===');
+        if (imageUpload) {
+          console.log('Triggering file input from dropzone click');
+          imageUpload.click();
+        }
       });
     }
     
-    function handleImageUpload(event) {
-      const file = event.target.files[0];
+    function processSelectedFile(file) {
+      console.log('=== PROCESSING SELECTED FILE ===');
+      
       if (!file) {
-        console.log('No file selected');
+        console.log('No file provided');
         return;
       }
       
-      console.log('File selected:', file.name, 'Size:', file.size, 'Type:', file.type);
+      console.log('File details:', {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        lastModified: file.lastModified
+      });
       
-      // Reset any previous errors
+      // Reset any previous errors and show upload section
       window.widgetFunctions.showSection('upload');
       
       // Validate file type
@@ -290,67 +360,95 @@
       if (!allowedTypes.includes(file.type.toLowerCase())) {
         console.error('Invalid file type:', file.type);
         window.widgetFunctions.showError('Please upload a JPG, PNG, or WebP image.');
-        // Clear the input so user can try again
-        event.target.value = '';
         return;
       }
       
       // Validate file size (5MB limit for storefront)
       const maxSize = 5 * 1024 * 1024;
       if (file.size > maxSize) {
-        console.error('File too large:', file.size, 'Max:', maxSize);
+        console.error('File too large:', file.size, 'bytes. Max:', maxSize, 'bytes');
         window.widgetFunctions.showError('Image too large. Please upload an image smaller than 5MB.');
-        // Clear the input so user can try again
-        event.target.value = '';
         return;
       }
       
-      // Validate file is actually an image by checking for image data
+      // Validate file is not empty
       if (file.size === 0) {
         console.error('Empty file');
         window.widgetFunctions.showError('The selected file appears to be empty. Please try another image.');
-        event.target.value = '';
         return;
       }
+      
+      console.log('File validation passed, reading file...');
       
       // Show preview and start transformation
       const reader = new FileReader();
       
       reader.onload = function(e) {
+        console.log('=== FILE READ COMPLETE ===');
+        console.log('Data URL length:', e.target.result.length);
+        
         try {
-          console.log('File read successfully, data length:', e.target.result.length);
-          beforeImage.src = e.target.result;
-          
-          // Start transformation after a small delay to ensure image is displayed
-          setTimeout(() => {
-            transformImage(file);
-          }, 100);
+          // Set the preview image
+          const beforeImg = document.getElementById('beforeImage');
+          if (beforeImg) {
+            // Clear any existing handlers first
+            beforeImg.onload = null;
+            beforeImg.onerror = null;
+            
+            // Set up new handlers
+            beforeImg.onload = function() {
+              console.log('Preview image loaded successfully, starting transformation...');
+              // Clear the handlers to prevent them from firing later
+              beforeImg.onload = null;
+              beforeImg.onerror = null;
+              transformImage(file);
+            };
+            
+            beforeImg.onerror = function() {
+              console.error('Error loading preview image');
+              // Clear the handlers
+              beforeImg.onload = null;
+              beforeImg.onerror = null;
+              window.widgetFunctions.showError('Error displaying image preview. Please try again.');
+            };
+            
+            // Set the image source (this will trigger onload or onerror)
+            beforeImg.src = e.target.result;
+            console.log('Preview image source set');
+          } else {
+            console.error('beforeImage element not found');
+            transformImage(file); // Try transformation anyway
+          }
         } catch (error) {
           console.error('Error setting image preview:', error);
           window.widgetFunctions.showError('Error loading image preview. Please try again.');
-          event.target.value = '';
         }
       };
       
       reader.onerror = function(error) {
         console.error('FileReader error:', error);
         window.widgetFunctions.showError('Error reading the image file. Please try again.');
-        event.target.value = '';
       };
       
       reader.onabort = function() {
         console.log('FileReader aborted');
         window.widgetFunctions.showError('File reading was interrupted. Please try again.');
-        event.target.value = '';
+      };
+      
+      reader.onprogress = function(e) {
+        if (e.lengthComputable) {
+          const percentLoaded = Math.round((e.loaded / e.total) * 100);
+          console.log('File reading progress:', percentLoaded + '%');
+        }
       };
       
       // Read the file as data URL
       try {
+        console.log('Starting file read...');
         reader.readAsDataURL(file);
       } catch (error) {
         console.error('Error starting file read:', error);
         window.widgetFunctions.showError('Error reading the image file. Please try again.');
-        event.target.value = '';
       }
     }
     
