@@ -3,7 +3,7 @@
 client_id = "ac8f292f729eec24bdc34848c1558f5a"
 name = "glimpse-app-dev"
 handle = "glimpse-app-dev"
-application_url = "https://helena-efficiently-running-trustees.trycloudflare.com"
+application_url = "https://turtle-istanbul-w-verified.trycloudflare.com"
 embedded = true
 
 [build]
@@ -18,7 +18,7 @@ api_version = "2025-07"
 scopes = "write_products"
 
 [auth]
-redirect_urls = ["https://helena-efficiently-running-trustees.trycloudflare.com/auth/callback", "https://helena-efficiently-running-trustees.trycloudflare.com/auth/shopify/callback", "https://helena-efficiently-running-trustees.trycloudflare.com/api/auth/callback"]
+redirect_urls = ["https://turtle-istanbul-w-verified.trycloudflare.com/auth/callback", "https://turtle-istanbul-w-verified.trycloudflare.com/auth/shopify/callback", "https://turtle-istanbul-w-verified.trycloudflare.com/api/auth/callback"]
 
 [pos]
 embedded = false

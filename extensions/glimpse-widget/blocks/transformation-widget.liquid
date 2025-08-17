@@ -9,7 +9,7 @@
 
 <!-- Try It On Button (always visible) -->
 <div class="beauty-transformation-trigger" data-product-id="{{ product_id }}">
-  <button class="try-it-on-btn" onclick="openTransformationModal('{{ product_id }}', '{{ product.title | escape }}')">
+  <button class="try-it-on-btn" type="button" onclick="console.log('Button clicked!'); openTransformationModal('{{ product_id }}', '{{ product.title | escape }}');">
     <span class="try-it-icon">✨</span>
     {{ block.settings.button_text }}
   </button>
@@ -33,7 +33,7 @@
           <p class="upload-text">{{ 'transformation.upload_text' | t: default: 'Upload your photo to see how you will look!' }}</p>
           <p class="upload-subtext">{{ 'transformation.upload_subtext' | t: default: 'Supports JPG, PNG files up to 5MB' }}</p>
           <input type="file" id="imageUpload" accept="image/*" style="display: none;">
-          <button class="upload-button" onclick="document.getElementById('imageUpload').click()">
+          <button class="upload-button" type="button">
             {{ 'transformation.choose_photo' | t: default: 'Choose Photo' }}
           </button>
         </div>
@@ -110,18 +110,39 @@
   
   // Global functions for the widget
   window.openTransformationModal = function(productId, productTitle) {
-    console.log('Opening modal for product:', productId);
+    console.log('=== OPENING MODAL ===');
+    console.log('Product ID:', productId);
+    console.log('Product Title:', productTitle);
     
-    currentProductId = productId;
-    currentShopDomain = getShopDomain();
-    
-    console.log('Shop domain detected:', currentShopDomain);
-    console.log('App URL:', SHOPIFY_APP_URL);
-    
-    document.getElementById('modalProductTitle').textContent = productTitle;
-    document.getElementById('transformationModal').style.display = 'flex';
-    document.body.style.overflow = 'hidden'; // Prevent background scrolling
-    window.widgetFunctions.resetTransformation();
+    try {
+      currentProductId = productId;
+      currentShopDomain = getShopDomain();
+      
+      console.log('Shop domain detected:', currentShopDomain);
+      console.log('App URL:', SHOPIFY_APP_URL);
+      
+      const modal = document.getElementById('transformationModal');
+      const titleElement = document.getElementById('modalProductTitle');
+      
+      if (!modal) {
+        console.error('Modal element not found!');
+        return;
+      }
+      
+      if (!titleElement) {
+        console.error('Modal title element not found!');
+        return;
+      }
+      
+      titleElement.textContent = productTitle;
+      modal.style.display = 'flex';
+      document.body.style.overflow = 'hidden'; // Prevent background scrolling
+      
+      console.log('Modal opened successfully');
+      window.widgetFunctions.resetTransformation();
+    } catch (error) {
+      console.error('Error opening modal:', error);
+    }
   };
   
   window.closeTransformationModal = function() {
@@ -132,9 +153,14 @@
   
   window.widgetFunctions.resetTransformation = function() {
     console.log('Resetting transformation');
-    document.getElementById('imageUpload').value = '';
-    document.getElementById('beforeImage').src = '';
-    document.getElementById('afterImage').src = '';
+    const imageUpload = document.getElementById('imageUpload');
+    const beforeImage = document.getElementById('beforeImage');
+    const afterImage = document.getElementById('afterImage');
+    
+    if (imageUpload) imageUpload.value = '';
+    if (beforeImage) beforeImage.src = '';
+    if (afterImage) afterImage.src = '';
+    
     window.widgetFunctions.showSection('upload');
   };
   
@@ -176,16 +202,24 @@
     const beforeImage = document.getElementById('beforeImage');
     const afterImage = document.getElementById('afterImage');
     
-    // Handle file upload
-    if (imageUpload) {
-      imageUpload.addEventListener('change', handleImageUpload);
+    // Ensure elements exist before adding event listeners
+    if (!imageUpload || !beforeImage || !afterImage) {
+      console.error('Required widget elements not found');
+      return;
     }
+    
+    // Handle file upload
+    imageUpload.addEventListener('change', handleImageUpload);
     
     // Handle dropzone clicks and drag-and-drop
     const uploadDropzone = document.getElementById('uploadDropzone');
+    const uploadButton = document.querySelector('.upload-button');
+    
     if (uploadDropzone) {
       uploadDropzone.addEventListener('click', (e) => {
         e.preventDefault();
+        e.stopPropagation();
+        console.log('Dropzone clicked');
         imageUpload.click();
       });
       
@@ -216,6 +250,7 @@
       uploadDropzone.addEventListener('drop', (e) => {
         const files = Array.from(e.dataTransfer.files);
         if (files.length > 0) {
+          console.log('Files dropped:', files.length);
           // Simulate file input change event
           const fakeEvent = {
             target: {
@@ -226,6 +261,16 @@
           handleImageUpload(fakeEvent);
         }
       }, false);
+    }
+    
+    // Handle upload button clicks specifically
+    if (uploadButton) {
+      uploadButton.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('Upload button clicked');
+        imageUpload.click();
+      });
     }
     
     function handleImageUpload(event) {
@@ -313,8 +358,12 @@
       window.widgetFunctions.showSection('processing');
       
       try {
-        console.log('Starting transformation for product:', currentProductId);
+        console.log('=== STARTING TRANSFORMATION ===');
+        console.log('Product ID:', currentProductId);
         console.log('Shop domain:', currentShopDomain);
+        console.log('File name:', file.name);
+        console.log('File size:', file.size);
+        console.log('File type:', file.type);
         console.log('Current location:', window.location.href);
         console.log('Using app URL:', SHOPIFY_APP_URL);
         
@@ -332,14 +381,17 @@
         formData.append('productId', currentProductId);
         formData.append('shopDomain', currentShopDomain);
         
-        console.log('Sending request to API...');
+        console.log('FormData contents:');
+        for (let [key, value] of formData.entries()) {
+          console.log('-', key + ':', typeof value === 'object' ? value.name : value);
+        }
         
         // Use the app's domain for API calls
         const apiUrl = SHOPIFY_APP_URL.endsWith('/') 
           ? SHOPIFY_APP_URL + 'api/storefront/transform-image'
           : SHOPIFY_APP_URL + '/api/storefront/transform-image';
         
-        console.log('API URL:', apiUrl);
+        console.log('Making API request to:', apiUrl);
         
         const response = await fetch(apiUrl, {
           method: 'POST',
@@ -349,21 +401,24 @@
           }
         });
         
-        console.log('API response status:', response.status);
-        console.log('API response headers:', Object.fromEntries(response.headers.entries()));
+        console.log('=== API RESPONSE ===');
+        console.log('Status:', response.status);
+        console.log('Status text:', response.statusText);
+        console.log('Headers:', Object.fromEntries(response.headers.entries()));
         
         let result;
         const responseText = await response.text();
-        console.log('Raw response:', responseText);
+        console.log('Raw response body:', responseText);
+        console.log('Response length:', responseText.length);
         
         try {
           result = JSON.parse(responseText);
+          console.log('Parsed result:', result);
         } catch (parseError) {
           console.error('JSON parse error:', parseError);
+          console.error('Failed to parse response:', responseText.substring(0, 500));
           throw new Error('Invalid server response. Please try again.');
         }
-        
-        console.log('Parsed API result:', result);
         
         if (!response.ok) {
           throw new Error(result.error || `Server error: ${response.status}`);

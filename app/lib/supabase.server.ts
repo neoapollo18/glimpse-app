@@ -37,26 +37,62 @@ export async function getConfiguredProducts(shopDomain: string) {
 }
 
 export async function getProductConfiguration(shopDomain: string, shopifyId: string) {
+  console.log('Looking for product config:', { shopDomain, shopifyId });
+  
   const { data: shop } = await supabase
     .from('shops')
     .select('id')
     .eq('shop_domain', shopDomain)
     .single();
 
-  if (!shop) return null;
+  if (!shop) {
+    console.log('Shop not found for domain:', shopDomain);
+    return null;
+  }
+
+  console.log('Found shop:', shop.id);
+
+  // Handle both formats: numeric ID and full GID
+  // If we get just a number, convert it to GID format
+  let searchShopifyId = shopifyId;
+  if (!shopifyId.startsWith('gid://')) {
+    searchShopifyId = `gid://shopify/Product/${shopifyId}`;
+  }
+  
+  console.log('Searching for shopify_id:', searchShopifyId);
 
   const { data: product, error } = await supabase
     .from('products')
     .select('*')
     .eq('shop_id', shop.id)
-    .eq('shopify_id', shopifyId)
+    .eq('shopify_id', searchShopifyId)
     .single();
 
   if (error) {
     console.error('Error fetching product configuration:', error);
+    
+    // Also try searching with just the numeric part in case it's stored differently
+    if (shopifyId.includes('/')) {
+      const numericId = shopifyId.split('/').pop();
+      console.log('Trying with numeric ID:', numericId);
+      
+      const { data: altProduct, error: altError } = await supabase
+        .from('products')
+        .select('*')
+        .eq('shop_id', shop.id)
+        .eq('shopify_id', numericId)
+        .single();
+        
+      if (!altError && altProduct) {
+        console.log('Found product with numeric ID');
+        return altProduct;
+      }
+    }
+    
     return null;
   }
 
+  console.log('Found product:', product);
   return product;
 }
 
