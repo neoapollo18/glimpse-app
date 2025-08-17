@@ -1,8 +1,3 @@
-{% comment %}
-  AI Beauty Transformation Widget - Modal Version
-  Shows a "Try It On" button that opens a modal for transformations
-{% endcomment %}
-
 {% liquid
   assign product = block.settings.product | default: product
   unless product
@@ -10,12 +5,11 @@
   endunless
   
   assign product_id = product.id
-  assign app_url = block.settings.app_url | default: ''
 %}
 
 <!-- Try It On Button (always visible) -->
-<div class="beauty-transformation-trigger" data-product-id="{{ product_id }}" data-app-url="{{ app_url }}">
-  <button class="try-it-on-btn" onclick="openTransformationModal('{{ product_id }}', '{{ product.title | escape }}', '{{ app_url }}')">
+<div class="beauty-transformation-trigger" data-product-id="{{ product_id }}">
+  <button class="try-it-on-btn" onclick="openTransformationModal('{{ product_id }}', '{{ product.title | escape }}')">
     <span class="try-it-icon">✨</span>
     {{ block.settings.button_text }}
   </button>
@@ -90,15 +84,39 @@
   window.widgetFunctions = window.widgetFunctions || {};
   
   let currentProductId = null;
-  let currentAppUrl = null;
+  let currentShopDomain = null;
+  
+  // =====================================================
+  // CONFIGURATION: Update this URL to your deployed app
+  const SHOPIFY_APP_URL = 'https://glimpse-app-9zjc.onrender.com';
+  // =====================================================
+  
+  // Auto-detect shop domain from current URL
+  function getShopDomain() {
+    const hostname = window.location.hostname;
+    if (hostname.includes('.myshopify.com')) {
+      return hostname;
+    }
+    // For custom domains, we might need to find the shop domain differently
+    // For now, we'll extract it from the Shopify scripts or other indicators
+    const shopifyScripts = document.querySelectorAll('script[src*="myshopify.com"]');
+    if (shopifyScripts.length > 0) {
+      const scriptSrc = shopifyScripts[0].src;
+      const match = scriptSrc.match(/\/\/([^\/]+\.myshopify\.com)/);
+      if (match) return match[1];
+    }
+    return hostname; // Fallback to current hostname
+  }
   
   // Global functions for the widget
-  window.openTransformationModal = function(productId, productTitle, appUrl) {
+  window.openTransformationModal = function(productId, productTitle) {
     console.log('Opening modal for product:', productId);
-    console.log('App URL:', appUrl);
     
     currentProductId = productId;
-    currentAppUrl = appUrl;
+    currentShopDomain = getShopDomain();
+    
+    console.log('Shop domain detected:', currentShopDomain);
+    console.log('App URL:', SHOPIFY_APP_URL);
     
     document.getElementById('modalProductTitle').textContent = productTitle;
     document.getElementById('transformationModal').style.display = 'flex';
@@ -163,38 +181,132 @@
       imageUpload.addEventListener('change', handleImageUpload);
     }
     
-    // Handle dropzone clicks
+    // Handle dropzone clicks and drag-and-drop
     const uploadDropzone = document.getElementById('uploadDropzone');
     if (uploadDropzone) {
-      uploadDropzone.addEventListener('click', () => {
+      uploadDropzone.addEventListener('click', (e) => {
+        e.preventDefault();
         imageUpload.click();
       });
+      
+      // Prevent default drag behaviors
+      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        uploadDropzone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }, false);
+      });
+      
+      // Highlight drop area when dragging over it
+      ['dragenter', 'dragover'].forEach(eventName => {
+        uploadDropzone.addEventListener(eventName, () => {
+          uploadDropzone.style.borderColor = '#8b5cf6';
+          uploadDropzone.style.background = '#f3f0ff';
+        }, false);
+      });
+      
+      ['dragleave', 'drop'].forEach(eventName => {
+        uploadDropzone.addEventListener(eventName, () => {
+          uploadDropzone.style.borderColor = '#d1d5db';
+          uploadDropzone.style.background = '#fafbfb';
+        }, false);
+      });
+      
+      // Handle dropped files
+      uploadDropzone.addEventListener('drop', (e) => {
+        const files = Array.from(e.dataTransfer.files);
+        if (files.length > 0) {
+          // Simulate file input change event
+          const fakeEvent = {
+            target: {
+              files: [files[0]],
+              value: ''
+            }
+          };
+          handleImageUpload(fakeEvent);
+        }
+      }, false);
     }
     
     function handleImageUpload(event) {
       const file = event.target.files[0];
-      if (!file) return;
-      
-      console.log('File selected:', file.name, 'Size:', file.size, 'Type:', file.type);
-      
-      // Validate file
-      if (!['image/jpeg', 'image/jpg', 'image/png', 'image/webp'].includes(file.type)) {
-        window.widgetFunctions.showError('Please upload a JPG, PNG, or WebP image.');
+      if (!file) {
+        console.log('No file selected');
         return;
       }
       
-      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+      console.log('File selected:', file.name, 'Size:', file.size, 'Type:', file.type);
+      
+      // Reset any previous errors
+      window.widgetFunctions.showSection('upload');
+      
+      // Validate file type
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      if (!allowedTypes.includes(file.type.toLowerCase())) {
+        console.error('Invalid file type:', file.type);
+        window.widgetFunctions.showError('Please upload a JPG, PNG, or WebP image.');
+        // Clear the input so user can try again
+        event.target.value = '';
+        return;
+      }
+      
+      // Validate file size (5MB limit for storefront)
+      const maxSize = 5 * 1024 * 1024;
+      if (file.size > maxSize) {
+        console.error('File too large:', file.size, 'Max:', maxSize);
         window.widgetFunctions.showError('Image too large. Please upload an image smaller than 5MB.');
+        // Clear the input so user can try again
+        event.target.value = '';
+        return;
+      }
+      
+      // Validate file is actually an image by checking for image data
+      if (file.size === 0) {
+        console.error('Empty file');
+        window.widgetFunctions.showError('The selected file appears to be empty. Please try another image.');
+        event.target.value = '';
         return;
       }
       
       // Show preview and start transformation
       const reader = new FileReader();
+      
       reader.onload = function(e) {
-        beforeImage.src = e.target.result;
-        transformImage(file);
+        try {
+          console.log('File read successfully, data length:', e.target.result.length);
+          beforeImage.src = e.target.result;
+          
+          // Start transformation after a small delay to ensure image is displayed
+          setTimeout(() => {
+            transformImage(file);
+          }, 100);
+        } catch (error) {
+          console.error('Error setting image preview:', error);
+          window.widgetFunctions.showError('Error loading image preview. Please try again.');
+          event.target.value = '';
+        }
       };
-      reader.readAsDataURL(file);
+      
+      reader.onerror = function(error) {
+        console.error('FileReader error:', error);
+        window.widgetFunctions.showError('Error reading the image file. Please try again.');
+        event.target.value = '';
+      };
+      
+      reader.onabort = function() {
+        console.log('FileReader aborted');
+        window.widgetFunctions.showError('File reading was interrupted. Please try again.');
+        event.target.value = '';
+      };
+      
+      // Read the file as data URL
+      try {
+        reader.readAsDataURL(file);
+      } catch (error) {
+        console.error('Error starting file read:', error);
+        window.widgetFunctions.showError('Error reading the image file. Please try again.');
+        event.target.value = '';
+      }
     }
     
     async function transformImage(file) {
@@ -202,24 +314,30 @@
       
       try {
         console.log('Starting transformation for product:', currentProductId);
+        console.log('Shop domain:', currentShopDomain);
         console.log('Current location:', window.location.href);
-        console.log('Using app URL:', currentAppUrl);
+        console.log('Using app URL:', SHOPIFY_APP_URL);
         
-        // Validate app URL
-        if (!currentAppUrl || currentAppUrl === '') {
-          throw new Error('App URL not configured. Please set the App URL in the theme editor.');
+        // Validate configuration
+        if (!currentShopDomain) {
+          throw new Error('Could not determine shop domain. Please refresh the page and try again.');
+        }
+        
+        if (!SHOPIFY_APP_URL) {
+          throw new Error('App URL not configured. Please update the APP_URL in the widget code.');
         }
         
         const formData = new FormData();
         formData.append('image', file);
         formData.append('productId', currentProductId);
+        formData.append('shopDomain', currentShopDomain);
         
         console.log('Sending request to API...');
         
         // Use the app's domain for API calls
-        const apiUrl = currentAppUrl.endsWith('/') 
-          ? currentAppUrl + 'api/storefront/transform'
-          : currentAppUrl + '/api/storefront/transform';
+        const apiUrl = SHOPIFY_APP_URL.endsWith('/') 
+          ? SHOPIFY_APP_URL + 'api/storefront/transform-image'
+          : SHOPIFY_APP_URL + '/api/storefront/transform-image';
         
         console.log('API URL:', apiUrl);
         
@@ -301,12 +419,6 @@
       "id": "product",
       "label": "Product",
       "autofill": true
-    },
-    {
-      "type": "url",
-      "id": "app_url",
-      "label": "App URL",
-      "info": "Your Shopify app's URL (e.g., https://your-app.vercel.app or http://localhost:3000 for development)"
     },
     {
       "type": "text",

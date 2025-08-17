@@ -36,6 +36,30 @@ export async function getConfiguredProducts(shopDomain: string) {
   return products || [];
 }
 
+export async function getProductConfiguration(shopDomain: string, shopifyId: string) {
+  const { data: shop } = await supabase
+    .from('shops')
+    .select('id')
+    .eq('shop_domain', shopDomain)
+    .single();
+
+  if (!shop) return null;
+
+  const { data: product, error } = await supabase
+    .from('products')
+    .select('*')
+    .eq('shop_id', shop.id)
+    .eq('shopify_id', shopifyId)
+    .single();
+
+  if (error) {
+    console.error('Error fetching product configuration:', error);
+    return null;
+  }
+
+  return product;
+}
+
 export async function saveProductConfiguration(
   shopDomain: string,
   shopifyId: string,
