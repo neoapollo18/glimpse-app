@@ -1,0 +1,331 @@
+{% comment %}
+  AI Beauty Transformation Widget - Modal Version
+  Shows a "Try It On" button that opens a modal for transformations
+{% endcomment %}
+
+{% liquid
+  assign product = block.settings.product | default: product
+  unless product
+    assign product = product
+  endunless
+  
+  assign product_id = product.id
+  assign app_url = block.settings.app_url | default: ''
+%}
+
+<!-- Try It On Button (always visible) -->
+<div class="beauty-transformation-trigger" data-product-id="{{ product_id }}" data-app-url="{{ app_url }}">
+  <button class="try-it-on-btn" onclick="openTransformationModal('{{ product_id }}', '{{ product.title | escape }}', '{{ app_url }}')">
+    <span class="try-it-icon">✨</span>
+    {{ block.settings.button_text }}
+  </button>
+</div>
+
+<!-- Modal (hidden by default) -->
+<div class="transformation-modal-overlay" id="transformationModal" style="display: none;">
+  <div class="transformation-modal">
+    <div class="modal-header">
+      <h3 id="modalProductTitle">{{ block.settings.widget_title }}</h3>
+      <button class="modal-close" onclick="closeTransformationModal()">&times;</button>
+    </div>
+    
+    <div class="modal-content">
+      <p class="modal-description">{{ block.settings.widget_description }}</p>
+      
+      <!-- Upload Section -->
+      <div class="upload-section" id="uploadSection">
+        <div class="upload-dropzone" id="uploadDropzone">
+          <div class="upload-icon">📷</div>
+          <p class="upload-text">{{ 'transformation.upload_text' | t: default: 'Upload your photo to see how you will look!' }}</p>
+          <p class="upload-subtext">{{ 'transformation.upload_subtext' | t: default: 'Supports JPG, PNG files up to 5MB' }}</p>
+          <input type="file" id="imageUpload" accept="image/*" style="display: none;">
+          <button class="upload-button" onclick="document.getElementById('imageUpload').click()">
+            {{ 'transformation.choose_photo' | t: default: 'Choose Photo' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Processing Section -->
+      <div class="processing-section" id="processingSection" style="display: none;">
+        <div class="loading-spinner"></div>
+        <p>{{ 'transformation.processing' | t: default: 'Creating your transformation...' }}</p>
+      </div>
+
+      <!-- Results Section -->
+      <div class="results-section" id="resultsSection" style="display: none;">
+        <div class="before-after-container">
+          <div class="image-container">
+            <h4>{{ 'transformation.before' | t: default: 'Before' }}</h4>
+            <img id="beforeImage" alt="Before transformation" width="150" height="150">
+          </div>
+          <div class="image-container">
+            <h4>{{ 'transformation.after' | t: default: 'After' }}</h4>
+            <img id="afterImage" alt="After transformation" width="150" height="150">
+          </div>
+        </div>
+        
+        <div class="result-actions">
+          <button class="try-another-btn" onclick="window.widgetFunctions.resetTransformation()">
+            {{ 'transformation.try_another' | t: default: 'Try Another Photo' }}
+          </button>
+          <button class="add-to-cart-btn" onclick="window.widgetFunctions.addToCartAndClose()">
+            {{ 'transformation.add_to_cart' | t: default: 'Add to Cart' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Error Section -->
+      <div class="error-section" id="errorSection" style="display: none;">
+        <p class="error-message" id="errorMessage"></p>
+        <button class="try-again-btn" onclick="window.widgetFunctions.resetTransformation()">
+          {{ 'transformation.try_again' | t: default: 'Try Again' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Global namespace for widget functions
+  window.widgetFunctions = window.widgetFunctions || {};
+  
+  let currentProductId = null;
+  let currentAppUrl = null;
+  
+  // Global functions for the widget
+  window.openTransformationModal = function(productId, productTitle, appUrl) {
+    console.log('Opening modal for product:', productId);
+    console.log('App URL:', appUrl);
+    
+    currentProductId = productId;
+    currentAppUrl = appUrl;
+    
+    document.getElementById('modalProductTitle').textContent = productTitle;
+    document.getElementById('transformationModal').style.display = 'flex';
+    document.body.style.overflow = 'hidden'; // Prevent background scrolling
+    window.widgetFunctions.resetTransformation();
+  };
+  
+  window.closeTransformationModal = function() {
+    document.getElementById('transformationModal').style.display = 'none';
+    document.body.style.overflow = 'auto';
+    window.widgetFunctions.resetTransformation();
+  };
+  
+  window.widgetFunctions.resetTransformation = function() {
+    console.log('Resetting transformation');
+    document.getElementById('imageUpload').value = '';
+    document.getElementById('beforeImage').src = '';
+    document.getElementById('afterImage').src = '';
+    window.widgetFunctions.showSection('upload');
+  };
+  
+  window.widgetFunctions.addToCartAndClose = function() {
+    // Find the add to cart form
+    const form = document.querySelector('form[action*="/cart/add"]');
+    if (form) {
+      // Close modal first
+      closeTransformationModal();
+      // Then submit form
+      setTimeout(() => form.submit(), 100);
+    } else {
+      // Fallback - just close modal
+      closeTransformationModal();
+    }
+  };
+
+  window.widgetFunctions.showSection = function(section) {
+    console.log('Showing section:', section);
+    const sections = ['upload', 'processing', 'results', 'error'];
+    sections.forEach(s => {
+      const el = document.getElementById(`${s}Section`);
+      if (el) {
+        el.style.display = s === section ? 'block' : 'none';
+      }
+    });
+  };
+
+  window.widgetFunctions.showError = function(message) {
+    console.error('Widget error:', message);
+    document.getElementById('errorMessage').textContent = message;
+    window.widgetFunctions.showSection('error');
+  };
+
+  document.addEventListener('DOMContentLoaded', function() {
+    console.log('Widget loaded');
+    
+    const imageUpload = document.getElementById('imageUpload');
+    const beforeImage = document.getElementById('beforeImage');
+    const afterImage = document.getElementById('afterImage');
+    
+    // Handle file upload
+    if (imageUpload) {
+      imageUpload.addEventListener('change', handleImageUpload);
+    }
+    
+    // Handle dropzone clicks
+    const uploadDropzone = document.getElementById('uploadDropzone');
+    if (uploadDropzone) {
+      uploadDropzone.addEventListener('click', () => {
+        imageUpload.click();
+      });
+    }
+    
+    function handleImageUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      
+      console.log('File selected:', file.name, 'Size:', file.size, 'Type:', file.type);
+      
+      // Validate file
+      if (!['image/jpeg', 'image/jpg', 'image/png', 'image/webp'].includes(file.type)) {
+        window.widgetFunctions.showError('Please upload a JPG, PNG, or WebP image.');
+        return;
+      }
+      
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        window.widgetFunctions.showError('Image too large. Please upload an image smaller than 5MB.');
+        return;
+      }
+      
+      // Show preview and start transformation
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        beforeImage.src = e.target.result;
+        transformImage(file);
+      };
+      reader.readAsDataURL(file);
+    }
+    
+    async function transformImage(file) {
+      window.widgetFunctions.showSection('processing');
+      
+      try {
+        console.log('Starting transformation for product:', currentProductId);
+        console.log('Current location:', window.location.href);
+        console.log('Using app URL:', currentAppUrl);
+        
+        // Validate app URL
+        if (!currentAppUrl || currentAppUrl === '') {
+          throw new Error('App URL not configured. Please set the App URL in the theme editor.');
+        }
+        
+        const formData = new FormData();
+        formData.append('image', file);
+        formData.append('productId', currentProductId);
+        
+        console.log('Sending request to API...');
+        
+        // Use the app's domain for API calls
+        const apiUrl = currentAppUrl.endsWith('/') 
+          ? currentAppUrl + 'api/storefront/transform'
+          : currentAppUrl + '/api/storefront/transform';
+        
+        console.log('API URL:', apiUrl);
+        
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+          }
+        });
+        
+        console.log('API response status:', response.status);
+        console.log('API response headers:', Object.fromEntries(response.headers.entries()));
+        
+        let result;
+        const responseText = await response.text();
+        console.log('Raw response:', responseText);
+        
+        try {
+          result = JSON.parse(responseText);
+        } catch (parseError) {
+          console.error('JSON parse error:', parseError);
+          throw new Error('Invalid server response. Please try again.');
+        }
+        
+        console.log('Parsed API result:', result);
+        
+        if (!response.ok) {
+          throw new Error(result.error || `Server error: ${response.status}`);
+        }
+        
+        if (!result.success) {
+          throw new Error(result.error || 'Transformation failed');
+        }
+        
+        if (!result.generatedImage) {
+          throw new Error('No transformed image received');
+        }
+        
+        // Show result
+        afterImage.src = `data:image/jpeg;base64,${result.generatedImage}`;
+        window.widgetFunctions.showSection('results');
+        
+        console.log('Transformation completed successfully!');
+        
+      } catch (error) {
+        console.error('Transformation error:', error);
+        window.widgetFunctions.showError(error.message || 'Something went wrong. Please try again.');
+      }
+    }
+    
+    // Close modal when clicking overlay
+    document.getElementById('transformationModal').addEventListener('click', function(e) {
+      if (e.target === this) {
+        closeTransformationModal();
+      }
+    });
+    
+    // Close modal with Escape key
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && document.getElementById('transformationModal').style.display === 'flex') {
+        closeTransformationModal();
+      }
+    });
+  });
+</script>
+
+{% schema %}
+{
+  "name": "AI Beauty Transformation",
+  "target": "section",
+  "enabled_on": {
+    "templates": ["product"]
+  },
+  "stylesheet": "transformation-widget.css",
+  "settings": [
+    {
+      "type": "product",
+      "id": "product",
+      "label": "Product",
+      "autofill": true
+    },
+    {
+      "type": "url",
+      "id": "app_url",
+      "label": "App URL",
+      "info": "Your Shopify app's URL (e.g., https://your-app.vercel.app or http://localhost:3000 for development)"
+    },
+    {
+      "type": "text",
+      "id": "button_text",
+      "label": "Button Text",
+      "default": "Try It On"
+    },
+    {
+      "type": "text",
+      "id": "widget_title",
+      "label": "Modal Title",
+      "default": "See How You'll Look!"
+    },
+    {
+      "type": "textarea",
+      "id": "widget_description",
+      "label": "Modal Description",
+      "default": "Upload your photo and see how this product will look on you with AI-powered transformation."
+    }
+  ]
+}
+{% endschema %} 

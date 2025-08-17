@@ -1,0 +1,28 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "ac8f292f729eec24bdc34848c1558f5a"
+name = "glimpse-app-dev"
+handle = "glimpse-app-dev"
+application_url = "https://devel-instructor-parliamentary-impossible.trycloudflare.com"
+embedded = true
+
+[build]
+include_config_on_deploy = true
+automatically_update_urls_on_dev = true
+
+[webhooks]
+api_version = "2025-07"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "write_products"
+
+[auth]
+redirect_urls = [
+  "https://devel-instructor-parliamentary-impossible.trycloudflare.com/auth/callback",
+  "https://devel-instructor-parliamentary-impossible.trycloudflare.com/auth/shopify/callback",
+  "https://devel-instructor-parliamentary-impossible.trycloudflare.com/api/auth/callback",
+]
+
+[pos]
+embedded = false

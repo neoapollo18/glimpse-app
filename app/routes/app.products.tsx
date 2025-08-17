@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
-import { useLoaderData, useFetcher } from "@remix-run/react";
+import { useLoaderData, useFetcher, useSubmit } from "@remix-run/react";
 import {
   Page,
   Layout,
@@ -12,16 +12,19 @@ import {
   DataTable,
   Badge,
   TextField,
-  Select,
   Modal,
   FormLayout,
   Thumbnail,
+  Banner,
+  DropZone,
+  Spinner,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
+import { getConfiguredProducts, saveProductConfiguration } from "../lib/supabase.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
 
   // Fetch products from Shopify
   const response = await admin.graphql(`
@@ -64,38 +67,44 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   });
 
   const { data } = await response.json();
-  const products = data.products.edges.map(({ node }) => node);
+  const shopifyProducts = data.products.edges.map(({ node }: { node: any }) => node);
 
-  // TODO: Fetch configured products from Supabase
-  const configuredProducts = [];
+  // Fetch configured products from Supabase
+  const configuredProducts = await getConfiguredProducts(session.shop);
 
-  return { products, configuredProducts };
+  return { shopifyProducts, configuredProducts, shop: session.shop };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const formData = await request.formData();
   const action = formData.get("action");
 
   if (action === "configure") {
-    const productId = formData.get("productId");
-    const transformationPrompt = formData.get("transformationPrompt");
-    const category = formData.get("category");
+    try {
+      const shopifyProductId = formData.get("shopifyProductId");
+      const productTitle = formData.get("productTitle");
+      const transformationPrompt = formData.get("transformationPrompt");
 
-    // TODO: Save to Supabase
-    console.log("Configuring product:", {
-      productId,
-      transformationPrompt,
-      category
-    });
+      // Save to Supabase
+      await saveProductConfiguration(session.shop, shopifyProductId as string, productTitle as string, transformationPrompt as string);
 
-    return { success: true, message: "Product configured successfully!" };
+      return { success: true, message: "Product configured successfully!" };
+    } catch (error) {
+      console.error("Error saving product configuration:", error);
+      return { success: false, message: "Failed to save configuration. Please try again." };
+    }
+  }
+
+  if (action === "test") {
+    // TODO: Implement test transformation
+    return { success: true, message: "Test transformation initiated!" };
   }
 
   return { success: false, message: "Unknown action" };
 };
 
-interface Product {
+interface ShopifyProduct {
   id: string;
   title: string;
   handle: string;
@@ -122,39 +131,45 @@ interface Product {
   };
 }
 
+interface ConfiguredProduct {
+  id: string;
+  shopify_id: string;
+  product_name: string;
+  transformation_prompt: string;
+  created_at: string;
+}
+
 export default function Products() {
-  const { products, configuredProducts } = useLoaderData<typeof loader>();
+  const { shopifyProducts, configuredProducts } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const submit = useSubmit();
+  const [selectedProduct, setSelectedProduct] = useState<ShopifyProduct | null>(null);
   const [modalActive, setModalActive] = useState(false);
   const [transformationPrompt, setTransformationPrompt] = useState("");
-  const [category, setCategory] = useState("hair-color");
 
-  const categoryOptions = [
-    { label: "Hair Color", value: "hair-color" },
-    { label: "Makeup - Lipstick", value: "makeup-lipstick" },
-    { label: "Makeup - Eyeshadow", value: "makeup-eyeshadow" },
-    { label: "Makeup - Foundation", value: "makeup-foundation" },
-    { label: "Skincare - Glow", value: "skincare-glow" },
-    { label: "Skincare - Anti-aging", value: "skincare-antiaging" },
-  ];
+  // Test modal state
+  const [testModalActive, setTestModalActive] = useState(false);
+  const [selectedTestProduct, setSelectedTestProduct] = useState<ConfiguredProduct | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
+  const [transformedImageUrl, setTransformedImageUrl] = useState<string | null>(null);
+  const [isTransforming, setIsTransforming] = useState(false);
+  const [transformError, setTransformError] = useState<string | null>(null);
 
-  const isConfigured = (productId: string) => {
-    return configuredProducts.some((cp: any) => cp.productId === productId);
+  const isConfigured = (shopifyId: string) => {
+    return configuredProducts.some((cp) => cp.shopify_id === shopifyId);
   };
 
-  const handleConfigure = (product: Product) => {
+  const handleConfigure = (product: ShopifyProduct) => {
     setSelectedProduct(product);
     setModalActive(true);
     
-    // Set default prompt based on product type or tags
+    // Set default prompt based on product type
     if (product.productType.toLowerCase().includes("hair") || 
         product.tags.some(tag => tag.toLowerCase().includes("hair"))) {
-      setCategory("hair-color");
-      setTransformationPrompt("Transform the person's hair color to match this product. Ensure natural blending and realistic hair texture.");
+      setTransformationPrompt("Transform the person's hair color to match this product with natural blending and realistic texture.");
     } else if (product.productType.toLowerCase().includes("lipstick") ||
                product.tags.some(tag => tag.toLowerCase().includes("lipstick"))) {
-      setCategory("makeup-lipstick");
       setTransformationPrompt("Apply this lipstick color to the person's lips with natural, smooth coverage.");
     } else {
       setTransformationPrompt("Apply this beauty product effect to enhance the person's appearance naturally.");
@@ -166,16 +181,121 @@ export default function Products() {
 
     const formData = new FormData();
     formData.append("action", "configure");
-    formData.append("productId", selectedProduct.id);
+    formData.append("shopifyProductId", selectedProduct.id);
+    formData.append("productTitle", selectedProduct.title);
     formData.append("transformationPrompt", transformationPrompt);
-    formData.append("category", category);
 
-    fetcher.submit(formData, { method: "POST" });
+    submit(formData, { method: "POST" });
     setModalActive(false);
     setSelectedProduct(null);
+    setTransformationPrompt("");
   };
 
-  const tableRows = products.map((product: Product) => {
+  const handleTest = (configuredProduct: ConfiguredProduct) => {
+    setSelectedTestProduct(configuredProduct);
+    setTestModalActive(true);
+    // Reset modal state
+    setUploadedFile(null);
+    setUploadedImageUrl(null);
+    setTransformedImageUrl(null);
+    setTransformError(null);
+  };
+
+  const handleImageUpload = (files: File[]) => {
+    if (files.length > 0) {
+      const file = files[0];
+      setUploadedFile(file);
+      
+      // Create preview URL
+      const previewUrl = URL.createObjectURL(file);
+      setUploadedImageUrl(previewUrl);
+      setTransformedImageUrl(null);
+      setTransformError(null);
+    }
+  };
+
+  const handleTransformImage = async () => {
+    if (!uploadedFile || !selectedTestProduct) return;
+
+    setIsTransforming(true);
+    setTransformError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('image', uploadedFile);
+      formData.append('transformationPrompt', selectedTestProduct.transformation_prompt);
+
+      const response = await fetch('/api/transform-image', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Transformation failed');
+      }
+
+      // Convert base64 to blob URL for display
+      const base64Image = result.generatedImage;
+      const binaryString = atob(base64Image);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const blob = new Blob([bytes], { type: 'image/jpeg' });
+      const transformedUrl = URL.createObjectURL(blob);
+      
+      setTransformedImageUrl(transformedUrl);
+    } catch (error) {
+      console.error('Transform error:', error);
+      setTransformError(error instanceof Error ? error.message : 'Transformation failed');
+    } finally {
+      setIsTransforming(false);
+    }
+  };
+
+  const handleCloseTestModal = () => {
+    setTestModalActive(false);
+    setSelectedTestProduct(null);
+    setUploadedFile(null);
+    if (uploadedImageUrl) {
+      URL.revokeObjectURL(uploadedImageUrl);
+      setUploadedImageUrl(null);
+    }
+    if (transformedImageUrl) {
+      URL.revokeObjectURL(transformedImageUrl);
+      setTransformedImageUrl(null);
+    }
+    setTransformError(null);
+  };
+
+  // Configured Products Table
+  const configuredProductsRows = configuredProducts.map((product) => [
+    <InlineStack gap="300" key={product.id}>
+      <BlockStack gap="100">
+        <Text as="span" variant="bodyMd" fontWeight="semibold">
+          {product.product_name}
+        </Text>
+      </BlockStack>
+    </InlineStack>,
+    <Text as="span" variant="bodySm">
+      {product.transformation_prompt.length > 100 
+        ? `${product.transformation_prompt.substring(0, 100)}...` 
+        : product.transformation_prompt}
+    </Text>,
+    <InlineStack gap="200">
+      <Button size="slim" onClick={() => handleTest(product)}>
+        Test
+      </Button>
+      <Button variant="plain" size="slim">
+        Edit
+      </Button>
+    </InlineStack>,
+  ]);
+
+  // All Shopify Products Table
+  const allProductsRows = shopifyProducts.map((product: ShopifyProduct) => {
     const image = product.images.edges[0]?.node;
     const price = product.variants.edges[0]?.node?.price || "0";
     const configured = isConfigured(product.id);
@@ -196,15 +316,13 @@ export default function Products() {
           </Text>
         </BlockStack>
       </InlineStack>,
-      <Badge tone={configured ? "success" : "attention"}>
-        {configured ? "Configured" : "Not Configured"}
-      </Badge>,
       <Button
         variant={configured ? "plain" : "primary"}
         onClick={() => handleConfigure(product)}
         size="slim"
+        disabled={configured}
       >
-        {configured ? "Edit" : "Configure"}
+        {configured ? "Configured" : "Configure"}
       </Button>,
     ];
   });
@@ -214,24 +332,74 @@ export default function Products() {
       <TitleBar title="Product Configuration" />
       
       <BlockStack gap="500">
+        {fetcher.data?.success && (
+          <Banner
+            title={fetcher.data.message}
+            tone="success"
+            onDismiss={() => {}}
+          />
+        )}
+
+        {fetcher.data?.success === false && (
+          <Banner
+            title={fetcher.data.message}
+            tone="critical"
+            onDismiss={() => {}}
+          />
+        )}
+
+        {/* Configured Products Panel */}
         <Layout>
           <Layout.Section>
             <Card>
               <BlockStack gap="400">
                 <BlockStack gap="200">
                   <Text as="h2" variant="headingMd">
-                    Configure Products for AI Transformations
+                    Configured Products
                   </Text>
                   <Text as="p" variant="bodyMd" tone="subdued">
-                    Connect your beauty products to AI transformation prompts. 
-                    Each product will show a "Try it on" widget on your storefront.
+                    Products that are enabled for AI transformations
+                  </Text>
+                </BlockStack>
+
+                {configuredProducts.length > 0 ? (
+                  <DataTable
+                    columnContentTypes={["text", "text", "text"]}
+                    headings={["Product", "Transformation Prompt", "Actions"]}
+                    rows={configuredProductsRows}
+                  />
+                ) : (
+                  <Card>
+                    <BlockStack gap="200">
+                      <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
+                        No products configured yet. Configure your first product below to enable AI transformations.
+                      </Text>
+                    </BlockStack>
+                  </Card>
+                )}
+              </BlockStack>
+            </Card>
+          </Layout.Section>
+        </Layout>
+
+        {/* All Products Panel */}
+        <Layout>
+          <Layout.Section>
+            <Card>
+              <BlockStack gap="400">
+                <BlockStack gap="200">
+                  <Text as="h2" variant="headingMd">
+                    All Products
+                  </Text>
+                  <Text as="p" variant="bodyMd" tone="subdued">
+                    Select products to enable for AI transformations
                   </Text>
                 </BlockStack>
 
                 <DataTable
-                  columnContentTypes={["text", "text", "text"]}
-                  headings={["Product", "Status", "Action"]}
-                  rows={tableRows}
+                  columnContentTypes={["text", "text"]}
+                  headings={["Product", "Action"]}
+                  rows={allProductsRows}
                 />
               </BlockStack>
             </Card>
@@ -247,13 +415,13 @@ export default function Products() {
                       1. Select products to enable for AI transformations
                     </Text>
                     <Text as="p" variant="bodyMd">
-                      2. Customize the transformation prompt for each product
+                      2. Write a transformation prompt describing the effect
                     </Text>
                     <Text as="p" variant="bodyMd">
-                      3. The widget automatically appears on product pages
+                      3. Test the transformation with sample images
                     </Text>
                     <Text as="p" variant="bodyMd">
-                      4. Customers upload photos and see instant results
+                      4. The widget automatically appears on product pages
                     </Text>
                   </BlockStack>
                 </BlockStack>
@@ -280,6 +448,7 @@ export default function Products() {
         </Layout>
       </BlockStack>
 
+      {/* Configuration Modal */}
       <Modal
         open={modalActive}
         onClose={() => setModalActive(false)}
@@ -316,14 +485,6 @@ export default function Products() {
                   </BlockStack>
                 </InlineStack>
 
-                <Select
-                  label="Transformation Category"
-                  options={categoryOptions}
-                  value={category}
-                  onChange={setCategory}
-                  helpText="Choose the type of beauty transformation this product provides"
-                />
-
                 <TextField
                   label="AI Transformation Prompt"
                   value={transformationPrompt}
@@ -331,10 +492,151 @@ export default function Products() {
                   multiline={4}
                   helpText="Describe how the AI should transform the customer's photo when using this product"
                   placeholder="e.g., Transform the person's hair color to a vibrant red shade with natural highlights..."
+                  autoComplete="off"
                 />
               </BlockStack>
             </FormLayout>
           )}
+        </Modal.Section>
+      </Modal>
+
+      {/* Test Transformation Modal */}
+      <Modal
+        open={testModalActive}
+        onClose={handleCloseTestModal}
+        title="Test AI Transformation"
+        primaryAction={{
+          content: "Transform Image",
+          onAction: handleTransformImage,
+          loading: isTransforming,
+          disabled: !uploadedFile || isTransforming,
+        }}
+        secondaryActions={[
+          {
+            content: "Cancel",
+            onAction: handleCloseTestModal,
+          },
+        ]}
+      >
+        <Modal.Section>
+          <BlockStack gap="300">
+            {transformError && (
+              <Banner title={transformError} tone="critical" />
+            )}
+            
+            <Text as="h3" variant="headingMd">
+              {selectedTestProduct?.product_name}
+            </Text>
+            <Text as="p" variant="bodyMd" tone="subdued">
+              {selectedTestProduct?.transformation_prompt}
+            </Text>
+
+            {!uploadedImageUrl ? (
+              <DropZone
+                allowMultiple={false}
+                onDrop={handleImageUpload}
+                accept="image/*"
+              >
+                <BlockStack gap="200">
+                  <Text as="p" variant="bodyMd" alignment="center">
+                    Drop image here or click to upload
+                  </Text>
+                  <Text as="p" variant="bodySm" alignment="center" tone="subdued">
+                    Supports JPG, PNG, and WebP files up to 10MB
+                  </Text>
+                </BlockStack>
+              </DropZone>
+            ) : (
+              <BlockStack gap="300">
+                {/* Single image view (before transformation) */}
+                {!transformedImageUrl ? (
+                  <BlockStack gap="300" align="center">
+                    <Text as="p" variant="headingMd" fontWeight="semibold">Before</Text>
+                    <div style={{ 
+                      width: '100%', 
+                      maxWidth: '400px', 
+                      height: '300px',
+                      borderRadius: '8px',
+                      overflow: 'hidden',
+                      border: '1px solid #e1e3e5'
+                    }}>
+                      <img
+                        src={uploadedImageUrl}
+                        alt="Before transformation"
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover'
+                        }}
+                      />
+                    </div>
+                  </BlockStack>
+                ) : (
+                  /* Side by side view (before and after) */
+                  <InlineStack gap="400" align="center">
+                    <BlockStack gap="200" align="center">
+                      <Text as="p" variant="headingMd" fontWeight="semibold">Before</Text>
+                      <div style={{ 
+                        width: '200px', 
+                        height: '200px',
+                        borderRadius: '8px',
+                        overflow: 'hidden',
+                        border: '1px solid #e1e3e5'
+                      }}>
+                        <img
+                          src={uploadedImageUrl}
+                          alt="Before transformation"
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover'
+                          }}
+                        />
+                      </div>
+                    </BlockStack>
+                    
+                    <BlockStack gap="200" align="center">
+                      <Text as="p" variant="headingMd" fontWeight="semibold">After</Text>
+                      <div style={{ 
+                        width: '200px', 
+                        height: '200px',
+                        borderRadius: '8px',
+                        overflow: 'hidden',
+                        border: '1px solid #e1e3e5'
+                      }}>
+                        <img
+                          src={transformedImageUrl}
+                          alt="After transformation"
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover'
+                          }}
+                        />
+                      </div>
+                    </BlockStack>
+                  </InlineStack>
+                )}
+                
+                <Button
+                  variant="plain"
+                  onClick={() => {
+                    setUploadedFile(null);
+                    if (uploadedImageUrl) {
+                      URL.revokeObjectURL(uploadedImageUrl);
+                      setUploadedImageUrl(null);
+                    }
+                    if (transformedImageUrl) {
+                      URL.revokeObjectURL(transformedImageUrl);
+                      setTransformedImageUrl(null);
+                    }
+                  }}
+                >
+                  Upload Different Image
+                </Button>
+              </BlockStack>
+            )}
+          </BlockStack>
         </Modal.Section>
       </Modal>
     </Page>
