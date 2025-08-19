@@ -21,7 +21,7 @@ import {
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { getConfiguredProducts, saveProductConfiguration } from "../lib/supabase.server";
+import { getConfiguredProducts, saveProductConfiguration, updateProductConfiguration, deleteProductConfiguration } from "../lib/supabase.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
@@ -96,6 +96,35 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
   }
 
+  if (action === "update") {
+    try {
+      const configuredProductId = formData.get("configuredProductId");
+      const transformationPrompt = formData.get("transformationPrompt");
+
+      // Update in Supabase
+      await updateProductConfiguration(configuredProductId as string, transformationPrompt as string);
+
+      return { success: true, message: "Product configuration updated successfully!" };
+    } catch (error) {
+      console.error("Error updating product configuration:", error);
+      return { success: false, message: "Failed to update configuration. Please try again." };
+    }
+  }
+
+  if (action === "delete") {
+    try {
+      const configuredProductId = formData.get("configuredProductId");
+
+      // Delete from Supabase
+      await deleteProductConfiguration(configuredProductId as string);
+
+      return { success: true, message: "Product configuration deleted successfully!" };
+    } catch (error) {
+      console.error("Error deleting product configuration:", error);
+      return { success: false, message: "Failed to delete configuration. Please try again." };
+    }
+  }
+
   if (action === "test") {
     // TODO: Implement test transformation
     return { success: true, message: "Test transformation initiated!" };
@@ -144,7 +173,9 @@ export default function Products() {
   const fetcher = useFetcher<typeof action>();
   const submit = useSubmit();
   const [selectedProduct, setSelectedProduct] = useState<ShopifyProduct | null>(null);
+  const [selectedConfiguredProduct, setSelectedConfiguredProduct] = useState<ConfiguredProduct | null>(null);
   const [modalActive, setModalActive] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [transformationPrompt, setTransformationPrompt] = useState("");
 
   // Test modal state
@@ -162,32 +193,57 @@ export default function Products() {
 
   const handleConfigure = (product: ShopifyProduct) => {
     setSelectedProduct(product);
+    setSelectedConfiguredProduct(null);
+    setIsEditMode(false);
     setModalActive(true);
+  };
+
+  const handleEdit = (configuredProduct: ConfiguredProduct) => {
+    // Find the corresponding Shopify product for context
+    const shopifyProduct = shopifyProducts.find((p: ShopifyProduct) => p.id === configuredProduct.shopify_id);
     
-    // Set default prompt based on product type
-    if (product.productType.toLowerCase().includes("hair") || 
-        product.tags.some(tag => tag.toLowerCase().includes("hair"))) {
-      setTransformationPrompt("Transform the person's hair color to match this product with natural blending and realistic texture.");
-    } else if (product.productType.toLowerCase().includes("lipstick") ||
-               product.tags.some(tag => tag.toLowerCase().includes("lipstick"))) {
-      setTransformationPrompt("Apply this lipstick color to the person's lips with natural, smooth coverage.");
-    } else {
-      setTransformationPrompt("Apply this beauty product effect to enhance the person's appearance naturally.");
-    }
+    setSelectedProduct(shopifyProduct || null);
+    setSelectedConfiguredProduct(configuredProduct);
+    setIsEditMode(true);
+    setTransformationPrompt(configuredProduct.transformation_prompt);
+    setModalActive(true);
   };
 
   const handleSave = () => {
-    if (!selectedProduct) return;
+    if (!selectedProduct && !selectedConfiguredProduct) return;
 
     const formData = new FormData();
-    formData.append("action", "configure");
-    formData.append("shopifyProductId", selectedProduct.id);
-    formData.append("productTitle", selectedProduct.title);
-    formData.append("transformationPrompt", transformationPrompt);
+    if (isEditMode && selectedConfiguredProduct) {
+      formData.append("action", "update");
+      formData.append("configuredProductId", selectedConfiguredProduct.id);
+      formData.append("transformationPrompt", transformationPrompt);
+    } else if (selectedProduct) {
+      formData.append("action", "configure");
+      formData.append("shopifyProductId", selectedProduct.id);
+      formData.append("productTitle", selectedProduct.title);
+      formData.append("transformationPrompt", transformationPrompt);
+    }
 
     submit(formData, { method: "POST" });
     setModalActive(false);
     setSelectedProduct(null);
+    setSelectedConfiguredProduct(null);
+    setIsEditMode(false);
+    setTransformationPrompt("");
+  };
+
+  const handleDelete = () => {
+    if (!selectedConfiguredProduct) return;
+
+    const formData = new FormData();
+    formData.append("action", "delete");
+    formData.append("configuredProductId", selectedConfiguredProduct.id);
+
+    submit(formData, { method: "POST" });
+    setModalActive(false);
+    setSelectedProduct(null);
+    setSelectedConfiguredProduct(null);
+    setIsEditMode(false);
     setTransformationPrompt("");
   };
 
@@ -288,7 +344,7 @@ export default function Products() {
       <Button size="slim" onClick={() => handleTest(product)}>
         Test
       </Button>
-      <Button variant="plain" size="slim">
+      <Button variant="plain" size="slim" onClick={() => handleEdit(product)}>
         Edit
       </Button>
     </InlineStack>,
@@ -392,7 +448,7 @@ export default function Products() {
                     All Products
                   </Text>
                   <Text as="p" variant="bodyMd" tone="subdued">
-                    Select products to enable for AI transformations
+                    Select products to enable for AI virtual try-on
                   </Text>
                 </BlockStack>
 
@@ -421,7 +477,7 @@ export default function Products() {
                       3. Test the transformation with sample images
                     </Text>
                     <Text as="p" variant="bodyMd">
-                      4. The widget automatically appears on product pages
+                      4. Add the widget to your product pages
                     </Text>
                   </BlockStack>
                 </BlockStack>
@@ -432,10 +488,10 @@ export default function Products() {
                   <Text as="h3" variant="headingMd">Best Practices</Text>
                   <BlockStack gap="200">
                     <Text as="p" variant="bodyMd">
-                      • Use specific, descriptive prompts
+                      • Use specific, simple prompts
                     </Text>
                     <Text as="p" variant="bodyMd">
-                      • Match the prompt to your product category
+                      • Match the prompt to your product
                     </Text>
                     <Text as="p" variant="bodyMd">
                       • Test transformations before going live
@@ -452,38 +508,40 @@ export default function Products() {
       <Modal
         open={modalActive}
         onClose={() => setModalActive(false)}
-        title="Configure AI Transformation"
-        primaryAction={{
-          content: "Save Configuration",
-          onAction: handleSave,
-          loading: fetcher.state === "submitting",
-        }}
-        secondaryActions={[
-          {
-            content: "Cancel",
-            onAction: () => setModalActive(false),
-          },
-        ]}
+        title={isEditMode ? "Edit AI Transformation" : "Configure AI Transformation"}
       >
         <Modal.Section>
-          {selectedProduct && (
+          {(selectedProduct || selectedConfiguredProduct) && (
             <FormLayout>
               <BlockStack gap="300">
-                <InlineStack gap="300">
-                  <Thumbnail
-                    source={selectedProduct.images.edges[0]?.node?.url || ""}
-                    alt={selectedProduct.title}
-                    size="large"
-                  />
+                {selectedProduct && (
+                  <InlineStack gap="300">
+                    <Thumbnail
+                      source={selectedProduct.images.edges[0]?.node?.url || ""}
+                      alt={selectedProduct.title}
+                      size="large"
+                    />
+                    <BlockStack gap="100">
+                      <Text as="h3" variant="headingMd">
+                        {selectedProduct.title}
+                      </Text>
+                      <Text as="p" variant="bodyMd" tone="subdued">
+                        {selectedProduct.productType}
+                      </Text>
+                    </BlockStack>
+                  </InlineStack>
+                )}
+                
+                {!selectedProduct && selectedConfiguredProduct && (
                   <BlockStack gap="100">
                     <Text as="h3" variant="headingMd">
-                      {selectedProduct.title}
+                      {selectedConfiguredProduct.product_name}
                     </Text>
                     <Text as="p" variant="bodyMd" tone="subdued">
-                      {selectedProduct.productType}
+                      Edit transformation settings
                     </Text>
                   </BlockStack>
-                </InlineStack>
+                )}
 
                 <TextField
                   label="AI Transformation Prompt"
@@ -491,12 +549,45 @@ export default function Products() {
                   onChange={setTransformationPrompt}
                   multiline={4}
                   helpText="Describe how the AI should transform the customer's photo when using this product"
-                  placeholder="e.g., Transform the person's hair color to a vibrant red shade with natural highlights..."
+                  placeholder="e.g., Darken and thicken the person's eyelashes..."
                   autoComplete="off"
                 />
               </BlockStack>
             </FormLayout>
           )}
+        </Modal.Section>
+        
+        {/* Custom footer with delete on left, other actions on right */}
+        <Modal.Section>
+          <InlineStack align="space-between">
+            <div>
+              {isEditMode && (
+                <Button
+                  variant="plain"
+                  tone="critical"
+                  onClick={handleDelete}
+                  loading={fetcher.state === "submitting"}
+                >
+                  Delete Configuration
+                </Button>
+              )}
+            </div>
+            <InlineStack gap="200">
+              <Button
+                onClick={() => setModalActive(false)}
+                loading={fetcher.state === "submitting"}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleSave}
+                loading={fetcher.state === "submitting"}
+              >
+                {isEditMode ? "Update Configuration" : "Save Configuration"}
+              </Button>
+            </InlineStack>
+          </InlineStack>
         </Modal.Section>
       </Modal>
 
@@ -542,7 +633,7 @@ export default function Products() {
                     Drop image here or click to upload
                   </Text>
                   <Text as="p" variant="bodySm" alignment="center" tone="subdued">
-                    Supports JPG, PNG, and WebP files up to 10MB
+                    Supports all image formats up to 10MB
                   </Text>
                 </BlockStack>
               </DropZone>

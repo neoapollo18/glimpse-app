@@ -22,9 +22,9 @@ export default function App() {
   return (
     <div className={styles.index}>
       <div className={styles.content}>
-        <h1 className={styles.heading}>Glimpse - AI Beauty Transformations</h1>
+        <h1 className={styles.heading}>Glimpse - AI Product Visualizations</h1>
         <p className={styles.text}>
-          Let customers see how they'll look with your beauty products using AI-powered transformations. Increase conversions by letting shoppers try before they buy.
+          Let customers see how they'll look with your products using AI-powered transformations. Increase conversions by letting shoppers try before they buy.
         </p>
         {showForm && (
           <Form className={styles.form} method="post" action="/auth/login">
@@ -40,13 +40,13 @@ export default function App() {
         )}
         <ul className={styles.list}>
           <li>
-            <strong>AI Transformations</strong>. Customers upload photos and see realistic results with your beauty products using advanced AI technology.
+            <strong>AI Transformations</strong>. Customers upload photos and see realistic results with your products using advanced AI technology.
           </li>
           <li>
             <strong>Instant Setup</strong>. Configure products with simple transformation prompts in minutes. No technical knowledge required.
           </li>
           <li>
-            <strong>Boost Conversions</strong>. Proven to increase purchase confidence and reduce returns for hair color, makeup, and skincare products.
+            <strong>Boost Conversions</strong>. Proven to increase purchase confidence and reduce returns by letting customers visualize products on themselves.
           </li>
         </ul>
       </div>

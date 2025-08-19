@@ -8,7 +8,7 @@
 %}
 
 <!-- Try It On Button (always visible) -->
-<div class="beauty-transformation-trigger" data-product-id="{{ product_id }}">
+<div class="glimpse-transformation-trigger" data-product-id="{{ product_id }}">
   <button class="try-it-on-btn" type="button" onclick="console.log('Button clicked!'); openTransformationModal('{{ product_id }}', '{{ product.title | escape }}');">
     <span class="try-it-icon">✨</span>
     {{ block.settings.button_text }}
@@ -31,9 +31,9 @@
         <div class="upload-dropzone" id="uploadDropzone">
           <div class="upload-icon">📷</div>
           <p class="upload-text">{{ 'transformation.upload_text' | t: default: 'Upload your photo to see how you will look!' }}</p>
-          <p class="upload-subtext">{{ 'transformation.upload_subtext' | t: default: 'Supports JPG, PNG files up to 5MB' }}</p>
+          <p class="upload-subtext">{{ 'transformation.upload_subtext' | t: default: 'Supports all image formats up to 5MB' }}</p>
           <!-- Simple, reliable file input with label styled as button -->
-          <input type="file" id="imageUpload" accept="image/jpeg,image/jpg,image/png,image/webp" style="position: absolute; opacity: 0; width: 0; height: 0; overflow: hidden;">
+          <input type="file" id="imageUpload" accept="image/*" style="position: absolute; opacity: 0; width: 0; height: 0; overflow: hidden;">
           <label for="imageUpload" class="upload-button" id="uploadButtonLabel">
             {{ 'transformation.choose_photo' | t: default: 'Choose Photo' }}
           </label>
@@ -355,11 +355,10 @@
       // Reset any previous errors and show upload section
       window.widgetFunctions.showSection('upload');
       
-      // Validate file type
-      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-      if (!allowedTypes.includes(file.type.toLowerCase())) {
+      // Validate file type - check if it's an image
+      if (!file.type.startsWith('image/')) {
         console.error('Invalid file type:', file.type);
-        window.widgetFunctions.showError('Please upload a JPG, PNG, or WebP image.');
+        window.widgetFunctions.showError('Please upload an image file.');
         return;
       }
       
@@ -560,7 +559,7 @@
 
 {% schema %}
 {
-  "name": "AI Beauty Transformation",
+  "name": "Glimpse AI Transformation",
   "target": "section",
   "enabled_on": {
     "templates": ["product"]

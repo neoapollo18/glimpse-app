@@ -1,6 +1,6 @@
-# AI Beauty Transformation Widget
+# Glimpse AI Transformation Widget
 
-This Theme App Extension provides customers with AI-powered beauty transformations directly on product pages.
+This Theme App Extension provides customers with AI-powered product visualizations directly on product pages.
 
 ## How It Works
 
@@ -11,11 +11,11 @@ This Theme App Extension provides customers with AI-powered beauty transformatio
 
 ## Installation for Merchants
 
-1. Install the Beauty Transformation app
+1. Install the Glimpse app
 2. Configure products with transformation prompts in the app admin
 3. Go to your theme editor (Online Store > Themes > Customize)
 4. Navigate to a product page
-5. Add the "AI Beauty Transformation" block to your product page
+5. Add the "Glimpse AI Transformation" block to your product page
 6. Customize the widget title and description
 7. Save and publish
 
@@ -36,9 +36,7 @@ This Theme App Extension provides customers with AI-powered beauty transformatio
 
 ## Supported File Types
 
-- JPEG/JPG
-- PNG  
-- WebP
+- All image formats (JPEG, PNG, WebP, HEIC, etc.)
 - Maximum file size: 5MB
 
 ## Browser Support

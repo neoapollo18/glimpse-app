@@ -1,6 +1,6 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { transformImage } from "../lib/gemini.server";
+import { transformImage } from "../lib/ai.server";
 import { getProductConfiguration } from "../lib/supabase.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -62,11 +62,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     // Validate image file
     const maxSize = 5 * 1024 * 1024; // 5MB for storefront (smaller than admin)
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 
-    if (!allowedTypes.includes(imageFile.type)) {
+    // Check if it's actually an image by checking the file type starts with 'image/'
+    if (!imageFile.type.startsWith('image/')) {
       return json({ 
-        error: "Invalid file type. Please upload a JPEG, PNG, or WebP image." 
+        error: "Please upload an image file." 
       }, { 
         status: 400,
         headers: {
@@ -90,7 +90,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const arrayBuffer = await imageFile.arrayBuffer();
     const base64Image = Buffer.from(arrayBuffer).toString('base64');
 
-    // Call Gemini API with the product's transformation prompt
+    // Call OpenAI API with the product's transformation prompt
     const result = await transformImage({
       inputImage: base64Image,
       transformationPrompt: productConfig.transformation_prompt,

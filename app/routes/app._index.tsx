@@ -5,145 +5,68 @@ import {
   Text,
   Card,
   BlockStack,
-  InlineStack,
-  Badge,
-  ProgressBar,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
-
-  // TODO: Replace with real data from Supabase
-  const mockStats = {
-    totalTransformations: 1247,
-    thisWeekTransformations: 89,
-    conversionRate: 12.4,
-    enabledProducts: 0,
-    totalProducts: 0
-  };
-
-  return { stats: mockStats };
+  return {};
 };
 
 export default function Dashboard() {
-  // const { stats } = useLoaderData<typeof loader>();
-  
-  // Mock data for now
-  const stats = {
-    totalTransformations: 1247,
-    thisWeekTransformations: 89,
-    conversionRate: 12.4,
-    enabledProducts: 0,
-    totalProducts: 0
-  };
 
   return (
     <Page>
-      <TitleBar title="Beauty Transformation Dashboard" />
+      <TitleBar title="Glimpse Dashboard" />
       <BlockStack gap="500">
         <Layout>
           <Layout.Section>
             <Card>
               <BlockStack gap="400">
                 <Text as="h2" variant="headingMd">
-                  Welcome to AI Beauty Transformations
+                  Welcome to Glimpse
                 </Text>
                 <Text variant="bodyMd" as="p">
-                  Help your customers visualize how they'll look with your beauty products using AI-powered transformations. 
-                  Increase conversions by letting customers see the results before they buy!
+                  Let customers see how they'll look with your products using AI-powered transformations. 
+                  Increase conversions by letting customers try before they buy!
                 </Text>
-                {stats.enabledProducts === 0 && (
-                  <InlineStack gap="200" align="start">
-                    <Badge tone="attention">Setup Required</Badge>
-                    <Text variant="bodyMd" as="p">
-                      Get started by configuring your first product for AI transformations.
-                    </Text>
-                  </InlineStack>
-                )}
+                <Text variant="bodyMd" as="p" tone="subdued">
+                  Getting started is simple: configure your products, then add the widget to your product pages.
+                </Text>
               </BlockStack>
             </Card>
           </Layout.Section>
           
-          <Layout.Section variant="oneThird">
-            <BlockStack gap="400">
-              <Card>
-                <BlockStack gap="300">
-                  <Text as="h3" variant="headingMd">Quick Stats</Text>
-                  <BlockStack gap="200">
-                    <InlineStack align="space-between">
-                      <Text as="span" variant="bodyMd">Total Transformations</Text>
-                      <Text as="span" variant="headingMd">{stats.totalTransformations.toLocaleString()}</Text>
-                    </InlineStack>
-                    <InlineStack align="space-between">
-                      <Text as="span" variant="bodyMd">This Week</Text>
-                      <Text as="span" variant="headingMd" tone="success">+{stats.thisWeekTransformations}</Text>
-                    </InlineStack>
-                    <InlineStack align="space-between">
-                      <Text as="span" variant="bodyMd">Conversion Rate</Text>
-                      <Text as="span" variant="headingMd">{stats.conversionRate}%</Text>
-                    </InlineStack>
-                  </BlockStack>
-                </BlockStack>
-              </Card>
-              
-              <Card>
-                <BlockStack gap="300">
-                  <Text as="h3" variant="headingMd">Setup Progress</Text>
-                  <BlockStack gap="200">
-                                         <InlineStack align="space-between">
-                       <Text as="span" variant="bodyMd">Products Configured</Text>
-                       <Text as="span" variant="bodyMd">{stats.enabledProducts} of {stats.totalProducts}</Text>
-                     </InlineStack>
-                    <ProgressBar 
-                      progress={stats.totalProducts > 0 ? (stats.enabledProducts / stats.totalProducts) * 100 : 0} 
-                      size="small" 
-                    />
-                  </BlockStack>
-                </BlockStack>
-              </Card>
-            </BlockStack>
-          </Layout.Section>
+
         </Layout>
 
         <Layout>
           <Layout.Section>
             <Card>
               <BlockStack gap="400">
-                <Text as="h3" variant="headingMd">Next Steps</Text>
+                <Text as="h3" variant="headingMd">How It Works</Text>
                 <BlockStack gap="300">
-                  <InlineStack gap="300">
-                    <Badge tone={stats.enabledProducts > 0 ? "success" : "attention"}>
-                      {stats.enabledProducts > 0 ? "✓" : "1"}
-                    </Badge>
-                                         <BlockStack gap="100">
-                       <Text as="span" variant="bodyMd" fontWeight="semibold">Configure Products</Text>
-                       <Text as="p" variant="bodyMd" tone="subdued">
-                         Connect your beauty products to AI transformation prompts
-                       </Text>
-                     </BlockStack>
-                   </InlineStack>
+                  <BlockStack gap="100">
+                    <Text as="span" variant="bodyMd" fontWeight="semibold">1. Configure Products</Text>
+                    <Text as="p" variant="bodyMd" tone="subdued">
+                      Connect your products to AI transformation prompts in the Product Configuration tab
+                    </Text>
+                  </BlockStack>
                    
-                   <InlineStack gap="300">
-                     <Badge tone="attention">2</Badge>
-                     <BlockStack gap="100">
-                       <Text as="span" variant="bodyMd" fontWeight="semibold">Set Up API Keys</Text>
-                       <Text as="p" variant="bodyMd" tone="subdued">
-                         Configure Google Gemini API for AI transformations
-                       </Text>
-                     </BlockStack>
-                   </InlineStack>
+                  <BlockStack gap="100">
+                    <Text as="span" variant="bodyMd" fontWeight="semibold">2. Add Widget to Store</Text>
+                    <Text as="p" variant="bodyMd" tone="subdued">
+                      In your theme editor, add the "Glimpse" block to your product pages
+                    </Text>
+                  </BlockStack>
                    
-                   <InlineStack gap="300">
-                     <Badge tone="attention">3</Badge>
-                     <BlockStack gap="100">
-                       <Text as="span" variant="bodyMd" fontWeight="semibold">Deploy Widget</Text>
-                       <Text as="p" variant="bodyMd" tone="subdued">
-                         Add the transformation widget to your product pages
-                       </Text>
-                     </BlockStack>
-                  </InlineStack>
+                  <BlockStack gap="100">
+                    <Text as="span" variant="bodyMd" fontWeight="semibold">3. Customers Transform & Buy</Text>
+                    <Text as="p" variant="bodyMd" tone="subdued">
+                      Customers upload photos, see the transformation, and convert at higher rates
+                    </Text>
+                  </BlockStack>
                 </BlockStack>
               </BlockStack>
             </Card>

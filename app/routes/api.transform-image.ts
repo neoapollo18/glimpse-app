@@ -1,7 +1,7 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
-import { transformImage } from "../lib/gemini.server";
+import { transformImage } from "../lib/ai.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   try {
@@ -24,11 +24,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     // Validate image file
     const maxSize = 10 * 1024 * 1024; // 10MB
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 
-    if (!allowedTypes.includes(imageFile.type)) {
+    // Check if it's actually an image by checking the file type starts with 'image/'
+    if (!imageFile.type.startsWith('image/')) {
       return json({ 
-        error: "Invalid file type. Please upload a JPEG, PNG, or WebP image." 
+        error: "Please upload an image file." 
       }, { status: 400 });
     }
 
@@ -42,7 +42,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const arrayBuffer = await imageFile.arrayBuffer();
     const base64Image = Buffer.from(arrayBuffer).toString('base64');
 
-    // Call Gemini API
+    // Call OpenAI API
     const result = await transformImage({
       inputImage: base64Image,
       transformationPrompt: transformationPrompt,

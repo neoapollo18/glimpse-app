@@ -182,4 +182,51 @@ export async function saveProductConfiguration(
     console.error("Error in saveProductConfiguration:", error);
     throw error;
   }
+}
+
+export async function updateProductConfiguration(
+  configuredProductId: string,
+  transformationPrompt: string
+) {
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .update({
+        transformation_prompt: transformationPrompt
+      })
+      .eq('id', configuredProductId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Product update error:", error);
+      throw new Error(`Failed to update product configuration: ${error.message}`);
+    }
+
+    console.log('Product updated successfully:', data);
+    return data;
+  } catch (error) {
+    console.error("Error in updateProductConfiguration:", error);
+    throw error;
+  }
+}
+
+export async function deleteProductConfiguration(configuredProductId: string) {
+  try {
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', configuredProductId);
+
+    if (error) {
+      console.error("Product delete error:", error);
+      throw new Error(`Failed to delete product configuration: ${error.message}`);
+    }
+
+    console.log('Product deleted successfully');
+    return true;
+  } catch (error) {
+    console.error("Error in deleteProductConfiguration:", error);
+    throw error;
+  }
 } 

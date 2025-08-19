@@ -1,7 +1,7 @@
 {
   "transformation": {
     "upload_text": "Upload your photo to see how you will look!",
-    "upload_subtext": "Supports JPG, PNG files up to 5MB",
+    "upload_subtext": "Supports all image formats up to 5MB",
     "choose_photo": "Choose Photo",
     "processing": "Creating your transformation...",
     "before": "Before",

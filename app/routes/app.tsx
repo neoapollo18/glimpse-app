@@ -25,8 +25,6 @@ export default function App() {
           Dashboard
         </Link>
         <Link to="/app/products">Product Configuration</Link>
-        <Link to="/app/analytics">Analytics</Link>
-        <Link to="/app/settings">Settings</Link>
       </NavMenu>
       <Outlet />
     </AppProvider>
