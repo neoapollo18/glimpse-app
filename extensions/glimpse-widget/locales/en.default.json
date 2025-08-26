@@ -6,7 +6,10 @@
     "processing": "Creating your transformation...",
     "before": "Before",
     "after": "After",
+    "me": "Me",
+    "future_me": "Future Me",
     "try_another": "Try Another Photo",
+    "retry": "Retry",
     "add_to_cart": "Add to Cart",
     "try_again": "Try Again"
   }

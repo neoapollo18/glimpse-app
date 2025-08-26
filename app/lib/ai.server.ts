@@ -81,7 +81,7 @@ export async function transformImage(
       type: compressedMimeType 
     });
     
-    const prompt = `Product transformation description: "${request.transformationPrompt}". Edit this person's photo based on the product description so that it looks natural and realistic. Keep their facial features, hair, skin color, eye color, identity, and background the same. Apply subtle changes based EXACTLY on the product transformation description. Make the effect accurate but not exaggerated. AVOID anything that looks artificial, over-smoothed, cartoonish, or fake. Output ONLY the edited image based on ONLY the product description.`;
+    const prompt = `Product transformation description: "${request.transformationPrompt}". Edit this person's photo based on the product description so that it looks natural and realistic. Keep their facial features, hair, skin color, eye color, identity, and background the same. Apply subtle changes based EXACTLY on the product transformation description. Make the effect accurate but not exaggerated. AVOID anything that looks artificial, over-smoothed, cartoonish, or fake. Output ONLY the edited image based on ONLY the product description. The output should have the same orientation as the input image.`;
 
     const response = await client.images.edit({
       model: "gpt-image-1",

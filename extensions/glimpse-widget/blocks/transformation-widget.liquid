@@ -5,79 +5,171 @@
   endunless
   
   assign product_id = product.id
+  
+  # Use custom colors or defaults
+  assign primary_color_1 = block.settings.primary_color_1 | default: '#8b5cf6'
+  assign primary_color_2 = block.settings.primary_color_2 | default: '#7c3aed'
+  assign button_color_1 = block.settings.button_color_1 | default: '#8b5cf6'
+  assign button_color_2 = block.settings.button_color_2 | default: '#7c3aed'
+  assign caption_color_1 = block.settings.caption_color_1 | default: '#6b7280'
+  assign caption_color_2 = block.settings.caption_color_2 | default: '#9ca3af'
+  assign icon_color = block.settings.icon_color | default: '#8b5cf6'
+  assign background_color = block.settings.background_color | default: '#ffffff'
+  assign text_color = block.settings.text_color | default: '#1f2937'
 %}
 
-<!-- Try It On Button (always visible) -->
-<div class="glimpse-transformation-trigger" data-product-id="{{ product_id }}">
-  <button class="try-it-on-btn" type="button" onclick="console.log('Button clicked!'); openTransformationModal('{{ product_id }}', '{{ product.title | escape }}');">
-    <span class="try-it-icon">✨</span>
-    {{ block.settings.button_text }}
-  </button>
-</div>
-
-<!-- Modal (hidden by default) -->
-<div class="transformation-modal-overlay" id="transformationModal" style="display: none;">
-  <div class="transformation-modal">
-    <div class="modal-header">
-      <h3 id="modalProductTitle">{{ block.settings.widget_title }}</h3>
-      <button class="modal-close" onclick="closeTransformationModal()">&times;</button>
+<!-- Glimpse AI Transformation Widget -->
+<div class="glimpse-ai-widget" 
+     data-product-id="{{ product_id }}"
+     style="--primary-color-1: {{ primary_color_1 }}; 
+            --primary-color-2: {{ primary_color_2 }};
+            --button-color-1: {{ button_color_1 }}; 
+            --button-color-2: {{ button_color_2 }};
+            --caption-color-1: {{ caption_color_1 }};
+            --caption-color-2: {{ caption_color_2 }};
+            --icon-color: {{ icon_color }};
+            --background-color: {{ background_color }}; 
+            --text-color: {{ text_color }};">
+  
+  <!-- AI Preview Badge -->
+  <div class="ai-preview-badge">
+    {{ block.settings.badge_text | default: "AI Preview" }}
+  </div>
+  
+  <!-- Widget Header -->
+  <div class="widget-header">
+    <h2 class="widget-title">{{ block.settings.widget_title | default: "See My Glowup!" }}</h2>
+    
+    <!-- Star Icon -->
+    <div class="star-icon">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sparkle-icon lucide-sparkle"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/></svg>
     </div>
     
-    <div class="modal-content">
-      <p class="modal-description">{{ block.settings.widget_description }}</p>
+    <p class="widget-description">{{ block.settings.widget_description | default: "Upload an image of yourself and see your transformation" }}</p>
+  </div>
+  
+  <!-- Widget Content Area -->
+  <div class="widget-content">
+    
+    <!-- Initial/Upload State -->
+    <div class="upload-state" id="uploadState">
+      <div class="placeholder-image-container" onclick="window.widgetFunctions.triggerFileInput()">
+        {% if block.settings.placeholder_image %}
+          <img src="{{ block.settings.placeholder_image | image_url: width: 400 }}" 
+               alt="Transformation preview" 
+               class="placeholder-image"
+               width="400"
+               height="200">
+        {% else %}
+          <div class="default-placeholder">
+            <div class="placeholder-split">
+              <div class="placeholder-half placeholder-before"></div>
+              <div class="placeholder-half placeholder-after"></div>
+            </div>
+          </div>
+        {% endif %}
+      </div>
       
-      <!-- Upload Section -->
-      <div class="upload-section" id="uploadSection">
-        <div class="upload-dropzone" id="uploadDropzone">
-          <div class="upload-icon">📷</div>
-          <p class="upload-text">{{ 'transformation.upload_text' | t: default: 'Upload your photo to see how you will look!' }}</p>
-          <p class="upload-subtext">{{ 'transformation.upload_subtext' | t: default: 'Supports all image formats up to 5MB' }}</p>
-          <!-- Simple, reliable file input with label styled as button -->
-          <input type="file" id="imageUpload" accept="image/*" style="position: absolute; opacity: 0; width: 0; height: 0; overflow: hidden;">
-          <label for="imageUpload" class="upload-button" id="uploadButtonLabel">
-            {{ 'transformation.choose_photo' | t: default: 'Choose Photo' }}
-          </label>
-        </div>
-      </div>
-
-      <!-- Processing Section -->
-      <div class="processing-section" id="processingSection" style="display: none;">
+      <input type="file" 
+             id="imageUpload" 
+             accept="image/*" 
+             style="display: none;">
+      
+      <button class="upload-button" 
+              type="button" 
+              onclick="window.widgetFunctions.triggerFileInput()">
+        {{ block.settings.button_text | default: "Take A Photo" }}
+      </button>
+    </div>
+    
+    <!-- Processing State -->
+    <div class="processing-state" id="processingState" style="display: none;">
+      <div class="loading-container">
         <div class="loading-spinner"></div>
-        <p>{{ 'transformation.processing' | t: default: 'Creating your transformation...' }}</p>
+        <p class="loading-text">{{ 'transformation.processing' | t: default: 'Creating your transformation...' }}</p>
       </div>
-
-      <!-- Results Section -->
-      <div class="results-section" id="resultsSection" style="display: none;">
-        <div class="before-after-container">
-          <div class="image-container">
-            <h4>{{ 'transformation.before' | t: default: 'Before' }}</h4>
-            <img id="beforeImage" alt="Before transformation" width="150" height="150">
+    </div>
+    
+    <!-- Results State -->
+    <div class="results-state" id="resultsState" style="display: none;">
+      <div class="before-after-grid">
+        <div class="image-comparison">
+          <div class="comparison-item">
+            <div class="image-label">{{ 'transformation.me' | t: default: 'Me' }}</div>
+            <img id="beforeImage" alt="Before transformation" class="comparison-image" width="150" height="150">
           </div>
-          <div class="image-container">
-            <h4>{{ 'transformation.after' | t: default: 'After' }}</h4>
-            <img id="afterImage" alt="After transformation" width="150" height="150">
+          <div class="comparison-item">
+            <div class="image-label">{{ 'transformation.future_me' | t: default: 'Future Me' }}</div>
+            <img id="afterImage" alt="After transformation" class="comparison-image" width="150" height="150">
           </div>
         </div>
-        
-        <div class="result-actions">
-          <button class="try-another-btn" onclick="window.widgetFunctions.resetTransformation()">
-            {{ 'transformation.try_another' | t: default: 'Try Another Photo' }}
-          </button>
-          <button class="add-to-cart-btn" onclick="window.widgetFunctions.addToCartAndClose()">
-            {{ 'transformation.add_to_cart' | t: default: 'Add to Cart' }}
-          </button>
-        </div>
       </div>
-
-      <!-- Error Section -->
-      <div class="error-section" id="errorSection" style="display: none;">
+      
+      <div class="results-actions">
+        <button class="add-to-cart-button" 
+                type="button" 
+                onclick="window.widgetFunctions.addToCart()">
+          <svg class="cart-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="8" cy="21" r="1"/>
+            <circle cx="19" cy="21" r="1"/>
+            <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>
+          </svg>
+          {{ 'transformation.add_to_cart' | t: default: 'Add to Cart' }}
+        </button>
+        <button class="retry-button" 
+                type="button" 
+                onclick="window.widgetFunctions.resetTransformation()">
+          <svg class="retry-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+            <path d="M21 3v5h-5"/>
+            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+            <path d="M3 21v-5h5"/>
+          </svg>
+          {{ 'transformation.retry' | t: default: 'Retry' }}
+        </button>
+      </div>
+    </div>
+    
+    <!-- Error State -->
+    <div class="error-state" id="errorState" style="display: none;">
+      <div class="error-container">
+        <svg class="error-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 9v4"/>
+          <path d="M12 17h.01"/>
+          <path d="M3 7v12a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1z"/>
+          <path d="M21 7 12 2 3 7"/>
+        </svg>
         <p class="error-message" id="errorMessage"></p>
-        <button class="try-again-btn" onclick="window.widgetFunctions.resetTransformation()">
+        <button class="retry-button" 
+                type="button" 
+                onclick="window.widgetFunctions.resetTransformation()">
+          <svg class="retry-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+            <path d="M21 3v5h-5"/>
+            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+            <path d="M3 21v-5h5"/>
+          </svg>
           {{ 'transformation.try_again' | t: default: 'Try Again' }}
         </button>
       </div>
     </div>
+    
   </div>
+  
+  <!-- Widget Footer -->
+  <div class="widget-footer">
+    <div class="info-icon-container">
+      <svg class="info-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 16v-4"/>
+        <path d="M12 8h.01"/>
+      </svg>
+    </div>
+    <p class="disclaimer">
+      Results are not guaranteed, just a generated image
+    </p>
+  </div>
+  
 </div>
 
 <script>
@@ -109,47 +201,33 @@
     return hostname; // Fallback to current hostname
   }
   
-  // Global functions for the widget
-  window.openTransformationModal = function(productId, productTitle) {
-    console.log('=== OPENING MODAL ===');
-    console.log('Product ID:', productId);
-    console.log('Product Title:', productTitle);
+  // Initialize the widget
+  window.widgetFunctions.initWidget = function() {
+    console.log('=== INITIALIZING WIDGET ===');
     
-    try {
-      currentProductId = productId;
-      currentShopDomain = getShopDomain();
-      
-      console.log('Shop domain detected:', currentShopDomain);
-      console.log('App URL:', SHOPIFY_APP_URL);
-      
-      const modal = document.getElementById('transformationModal');
-      const titleElement = document.getElementById('modalProductTitle');
-      
-      if (!modal) {
-        console.error('Modal element not found!');
-        return;
-      }
-      
-      if (!titleElement) {
-        console.error('Modal title element not found!');
-        return;
-      }
-      
-      titleElement.textContent = productTitle;
-      modal.style.display = 'flex';
-      document.body.style.overflow = 'hidden'; // Prevent background scrolling
-      
-      console.log('Modal opened successfully');
-      window.widgetFunctions.resetTransformation();
-    } catch (error) {
-      console.error('Error opening modal:', error);
+    const widget = document.querySelector('.glimpse-ai-widget');
+    if (!widget) {
+      console.error('Widget not found');
+      return;
     }
+    
+    currentProductId = widget.getAttribute('data-product-id');
+    currentShopDomain = getShopDomain();
+    
+    console.log('Product ID:', currentProductId);
+    console.log('Shop domain:', currentShopDomain);
+    console.log('App URL:', SHOPIFY_APP_URL);
+    
+    // Show initial upload state
+    window.widgetFunctions.showState('upload');
   };
   
-  window.closeTransformationModal = function() {
-    document.getElementById('transformationModal').style.display = 'none';
-    document.body.style.overflow = 'auto';
-    window.widgetFunctions.resetTransformation();
+  window.widgetFunctions.triggerFileInput = function() {
+    console.log('=== TRIGGERING FILE INPUT ===');
+    const fileInput = document.getElementById('imageUpload');
+    if (fileInput) {
+      fileInput.click();
+    }
   };
   
   window.widgetFunctions.resetTransformation = function() {
@@ -181,63 +259,74 @@
         console.log('After image cleared');
       }
       
-      // Show upload section
-      window.widgetFunctions.showSection('upload');
-      console.log('Reset to upload section');
+      // Show upload state
+      window.widgetFunctions.showState('upload');
+      console.log('Reset to upload state');
       
     } catch (error) {
       console.error('Error during reset:', error);
-      // Even if there's an error, make sure we show the upload section
-      window.widgetFunctions.showSection('upload');
+      // Even if there's an error, make sure we show the upload state
+      window.widgetFunctions.showState('upload');
     }
   };
   
-  window.widgetFunctions.addToCartAndClose = function() {
+  window.widgetFunctions.addToCart = function() {
+    console.log('=== ADDING TO CART ===');
+    
     // Find the add to cart form
     const form = document.querySelector('form[action*="/cart/add"]');
     if (form) {
-      // Close modal first
-      closeTransformationModal();
-      // Then submit form
-      setTimeout(() => form.submit(), 100);
+      // Submit the form
+      form.submit();
     } else {
-      // Fallback - just close modal
-      closeTransformationModal();
+      // Fallback - try to find add to cart button and trigger it
+      const addToCartBtn = document.querySelector('[name="add"], .btn-product-form, .product-form__cart-submit, [data-add-to-cart]');
+      if (addToCartBtn) {
+        addToCartBtn.click();
+      } else {
+        console.warn('No add to cart form or button found');
+        // Could also show a message to the user
+        alert('Please add the product to cart manually');
+      }
     }
   };
 
-  window.widgetFunctions.showSection = function(section) {
-    console.log('Showing section:', section);
-    const sections = ['upload', 'processing', 'results', 'error'];
-    sections.forEach(s => {
-      const el = document.getElementById(`${s}Section`);
+  window.widgetFunctions.showState = function(state) {
+    console.log('Showing state:', state);
+    const states = ['upload', 'processing', 'results', 'error'];
+    states.forEach(s => {
+      const el = document.getElementById(`${s}State`);
       if (el) {
-        el.style.display = s === section ? 'block' : 'none';
+        el.style.display = s === state ? 'block' : 'none';
       }
     });
   };
 
   window.widgetFunctions.showError = function(message) {
     console.error('Widget error:', message);
-    document.getElementById('errorMessage').textContent = message;
-    window.widgetFunctions.showSection('error');
+    const errorMessage = document.getElementById('errorMessage');
+    if (errorMessage) {
+      errorMessage.textContent = message;
+    }
+    window.widgetFunctions.showState('error');
   };
 
   document.addEventListener('DOMContentLoaded', function() {
-    console.log('=== WIDGET INITIALIZING (SIMPLIFIED) ===');
+    console.log('=== WIDGET INITIALIZING ===');
+    
+    // Initialize the widget
+    window.widgetFunctions.initWidget();
     
     const imageUpload = document.getElementById('imageUpload');
     const beforeImage = document.getElementById('beforeImage');
     const afterImage = document.getElementById('afterImage');
-    const uploadDropzone = document.getElementById('uploadDropzone');
-    const uploadButtonLabel = document.getElementById('uploadButtonLabel');
+    const placeholderContainer = document.querySelector('.placeholder-image-container');
     
     console.log('Elements found:', {
       imageUpload: !!imageUpload,
       beforeImage: !!beforeImage,
       afterImage: !!afterImage,
-      uploadDropzone: !!uploadDropzone,
-      uploadButtonLabel: !!uploadButtonLabel
+      placeholderContainer: !!placeholderContainer
     });
     
     // Ensure critical elements exist
@@ -246,7 +335,7 @@
       return;
     }
     
-    // SINGLE FILE INPUT HANDLER - Simple and reliable
+    // FILE INPUT HANDLER
     imageUpload.addEventListener('change', function(event) {
       console.log('=== FILE INPUT CHANGED ===');
       const files = event.target.files;
@@ -262,28 +351,18 @@
           lastModified: file.lastModified
         });
         
-        // Process the file - same as drag and drop
+        // Process the file
         processSelectedFile(file);
       } else {
         console.log('No files selected from input');
       }
     });
     
-    // Add click logging to the label for debugging
-    if (uploadButtonLabel) {
-      uploadButtonLabel.addEventListener('click', function(e) {
-        console.log('=== LABEL CLICKED ===');
-        console.log('Label target:', e.target);
-        console.log('Will trigger file input via for attribute');
-        // Don't prevent default - let the label work naturally
-      });
-    }
-    
-    // DRAG AND DROP HANDLER
-    if (uploadDropzone) {
+    // DRAG AND DROP HANDLER for placeholder container
+    if (placeholderContainer) {
       // Prevent default drag behaviors
       ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-        uploadDropzone.addEventListener(eventName, (e) => {
+        placeholderContainer.addEventListener(eventName, (e) => {
           e.preventDefault();
           e.stopPropagation();
         }, false);
@@ -291,21 +370,21 @@
       
       // Visual feedback for drag over
       ['dragenter', 'dragover'].forEach(eventName => {
-        uploadDropzone.addEventListener(eventName, () => {
-          uploadDropzone.style.borderColor = '#8b5cf6';
-          uploadDropzone.style.background = '#f3f0ff';
+        placeholderContainer.addEventListener(eventName, () => {
+          placeholderContainer.style.opacity = '0.8';
+          placeholderContainer.style.transform = 'scale(1.02)';
         }, false);
       });
       
       ['dragleave', 'drop'].forEach(eventName => {
-        uploadDropzone.addEventListener(eventName, () => {
-          uploadDropzone.style.borderColor = '#d1d5db';
-          uploadDropzone.style.background = '#fafbfb';
+        placeholderContainer.addEventListener(eventName, () => {
+          placeholderContainer.style.opacity = '1';
+          placeholderContainer.style.transform = 'scale(1)';
         }, false);
       });
       
       // Handle file drop
-      uploadDropzone.addEventListener('drop', (e) => {
+      placeholderContainer.addEventListener('drop', (e) => {
         console.log('=== FILES DROPPED ===');
         const files = Array.from(e.dataTransfer.files);
         console.log('Dropped files:', files.length);
@@ -318,23 +397,10 @@
             type: file.type
           });
           
-          // Process the file directly - same as file input
+          // Process the file
           processSelectedFile(file);
         }
       }, false);
-      
-      // Handle dropzone clicks (but not label clicks)
-      uploadDropzone.addEventListener('click', (e) => {
-        if (e.target.id === 'uploadButtonLabel' || e.target.classList.contains('upload-button')) {
-          return; // Let label handler deal with it
-        }
-        
-        console.log('=== DROPZONE CLICKED ===');
-        if (imageUpload) {
-          console.log('Triggering file input from dropzone click');
-          imageUpload.click();
-        }
-      });
     }
     
     function processSelectedFile(file) {
@@ -352,8 +418,8 @@
         lastModified: file.lastModified
       });
       
-      // Reset any previous errors and show upload section
-      window.widgetFunctions.showSection('upload');
+      // Reset any previous errors and show upload state
+      window.widgetFunctions.showState('upload');
       
       // Validate file type - check if it's an image
       if (!file.type.startsWith('image/')) {
@@ -452,7 +518,7 @@
     }
     
     async function transformImage(file) {
-      window.widgetFunctions.showSection('processing');
+      window.widgetFunctions.showState('processing');
       
       try {
         console.log('=== STARTING TRANSFORMATION ===');
@@ -530,8 +596,11 @@
         }
         
         // Show result
-        afterImage.src = `data:image/jpeg;base64,${result.generatedImage}`;
-        window.widgetFunctions.showSection('results');
+        const afterImg = document.getElementById('afterImage');
+        if (afterImg) {
+          afterImg.src = `data:image/jpeg;base64,${result.generatedImage}`;
+        }
+        window.widgetFunctions.showState('results');
         
         console.log('Transformation completed successfully!');
         
@@ -540,20 +609,6 @@
         window.widgetFunctions.showError(error.message || 'Something went wrong. Please try again.');
       }
     }
-    
-    // Close modal when clicking overlay
-    document.getElementById('transformationModal').addEventListener('click', function(e) {
-      if (e.target === this) {
-        closeTransformationModal();
-      }
-    });
-    
-    // Close modal with Escape key
-    document.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape' && document.getElementById('transformationModal').style.display === 'flex') {
-        closeTransformationModal();
-      }
-    });
   });
 </script>
 
@@ -573,22 +628,109 @@
       "autofill": true
     },
     {
+      "type": "header",
+      "content": "Widget Content"
+    },
+    {
       "type": "text",
-      "id": "button_text",
-      "label": "Button Text",
-      "default": "Try It On"
+      "id": "badge_text",
+      "label": "AI Preview Badge Text",
+      "default": "AI Preview"
     },
     {
       "type": "text",
       "id": "widget_title",
-      "label": "Modal Title",
-      "default": "See How You'll Look!"
+      "label": "Widget Title",
+      "default": "See My Glowup!"
     },
     {
       "type": "textarea",
       "id": "widget_description",
-      "label": "Modal Description",
-      "default": "Upload your photo and see how this product will look on you with AI-powered transformation."
+      "label": "Widget Description",
+      "default": "Upload an image of yourself and see your transformation"
+    },
+    {
+      "type": "text",
+      "id": "button_text",
+      "label": "Upload Button Text",
+      "default": "Take A New Photo"
+    },
+    {
+      "type": "header",
+      "content": "Placeholder Image"
+    },
+    {
+      "type": "image_picker",
+      "id": "placeholder_image",
+      "label": "Custom Placeholder Image",
+      "info": "Upload a custom before/after preview image. If not set, a default split-face design will be used."
+    },
+    {
+      "type": "header",
+      "content": "Colors & Styling"
+    },
+    {
+      "type": "color",
+      "id": "primary_color_1",
+      "label": "Primary Color 1 (Start)",
+      "default": "#8b5cf6",
+      "info": "First color for primary gradient (used in labels and badges)"
+    },
+    {
+      "type": "color",
+      "id": "primary_color_2",
+      "label": "Primary Color 2 (End)",
+      "default": "#7c3aed",
+      "info": "Second color for primary gradient"
+    },
+    {
+      "type": "color",
+      "id": "button_color_1",
+      "label": "Button Color 1 (Start)",
+      "default": "#8b5cf6",
+      "info": "First color for button gradient"
+    },
+    {
+      "type": "color",
+      "id": "button_color_2",
+      "label": "Button Color 2 (End)",
+      "default": "#7c3aed",
+      "info": "Second color for button gradient"
+    },
+    {
+      "type": "color",
+      "id": "caption_color_1",
+      "label": "Caption Color 1 (Start)",
+      "default": "#6b7280",
+      "info": "First color for caption text gradient"
+    },
+    {
+      "type": "color",
+      "id": "caption_color_2",
+      "label": "Caption Color 2 (End)",
+      "default": "#9ca3af",
+      "info": "Second color for caption text gradient"
+    },
+    {
+      "type": "color",
+      "id": "icon_color",
+      "label": "Icon Color",
+      "default": "#8b5cf6",
+      "info": "Color for star and other icons"
+    },
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": "Widget Background",
+      "default": "#ffffff",
+      "info": "Background color of the entire widget"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Text Color",
+      "default": "#1f2937",
+      "info": "Main text color for titles"
     }
   ]
 }

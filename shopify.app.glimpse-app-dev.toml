@@ -3,7 +3,7 @@
 client_id = "ac8f292f729eec24bdc34848c1558f5a"
 name = "glimpse-app-dev"
 handle = "glimpse-app-dev"
-application_url = "https://wake-counts-sell-federal.trycloudflare.com"
+application_url = "https://localhost:3458"
 embedded = true
 
 [build]
@@ -18,7 +18,7 @@ api_version = "2025-07"
 scopes = "write_products"
 
 [auth]
-redirect_urls = ["https://wake-counts-sell-federal.trycloudflare.com/auth/callback", "https://wake-counts-sell-federal.trycloudflare.com/auth/shopify/callback", "https://wake-counts-sell-federal.trycloudflare.com/api/auth/callback"]
+redirect_urls = ["https://localhost:3458/auth/callback", "https://localhost:3458/auth/shopify/callback", "https://localhost:3458/api/auth/callback"]
 
 [pos]
 embedded = false

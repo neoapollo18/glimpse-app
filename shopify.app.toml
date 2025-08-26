@@ -7,7 +7,7 @@ application_url = "https://glimpse-app-9zjc.onrender.com"
 embedded = true
 
 [build]
-automatically_update_urls_on_dev = true
+automatically_update_urls_on_dev = false
 include_config_on_deploy = true
 
 [webhooks]
