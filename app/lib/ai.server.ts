@@ -1,8 +1,8 @@
-import OpenAI from "openai";
+import { GoogleGenAI, Modality } from "@google/genai";
 import sharp from "sharp";
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+const client = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
 });
 
 interface ImageTransformationRequest {
@@ -73,77 +73,84 @@ export async function transformImage(
       compressedMimeType,
     } = await compressImage(request.inputImage, request.mimeType);
     
-    // Convert compressed base64 to Buffer for OpenAI API
-    const imageBuffer = Buffer.from(compressedBase64, 'base64');
-    
-    // Create a File-like object from the compressed buffer
-    const imageFile = new File([imageBuffer], 'image', { 
-      type: compressedMimeType 
-    });
-    
-    const prompt = `Product transformation description: "${request.transformationPrompt}". Edit this person's photo based on the product description so that it looks natural and realistic. Keep their facial features, hair, skin color, eye color, identity, and background the same. Apply subtle changes based EXACTLY on the product transformation description. Make the effect accurate but not exaggerated. AVOID anything that looks artificial, over-smoothed, cartoonish, or fake. Output ONLY the edited image based on ONLY the product description. The output should have the same orientation as the input image.`;
+    const prompt = [
+      { 
+        text: `Product transformation description: "${request.transformationPrompt}". Edit this person's photo based on the product description so that it looks natural and realistic. Keep their facial features, hair, skin color, eye color, identity, and background the same. Apply subtle changes based EXACTLY on the product transformation description. Make the effect accurate but not exaggerated. AVOID anything that looks artificial, over-smoothed, cartoonish, or fake. Output ONLY the edited image based on ONLY the product description.` 
+      },
+      {
+        inlineData: {
+          mimeType: compressedMimeType,
+          data: compressedBase64
+        }
+      }
+    ]
 
-    const response = await client.images.edit({
-      model: "gpt-image-1",
-      image: imageFile,
-      prompt: prompt,
-      background: "opaque",
-      input_fidelity: "high",
-      quality: "low",
-      size: "1024x1024",
+    const response = await client.models.generateContent({
+      model: "gemini-2.5-flash-image-preview",
+      contents: prompt,
     });
 
-    // Check if response exists and has data
-    if (!response || !response.data || response.data.length === 0) {
-      throw new Error('No response generated from OpenAI API');
+    // Check if response exists and has candidates
+    if (!response || !response.candidates || response.candidates.length === 0) {
+      throw new Error('No response generated from Gemini API');
     }
 
-    const result = response.data[0];
-    if (!result || !result.b64_json) {
-      throw new Error('Invalid response structure from OpenAI API');
+    const candidate = response.candidates[0];
+    if (!candidate || !candidate.content || !candidate.content.parts) {
+      throw new Error('Invalid response structure from Gemini API');
+    }
+
+    // Find the image part in the response
+    let generatedImageData = null;
+    for (const part of candidate.content.parts) {
+      if (part.inlineData && part.inlineData.data) {
+        generatedImageData = part.inlineData.data;
+        break;
+      }
+    }
+
+    if (!generatedImageData) {
+      throw new Error('No image data found in Gemini API response');
     }
 
     return {
       success: true,
-      generatedImage: result.b64_json
+      generatedImage: generatedImageData
     };
 
   } catch (error) {
     console.error('Error in transformImage:', error);
     
-    // Handle specific OpenAI errors
-    if (error instanceof OpenAI.APIError) {
-      console.error('OpenAI API Error:', {
-        status: error.status,
+    // Handle Gemini API errors
+    let userMessage = 'AI transformation failed. Please try again.';
+    
+    if (error instanceof Error) {
+      console.error('Gemini API Error:', {
         message: error.message,
-        code: error.code,
-        type: error.type
+        stack: error.stack
       });
       
-      // Provide more user-friendly error messages
-      let userMessage = 'AI transformation failed. Please try again.';
-      
-      if (error.status === 400) {
+      // Provide more user-friendly error messages based on common error patterns
+      if (error.message?.includes('RATE_LIMIT') || error.message?.includes('429')) {
+        userMessage = 'Too many requests. Please wait a moment and try again.';
+      } else if (error.message?.includes('INVALID_ARGUMENT') || error.message?.includes('400')) {
         if (error.message?.includes('image')) {
           userMessage = 'The uploaded image could not be processed. Please try a different image.';
-        } else if (error.message?.includes('prompt')) {
-          userMessage = 'The transformation prompt is invalid. Please contact support.';
+        } else {
+          userMessage = 'Invalid request. Please check your input and try again.';
         }
-      } else if (error.status === 429) {
-        userMessage = 'Too many requests. Please wait a moment and try again.';
-      } else if (error.status >= 500) {
+      } else if (error.message?.includes('PERMISSION_DENIED') || error.message?.includes('401')) {
+        userMessage = 'Authentication failed. Please check your API configuration.';
+      } else if (error.message?.includes('RESOURCE_EXHAUSTED') || error.message?.includes('quota')) {
+        userMessage = 'Service quota exceeded. Please try again later.';
+      } else if (error.message?.includes('UNAVAILABLE') || error.message?.includes('500')) {
         userMessage = 'AI service is temporarily unavailable. Please try again later.';
       }
-      
-      return {
-        success: false,
-        error: userMessage
-      };
     }
     
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error occurred'
+      error: userMessage
     };
   }
 }
