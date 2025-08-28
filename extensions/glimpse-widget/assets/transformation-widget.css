@@ -5,8 +5,6 @@
   /* CSS Custom Properties for customization */
   --primary-color-1: #8b5cf6;
   --primary-color-2: #7c3aed;
-  --button-color-1: #8b5cf6;
-  --button-color-2: #7c3aed;
   --caption-color-1: #6b7280;
   --caption-color-2: #9ca3af;
   --icon-color: #8b5cf6;
@@ -27,36 +25,6 @@
   overflow: hidden;
 }
 
-/* AI Preview Badge */
-.ai-preview-badge {
-  background: linear-gradient(135deg, var(--primary-color-1), var(--primary-color-2));
-  color: white;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 8px 16px;
-  border-radius: 20px;
-  display: block;
-  margin: 0 auto 16px auto;
-  letter-spacing: 0.5px;
-  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
-  text-align: center;
-  width: fit-content;
-  position: relative;
-}
-
-.ai-preview-badge::before {
-  content: '';
-  position: absolute;
-  top: -2px;
-  left: -2px;
-  right: -2px;
-  bottom: -2px;
-  background: linear-gradient(135deg, var(--primary-color-1), var(--primary-color-2));
-  border-radius: 22px;
-  z-index: -1;
-  opacity: 0.3;
-}
-
 /* Widget Header */
 .widget-header {
   text-align: center;
@@ -65,10 +33,12 @@
 
 .widget-title {
   color: var(--text-color);
-  font-size: 24px;
-  font-weight: 700;
+  font-size: 36px;
+  font-weight: 600;
   margin: 0 0 8px 0;
   line-height: 1.2;
+  text-transform: none;
+  letter-spacing: -0.02em;
 }
 
 /* Star Icon */
@@ -192,7 +162,7 @@
 
 /* Upload Button */
 .upload-button {
-  background: linear-gradient(135deg, var(--button-color-1), var(--button-color-2));
+  background: linear-gradient(135deg, var(--primary-color-1), var(--primary-color-2));
   color: white;
   border: none;
   padding: 16px 32px;
@@ -225,7 +195,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 16px;
+  min-height: 100px;
+  width: 100%;
 }
 
 .loading-spinner {
@@ -235,11 +208,33 @@
   border-top: 3px solid var(--primary-color-1);
   border-radius: 50%;
   animation: spin 1s linear infinite;
+  display: block;
+  margin: 0 auto;
+  flex-shrink: 0;
+  /* Ensure visibility on all devices */
+  -webkit-animation: spin 1s linear infinite;
+  -moz-animation: spin 1s linear infinite;
+  -o-animation: spin 1s linear infinite;
 }
 
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+@-webkit-keyframes spin {
+  0% { -webkit-transform: rotate(0deg); }
+  100% { -webkit-transform: rotate(360deg); }
+}
+
+@-moz-keyframes spin {
+  0% { -moz-transform: rotate(0deg); }
+  100% { -moz-transform: rotate(360deg); }
+}
+
+@-o-keyframes spin {
+  0% { -o-transform: rotate(0deg); }
+  100% { -o-transform: rotate(360deg); }
 }
 
 .loading-text {
@@ -261,7 +256,7 @@
 .image-comparison {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  gap: 0;
   margin-bottom: 20px;
 }
 
@@ -284,11 +279,23 @@
 
 .comparison-image {
   width: 100%;
-  height: 150px;
+  height: 220px;
   object-fit: cover;
-  border-radius: 8px;
   border: 2px solid #e5e7eb;
+  border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  object-position: center;
+  image-orientation: from-image;
+  /* Ensure proper orientation on all devices */
+  -webkit-transform: none;
+  -moz-transform: none;
+  -ms-transform: none;
+  -o-transform: none;
+  transform: none;
+  /* Force vertical orientation for generated images */
+  image-rendering: auto;
+  image-rendering: crisp-edges;
+  image-rendering: -webkit-optimize-contrast;
 }
 
 /* Results Actions */
@@ -301,21 +308,20 @@
 }
 
 .add-to-cart-button {
-  background: linear-gradient(135deg, var(--button-color-1), var(--button-color-2));
+  background: linear-gradient(135deg, var(--primary-color-1), var(--primary-color-2));
   color: white;
   border: none;
-  padding: 14px 24px;
-  border-radius: 8px;
-  font-size: 15px;
+  padding: 16px 32px;
+  border-radius: 12px;
+  font-size: 16px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.3);
   display: inline-flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  max-width: 200px;
   justify-content: center;
 }
 
@@ -328,17 +334,16 @@
   background: #f9fafb;
   color: #374151;
   border: 1px solid #d1d5db;
-  padding: 12px 20px;
-  border-radius: 8px;
-  font-size: 14px;
+  padding: 16px 32px;
+  border-radius: 12px;
+  font-size: 16px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.3s ease;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
-  max-width: 200px;
   justify-content: center;
 }
 
@@ -423,7 +428,7 @@
   }
   
   .widget-title {
-    font-size: 20px;
+    font-size: 32px;
   }
   
   .placeholder-image,
@@ -437,14 +442,12 @@
   }
   
   .image-comparison {
-    grid-template-columns: 1fr;
-    gap: 20px;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
   }
   
   .comparison-image {
-    height: 180px;
-    max-width: 200px;
-    margin: 0 auto;
+    height: 200px;
   }
   
   .results-actions {
@@ -452,9 +455,29 @@
     align-items: center;
   }
   
-  .results-actions button {
+  /* Ensure loading spinner is visible on mobile */
+  .processing-state {
+    padding: 40px 10px;
+    min-height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .loading-container {
     width: 100%;
-    max-width: none;
+    min-height: 80px;
+  }
+  
+  .loading-spinner {
+    width: 36px;
+    height: 36px;
+    border-width: 3px;
+  }
+  
+  .loading-text {
+    font-size: 15px;
+    margin-top: 16px;
   }
 }
 

@@ -17,7 +17,7 @@ interface ImageTransformationResponse {
   error?: string;
 }
 
-// Compress image to ~320p for faster processing and lower costs
+// Compress image for faster processing and lower costs
 async function compressImage(base64Image: string, mimeType: string): Promise<{
   compressedBase64: string;
   compressedMimeType: string;
@@ -29,12 +29,13 @@ async function compressImage(base64Image: string, mimeType: string): Promise<{
     const inputBuffer = Buffer.from(base64Image, 'base64');
     const originalSize = inputBuffer.length;
     
-    // Use Sharp to resize image to max 320px on the larger dimension
+    // Use Sharp to resize image to max 480px on the larger dimension
     const compressedBuffer = await sharp(inputBuffer)
+      .rotate() // Auto-rotate based on EXIF orientation data
       .resize({
-        width: 320,
-        height: 320,
-        fit: 'inside', // Maintain aspect ratio, fit within 320x320
+        width: 480,
+        height: 480,
+        fit: 'inside', // Maintain aspect ratio
         withoutEnlargement: true // Don't upscale small images
       })
       .jpeg({ 
@@ -75,7 +76,7 @@ export async function transformImage(
     
     const prompt = [
       { 
-        text: `Product transformation description: "${request.transformationPrompt}". Edit this person's photo based on the product description so that it looks natural and realistic. Keep their facial features, hair, skin color, eye color, identity, and background the same. Apply subtle changes based EXACTLY on the product transformation description. Make the effect accurate but not exaggerated. AVOID anything that looks artificial, over-smoothed, cartoonish, or fake. Output ONLY the edited image based on ONLY the product description.` 
+        text: request.transformationPrompt
       },
       {
         inlineData: {

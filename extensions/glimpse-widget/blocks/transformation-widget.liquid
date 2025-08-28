@@ -9,8 +9,6 @@
   # Use custom colors or defaults
   assign primary_color_1 = block.settings.primary_color_1 | default: '#8b5cf6'
   assign primary_color_2 = block.settings.primary_color_2 | default: '#7c3aed'
-  assign button_color_1 = block.settings.button_color_1 | default: '#8b5cf6'
-  assign button_color_2 = block.settings.button_color_2 | default: '#7c3aed'
   assign caption_color_1 = block.settings.caption_color_1 | default: '#6b7280'
   assign caption_color_2 = block.settings.caption_color_2 | default: '#9ca3af'
   assign icon_color = block.settings.icon_color | default: '#8b5cf6'
@@ -23,18 +21,11 @@
      data-product-id="{{ product_id }}"
      style="--primary-color-1: {{ primary_color_1 }}; 
             --primary-color-2: {{ primary_color_2 }};
-            --button-color-1: {{ button_color_1 }}; 
-            --button-color-2: {{ button_color_2 }};
             --caption-color-1: {{ caption_color_1 }};
             --caption-color-2: {{ caption_color_2 }};
             --icon-color: {{ icon_color }};
             --background-color: {{ background_color }}; 
             --text-color: {{ text_color }};">
-  
-  <!-- AI Preview Badge -->
-  <div class="ai-preview-badge">
-    {{ block.settings.badge_text | default: "AI Preview" }}
-  </div>
   
   <!-- Widget Header -->
   <div class="widget-header">
@@ -86,7 +77,7 @@
     <div class="processing-state" id="processingState" style="display: none;">
       <div class="loading-container">
         <div class="loading-spinner"></div>
-        <p class="loading-text">{{ 'transformation.processing' | t: default: 'Creating your transformation...' }}</p>
+        <p class="loading-text">Analyzing image...</p>
       </div>
     </div>
     
@@ -166,7 +157,7 @@
       </svg>
     </div>
     <p class="disclaimer">
-      Results are not guaranteed, just a generated image
+      Results are not guaranteed, just a generated image. Images are never saved.
     </p>
   </div>
   
@@ -178,6 +169,15 @@
   
   let currentProductId = null;
   let currentShopDomain = null;
+  let loadingTextInterval = null;
+  
+  // Loading messages array
+  const loadingMessages = [
+    'Analyzing image...',
+    'Creating your transformation...',
+    'Working our magic...',
+    'Almost there...'
+  ];
   
   // =====================================================
   // CONFIGURATION: Update this URL to your deployed app
@@ -300,7 +300,40 @@
         el.style.display = s === state ? 'block' : 'none';
       }
     });
+    
+    // Handle loading text animation
+    if (state === 'processing') {
+      startLoadingTextAnimation();
+    } else {
+      stopLoadingTextAnimation();
+    }
   };
+  
+  function startLoadingTextAnimation() {
+    const loadingTextEl = document.querySelector('.loading-text');
+    if (!loadingTextEl) return;
+    
+    let currentIndex = 0;
+    loadingTextEl.textContent = loadingMessages[currentIndex];
+    
+    loadingTextInterval = setInterval(() => {
+      currentIndex++;
+      if (currentIndex < loadingMessages.length) {
+        loadingTextEl.textContent = loadingMessages[currentIndex];
+      } else {
+        // Stop on the last message
+        clearInterval(loadingTextInterval);
+        loadingTextInterval = null;
+      }
+    }, 3000); // Change every 3 seconds
+  }
+  
+  function stopLoadingTextAnimation() {
+    if (loadingTextInterval) {
+      clearInterval(loadingTextInterval);
+      loadingTextInterval = null;
+    }
+  }
 
   window.widgetFunctions.showError = function(message) {
     console.error('Widget error:', message);
@@ -598,6 +631,22 @@
         // Show result
         const afterImg = document.getElementById('afterImage');
         if (afterImg) {
+          // Clear any existing handlers
+          afterImg.onload = null;
+          afterImg.onerror = null;
+          
+          // Set up orientation handling
+          afterImg.onload = function() {
+            // Ensure proper orientation by forcing browser to respect image data
+            afterImg.style.imageOrientation = 'from-image';
+            afterImg.style.transform = 'none';
+            console.log('After image loaded successfully with proper orientation');
+          };
+          
+          afterImg.onerror = function() {
+            console.error('Error loading after image');
+          };
+          
           afterImg.src = `data:image/jpeg;base64,${result.generatedImage}`;
         }
         window.widgetFunctions.showState('results');
@@ -631,12 +680,7 @@
       "type": "header",
       "content": "Widget Content"
     },
-    {
-      "type": "text",
-      "id": "badge_text",
-      "label": "AI Preview Badge Text",
-      "default": "AI Preview"
-    },
+
     {
       "type": "text",
       "id": "widget_title",
@@ -663,7 +707,7 @@
       "type": "image_picker",
       "id": "placeholder_image",
       "label": "Custom Placeholder Image",
-      "info": "Upload a custom before/after preview image. If not set, a default split-face design will be used."
+      "info": "Upload a custom before/after preview image."
     },
     {
       "type": "header",
@@ -674,7 +718,7 @@
       "id": "primary_color_1",
       "label": "Primary Color 1 (Start)",
       "default": "#8b5cf6",
-      "info": "First color for primary gradient (used in labels and badges)"
+      "info": "First color for primary gradient"
     },
     {
       "type": "color",
@@ -683,20 +727,7 @@
       "default": "#7c3aed",
       "info": "Second color for primary gradient"
     },
-    {
-      "type": "color",
-      "id": "button_color_1",
-      "label": "Button Color 1 (Start)",
-      "default": "#8b5cf6",
-      "info": "First color for button gradient"
-    },
-    {
-      "type": "color",
-      "id": "button_color_2",
-      "label": "Button Color 2 (End)",
-      "default": "#7c3aed",
-      "info": "Second color for button gradient"
-    },
+
     {
       "type": "color",
       "id": "caption_color_1",
