@@ -29,13 +29,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return new Response("OK", { status: 200 });
   } catch (error) {
     console.error("Webhook processing error:", error);
-    
-    // Return 401 for HMAC verification failures as required by Shopify
-    if (error instanceof Error && error.message.includes("HMAC")) {
-      return new Response("Unauthorized", { status: 401 });
-    }
-    
-    // Return 500 for other errors
-    return new Response("Internal Server Error", { status: 500 });
+    return new Response("Unauthorized", { status: 401 });
   }
 };
