@@ -29,12 +29,12 @@ async function compressImage(base64Image: string, mimeType: string): Promise<{
     const inputBuffer = Buffer.from(base64Image, 'base64');
     const originalSize = inputBuffer.length;
     
-    // Use Sharp to resize image to max 480px on the larger dimension
+    // Use Sharp to resize image to max 720px on the larger dimension
     const compressedBuffer = await sharp(inputBuffer)
       .rotate() // Auto-rotate based on EXIF orientation data
       .resize({
-        width: 480,
-        height: 480,
+        width: 720,
+        height: 720,
         fit: 'inside', // Maintain aspect ratio
         withoutEnlargement: true // Don't upscale small images
       })

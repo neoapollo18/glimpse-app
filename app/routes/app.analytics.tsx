@@ -8,91 +8,58 @@ import {
   BlockStack,
   InlineStack,
   DataTable,
-  Badge,
-  ProgressBar,
   Select,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
+import { getAnalytics } from "../lib/supabase.server";
 import { useState } from "react";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
 
-  // TODO: Fetch real analytics data from Supabase
-  const analytics = {
-    totalTransformations: 1247,
-    thisWeekTransformations: 89,
-    conversionRate: 12.4,
-    totalRevenue: 4567.89,
-    topProducts: [
-      { id: "1", name: "Ruby Red Hair Dye", transformations: 156, conversions: 23, revenue: 345.67 },
-      { id: "2", name: "Coral Pink Lipstick", transformations: 134, conversions: 19, revenue: 285.50 },
-      { id: "3", name: "Midnight Black Mascara", transformations: 112, conversions: 16, revenue: 224.00 },
-      { id: "4", name: "Golden Glow Foundation", transformations: 98, conversions: 14, revenue: 420.00 },
-      { id: "5", name: "Ocean Blue Eyeshadow", transformations: 87, conversions: 11, revenue: 165.00 },
-    ],
-    recentTransformations: [
-      { id: "1", timestamp: "2024-01-15 14:30", product: "Ruby Red Hair Dye", converted: true },
-      { id: "2", timestamp: "2024-01-15 14:15", product: "Coral Pink Lipstick", converted: false },
-      { id: "3", timestamp: "2024-01-15 14:00", product: "Golden Glow Foundation", converted: true },
-      { id: "4", timestamp: "2024-01-15 13:45", product: "Midnight Black Mascara", converted: false },
-      { id: "5", timestamp: "2024-01-15 13:30", product: "Ocean Blue Eyeshadow", converted: true },
-    ],
-    weeklyData: [
-      { week: "Week 1", transformations: 287, conversions: 35 },
-      { week: "Week 2", transformations: 312, conversions: 41 },
-      { week: "Week 3", transformations: 298, conversions: 37 },
-      { week: "Week 4", transformations: 350, conversions: 46 },
-    ]
+  // Fetch real analytics data from Supabase
+  const analytics7Days = await getAnalytics(session.shop, 7);
+  const analytics30Days = await getAnalytics(session.shop, 30);
+
+  // Default to empty data if no analytics found
+  const safeAnalytics = {
+    totalTransformations: analytics7Days?.totalTransformations || 0,
+    totalTransformations30Days: analytics30Days?.totalTransformations || 0,
+    productBreakdown: analytics7Days?.productBreakdown || [],
+    productBreakdown30Days: analytics30Days?.productBreakdown || [],
   };
 
-  return { analytics };
+  return { analytics: safeAnalytics };
 };
 
 export default function Analytics() {
   const { analytics } = useLoaderData<typeof loader>();
-  const [timeRange, setTimeRange] = useState("last-30-days");
+  const [timeRange, setTimeRange] = useState("last-7-days");
 
   const timeRangeOptions = [
     { label: "Last 7 days", value: "last-7-days" },
     { label: "Last 30 days", value: "last-30-days" },
-    { label: "Last 90 days", value: "last-90-days" },
-    { label: "This year", value: "this-year" },
   ];
 
-  const topProductsRows = analytics.topProducts.map((product) => {
-    const conversionRate = ((product.conversions / product.transformations) * 100).toFixed(1);
-    
-    return [
-      <Text as="span" variant="bodyMd" fontWeight="semibold">
-        {product.name}
-      </Text>,
-      <Text as="span" variant="bodyMd">
-        {product.transformations}
-      </Text>,
-      <Text as="span" variant="bodyMd">
-        {product.conversions}
-      </Text>,
-      <Text as="span" variant="bodyMd">
-        {conversionRate}%
-      </Text>,
-      <Text as="span" variant="bodyMd">
-        ${product.revenue.toFixed(2)}
-      </Text>,
-    ];
-  });
+  // Choose data based on selected time range
+  const currentData = timeRange === "last-7-days" 
+    ? {
+        total: analytics.totalTransformations,
+        breakdown: analytics.productBreakdown
+      }
+    : {
+        total: analytics.totalTransformations30Days,
+        breakdown: analytics.productBreakdown30Days
+      };
 
-  const recentTransformationsRows = analytics.recentTransformations.map((transformation) => [
-    <Text as="span" variant="bodyMd">
-      {transformation.timestamp}
+  const topProductsRows = currentData.breakdown.map((product: any) => [
+    <Text as="span" variant="bodyMd" fontWeight="semibold" key={product.product_id}>
+      {product.product_name}
     </Text>,
-    <Text as="span" variant="bodyMd">
-      {transformation.product}
+    <Text as="span" variant="bodyMd" key={`${product.product_id}-trans`}>
+      {product.transformations}
     </Text>,
-    <Badge tone={transformation.converted ? "success" : "attention"}>
-      {transformation.converted ? "Converted" : "No Conversion"}
-    </Badge>,
   ]);
 
   return (
@@ -107,6 +74,8 @@ export default function Analytics() {
                 Transformation Analytics
               </Text>
               <Select
+                label="Time Range"
+                labelHidden
                 options={timeRangeOptions}
                 value={timeRange}
                 onChange={setTimeRange}
@@ -121,37 +90,44 @@ export default function Analytics() {
             <InlineStack gap="400">
               <Card>
                 <BlockStack gap="200">
-                  <Text as="h3" variant="headingMd">Total Transformations</Text>
-                  <Text as="span" variant="heading2xl" fontWeight="bold">
-                    {analytics.totalTransformations.toLocaleString()}
+                  <Text as="h3" variant="headingMd">
+                    Total Transformations ({timeRange === "last-7-days" ? "7 days" : "30 days"})
                   </Text>
-                  <Text as="span" variant="bodyMd" tone="success">
-                    +{analytics.thisWeekTransformations} this week
-                  </Text>
-                </BlockStack>
-              </Card>
-
-              <Card>
-                <BlockStack gap="200">
-                  <Text as="h3" variant="headingMd">Conversion Rate</Text>
                   <Text as="span" variant="heading2xl" fontWeight="bold">
-                    {analytics.conversionRate}%
-                  </Text>
-                  <ProgressBar 
-                    progress={analytics.conversionRate} 
-                    size="small" 
-                  />
-                </BlockStack>
-              </Card>
-
-              <Card>
-                <BlockStack gap="200">
-                  <Text as="h3" variant="headingMd">Revenue Generated</Text>
-                  <Text as="span" variant="heading2xl" fontWeight="bold">
-                    ${analytics.totalRevenue.toLocaleString()}
+                    {currentData.total.toLocaleString()}
                   </Text>
                   <Text as="span" variant="bodyMd" tone="subdued">
-                    From AI transformations
+                    Widget usage by customers
+                  </Text>
+                </BlockStack>
+              </Card>
+
+              <Card>
+                <BlockStack gap="200">
+                  <Text as="h3" variant="headingMd">Products with Transformations</Text>
+                  <Text as="span" variant="heading2xl" fontWeight="bold">
+                    {currentData.breakdown.length}
+                  </Text>
+                  <Text as="span" variant="bodyMd" tone="subdued">
+                    Active products being transformed
+                  </Text>
+                </BlockStack>
+              </Card>
+
+              <Card>
+                <BlockStack gap="200">
+                  <Text as="h3" variant="headingMd">Most Popular Product</Text>
+                  <Text as="span" variant="headingLg" fontWeight="bold">
+                    {currentData.breakdown.length > 0 
+                      ? (currentData.breakdown as any).sort((a: any, b: any) => b.transformations - a.transformations)[0].product_name
+                      : "No data"
+                    }
+                  </Text>
+                  <Text as="span" variant="bodyMd" tone="subdued">
+                    {currentData.breakdown.length > 0 
+                      ? `${(currentData.breakdown as any).sort((a: any, b: any) => b.transformations - a.transformations)[0].transformations} transformations`
+                      : "Add product configurations to see data"
+                    }
                   </Text>
                 </BlockStack>
               </Card>
@@ -159,20 +135,37 @@ export default function Analytics() {
           </Layout.Section>
         </Layout>
 
-        {/* Top Performing Products */}
+        {/* Product Performance */}
         <Layout>
           <Layout.Section>
             <Card>
               <BlockStack gap="400">
                 <Text as="h3" variant="headingMd">
-                  Top Performing Products
+                  Product Performance ({timeRange === "last-7-days" ? "Last 7 days" : "Last 30 days"})
                 </Text>
                 
-                <DataTable
-                  columnContentTypes={["text", "numeric", "numeric", "numeric", "numeric"]}
-                  headings={["Product", "Transformations", "Conversions", "Conversion Rate", "Revenue"]}
-                  rows={topProductsRows}
-                />
+                {currentData.breakdown.length > 0 ? (
+                  <DataTable
+                    columnContentTypes={["text", "numeric"]}
+                    headings={["Product Name", "Transformations"]}
+                    rows={topProductsRows}
+                  />
+                ) : (
+                  <BlockStack gap="300">
+                    <Text as="p" variant="bodyMd" tone="subdued">
+                      No transformation data available for the selected time period.
+                    </Text>
+                    <Text as="p" variant="bodyMd" tone="subdued">
+                      Make sure you have:
+                    </Text>
+                    <Text as="p" variant="bodyMd" tone="subdued">
+                      • Configured products with transformation prompts
+                    </Text>
+                    <Text as="p" variant="bodyMd" tone="subdued">
+                      • Customers are using the widget on your storefront
+                    </Text>
+                  </BlockStack>
+                )}
               </BlockStack>
             </Card>
           </Layout.Section>
@@ -181,39 +174,48 @@ export default function Analytics() {
             <BlockStack gap="400">
               <Card>
                 <BlockStack gap="300">
-                  <Text as="h3" variant="headingMd">Weekly Trends</Text>
+                  <Text as="h3" variant="headingMd">Quick Stats</Text>
                   <BlockStack gap="200">
-                    {analytics.weeklyData.map((week, index) => (
-                      <BlockStack gap="100" key={index}>
-                        <InlineStack align="space-between">
-                          <Text as="span" variant="bodyMd">{week.week}</Text>
-                          <Text as="span" variant="bodyMd">{week.transformations} / {week.conversions}</Text>
-                        </InlineStack>
-                        <ProgressBar 
-                          progress={(week.conversions / week.transformations) * 100} 
-                          size="small" 
-                        />
-                      </BlockStack>
-                    ))}
+                    <InlineStack align="space-between">
+                      <Text as="span" variant="bodyMd">7-day total:</Text>
+                      <Text as="span" variant="bodyMd" fontWeight="semibold">
+                        {analytics.totalTransformations}
+                      </Text>
+                    </InlineStack>
+                    <InlineStack align="space-between">
+                      <Text as="span" variant="bodyMd">30-day total:</Text>
+                      <Text as="span" variant="bodyMd" fontWeight="semibold">
+                        {analytics.totalTransformations30Days}
+                      </Text>
+                    </InlineStack>
+                    <InlineStack align="space-between">
+                      <Text as="span" variant="bodyMd">Daily average:</Text>
+                      <Text as="span" variant="bodyMd" fontWeight="semibold">
+                        {timeRange === "last-7-days" 
+                          ? Math.round(analytics.totalTransformations / 7)
+                          : Math.round(analytics.totalTransformations30Days / 30)
+                        }
+                      </Text>
+                    </InlineStack>
                   </BlockStack>
                 </BlockStack>
               </Card>
 
               <Card>
                 <BlockStack gap="300">
-                  <Text as="h3" variant="headingMd">Insights</Text>
+                  <Text as="h3" variant="headingMd">Getting Started</Text>
                   <BlockStack gap="200">
                     <Text as="p" variant="bodyMd">
-                      • Hair color products have the highest conversion rate
+                      • Configure products in the Products tab
                     </Text>
                     <Text as="p" variant="bodyMd">
-                      • Transformations peak on weekends
+                      • Add the widget to your product pages
                     </Text>
                     <Text as="p" variant="bodyMd">
-                      • Mobile users convert 23% more than desktop
+                      • Analytics will appear as customers use transformations
                     </Text>
                     <Text as="p" variant="bodyMd">
-                      • Average session duration: 2.4 minutes
+                      • Data refreshes in real-time
                     </Text>
                   </BlockStack>
                 </BlockStack>
@@ -222,53 +224,27 @@ export default function Analytics() {
           </Layout.Section>
         </Layout>
 
-        {/* Recent Activity */}
+        {/* Usage Insights */}
         <Layout>
           <Layout.Section>
             <Card>
               <BlockStack gap="400">
                 <Text as="h3" variant="headingMd">
-                  Recent Transformations
+                  Usage Overview
                 </Text>
                 
-                <DataTable
-                  columnContentTypes={["text", "text", "text"]}
-                  headings={["Timestamp", "Product", "Result"]}
-                  rows={recentTransformationsRows}
-                />
+                <BlockStack gap="300">
+                  <Text as="p" variant="bodyMd">
+                    This analytics dashboard tracks customer usage of your AI transformation widget. 
+                    Each time a customer uploads a photo and gets a transformation, it's recorded here.
+                  </Text>
+                </BlockStack>
               </BlockStack>
             </Card>
           </Layout.Section>
         </Layout>
 
-        {/* Export & Reports */}
-        <Layout>
-          <Layout.Section>
-            <Card>
-              <BlockStack gap="400">
-                <Text as="h3" variant="headingMd">
-                  Export & Reports
-                </Text>
-                
-                <Text as="p" variant="bodyMd" tone="subdued">
-                  Export your analytics data for further analysis or integrate with your business intelligence tools.
-                </Text>
 
-                <InlineStack gap="300">
-                  <button className="Polaris-Button Polaris-Button--outline">
-                    Export CSV
-                  </button>
-                  <button className="Polaris-Button Polaris-Button--outline">
-                    Generate Report
-                  </button>
-                  <button className="Polaris-Button Polaris-Button--outline">
-                    API Access
-                  </button>
-                </InlineStack>
-              </BlockStack>
-            </Card>
-          </Layout.Section>
-        </Layout>
       </BlockStack>
     </Page>
   );

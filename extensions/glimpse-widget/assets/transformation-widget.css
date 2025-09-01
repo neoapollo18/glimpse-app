@@ -15,14 +15,23 @@
   background: var(--background-color);
   border-radius: 16px;
   padding: 24px;
-  margin: 20px 0;
+  margin: 20px auto; /* Center by default */
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
   border: 1px solid #e5e7eb;
-  max-width: 400px;
+  max-width: 640px; /* Default max-width for vertical layout */
   width: 100%;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   position: relative;
   overflow: hidden;
+}
+
+/* Default Layout - Vertical */
+.widget-left {
+  width: 100%;
+}
+
+.widget-right {
+  width: 100%;
 }
 
 /* Widget Header */
@@ -418,13 +427,65 @@
   text-align: center;
 }
 
-/* Mobile Responsiveness */
+/* Mobile Responsiveness - Always vertical layout */
 @media (max-width: 640px) {
-  .glimpse-ai-widget {
+  .glimpse-ai-widget,
+  .glimpse-ai-widget.layout-horizontal {
     padding: 20px;
-    margin: 16px 0;
+    margin: 16px auto; /* Center on mobile */
     border-radius: 12px;
     max-width: 100%;
+    width: calc(100% - 32px); /* Account for margin */
+    display: block !important;
+    flex-direction: column !important;
+    gap: 0;
+  }
+  
+  .glimpse-ai-widget.layout-horizontal .widget-left,
+  .glimpse-ai-widget.layout-horizontal .widget-right {
+    width: 100%;
+    max-width: none;
+    min-width: auto;
+    flex: none;
+    display: block;
+    padding-right: 0;
+  }
+  
+  .glimpse-ai-widget.layout-horizontal .widget-header {
+    text-align: center;
+    margin-bottom: 20px;
+  }
+  
+  .glimpse-ai-widget.layout-horizontal .widget-title {
+    font-size: 32px;
+    text-align: center;
+  }
+  
+  .glimpse-ai-widget.layout-horizontal .widget-description {
+    text-align: center;
+  }
+  
+  .glimpse-ai-widget.layout-horizontal .star-icon {
+    justify-content: center;
+  }
+  
+  .glimpse-ai-widget.layout-horizontal .widget-footer {
+    display: none; /* Hide desktop footer on mobile */
+  }
+  
+  .glimpse-ai-widget.layout-horizontal .widget-footer-mobile {
+    display: block; /* Show mobile footer */
+    text-align: center;
+    margin-top: 16px;
+    padding-top: 8px;
+  }
+  
+  .glimpse-ai-widget.layout-horizontal .info-icon-container {
+    justify-content: center;
+  }
+  
+  .glimpse-ai-widget.layout-horizontal .disclaimer {
+    text-align: center;
   }
   
   .widget-title {
@@ -482,15 +543,215 @@
 }
 
 /* Tablet and medium screens */
-@media (min-width: 641px) and (max-width: 1024px) {
+@media (min-width: 641px) and (max-width: 1023px) {
   .glimpse-ai-widget {
     max-width: 380px;
+    margin: 20px auto; /* Center on tablets */
+  }
+  
+  /* Keep vertical layout on tablets even if horizontal is selected */
+  .glimpse-ai-widget.layout-horizontal {
+    display: block;
+    flex-direction: column;
+    max-width: 380px;
+    padding: 24px;
+    margin: 20px auto; /* Center on tablets */
+    width: 100%;
+  }
+  
+  .glimpse-ai-widget.layout-horizontal .widget-left,
+  .glimpse-ai-widget.layout-horizontal .widget-right {
+    width: 100%;
+    max-width: none;
+    min-width: auto;
+    flex: none;
+    display: block;
+    padding-right: 0;
+  }
+  
+  .glimpse-ai-widget.layout-horizontal .widget-header {
+    text-align: center;
+    margin-bottom: 20px;
+  }
+  
+  .glimpse-ai-widget.layout-horizontal .widget-footer {
+    display: none;
+  }
+  
+  .glimpse-ai-widget.layout-horizontal .widget-footer-mobile {
+    display: block;
+  }
+}
+
+/* Show/Hide appropriate footers based on layout mode */
+.glimpse-ai-widget:not(.layout-horizontal) .widget-left .widget-footer {
+  display: none;
+}
+
+.glimpse-ai-widget:not(.layout-horizontal) .widget-footer-mobile {
+  display: block;
+}
+
+/* Horizontal Layout - Applied when admin selects horizontal mode */
+@media (min-width: 1024px) {
+  .glimpse-ai-widget.layout-horizontal {
+    max-width: none !important;
+    width: min(calc(100vw - 80px), 1200px); /* Full width but cap at 1200px for readability */
+    margin: 20px auto; /* Center the widget */
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 40px;
+    padding: 40px;
+    min-height: 0; /* Remove enforced height to prevent extra bottom gap */
+  }
+
+  .glimpse-ai-widget.layout-horizontal .widget-left {
+    flex: 1;
+    max-width: 450px;
+    padding-right: 20px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start; /* Keep natural flow */
+    gap: 16px; /* Slightly tighter to raise disclaimer */
+  }
+
+  .glimpse-ai-widget.layout-horizontal .widget-right {
+    flex: 1.2;
+    min-width: 400px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .glimpse-ai-widget.layout-horizontal .widget-header {
+    text-align: center;
+    margin-bottom: 24px; /* Restore original spacing */
+  }
+
+  .glimpse-ai-widget.layout-horizontal .widget-title {
+    font-size: 42px;
+    line-height: 1.1;
+    margin-bottom: 12px;
+    text-align: center;
+  }
+
+  .glimpse-ai-widget.layout-horizontal .widget-description {
+    font-size: 16px;
+    line-height: 1.5;
+    text-align: center;
+    margin-bottom: 4px; /* Slight space; keep disclaimer closer */
+  }
+
+  .glimpse-ai-widget.layout-horizontal .star-icon {
+    justify-content: center;
+    margin: 12px 0;
+  }
+
+  .glimpse-ai-widget.layout-horizontal .widget-footer {
+    text-align: center;
+    margin-top: 0; /* Remove top margin since we're using space-between */
+    padding-top: 0; /* Remove top padding for cleaner alignment */
+  }
+
+  .glimpse-ai-widget.layout-horizontal .info-icon-container {
+    justify-content: center;
+    margin-bottom: 12px;
+  }
+
+  .glimpse-ai-widget.layout-horizontal .disclaimer {
+    text-align: center;
+    font-size: 13px;
+  }
+
+  /* Hide the mobile/tablet footer when in horizontal layout */
+  .glimpse-ai-widget.layout-horizontal .widget-footer-mobile {
+    display: none;
+  }
+
+  /* Right side content adjustments for horizontal layout */
+  .glimpse-ai-widget.layout-horizontal .widget-content {
+    margin-bottom: 0; /* Keep original minimal spacing */
+  }
+
+  .glimpse-ai-widget.layout-horizontal .comparison-image {
+    height: 280px;
+  }
+
+  .glimpse-ai-widget.layout-horizontal .upload-button {
+    padding: 18px 36px;
+    font-size: 17px;
+  }
+
+  .glimpse-ai-widget.layout-horizontal .add-to-cart-button,
+  .glimpse-ai-widget.layout-horizontal .retry-button {
+    padding: 18px 36px;
+    font-size: 17px;
+  }
+
+  .glimpse-ai-widget.layout-horizontal .processing-state {
+    padding: 60px 20px;
+    min-height: 180px;
+  }
+
+  .glimpse-ai-widget.layout-horizontal .loading-spinner {
+    width: 48px;
+    height: 48px;
+    border-width: 4px;
+  }
+
+  .glimpse-ai-widget.layout-horizontal .loading-text {
+    font-size: 18px;
+    margin-top: 20px;
+  }
+}
+
+/* Extra Large Screens - Enhanced horizontal layout */
+@media (min-width: 1400px) {
+  .glimpse-ai-widget.layout-horizontal {
+    width: min(calc(100vw - 120px), 1400px); /* Cap at 1400px max for readability */
+    gap: 60px;
+    padding: 50px 60px;
+  }
+
+  .glimpse-ai-widget.layout-horizontal .widget-left {
+    max-width: 500px;
+  }
+
+  .glimpse-ai-widget.layout-horizontal .widget-title {
+    font-size: 48px;
+  }
+
+  .glimpse-ai-widget.layout-horizontal .widget-description {
+    font-size: 18px;
+  }
+
+  .glimpse-ai-widget.layout-horizontal .comparison-image {
+    height: 320px;
+  }
+
+  .glimpse-ai-widget.layout-horizontal .upload-button,
+  .glimpse-ai-widget.layout-horizontal .add-to-cart-button,
+  .glimpse-ai-widget.layout-horizontal .retry-button {
+    padding: 20px 40px;
+    font-size: 18px;
   }
 }
 
 /* Integration with Shopify themes */
 .shopify-section .glimpse-ai-widget {
   margin-top: 0;
+}
+
+/* Ensure horizontal layout centers properly in Shopify sections */
+.shopify-section .glimpse-ai-widget.layout-horizontal {
+  margin: 20px auto;
+}
+
+/* Full width override for specific containers */
+.container-fluid .glimpse-ai-widget.layout-horizontal,
+.full-width .glimpse-ai-widget.layout-horizontal {
+  width: calc(100% - 80px);
+  max-width: none;
 }
 
 /* Theme editor preview mode */

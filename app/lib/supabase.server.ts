@@ -229,4 +229,173 @@ export async function deleteProductConfiguration(configuredProductId: string) {
     console.error("Error in deleteProductConfiguration:", error);
     throw error;
   }
+}
+
+// Analytics functions
+export async function trackTransformationEvent(
+  shopDomain: string,
+  shopifyProductId: string,
+  eventType: string = 'transformation'
+) {
+  try {
+    // Get shop
+    const { data: shop } = await supabase
+      .from('shops')
+      .select('id')
+      .eq('shop_domain', shopDomain)
+      .single();
+
+    if (!shop) {
+      console.log('Shop not found for analytics tracking:', shopDomain);
+      return null;
+    }
+
+    // Get product - need to handle both formats
+    let searchShopifyId = shopifyProductId;
+    if (!shopifyProductId.startsWith('gid://')) {
+      searchShopifyId = `gid://shopify/Product/${shopifyProductId}`;
+    }
+
+    const { data: product } = await supabase
+      .from('products')
+      .select('id')
+      .eq('shop_id', shop.id)
+      .eq('shopify_id', searchShopifyId)
+      .single();
+
+    if (!product) {
+      // Try with numeric ID if GID format failed
+      if (shopifyProductId.includes('/')) {
+        const numericId = shopifyProductId.split('/').pop();
+        const { data: altProduct } = await supabase
+          .from('products')
+          .select('id')
+          .eq('shop_id', shop.id)
+          .eq('shopify_id', numericId)
+          .single();
+        
+        if (altProduct) {
+          // Track with found product
+          const { data, error } = await supabase
+            .from('analytics_events')
+            .insert([{
+              shop_id: shop.id,
+              product_id: altProduct.id,
+              event_type: eventType
+            }])
+            .select()
+            .single();
+
+          if (error) {
+            console.error('Error tracking analytics event:', error);
+            return null;
+          }
+
+          console.log('Analytics event tracked successfully:', data);
+          return data;
+        }
+      }
+      
+      console.log('Product not found for analytics tracking:', shopifyProductId);
+      return null;
+    }
+
+    // Insert analytics event
+    const { data, error } = await supabase
+      .from('analytics_events')
+      .insert([{
+        shop_id: shop.id,
+        product_id: product.id,
+        event_type: eventType
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error tracking analytics event:', error);
+      return null;
+    }
+
+    console.log('Analytics event tracked successfully:', data);
+    return data;
+  } catch (error) {
+    console.error('Error in trackTransformationEvent:', error);
+    return null;
+  }
+}
+
+export async function getAnalytics(shopDomain: string, daysBack: number = 7) {
+  try {
+    // Get shop
+    const { data: shop } = await supabase
+      .from('shops')
+      .select('id')
+      .eq('shop_domain', shopDomain)
+      .single();
+
+    if (!shop) {
+      console.log('Shop not found for analytics:', shopDomain);
+      return null;
+    }
+
+    // Calculate date threshold
+    const dateThreshold = new Date();
+    dateThreshold.setDate(dateThreshold.getDate() - daysBack);
+
+    // Get total transformations in the last N days
+    const { data: totalEvents, error: totalError } = await supabase
+      .from('analytics_events')
+      .select('id')
+      .eq('shop_id', shop.id)
+      .eq('event_type', 'transformation')
+      .gte('created_at', dateThreshold.toISOString());
+
+    if (totalError) {
+      console.error('Error fetching total analytics:', totalError);
+      return null;
+    }
+
+    // Get per-product analytics in the last N days
+    const { data: productEvents, error: productError } = await supabase
+      .from('analytics_events')
+      .select(`
+        product_id,
+        products (
+          id,
+          product_name,
+          shopify_id
+        )
+      `)
+      .eq('shop_id', shop.id)
+      .eq('event_type', 'transformation')
+      .gte('created_at', dateThreshold.toISOString());
+
+    if (productError) {
+      console.error('Error fetching product analytics:', productError);
+      return null;
+    }
+
+    // Group by product
+    const productStats = productEvents.reduce((acc: any, event: any) => {
+      const productId = event.product_id;
+      if (!acc[productId]) {
+        acc[productId] = {
+          product_id: productId,
+          product_name: event.products?.product_name || 'Unknown Product',
+          shopify_id: event.products?.shopify_id || '',
+          transformations: 0
+        };
+      }
+      acc[productId].transformations++;
+      return acc;
+    }, {});
+
+    return {
+      totalTransformations: totalEvents?.length || 0,
+      productBreakdown: Object.values(productStats)
+    };
+  } catch (error) {
+    console.error('Error in getAnalytics:', error);
+    return null;
+  }
 } 

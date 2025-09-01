@@ -1,7 +1,7 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { transformImage } from "../lib/ai.server";
-import { getProductConfiguration } from "../lib/supabase.server";
+import { getProductConfiguration, trackTransformationEvent } from "../lib/supabase.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   try {
@@ -107,6 +107,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
       });
     }
+
+    // Track analytics event (don't wait for it to complete)
+    trackTransformationEvent(shopDomain, productId, 'transformation').catch(error => {
+      console.error('Failed to track analytics event:', error);
+    });
 
     // Log successful transformation for analytics
     console.log(`Successful transformation for product ${productId} on shop ${shopDomain}`);

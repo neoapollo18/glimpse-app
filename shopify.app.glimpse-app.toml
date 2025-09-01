@@ -1,6 +1,6 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "4b36e615c7828f978b45235c56247d68"
+client_id = "9cbb5891370933c3c50d2062a4a31962"
 name = "glimpse-app"
 handle = "glimpse-app"
 application_url = "https://glimpse-app-9zjc.onrender.com"

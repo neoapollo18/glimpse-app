@@ -14,10 +14,11 @@
   assign icon_color = block.settings.icon_color | default: '#8b5cf6'
   assign background_color = block.settings.background_color | default: '#ffffff'
   assign text_color = block.settings.text_color | default: '#1f2937'
+  assign layout_mode = block.settings.layout_mode | default: 'vertical'
 %}
 
 <!-- Glimpse AI Transformation Widget -->
-<div class="glimpse-ai-widget" 
+<div class="glimpse-ai-widget{% if layout_mode == 'horizontal' %} layout-horizontal{% endif %}" 
      data-product-id="{{ product_id }}"
      style="--primary-color-1: {{ primary_color_1 }}; 
             --primary-color-2: {{ primary_color_2 }};
@@ -27,20 +28,39 @@
             --background-color: {{ background_color }}; 
             --text-color: {{ text_color }};">
   
-  <!-- Widget Header -->
-  <div class="widget-header">
-    <h2 class="widget-title">{{ block.settings.widget_title | default: "See My Glowup!" }}</h2>
-    
-    <!-- Star Icon -->
-    <div class="star-icon">
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sparkle-icon lucide-sparkle"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/></svg>
+  <!-- Desktop Left Section -->
+  <div class="widget-left">
+    <!-- Widget Header -->
+    <div class="widget-header">
+      <h2 class="widget-title">{{ block.settings.widget_title | default: "See My Glowup!" }}</h2>
+      
+      <!-- Star Icon -->
+      <div class="star-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sparkle-icon lucide-sparkle"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/></svg>
+      </div>
+      
+      <p class="widget-description">{{ block.settings.widget_description | default: "Upload an image of yourself and see your transformation" }}</p>
     </div>
     
-    <p class="widget-description">{{ block.settings.widget_description | default: "Upload an image of yourself and see your transformation" }}</p>
+    <!-- Widget Footer (Desktop Left) -->
+    <div class="widget-footer">
+      <div class="info-icon-container">
+        <svg class="info-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 16v-4"/>
+          <path d="M12 8h.01"/>
+        </svg>
+      </div>
+      <p class="disclaimer">
+        Results are not guaranteed, just a generated image. Images are never saved.
+      </p>
+    </div>
   </div>
   
-  <!-- Widget Content Area -->
-  <div class="widget-content">
+  <!-- Desktop Right Section / Mobile Full Width -->
+  <div class="widget-right">
+    <!-- Widget Content Area -->
+    <div class="widget-content">
     
     <!-- Initial/Upload State -->
     <div class="upload-state" id="uploadState">
@@ -145,20 +165,21 @@
       </div>
     </div>
     
-  </div>
-  
-  <!-- Widget Footer -->
-  <div class="widget-footer">
-    <div class="info-icon-container">
-      <svg class="info-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"/>
-        <path d="M12 16v-4"/>
-        <path d="M12 8h.01"/>
-      </svg>
+    <!-- Widget Footer (Mobile/Tablet) -->
+    <div class="widget-footer widget-footer-mobile">
+      <div class="info-icon-container">
+        <svg class="info-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 16v-4"/>
+          <path d="M12 8h.01"/>
+        </svg>
+      </div>
+      <p class="disclaimer">
+        Results are not guaranteed, just a generated image. Images are never saved.
+      </p>
     </div>
-    <p class="disclaimer">
-      Results are not guaranteed, just a generated image. Images are never saved.
-    </p>
+    
+    </div>
   </div>
   
 </div>
@@ -307,6 +328,7 @@
     } else {
       stopLoadingTextAnimation();
     }
+
   };
   
   function startLoadingTextAnimation() {
@@ -344,11 +366,15 @@
     window.widgetFunctions.showState('error');
   };
 
+
+  
   document.addEventListener('DOMContentLoaded', function() {
     console.log('=== WIDGET INITIALIZING ===');
     
     // Initialize the widget
     window.widgetFunctions.initWidget();
+    
+
     
     const imageUpload = document.getElementById('imageUpload');
     const beforeImage = document.getElementById('beforeImage');
@@ -679,6 +705,23 @@
     {
       "type": "header",
       "content": "Widget Content"
+    },
+    {
+      "type": "select",
+      "id": "layout_mode",
+      "label": "Widget Layout",
+      "default": "vertical",
+      "options": [
+        {
+          "value": "vertical",
+          "label": "Vertical (Compact)"
+        },
+        {
+          "value": "horizontal",
+          "label": "Horizontal (Side-by-side)"
+        }
+      ],
+      "info": "Choose how the widget displays. Vertical is compact and works in narrow spaces. Horizontal spreads content side-by-side for full-width sections."
     },
 
     {

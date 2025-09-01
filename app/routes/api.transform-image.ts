@@ -2,11 +2,12 @@ import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import { transformImage } from "../lib/ai.server";
+import { trackTransformationEvent } from "../lib/supabase.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   try {
     // Authenticate the request
-    await authenticate.admin(request);
+    const { session } = await authenticate.admin(request);
 
     if (request.method !== "POST") {
       return json({ error: "Method not allowed" }, { status: 405 });
@@ -15,6 +16,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const formData = await request.formData();
     const imageFile = formData.get("image") as File;
     const transformationPrompt = formData.get("transformationPrompt") as string;
+    const productId = formData.get("productId") as string; // Optional for admin testing
 
     if (!imageFile || !transformationPrompt) {
       return json({ 
@@ -53,6 +55,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return json({ 
         error: result.error || "Image transformation failed" 
       }, { status: 500 });
+    }
+
+    // Track analytics event for admin transformations if productId is provided
+    if (productId && session?.shop) {
+      trackTransformationEvent(session.shop, productId, 'admin_transformation').catch(error => {
+        console.error('Failed to track admin analytics event:', error);
+      });
     }
 
     return json({
