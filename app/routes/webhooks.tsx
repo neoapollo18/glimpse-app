@@ -1,6 +1,5 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
-import db from "../db.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   try {
@@ -8,12 +7,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     console.log(`Received ${topic} webhook for ${shop}`);
 
-    // Webhook requests can trigger multiple times and after an app has already been uninstalled.
-    // If this webhook already ran, the session may have been deleted previously.
-    if (session) {
-      await db.session.deleteMany({ where: { shop } });
+    // Handle different compliance webhook topics
+    switch (topic) {
+      case "customers/data_request":
+        console.log("Processing customer data request for shop:", shop);
+        break;
+
+      case "customers/redact":
+        console.log("Processing customer data redaction for shop:", shop);
+        break;
+
+      case "shop/redact":
+        console.log("Processing shop data redaction for shop:", shop);
+        break;
+
+      default:
+        console.log(`Unhandled webhook topic: ${topic}`);
     }
 
+    // Respond with 200 status to acknowledge receipt
     return new Response("OK", { status: 200 });
   } catch (error) {
     console.error("Webhook processing error:", error);
