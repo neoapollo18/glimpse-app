@@ -15,18 +15,32 @@
   assign background_color = block.settings.background_color | default: '#ffffff'
   assign text_color = block.settings.text_color | default: '#1f2937'
   assign layout_mode = block.settings.layout_mode | default: 'vertical'
+  assign manual_shop_domain = block.settings.manual_shop_domain
+  
+  # Customization variables
+  assign widget_margin_top = block.settings.widget_margin_top | default: 20
+  assign widget_margin_bottom = block.settings.widget_margin_bottom | default: 20
+  assign title_font_size = block.settings.title_font_size | default: 24
+  assign description_font_size = block.settings.description_font_size | default: 16
+  assign disclaimer_text = block.settings.disclaimer_text | default: 'Results are not guaranteed, just a generated image. Images are never saved.'
 %}
 
 <!-- Glimpse AI Transformation Widget -->
 <div class="glimpse-ai-widget{% if layout_mode == 'horizontal' %} layout-horizontal{% endif %}" 
-     data-product-id="{{ product_id }}"
+     data-product-id="{{ product_id }}"{% if manual_shop_domain != blank %}
+     data-manual-shop-domain="{{ manual_shop_domain }}"{% endif %}
      style="--primary-color-1: {{ primary_color_1 }}; 
             --primary-color-2: {{ primary_color_2 }};
             --caption-color-1: {{ caption_color_1 }};
             --caption-color-2: {{ caption_color_2 }};
             --icon-color: {{ icon_color }};
             --background-color: {{ background_color }}; 
-            --text-color: {{ text_color }};">
+            --text-color: {{ text_color }};
+            --widget-margin-top: {{ widget_margin_top }}px;
+            --widget-margin-bottom: {{ widget_margin_bottom }}px;
+            --title-font-size: {{ title_font_size }}px;
+            --description-font-size: {{ description_font_size }}px;
+            --button-shadow-color: {{ primary_color_1 }};">
   
   <!-- Desktop Left Section -->
   <div class="widget-left">
@@ -52,7 +66,7 @@
         </svg>
       </div>
       <p class="disclaimer">
-        Results are not guaranteed, just a generated image. Images are never saved.
+        {{ disclaimer_text }}
       </p>
     </div>
   </div>
@@ -175,7 +189,7 @@
         </svg>
       </div>
       <p class="disclaimer">
-        Results are not guaranteed, just a generated image. Images are never saved.
+        {{ disclaimer_text }}
       </p>
     </div>
     
@@ -205,20 +219,61 @@
   const SHOPIFY_APP_URL = 'https://glimpse-app-9zjc.onrender.com';
   // =====================================================
   
-  // Auto-detect shop domain from current URL
+  // Get shop domain with multiple fallback methods
   function getShopDomain() {
+    const widget = document.querySelector('.glimpse-ai-widget');
+    
+    // First priority: Check for manually configured domain
+    const manualDomain = widget?.getAttribute('data-manual-shop-domain');
+    if (manualDomain) {
+      console.log('Using manual shop domain:', manualDomain);
+      return manualDomain;
+    }
+    
     const hostname = window.location.hostname;
+    
+    // Second priority: Direct .myshopify.com domain
     if (hostname.includes('.myshopify.com')) {
+      console.log('Using direct myshopify domain:', hostname);
       return hostname;
     }
-    // For custom domains, we might need to find the shop domain differently
-    // For now, we'll extract it from the Shopify scripts or other indicators
+    
+    // Third priority: Extract from Shopify scripts (multiple methods)
     const shopifyScripts = document.querySelectorAll('script[src*="myshopify.com"]');
-    if (shopifyScripts.length > 0) {
-      const scriptSrc = shopifyScripts[0].src;
+    for (let script of shopifyScripts) {
+      const scriptSrc = script.src;
       const match = scriptSrc.match(/\/\/([^\/]+\.myshopify\.com)/);
-      if (match) return match[1];
+      if (match) {
+        console.log('Found shop domain in script:', match[1]);
+        return match[1];
+      }
     }
+    
+    // Fourth priority: Check for Shopify global variables
+    if (window.Shopify && window.Shopify.shop) {
+      console.log('Using Shopify.shop global:', window.Shopify.shop);
+      return window.Shopify.shop;
+    }
+    
+    // Fifth priority: Check meta tags
+    const shopMeta = document.querySelector('meta[name="shopify-shop-domain"]');
+    if (shopMeta) {
+      console.log('Found shop domain in meta tag:', shopMeta.content);
+      return shopMeta.content;
+    }
+    
+    // Sixth priority: Extract from any Shopify URLs in the page
+    const allLinks = document.querySelectorAll('link[href*="myshopify.com"], a[href*="myshopify.com"]');
+    for (let link of allLinks) {
+      const href = link.href;
+      const match = href.match(/\/\/([^\/]+\.myshopify\.com)/);
+      if (match) {
+        console.log('Found shop domain in link:', match[1]);
+        return match[1];
+      }
+    }
+    
+    console.warn('Could not auto-detect shop domain, using hostname as fallback:', hostname);
     return hostname; // Fallback to current hostname
   }
   
@@ -704,6 +759,17 @@
     },
     {
       "type": "header",
+      "content": "Configuration"
+    },
+    {
+      "type": "text",
+      "id": "manual_shop_domain",
+      "label": "Shop Domain (Optional)",
+      "placeholder": "shop123.myshopify.com",
+      "info": "If you're using a custom domain and experiencing issues, manually enter your .myshopify.com domain here. This ensures proper connection to the transformation service."
+    },
+    {
+      "type": "header",
       "content": "Widget Content"
     },
     {
@@ -743,6 +809,13 @@
       "default": "Take A New Photo"
     },
     {
+      "type": "textarea",
+      "id": "disclaimer_text",
+      "label": "Disclaimer Text",
+      "default": "Results are not guaranteed, just a generated image. Images are never saved.",
+      "info": "Text shown at the bottom of the widget"
+    },
+    {
       "type": "header",
       "content": "Placeholder Image"
     },
@@ -751,6 +824,50 @@
       "id": "placeholder_image",
       "label": "Custom Placeholder Image",
       "info": "Upload a custom before/after preview image."
+    },
+    {
+      "type": "header",
+      "content": "Layout & Typography"
+    },
+    {
+      "type": "range",
+      "id": "widget_margin_top",
+      "label": "Margin Top (px)",
+      "min": 0,
+      "max": 100,
+      "step": 5,
+      "default": 20,
+      "info": "Space above the widget"
+    },
+    {
+      "type": "range",
+      "id": "widget_margin_bottom",
+      "label": "Margin Bottom (px)",
+      "min": 0,
+      "max": 100,
+      "step": 5,
+      "default": 20,
+      "info": "Space below the widget"
+    },
+    {
+      "type": "range",
+      "id": "title_font_size",
+      "label": "Title Font Size (px)",
+      "min": 12,
+      "max": 48,
+      "step": 2,
+      "default": 24,
+      "info": "Size of the widget title text"
+    },
+    {
+      "type": "range",
+      "id": "description_font_size",
+      "label": "Description Font Size (px)",
+      "min": 10,
+      "max": 24,
+      "step": 1,
+      "default": 16,
+      "info": "Size of the description text"
     },
     {
       "type": "header",

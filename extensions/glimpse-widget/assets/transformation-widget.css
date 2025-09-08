@@ -10,12 +10,20 @@
   --icon-color: #8b5cf6;
   --background-color: #ffffff;
   --text-color: #1f2937;
+  --widget-margin-top: 20px;
+  --widget-margin-bottom: 20px;
+  --title-font-size: 24px;
+  --description-font-size: 16px;
+  --button-shadow-color: #8b5cf6;
   
   /* Widget styles */
   background: var(--background-color);
   border-radius: 16px;
   padding: 24px;
-  margin: 20px auto; /* Center by default */
+  margin-top: var(--widget-margin-top);
+  margin-bottom: var(--widget-margin-bottom);
+  margin-left: auto;
+  margin-right: auto;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
   border: 1px solid #e5e7eb;
   max-width: 640px; /* Default max-width for vertical layout */
@@ -42,7 +50,7 @@
 
 .widget-title {
   color: var(--text-color);
-  font-size: 36px;
+  font-size: var(--title-font-size);
   font-weight: 600;
   margin: 0 0 8px 0;
   line-height: 1.2;
@@ -72,7 +80,7 @@
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  font-size: 14px;
+  font-size: var(--description-font-size);
   line-height: 1.4;
   margin: 0;
   font-weight: 500;
@@ -180,7 +188,7 @@
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.3);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--button-shadow-color) 30%, transparent);
   width: 100%;
   display: inline-flex;
   align-items: center;
@@ -432,10 +440,13 @@
   .glimpse-ai-widget,
   .glimpse-ai-widget.layout-horizontal {
     padding: 20px;
-    margin: 16px auto; /* Center on mobile */
+    margin-top: var(--widget-margin-top);
+    margin-bottom: var(--widget-margin-bottom);
+    margin-left: auto;
+    margin-right: auto;
     border-radius: 12px;
     max-width: 100%;
-    width: calc(100% - 32px); /* Account for margin */
+    width: 100%; /* Full width on mobile */
     display: block !important;
     flex-direction: column !important;
     gap: 0;
@@ -457,7 +468,7 @@
   }
   
   .glimpse-ai-widget.layout-horizontal .widget-title {
-    font-size: 32px;
+    font-size: var(--title-font-size);
     text-align: center;
   }
   
@@ -489,7 +500,7 @@
   }
   
   .widget-title {
-    font-size: 32px;
+    font-size: var(--title-font-size);
   }
   
   .placeholder-image,
@@ -546,7 +557,10 @@
 @media (min-width: 641px) and (max-width: 1023px) {
   .glimpse-ai-widget {
     max-width: 380px;
-    margin: 20px auto; /* Center on tablets */
+    margin-top: var(--widget-margin-top);
+    margin-bottom: var(--widget-margin-bottom);
+    margin-left: auto;
+    margin-right: auto;
   }
   
   /* Keep vertical layout on tablets even if horizontal is selected */
@@ -555,7 +569,10 @@
     flex-direction: column;
     max-width: 380px;
     padding: 24px;
-    margin: 20px auto; /* Center on tablets */
+    margin-top: var(--widget-margin-top);
+    margin-bottom: var(--widget-margin-bottom);
+    margin-left: auto;
+    margin-right: auto;
     width: 100%;
   }
   
@@ -597,7 +614,10 @@
   .glimpse-ai-widget.layout-horizontal {
     max-width: none !important;
     width: min(calc(100vw - 80px), 1200px); /* Full width but cap at 1200px for readability */
-    margin: 20px auto; /* Center the widget */
+    margin-top: var(--widget-margin-top);
+    margin-bottom: var(--widget-margin-bottom);
+    margin-left: auto;
+    margin-right: auto;
     display: flex;
     flex-direction: row;
     align-items: flex-start;
@@ -629,14 +649,14 @@
   }
 
   .glimpse-ai-widget.layout-horizontal .widget-title {
-    font-size: 42px;
+    font-size: var(--title-font-size);
     line-height: 1.1;
     margin-bottom: 12px;
     text-align: center;
   }
 
   .glimpse-ai-widget.layout-horizontal .widget-description {
-    font-size: 16px;
+    font-size: var(--description-font-size);
     line-height: 1.5;
     text-align: center;
     margin-bottom: 4px; /* Slight space; keep disclaimer closer */
@@ -718,11 +738,11 @@
   }
 
   .glimpse-ai-widget.layout-horizontal .widget-title {
-    font-size: 48px;
+    font-size: var(--title-font-size);
   }
 
   .glimpse-ai-widget.layout-horizontal .widget-description {
-    font-size: 18px;
+    font-size: var(--description-font-size);
   }
 
   .glimpse-ai-widget.layout-horizontal .comparison-image {
@@ -739,12 +759,16 @@
 
 /* Integration with Shopify themes */
 .shopify-section .glimpse-ai-widget {
-  margin-top: 0;
+  margin-top: var(--widget-margin-top);
+  margin-bottom: var(--widget-margin-bottom);
 }
 
 /* Ensure horizontal layout centers properly in Shopify sections */
 .shopify-section .glimpse-ai-widget.layout-horizontal {
-  margin: 20px auto;
+  margin-top: var(--widget-margin-top);
+  margin-bottom: var(--widget-margin-bottom);
+  margin-left: auto;
+  margin-right: auto;
 }
 
 /* Full width override for specific containers */
