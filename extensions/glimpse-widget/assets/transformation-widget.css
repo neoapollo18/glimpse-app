@@ -15,6 +15,12 @@
   --title-font-size: 24px;
   --description-font-size: 16px;
   --button-shadow-color: #8b5cf6;
+  --button-text-color: #ffffff;
+  --header-font-family: inherit;
+  --header-font-weight: inherit;
+  --body-font-family: inherit;
+  --body-font-weight: inherit;
+  --widget-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
   
   /* Widget styles */
   background: var(--background-color);
@@ -24,11 +30,12 @@
   margin-bottom: var(--widget-margin-bottom);
   margin-left: auto;
   margin-right: auto;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--widget-shadow);
   border: 1px solid #e5e7eb;
   max-width: 640px; /* Default max-width for vertical layout */
   width: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: var(--body-font-family);
+  font-weight: var(--body-font-weight);
   position: relative;
   overflow: hidden;
 }
@@ -51,7 +58,8 @@
 .widget-title {
   color: var(--text-color);
   font-size: var(--title-font-size);
-  font-weight: 600;
+  font-family: var(--header-font-family);
+  font-weight: var(--header-font-weight);
   margin: 0 0 8px 0;
   line-height: 1.2;
   text-transform: none;
@@ -80,10 +88,11 @@
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+  font-family: var(--body-font-family);
   font-size: var(--description-font-size);
   line-height: 1.4;
   margin: 0;
-  font-weight: 500;
+  font-weight: var(--body-font-weight);
 }
 
 /* Widget Content Area */
@@ -180,12 +189,13 @@
 /* Upload Button */
 .upload-button {
   background: linear-gradient(135deg, var(--primary-color-1), var(--primary-color-2));
-  color: white;
+  color: var(--button-text-color);
   border: none;
   padding: 16px 32px;
   border-radius: 12px;
+  font-family: var(--body-font-family);
   font-size: 16px;
-  font-weight: 600;
+  font-weight: var(--body-font-weight);
   cursor: pointer;
   transition: all 0.3s ease;
   box-shadow: 0 4px 16px color-mix(in srgb, var(--button-shadow-color) 30%, transparent);
@@ -199,7 +209,7 @@
 
 .upload-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4);
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--button-shadow-color) 30%, transparent);
 }
 
 /* Processing State */
@@ -256,9 +266,10 @@
 
 .loading-text {
   margin: 0;
+  font-family: var(--body-font-family);
   font-size: 16px;
   color: #6b7280;
-  font-weight: 500;
+  font-weight: var(--body-font-weight);
 }
 
 /* Results State */
@@ -283,15 +294,16 @@
 
 .image-label {
   background: linear-gradient(135deg, var(--primary-color-1), var(--primary-color-2));
-  color: white;
+  color: var(--button-text-color);
+  font-family: var(--header-font-family);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: var(--header-font-weight);
   padding: 6px 12px;
   border-radius: 20px;
   display: inline-block;
   margin-bottom: 8px;
   letter-spacing: 0.5px;
-  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--primary-color-1) 30%, transparent);
 }
 
 .comparison-image {
@@ -324,28 +336,6 @@
   align-items: center;
 }
 
-.add-to-cart-button {
-  background: linear-gradient(135deg, var(--primary-color-1), var(--primary-color-2));
-  color: white;
-  border: none;
-  padding: 16px 32px;
-  border-radius: 12px;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.3);
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  justify-content: center;
-}
-
-.add-to-cart-button:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
-}
 
 .retry-button {
   background: #f9fafb;
@@ -353,8 +343,9 @@
   border: 1px solid #d1d5db;
   padding: 16px 32px;
   border-radius: 12px;
+  font-family: var(--body-font-family);
   font-size: 16px;
-  font-weight: 500;
+  font-weight: var(--body-font-weight);
   cursor: pointer;
   transition: all 0.3s ease;
   display: inline-flex;
@@ -370,7 +361,6 @@
   transform: translateY(-1px);
 }
 
-.cart-icon,
 .retry-icon {
   width: 16px;
   height: 16px;
@@ -401,9 +391,10 @@
 
 .error-message {
   margin: 0;
+  font-family: var(--body-font-family);
   font-size: 14px;
   color: #dc2626;
-  font-weight: 500;
+  font-weight: var(--body-font-weight);
   line-height: 1.4;
 }
 
@@ -429,13 +420,15 @@
 
 .disclaimer {
   margin: 0;
+  font-family: var(--body-font-family);
   font-size: 12px;
+  font-weight: var(--body-font-weight);
   color: #9ca3af;
   line-height: 1.4;
   text-align: center;
 }
 
-/* Mobile Responsiveness - Always vertical layout */
+/* Mobile Responsiveness - Both widgets become vertical on mobile */
 @media (max-width: 640px) {
   .glimpse-ai-widget,
   .glimpse-ai-widget.layout-horizontal {
@@ -446,7 +439,7 @@
     margin-right: auto;
     border-radius: 12px;
     max-width: 100%;
-    width: 100%; /* Full width on mobile */
+    width: 100%;
     display: block !important;
     flex-direction: column !important;
     gap: 0;
@@ -481,11 +474,11 @@
   }
   
   .glimpse-ai-widget.layout-horizontal .widget-footer {
-    display: none; /* Hide desktop footer on mobile */
+    display: none;
   }
   
   .glimpse-ai-widget.layout-horizontal .widget-footer-mobile {
-    display: block; /* Show mobile footer */
+    display: block;
     text-align: center;
     margin-top: 16px;
     padding-top: 8px;
@@ -553,7 +546,7 @@
   }
 }
 
-/* Tablet and medium screens */
+/* Tablet and medium screens - Both widgets become vertical */
 @media (min-width: 641px) and (max-width: 1023px) {
   .glimpse-ai-widget {
     max-width: 380px;
@@ -563,7 +556,6 @@
     margin-right: auto;
   }
   
-  /* Keep vertical layout on tablets even if horizontal is selected */
   .glimpse-ai-widget.layout-horizontal {
     display: block;
     flex-direction: column;
@@ -600,7 +592,7 @@
   }
 }
 
-/* Show/Hide appropriate footers based on layout mode */
+/* Vertical widget always shows mobile footer */
 .glimpse-ai-widget:not(.layout-horizontal) .widget-left .widget-footer {
   display: none;
 }
@@ -609,11 +601,11 @@
   display: block;
 }
 
-/* Horizontal Layout - Applied when admin selects horizontal mode */
+/* Horizontal Layout - Only applies to the dedicated horizontal widget */
 @media (min-width: 1024px) {
   .glimpse-ai-widget.layout-horizontal {
-    max-width: none !important;
-    width: min(calc(100vw - 80px), 1200px); /* Full width but cap at 1200px for readability */
+    width: 950px; /* Fixed total width */
+    max-width: calc(100vw - 40px); /* Safety: don't overflow on narrow screens */
     margin-top: var(--widget-margin-top);
     margin-bottom: var(--widget-margin-bottom);
     margin-left: auto;
@@ -623,22 +615,21 @@
     align-items: flex-start;
     gap: 40px;
     padding: 40px;
-    min-height: 0; /* Remove enforced height to prevent extra bottom gap */
+    box-sizing: border-box;
   }
 
   .glimpse-ai-widget.layout-horizontal .widget-left {
-    flex: 1;
-    max-width: 450px;
-    padding-right: 20px;
+    width: 380px; /* Fixed width */
+    flex-shrink: 0; /* Prevent compression */
     display: flex;
     flex-direction: column;
-    justify-content: flex-start; /* Keep natural flow */
-    gap: 16px; /* Slightly tighter to raise disclaimer */
+    justify-content: flex-start;
+    gap: 16px;
   }
 
   .glimpse-ai-widget.layout-horizontal .widget-right {
-    flex: 1.2;
-    min-width: 400px;
+    width: 450px; /* Fixed width */
+    flex-shrink: 0; /* Prevent compression */
     display: flex;
     flex-direction: column;
   }
@@ -659,7 +650,7 @@
     font-size: var(--description-font-size);
     line-height: 1.5;
     text-align: center;
-    margin-bottom: 4px; /* Slight space; keep disclaimer closer */
+    margin-bottom: 20px; /* More space before disclaimer */
   }
 
   .glimpse-ai-widget.layout-horizontal .star-icon {
@@ -690,7 +681,7 @@
 
   /* Right side content adjustments for horizontal layout */
   .glimpse-ai-widget.layout-horizontal .widget-content {
-    margin-bottom: 0; /* Keep original minimal spacing */
+    margin-bottom: 0;
   }
 
   .glimpse-ai-widget.layout-horizontal .comparison-image {
@@ -702,7 +693,6 @@
     font-size: 17px;
   }
 
-  .glimpse-ai-widget.layout-horizontal .add-to-cart-button,
   .glimpse-ai-widget.layout-horizontal .retry-button {
     padding: 18px 36px;
     font-size: 17px;
@@ -728,13 +718,18 @@
 /* Extra Large Screens - Enhanced horizontal layout */
 @media (min-width: 1400px) {
   .glimpse-ai-widget.layout-horizontal {
-    width: min(calc(100vw - 120px), 1400px); /* Cap at 1400px max for readability */
+    width: 1100px; /* Larger fixed width for big screens */
+    max-width: calc(100vw - 40px); /* Safety: don't overflow on narrow screens */
     gap: 60px;
     padding: 50px 60px;
   }
 
   .glimpse-ai-widget.layout-horizontal .widget-left {
-    max-width: 500px;
+    width: 420px; /* Slightly larger on big screens */
+  }
+
+  .glimpse-ai-widget.layout-horizontal .widget-right {
+    width: 500px; /* Slightly larger on big screens */
   }
 
   .glimpse-ai-widget.layout-horizontal .widget-title {
@@ -750,7 +745,6 @@
   }
 
   .glimpse-ai-widget.layout-horizontal .upload-button,
-  .glimpse-ai-widget.layout-horizontal .add-to-cart-button,
   .glimpse-ai-widget.layout-horizontal .retry-button {
     padding: 20px 40px;
     font-size: 18px;
@@ -774,8 +768,9 @@
 /* Full width override for specific containers */
 .container-fluid .glimpse-ai-widget.layout-horizontal,
 .full-width .glimpse-ai-widget.layout-horizontal {
-  width: calc(100% - 80px);
-  max-width: none;
+  width: 1100px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 /* Theme editor preview mode */
@@ -800,8 +795,7 @@
 
 /* Accessibility improvements */
 .upload-button:focus,
-.retry-button:focus,
-.add-to-cart-button:focus {
+.retry-button:focus {
   outline: 2px solid var(--primary-color-1);
   outline-offset: 2px;
 }

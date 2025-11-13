@@ -22,7 +22,7 @@
   assign widget_margin_bottom = block.settings.widget_margin_bottom | default: 20
   assign title_font_size = block.settings.title_font_size | default: 24
   assign description_font_size = block.settings.description_font_size | default: 16
-  assign disclaimer_text = block.settings.disclaimer_text | default: 'Results are not guaranteed, just a generated image. Images are never saved.'
+  assign disclaimer_text = block.settings.disclaimer_text | default: 'Images are NEVER saved. Results are not guaranteed, just a generated image. '
   
   # Font customization variables
   assign header_font_family = block.settings.header_font_family | default: 'inherit'
@@ -40,7 +40,7 @@
 %}
 
 <!-- Glimpse AI Transformation Widget -->
-<div class="glimpse-ai-widget" 
+<div class="glimpse-ai-widget layout-horizontal" 
      data-product-id="{{ product_id }}"{% if manual_shop_domain != blank %}
      data-manual-shop-domain="{{ manual_shop_domain }}"{% endif %}
      style="--primary-color-1: {{ primary_color_1 }}; 
@@ -734,7 +734,7 @@
 
 {% schema %}
 {
-  "name": "Glimpse",
+  "name": "Glimpse (Horizontal)",
   "target": "section",
   "stylesheet": "transformation-widget.css",
   "settings": [
@@ -863,7 +863,7 @@
     },
     {
       "type": "header",
-      "content": "Layout"
+      "content": "Layout & Typography"
     },
     {
       "type": "range",

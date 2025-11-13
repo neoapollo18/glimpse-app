@@ -87,6 +87,7 @@ export async function getProductConfiguration(shopDomain: string, shopifyId: str
         console.log('Found product with numeric ID');
         return altProduct;
       }
+
     }
     
     return null;
