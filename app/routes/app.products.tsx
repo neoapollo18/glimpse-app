@@ -70,7 +70,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shopifyProducts = data.products.edges.map(({ node }: { node: any }) => node);
 
   // Fetch configured products from Supabase
-  const configuredProducts = await getConfiguredProducts(session.shop);
+  console.log('🔍 DEBUG: Fetching products for shop:', session.shop);
+  const configuredProducts = session.shop 
+    ? await getConfiguredProducts(session.shop)
+    : [];
+  console.log('🔍 DEBUG: Found', configuredProducts.length, 'configured products');
 
   return { shopifyProducts, configuredProducts, shop: session.shop };
 };
