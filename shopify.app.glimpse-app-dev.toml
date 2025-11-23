@@ -2,13 +2,9 @@
 
 client_id = "ac8f292f729eec24bdc34848c1558f5a"
 name = "glimpse-app-dev"
-handle = "glimpse-app-dev"
 application_url = "https://into-goal-paying-expiration.trycloudflare.com"
 embedded = true
-
-[build]
-include_config_on_deploy = true
-automatically_update_urls_on_dev = true
+handle = "glimpse-app-dev"
 
 [webhooks]
 api_version = "2025-07"
@@ -18,7 +14,11 @@ api_version = "2025-07"
 scopes = "write_products"
 
 [auth]
-redirect_urls = ["https://into-goal-paying-expiration.trycloudflare.com/auth/callback", "https://into-goal-paying-expiration.trycloudflare.com/auth/shopify/callback", "https://into-goal-paying-expiration.trycloudflare.com/api/auth/callback"]
+redirect_urls = [
+  "https://into-goal-paying-expiration.trycloudflare.com/auth/callback",
+  "https://into-goal-paying-expiration.trycloudflare.com/auth/shopify/callback",
+  "https://into-goal-paying-expiration.trycloudflare.com/api/auth/callback"
+]
 
 [pos]
 embedded = false
