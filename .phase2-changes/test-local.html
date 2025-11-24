@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Phase 2 API Test</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+    }
+    .test-section {
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+    }
+    button {
+      background: #8b5cf6;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:hover {
+      background: #7c3aed;
+    }
+    .result {
+      background: #f9fafb;
+      padding: 15px;
+      border-radius: 6px;
+      margin-top: 10px;
+      white-space: pre-wrap;
+      font-family: monospace;
+      font-size: 12px;
+    }
+    input, select {
+      width: 100%;
+      padding: 8px;
+      margin: 5px 0 15px 0;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+    }
+    label {
+      display: block;
+      font-weight: 600;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🧪 Phase 2 API Test</h1>
+  <p>Test variant support backend functions</p>
+
+  <div class="test-section">
+    <h3>Configuration</h3>
+    
+    <label>API URL:</label>
+    <input type="text" id="apiUrl" value="http://localhost:3000/api/storefront/transform-image" placeholder="Your API URL">
+    
+    <label>Shop Domain:</label>
+    <input type="text" id="shopDomain" value="yourshop.myshopify.com" placeholder="shop.myshopify.com">
+    
+    <label>Product ID:</label>
+    <input type="text" id="productId" value="gid://shopify/Product/9616382230849" placeholder="gid://shopify/Product/123">
+    
+    <label>Variant ID (optional):</label>
+    <input type="text" id="variantId" value="gid://shopify/ProductVariant/TEST123" placeholder="Leave empty to test product-level">
+    
+    <label>Test Image:</label>
+    <input type="file" id="imageFile" accept="image/*">
+  </div>
+
+  <div class="test-section">
+    <h3>Test 1: With Variant ID</h3>
+    <p>Should use variant-specific prompt if configured</p>
+    <button onclick="testWithVariant()">Run Test 1</button>
+    <div id="result1" class="result" style="display:none;"></div>
+  </div>
+
+  <div class="test-section">
+    <h3>Test 2: Without Variant ID (Fallback)</h3>
+    <p>Should use product-level prompt</p>
+    <button onclick="testWithoutVariant()">Run Test 2</button>
+    <div id="result2" class="result" style="display:none;"></div>
+  </div>
+
+  <div class="test-section">
+    <h3>Test 3: Invalid Variant ID</h3>
+    <p>Should fall back to product-level prompt</p>
+    <button onclick="testInvalidVariant()">Run Test 3</button>
+    <div id="result3" class="result" style="display:none;"></div>
+  </div>
+
+  <script>
+    async function testAPI(variantId, resultId) {
+      const apiUrl = document.getElementById('apiUrl').value;
+      const shopDomain = document.getElementById('shopDomain').value;
+      const productId = document.getElementById('productId').value;
+      const fileInput = document.getElementById('imageFile');
+      const resultDiv = document.getElementById(resultId);
+      
+      if (!fileInput.files[0]) {
+        alert('Please select an image file first!');
+        return;
+      }
+      
+      resultDiv.style.display = 'block';
+      resultDiv.textContent = '⏳ Testing...';
+      
+      try {
+        const formData = new FormData();
+        formData.append('image', fileInput.files[0]);
+        formData.append('productId', productId);
+        formData.append('shopDomain', shopDomain);
+        if (variantId) {
+          formData.append('variantId', variantId);
+        }
+        
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          body: formData
+        });
+        
+        const data = await response.json();
+        
+        resultDiv.textContent = JSON.stringify({
+          status: response.status,
+          statusText: response.statusText,
+          data: data,
+          timestamp: new Date().toISOString()
+        }, null, 2);
+        
+        if (response.ok) {
+          resultDiv.style.background = '#d1fae5';
+          console.log('✅ Success:', data);
+        } else {
+          resultDiv.style.background = '#fee2e2';
+          console.log('❌ Error:', data);
+        }
+        
+      } catch (error) {
+        resultDiv.style.background = '#fee2e2';
+        resultDiv.textContent = '❌ Error: ' + error.message;
+        console.error('Test error:', error);
+      }
+    }
+    
+    function testWithVariant() {
+      const variantId = document.getElementById('variantId').value;
+      testAPI(variantId, 'result1');
+    }
+    
+    function testWithoutVariant() {
+      testAPI(null, 'result2');
+    }
+    
+    function testInvalidVariant() {
+      testAPI('gid://shopify/ProductVariant/INVALID999', 'result3');
+    }
+  </script>
+</body>
+</html>
+

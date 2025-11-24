@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { useLoaderData, useFetcher, useSubmit } from "@remix-run/react";
 import {
@@ -21,7 +21,14 @@ import {
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { getConfiguredProducts, saveProductConfiguration, updateProductConfiguration, deleteProductConfiguration } from "../lib/supabase.server";
+import { 
+  getConfiguredProducts, 
+  saveProductConfiguration, 
+  updateProductConfiguration, 
+  deleteProductConfiguration,
+  getProductVariants,
+  saveVariantConfiguration
+} from "../lib/supabase.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
@@ -48,11 +55,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                 }
               }
             }
-            variants(first: 1) {
+            variants(first: 100) {
               edges {
                 node {
                   id
+                  title
                   price
+                  availableForSale
                 }
               }
             }
@@ -134,6 +143,41 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return { success: true, message: "Test transformation initiated!" };
   }
 
+  if (action === "save-variant") {
+    try {
+      const productId = formData.get("productId") as string; // Internal UUID
+      const shopifyVariantId = formData.get("shopifyVariantId") as string;
+      const variantTitle = formData.get("variantTitle") as string;
+      const transformationPrompt = formData.get("transformationPrompt") as string;
+
+      // Save variant configuration
+      await saveVariantConfiguration(productId, shopifyVariantId, variantTitle, transformationPrompt);
+
+      return { success: true, message: "Variant configured successfully!" };
+    } catch (error) {
+      console.error("Error saving variant configuration:", error);
+      return { success: false, message: "Failed to save variant configuration. Please try again." };
+    }
+  }
+
+  if (action === "delete-variant") {
+    try {
+      const variantConfigId = formData.get("variantConfigId") as string;
+
+      // Delete variant configuration
+      const { supabase } = await import("../lib/supabase.server");
+      await supabase
+        .from('product_variants')
+        .delete()
+        .eq('id', variantConfigId);
+
+      return { success: true, message: "Variant configuration deleted successfully!" };
+    } catch (error) {
+      console.error("Error deleting variant configuration:", error);
+      return { success: false, message: "Failed to delete variant configuration. Please try again." };
+    }
+  }
+
   return { success: false, message: "Unknown action" };
 };
 
@@ -158,7 +202,9 @@ interface ShopifyProduct {
     edges: Array<{
       node: {
         id: string;
+        title: string;
         price: string;
+        availableForSale: boolean;
       };
     }>;
   };
@@ -191,6 +237,32 @@ export default function Products() {
   const [isTransforming, setIsTransforming] = useState(false);
   const [transformError, setTransformError] = useState<string | null>(null);
 
+  // Variant configuration state (Phase 3)
+  const [showVariants, setShowVariants] = useState(false);
+  const [configuredVariants, setConfiguredVariants] = useState<any[]>([]);
+  const [selectedVariantForConfig, setSelectedVariantForConfig] = useState<any | null>(null);
+  const [variantPrompt, setVariantPrompt] = useState("");
+  const [variantModalActive, setVariantModalActive] = useState(false);
+
+  // Load configured variants when editing a product
+  useEffect(() => {
+    async function loadVariants() {
+      if (selectedConfiguredProduct && modalActive) {
+        try {
+          // Fetch from Supabase using the product's internal ID
+          const response = await fetch(`/api/get-variants?productId=${selectedConfiguredProduct.id}`);
+          if (response.ok) {
+            const data = await response.json();
+            setConfiguredVariants(data.variants || []);
+          }
+        } catch (error) {
+          console.error('Error loading variants:', error);
+        }
+      }
+    }
+    loadVariants();
+  }, [selectedConfiguredProduct, modalActive]);
+
   const isConfigured = (shopifyId: string) => {
     return configuredProducts.some((cp) => cp.shopify_id === shopifyId);
   };
@@ -210,6 +282,8 @@ export default function Products() {
     setSelectedConfiguredProduct(configuredProduct);
     setIsEditMode(true);
     setTransformationPrompt(configuredProduct.transformation_prompt);
+    setShowVariants(false); // Reset variant view
+    setConfiguredVariants([]); // Will load when user expands variants
     setModalActive(true);
   };
 
@@ -328,6 +402,40 @@ export default function Products() {
       setTransformedImageUrl(null);
     }
     setTransformError(null);
+  };
+
+  // Variant configuration handlers (Phase 3)
+  const handleConfigureVariant = (variant: any) => {
+    // Check if variant already configured
+    const existingConfig = configuredVariants.find(v => v.shopify_variant_id === variant.id);
+    
+    setSelectedVariantForConfig(variant);
+    setVariantPrompt(existingConfig?.transformation_prompt || "");
+    setVariantModalActive(true);
+  };
+
+  const handleSaveVariant = () => {
+    if (!selectedConfiguredProduct || !selectedVariantForConfig) return;
+
+    const formData = new FormData();
+    formData.append("action", "save-variant");
+    formData.append("productId", selectedConfiguredProduct.id);
+    formData.append("shopifyVariantId", selectedVariantForConfig.id);
+    formData.append("variantTitle", selectedVariantForConfig.title);
+    formData.append("transformationPrompt", variantPrompt);
+
+    submit(formData, { method: "POST" });
+    setVariantModalActive(false);
+    setSelectedVariantForConfig(null);
+    setVariantPrompt("");
+  };
+
+  const handleDeleteVariant = (variantConfigId: string) => {
+    const formData = new FormData();
+    formData.append("action", "delete-variant");
+    formData.append("variantConfigId", variantConfigId);
+
+    submit(formData, { method: "POST" });
   };
 
   // Configured Products Table
@@ -548,14 +656,89 @@ export default function Products() {
                 )}
 
                 <TextField
-                  label="AI Transformation Prompt"
+                  label="Product-Level Transformation Prompt (Default)"
                   value={transformationPrompt}
                   onChange={setTransformationPrompt}
                   multiline={4}
-                  helpText="Describe how the AI should transform the customer's photo when using this product"
+                  helpText="This prompt is used when no variant-specific prompt is configured"
                   placeholder="e.g., Darken and thicken the person's eyelashes..."
                   autoComplete="off"
                 />
+
+                {/* Variant Configuration Section (Phase 3) */}
+                {isEditMode && selectedProduct && selectedProduct.variants.edges.length > 1 && (
+                  <BlockStack gap="400">
+                    <div style={{ borderTop: '1px solid #e1e3e5', paddingTop: '20px' }}>
+                      <BlockStack gap="300">
+                        <Text as="h4" variant="headingMd">
+                          Variant-Specific Prompts (Optional)
+                        </Text>
+                        <Text as="p" variant="bodyMd" tone="subdued">
+                          Configure different prompts for each variant. Falls back to product-level prompt if not configured.
+                        </Text>
+                        
+                        {selectedProduct.variants.edges.map(({ node: variant }) => {
+                          const variantConfig = configuredVariants.find(v => v.shopify_variant_id === variant.id);
+                          const isConfigured = !!variantConfig;
+                          
+                          return (
+                            <Card key={variant.id}>
+                              <BlockStack gap="200">
+                                <InlineStack align="space-between">
+                                  <BlockStack gap="100">
+                                    <Text as="p" variant="bodyMd" fontWeight="semibold">
+                                      {variant.title}
+                                    </Text>
+                                    <Text as="p" variant="bodySm" tone="subdued">
+                                      ${variant.price} • {variant.availableForSale ? 'Available' : 'Not available'}
+                                    </Text>
+                                  </BlockStack>
+                                  <Badge tone={isConfigured ? "success" : "info"}>
+                                    {isConfigured ? "Configured" : "Using default"}
+                                  </Badge>
+                                </InlineStack>
+                                
+                                {isConfigured && (
+                                  <BlockStack gap="200">
+                                    <Text as="p" variant="bodySm">
+                                      <strong>Prompt:</strong> {variantConfig.transformation_prompt.substring(0, 100)}
+                                      {variantConfig.transformation_prompt.length > 100 && '...'}
+                                    </Text>
+                                    <InlineStack gap="200">
+                                      <Button
+                                        size="slim"
+                                        onClick={() => handleConfigureVariant(variant)}
+                                      >
+                                        Edit
+                                      </Button>
+                                      <Button
+                                        size="slim"
+                                        variant="plain"
+                                        tone="critical"
+                                        onClick={() => handleDeleteVariant(variantConfig.id)}
+                                      >
+                                        Delete
+                                      </Button>
+                                    </InlineStack>
+                                  </BlockStack>
+                                )}
+                                
+                                {!isConfigured && (
+                                  <Button
+                                    size="slim"
+                                    onClick={() => handleConfigureVariant(variant)}
+                                  >
+                                    Configure Variant
+                                  </Button>
+                                )}
+                              </BlockStack>
+                            </Card>
+                          );
+                        })}
+                      </BlockStack>
+                    </div>
+                  </BlockStack>
+                )}
               </BlockStack>
             </FormLayout>
           )}
@@ -732,6 +915,55 @@ export default function Products() {
               </BlockStack>
             )}
           </BlockStack>
+        </Modal.Section>
+      </Modal>
+
+      {/* Variant Configuration Modal (Phase 3) */}
+      <Modal
+        open={variantModalActive}
+        onClose={() => setVariantModalActive(false)}
+        title="Configure Variant Prompt"
+        primaryAction={{
+          content: "Save Variant",
+          onAction: handleSaveVariant,
+          loading: fetcher.state === "submitting"
+        }}
+        secondaryActions={[
+          {
+            content: "Cancel",
+            onAction: () => setVariantModalActive(false)
+          }
+        ]}
+      >
+        <Modal.Section>
+          {selectedVariantForConfig && (
+            <BlockStack gap="300">
+              <BlockStack gap="100">
+                <Text as="h3" variant="headingMd">
+                  {selectedVariantForConfig.title}
+                </Text>
+                <Text as="p" variant="bodyMd" tone="subdued">
+                  Configure a specific transformation prompt for this variant
+                </Text>
+              </BlockStack>
+
+              <TextField
+                label="Variant Transformation Prompt"
+                value={variantPrompt}
+                onChange={setVariantPrompt}
+                multiline={4}
+                helpText="This prompt will be used specifically when customers select this variant"
+                placeholder="e.g., Apply vibrant red eyeliner to the person's eyes..."
+                autoComplete="off"
+              />
+
+              <Banner tone="info">
+                <Text as="p" variant="bodyMd">
+                  If this variant doesn't have a specific prompt, the product-level prompt will be used as a fallback.
+                </Text>
+              </Banner>
+            </BlockStack>
+          )}
         </Modal.Section>
       </Modal>
     </Page>
