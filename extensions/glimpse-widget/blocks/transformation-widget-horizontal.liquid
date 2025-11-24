@@ -214,6 +214,7 @@
   
   let currentProductId = null;
   let currentShopDomain = null;
+  let currentVariantId = null;  // Phase 4: Track selected variant
   let loadingTextInterval = null;
   
   // Loading messages array
@@ -287,6 +288,57 @@
     return hostname; // Fallback to current hostname
   }
   
+  // Phase 4: Get currently selected variant ID with multiple fallback methods
+  function getCurrentVariantId() {
+    console.log('=== DETECTING CURRENT VARIANT ===');
+    
+    // Method 1: Check form select with name="id" (most common)
+    const variantSelect = document.querySelector('select[name="id"]');
+    if (variantSelect && variantSelect.value) {
+      console.log('Found variant via select[name="id"]:', variantSelect.value);
+      return variantSelect.value;
+    }
+    
+    // Method 2: Check radio button with name="id"
+    const variantRadio = document.querySelector('input[name="id"]:checked');
+    if (variantRadio && variantRadio.value) {
+      console.log('Found variant via radio input:', variantRadio.value);
+      return variantRadio.value;
+    }
+    
+    // Method 3: Check hidden input with name="id"
+    const variantHidden = document.querySelector('input[name="id"][type="hidden"]');
+    if (variantHidden && variantHidden.value) {
+      console.log('Found variant via hidden input:', variantHidden.value);
+      return variantHidden.value;
+    }
+    
+    // Method 4: Check Shopify Analytics global
+    if (window.ShopifyAnalytics?.meta?.selectedVariantId) {
+      const variantId = window.ShopifyAnalytics.meta.selectedVariantId.toString();
+      console.log('Found variant via ShopifyAnalytics:', variantId);
+      return variantId;
+    }
+    
+    // Method 5: Check modern theme globals
+    if (window.productVariants?.current?.id) {
+      const variantId = window.productVariants.current.id.toString();
+      console.log('Found variant via productVariants:', variantId);
+      return variantId;
+    }
+    
+    // Method 6: Check URL parameter
+    const urlParams = new URLSearchParams(window.location.search);
+    const variantParam = urlParams.get('variant');
+    if (variantParam) {
+      console.log('Found variant in URL param:', variantParam);
+      return variantParam;
+    }
+    
+    console.log('No specific variant detected - will use product-level prompt');
+    return null;
+  }
+  
   // Initialize the widget
   window.widgetFunctions.initWidget = function() {
     console.log('=== INITIALIZING WIDGET ===');
@@ -299,9 +351,11 @@
     
     currentProductId = widget.getAttribute('data-product-id');
     currentShopDomain = getShopDomain();
+    currentVariantId = getCurrentVariantId();  // Phase 4: Detect initial variant
     
     console.log('Product ID:', currentProductId);
     console.log('Shop domain:', currentShopDomain);
+    console.log('Variant ID:', currentVariantId);  // Phase 4: Log variant
     console.log('App URL:', SHOPIFY_APP_URL);
     
     // Show initial upload state
@@ -315,6 +369,46 @@
       fileInput.click();
     }
   };
+  
+  // Phase 4: Listen for variant changes on the product page
+  function setupVariantChangeListeners() {
+    console.log('=== SETTING UP VARIANT LISTENERS ===');
+    
+    // Listen to select dropdown changes
+    const variantSelect = document.querySelector('select[name="id"]');
+    if (variantSelect) {
+      variantSelect.addEventListener('change', function(e) {
+        currentVariantId = e.target.value;
+        console.log('✓ Variant changed via select:', currentVariantId);
+      });
+      console.log('Added listener to select[name="id"]');
+    }
+    
+    // Listen to radio button changes
+    const variantRadios = document.querySelectorAll('input[name="id"][type="radio"]');
+    if (variantRadios.length > 0) {
+      variantRadios.forEach(radio => {
+        radio.addEventListener('change', function(e) {
+          if (e.target.checked) {
+            currentVariantId = e.target.value;
+            console.log('✓ Variant changed via radio:', currentVariantId);
+          }
+        });
+      });
+      console.log('Added listeners to', variantRadios.length, 'radio buttons');
+    }
+    
+    // Listen for Shopify theme variant change events
+    document.addEventListener('variant:change', function(event) {
+      if (event.detail && event.detail.variant && event.detail.variant.id) {
+        currentVariantId = event.detail.variant.id.toString();
+        console.log('✓ Variant changed via theme event:', currentVariantId);
+      }
+    });
+    console.log('Added listener for variant:change event');
+    
+    console.log('Variant change listeners setup complete');
+  }
   
   window.widgetFunctions.resetTransformation = function() {
     console.log('=== RESETTING TRANSFORMATION ===');
@@ -419,7 +513,8 @@
     // Initialize the widget
     window.widgetFunctions.initWidget();
     
-
+    // Phase 4: Set up variant change listeners
+    setupVariantChangeListeners();
     
     const imageUpload = document.getElementById('imageUpload');
     const beforeImage = document.getElementById('beforeImage');
@@ -647,6 +742,14 @@
         formData.append('image', file);
         formData.append('productId', currentProductId);
         formData.append('shopDomain', currentShopDomain);
+        
+        // Phase 4: Include variant ID if available
+        if (currentVariantId) {
+          formData.append('variantId', currentVariantId);
+          console.log('Including variant ID in request:', currentVariantId);
+        } else {
+          console.log('No variant ID - using product-level prompt');
+        }
         
         console.log('FormData contents:');
         for (let [key, value] of formData.entries()) {
