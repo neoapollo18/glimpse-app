@@ -1,7 +1,7 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { transformImage } from "../lib/ai.server";
-import { getProductConfiguration, trackTransformationEvent } from "../lib/supabase.server";
+import { getProductOrVariantConfiguration, trackTransformationEvent } from "../lib/supabase.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   try {
@@ -32,8 +32,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const imageFile = formData.get("image") as File;
     const productId = formData.get("productId") as string;
     const shopDomain = formData.get("shopDomain") as string;
+    const variantId = formData.get("variantId") as string | null; // NEW: Optional variant ID
 
-    console.log('Storefront API called with:', { productId, shopDomain, imageSize: imageFile?.size });
+    console.log('Storefront API called with:', { productId, shopDomain, variantId, imageSize: imageFile?.size });
 
     if (!imageFile || !productId || !shopDomain) {
       return json({ 
@@ -46,8 +47,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       });
     }
 
-    // Get product configuration from Supabase
-    const productConfig = await getProductConfiguration(shopDomain, productId);
+    // Get product or variant configuration from Supabase
+    // If variantId provided, tries variant first, then falls back to product
+    const productConfig = await getProductOrVariantConfiguration(
+      shopDomain, 
+      productId,
+      variantId || undefined
+    );
     
     if (!productConfig) {
       return json({ 

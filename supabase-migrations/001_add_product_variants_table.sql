@@ -1,10 +1,10 @@
 -- ============================================
 -- MIGRATION: Add Product Variants Support
--- Date: 2024-11-24
--- Description: Adds variant-level transformation prompts
+-- Date: 2025-11-24
+-- Description: Variant-level transformation prompts: for MAKE UP COMPANIES
 -- ============================================
 
--- SAFETY NOTE: This migration is ADDITIVE ONLY
+-- NOTE: ADDITIVE ONLY
 -- - Does NOT modify existing tables
 -- - Does NOT delete any data
 -- - Existing products table remains unchanged as fallback
@@ -24,17 +24,17 @@
 CREATE TABLE IF NOT EXISTS product_variants (
   -- Primary key
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  
+
   -- Foreign key to products table
   product_id UUID NOT NULL,
   
-  -- Shopify variant identifier (e.g., "gid://shopify/ProductVariant/123456789")
+  -- Shopify variant identifier (for example, "gid://shopify/ProductVariant/123456789")
   shopify_variant_id TEXT NOT NULL,
   
-  -- Human-readable variant name (e.g., "Red Eyeliner", "Small / Cotton")
+  -- variant name (e.g., "Red Eyeliner", "Small / Cotton")
   variant_title TEXT NOT NULL,
   
-  -- Variant-specific transformation prompt
+  -- prompt
   transformation_prompt TEXT NOT NULL,
   
   -- Metadata
