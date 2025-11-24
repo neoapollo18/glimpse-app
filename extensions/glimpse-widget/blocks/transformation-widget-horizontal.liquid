@@ -364,6 +364,48 @@
       console.log('Could not check product form:', e.message);
     }
     
+    // Method 10: Check data-variant-id attribute on product form
+    const formWithVariant = document.querySelector('[data-variant-id]');
+    if (formWithVariant) {
+      const variantId = formWithVariant.getAttribute('data-variant-id');
+      if (variantId) {
+        console.log('Found variant via data-variant-id:', variantId);
+        return variantId;
+      }
+    }
+    
+    // Method 11: Check variant-selects component (Shopify 2.0 themes)
+    const variantSelectsComponent = document.querySelector('variant-selects');
+    if (variantSelectsComponent && variantSelectsComponent.currentVariant) {
+      const variantId = variantSelectsComponent.currentVariant.id.toString();
+      console.log('Found variant via variant-selects component:', variantId);
+      return variantId;
+    }
+    
+    // Method 12: Check for selected option buttons/fieldsets
+    try {
+      const selectedOptions = document.querySelectorAll('input[type="radio"][name^="options"]:checked');
+      if (selectedOptions.length > 0) {
+        // Try to find matching variant from product JSON
+        const productJson = document.querySelector('[data-product-json], script[data-product-json], script[type="application/json"][data-product]');
+        if (productJson) {
+          const productData = JSON.parse(productJson.textContent);
+          if (productData.variants) {
+            const selectedOptionValues = Array.from(selectedOptions).map(opt => opt.value);
+            const matchedVariant = productData.variants.find(variant => {
+              return variant.options.every((opt, idx) => opt === selectedOptionValues[idx]);
+            });
+            if (matchedVariant) {
+              console.log('Found variant via option matching:', matchedVariant.id);
+              return matchedVariant.id.toString();
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.log('Could not match variant via options:', e.message);
+    }
+    
     console.log('No specific variant detected - will use product-level prompt');
     return null;
   }
