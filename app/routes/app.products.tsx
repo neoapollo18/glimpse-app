@@ -414,7 +414,7 @@ export default function Products() {
     setVariantModalActive(true);
   };
 
-  const handleSaveVariant = () => {
+  const handleSaveVariant = async () => {
     if (!selectedConfiguredProduct || !selectedVariantForConfig) return;
 
     const formData = new FormData();
@@ -428,14 +428,42 @@ export default function Products() {
     setVariantModalActive(false);
     setSelectedVariantForConfig(null);
     setVariantPrompt("");
+    
+    // Reload configured variants to show updated status
+    setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/get-variants?productId=${selectedConfiguredProduct.id}`);
+        if (response.ok) {
+          const data = await response.json();
+          setConfiguredVariants(data.variants || []);
+        }
+      } catch (error) {
+        console.error('Error reloading variants:', error);
+      }
+    }, 500); // Small delay to let the save complete
   };
 
-  const handleDeleteVariant = (variantConfigId: string) => {
+  const handleDeleteVariant = async (variantConfigId: string) => {
     const formData = new FormData();
     formData.append("action", "delete-variant");
     formData.append("variantConfigId", variantConfigId);
 
     submit(formData, { method: "POST" });
+    
+    // Reload configured variants to show updated status
+    if (selectedConfiguredProduct) {
+      setTimeout(async () => {
+        try {
+          const response = await fetch(`/api/get-variants?productId=${selectedConfiguredProduct.id}`);
+          if (response.ok) {
+            const data = await response.json();
+            setConfiguredVariants(data.variants || []);
+          }
+        } catch (error) {
+          console.error('Error reloading variants:', error);
+        }
+      }, 500);
+    }
   };
 
   // Configured Products Table
