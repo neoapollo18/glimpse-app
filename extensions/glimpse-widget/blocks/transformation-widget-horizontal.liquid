@@ -313,7 +313,7 @@
       return variantHidden.value;
     }
     
-    // Method 4: Check any input with name="id" (broader search)
+    // Method 4: Check any input with name="id" (broader search) GREATER DETECTION
     const anyIdInput = document.querySelector('input[name="id"]');
     if (anyIdInput && anyIdInput.value) {
       console.log('Found variant via any input[name="id"]:', anyIdInput.value);
@@ -349,7 +349,7 @@
       return variantParam;
     }
     
-    // Method 9: Try to find variant in product form data
+    // Method 9: Try to find variant in product form data,  improtant
     try {
       const productForm = document.querySelector('form[action*="/cart/add"]');
       if (productForm) {

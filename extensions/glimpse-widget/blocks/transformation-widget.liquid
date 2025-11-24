@@ -313,7 +313,7 @@
       return variantHidden.value;
     }
     
-    // Method 4: Check any input with name="id" (broader search)
+    // Method 4: Check any input with name="id" (broader search), GREATER DETECTION
     const anyIdInput = document.querySelector('input[name="id"]');
     if (anyIdInput && anyIdInput.value) {
       console.log('Found variant via any input[name="id"]:', anyIdInput.value);
@@ -427,7 +427,7 @@
       console.log('Added listeners to', variantRadios.length, 'radio buttons');
     }
     
-    // Listen to ALL inputs with name="id" (catches custom implementations)
+    // Listen to ALL inputs with name="id" (catches custom implementations), GREATER DETECTION
     const allIdInputs = document.querySelectorAll('input[name="id"]');
     allIdInputs.forEach(input => {
       input.addEventListener('change', function(e) {
@@ -439,7 +439,7 @@
       console.log('Added listeners to', allIdInputs.length, 'inputs with name="id"');
     }
     
-    // Listen for Shopify theme variant change events
+    // Listen for Shopify theme variant change events, GREATER DETECTION
     document.addEventListener('variant:change', function(event) {
       if (event.detail && event.detail.variant && event.detail.variant.id) {
         currentVariantId = event.detail.variant.id.toString();
