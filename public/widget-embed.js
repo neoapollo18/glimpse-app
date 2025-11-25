@@ -26,15 +26,27 @@
     }
     
     widgets.forEach(function(container) {
-      const productId = container.getAttribute('data-product-id');
-      const shopDomain = container.getAttribute('data-shop-domain');
+      let productId = container.getAttribute('data-product-id');
+      let shopDomain = container.getAttribute('data-shop-domain');
+      
+      // Auto-detect if attributes are missing or contain Liquid templates
+      if (!productId || productId.includes('{{') || productId.includes('}}')) {
+        productId = autoDetectProductId();
+        console.log('Auto-detected product ID:', productId);
+      }
+      
+      if (!shopDomain || shopDomain.includes('{{') || shopDomain.includes('}}')) {
+        shopDomain = autoDetectShopDomain();
+        console.log('Auto-detected shop domain:', shopDomain);
+      }
       
       if (!productId || !shopDomain) {
-        console.error('Glimpse Widget: Missing data-product-id or data-shop-domain attributes');
+        console.error('Glimpse Widget: Could not detect product ID or shop domain');
+        container.innerHTML = '<p style="color:red;">Glimpse Widget: Must be on a product page</p>';
         return;
       }
       
-      console.log('✓ Initializing widget for product:', productId);
+      console.log('✓ Initializing widget for product:', productId, 'on shop:', shopDomain);
       container.setAttribute('data-embed-initialized', 'true');
       
       // Get current variant ID
@@ -46,6 +58,81 @@
       // Listen for variant changes
       setupVariantListeners(container, productId, shopDomain);
     });
+  }
+  
+  function autoDetectProductId() {
+    // Method 1: Check meta tags
+    const metaProduct = document.querySelector('meta[property="product:id"], meta[name="product-id"]');
+    if (metaProduct) {
+      return metaProduct.getAttribute('content');
+    }
+    
+    // Method 2: Check Shopify global
+    if (window.ShopifyAnalytics && window.ShopifyAnalytics.meta && window.ShopifyAnalytics.meta.product) {
+      return window.ShopifyAnalytics.meta.product.id.toString();
+    }
+    
+    // Method 3: Check window.meta.product
+    if (window.meta && window.meta.product && window.meta.product.id) {
+      return window.meta.product.id.toString();
+    }
+    
+    // Method 4: Check product JSON-LD
+    const jsonLd = document.querySelector('script[type="application/ld+json"]');
+    if (jsonLd) {
+      try {
+        const data = JSON.parse(jsonLd.textContent);
+        if (data['@type'] === 'Product' && data.productID) {
+          return data.productID;
+        }
+      } catch (e) {}
+    }
+    
+    // Method 5: Extract from URL
+    const urlMatch = window.location.pathname.match(/\/products\/([^\/\?]+)/);
+    if (urlMatch) {
+      // We have the handle, try to get ID from product form
+      const form = document.querySelector('form[action*="/cart/add"]');
+      if (form) {
+        const idInput = form.querySelector('input[name="id"], select[name="id"]');
+        if (idInput && idInput.value) {
+          return idInput.value;
+        }
+      }
+    }
+    
+    return null;
+  }
+  
+  function autoDetectShopDomain() {
+    // Method 1: Check Shopify global
+    if (window.Shopify && window.Shopify.shop) {
+      return window.Shopify.shop;
+    }
+    
+    // Method 2: Check meta tags
+    const metaShop = document.querySelector('meta[name="shopify-shop-domain"], meta[property="og:site_name"]');
+    if (metaShop) {
+      let domain = metaShop.getAttribute('content');
+      if (domain && !domain.includes('.myshopify.com')) {
+        domain = domain + '.myshopify.com';
+      }
+      return domain;
+    }
+    
+    // Method 3: Extract from scripts
+    const scripts = document.querySelectorAll('script[src*="myshopify.com"]');
+    for (let script of scripts) {
+      const match = script.src.match(/\/\/([^\/]+\.myshopify\.com)/);
+      if (match) return match[1];
+    }
+    
+    // Method 4: Check hostname if it's a myshopify domain
+    if (window.location.hostname.includes('.myshopify.com')) {
+      return window.location.hostname;
+    }
+    
+    return null;
   }
   
   function getCurrentVariantId() {
