@@ -1,0 +1,342 @@
+/**
+ * Glimpse AI Widget - Standalone Embed Script
+ * Hosted at: https://glimpse-app-charles.onrender.com/widget-embed.js
+ * 
+ * Usage in EComposer or any page builder:
+ * 
+ * <div class="glimpse-ai-widget" 
+ *      data-product-id="{{ product.id }}"
+ *      data-shop-domain="{{ shop.permanent_domain }}"></div>
+ * <script src="https://glimpse-app-charles.onrender.com/widget-embed.js"></script>
+ */
+
+(function() {
+  'use strict';
+
+  const SHOPIFY_APP_URL = 'https://glimpse-app-charles.onrender.com';
+
+  function initGlimpseWidgets() {
+    console.log('🎨 Glimpse AI Widget - Initializing');
+    
+    const widgets = document.querySelectorAll('.glimpse-ai-widget:not([data-embed-initialized])');
+    
+    if (widgets.length === 0) {
+      console.log('No Glimpse widgets found on page');
+      return;
+    }
+    
+    widgets.forEach(function(container) {
+      const productId = container.getAttribute('data-product-id');
+      const shopDomain = container.getAttribute('data-shop-domain');
+      
+      if (!productId || !shopDomain) {
+        console.error('Glimpse Widget: Missing data-product-id or data-shop-domain attributes');
+        return;
+      }
+      
+      console.log('✓ Initializing widget for product:', productId);
+      container.setAttribute('data-embed-initialized', 'true');
+      
+      // Get current variant ID
+      let currentVariantId = getCurrentVariantId();
+      
+      // Render widget UI
+      renderWidget(container, productId, shopDomain, currentVariantId);
+      
+      // Listen for variant changes
+      setupVariantListeners(container, productId, shopDomain);
+    });
+  }
+  
+  function getCurrentVariantId() {
+    // Method 1: Check select with name="id"
+    const select = document.querySelector('select[name="id"]');
+    if (select && select.value) return select.value;
+    
+    // Method 2: Check radio buttons
+    const radio = document.querySelector('input[name="id"]:checked');
+    if (radio && radio.value) return radio.value;
+    
+    // Method 3: Check hidden input
+    const hidden = document.querySelector('input[name="id"][type="hidden"]');
+    if (hidden && hidden.value) return hidden.value;
+    
+    // Method 4: Check URL parameter
+    const urlParams = new URLSearchParams(window.location.search);
+    const variant = urlParams.get('variant');
+    if (variant) return variant;
+    
+    return null;
+  }
+  
+  function setupVariantListeners(container, productId, shopDomain) {
+    // Listen for select changes
+    const selects = document.querySelectorAll('select[name="id"], select[name^="option"]');
+    selects.forEach(function(select) {
+      select.addEventListener('change', function() {
+        const newVariantId = getCurrentVariantId();
+        console.log('Variant changed to:', newVariantId);
+        container.setAttribute('data-current-variant', newVariantId || '');
+      });
+    });
+    
+    // Listen for radio button changes
+    const radios = document.querySelectorAll('input[type="radio"][name="id"], input[type="radio"][name^="option"]');
+    radios.forEach(function(radio) {
+      radio.addEventListener('change', function() {
+        const newVariantId = getCurrentVariantId();
+        console.log('Variant changed to:', newVariantId);
+        container.setAttribute('data-current-variant', newVariantId || '');
+      });
+    });
+  }
+  
+  function renderWidget(container, productId, shopDomain, variantId) {
+    const widgetId = 'glimpse-' + productId + '-' + Date.now();
+    
+    container.innerHTML = `
+      <style>
+        .glimpse-embed-widget {
+          max-width: 600px;
+          margin: 20px auto;
+          padding: 30px;
+          border: 2px solid #e0e0e0;
+          border-radius: 12px;
+          background: #ffffff;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        .glimpse-embed-header {
+          text-align: center;
+          margin-bottom: 20px;
+        }
+        .glimpse-embed-header h3 {
+          margin: 0 0 10px 0;
+          font-size: 24px;
+          font-weight: 600;
+        }
+        .glimpse-embed-header p {
+          margin: 0;
+          color: #666;
+          font-size: 14px;
+        }
+        .glimpse-upload-btn {
+          display: block;
+          width: 100%;
+          padding: 15px;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          border: none;
+          border-radius: 8px;
+          font-size: 16px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: transform 0.2s;
+        }
+        .glimpse-upload-btn:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        .glimpse-loading {
+          text-align: center;
+          padding: 40px;
+        }
+        .glimpse-loading-spinner {
+          border: 4px solid #f3f3f3;
+          border-top: 4px solid #667eea;
+          border-radius: 50%;
+          width: 40px;
+          height: 40px;
+          animation: spin 1s linear infinite;
+          margin: 0 auto 20px;
+        }
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        .glimpse-results {
+          display: flex;
+          gap: 20px;
+          justify-content: center;
+          margin: 20px 0;
+        }
+        .glimpse-result-item {
+          text-align: center;
+        }
+        .glimpse-result-item img {
+          max-width: 250px;
+          border-radius: 8px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .glimpse-result-item p {
+          margin: 10px 0 0 0;
+          font-weight: 600;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+        }
+        .glimpse-retry-btn {
+          display: block;
+          width: 100%;
+          padding: 12px;
+          background: white;
+          border: 2px solid #667eea;
+          color: #667eea;
+          border-radius: 8px;
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+          margin-top: 15px;
+        }
+        .glimpse-error {
+          background: #fee;
+          border: 1px solid #fcc;
+          padding: 15px;
+          border-radius: 8px;
+          color: #c00;
+          text-align: center;
+        }
+      </style>
+      
+      <div class="glimpse-embed-widget">
+        <div id="${widgetId}-upload" class="glimpse-upload-state">
+          <div class="glimpse-embed-header">
+            <h3>✨ See Your Transformation!</h3>
+            <p>Upload your photo to see how this product looks on you</p>
+          </div>
+          <button class="glimpse-upload-btn" onclick="document.getElementById('${widgetId}-file').click()">
+            📸 Upload Your Photo
+          </button>
+          <input type="file" id="${widgetId}-file" accept="image/*" style="display:none;">
+        </div>
+        
+        <div id="${widgetId}-loading" class="glimpse-loading" style="display:none;">
+          <div class="glimpse-loading-spinner"></div>
+          <p>✨ Creating your transformation...</p>
+          <p style="font-size: 12px; color: #999;">This may take a few seconds</p>
+        </div>
+        
+        <div id="${widgetId}-results" style="display:none;">
+          <div class="glimpse-results" id="${widgetId}-images"></div>
+          <button class="glimpse-retry-btn" onclick="glimpseWidget.retry('${widgetId}')">
+            🔄 Try Another Photo
+          </button>
+        </div>
+        
+        <div id="${widgetId}-error" class="glimpse-error" style="display:none;"></div>
+      </div>
+    `;
+    
+    // Set up file input handler
+    document.getElementById(widgetId + '-file').addEventListener('change', function(e) {
+      handleUpload(e, widgetId, productId, shopDomain, container);
+    });
+    
+    // Store widget ID on container
+    container.setAttribute('data-widget-id', widgetId);
+  }
+  
+  function handleUpload(event, widgetId, productId, shopDomain, container) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    console.log('📤 Uploading file:', file.name);
+    
+    // Show loading
+    document.getElementById(widgetId + '-upload').style.display = 'none';
+    document.getElementById(widgetId + '-loading').style.display = 'block';
+    document.getElementById(widgetId + '-error').style.display = 'none';
+    
+    // Get current variant
+    const variantId = container.getAttribute('data-current-variant') || getCurrentVariantId();
+    
+    // Prepare form data
+    const formData = new FormData();
+    formData.append('image', file);
+    formData.append('productId', productId);
+    formData.append('shopDomain', shopDomain);
+    if (variantId) {
+      formData.append('variantId', variantId);
+      console.log('📦 Using variant:', variantId);
+    }
+    
+    // Send to API
+    fetch(SHOPIFY_APP_URL + '/api/storefront/transform-image', {
+      method: 'POST',
+      body: formData
+    })
+    .then(function(response) {
+      if (!response.ok) {
+        throw new Error('API request failed');
+      }
+      return response.json();
+    })
+    .then(function(data) {
+      if (data.success && data.generatedImage) {
+        showResults(widgetId, file, data.generatedImage);
+      } else {
+        showError(widgetId, data.error || 'Transformation failed. Please try again.');
+      }
+    })
+    .catch(function(error) {
+      console.error('❌ Transform error:', error);
+      showError(widgetId, 'Network error. Please check your connection and try again.');
+    });
+  }
+  
+  function showResults(widgetId, originalFile, transformedBase64) {
+    const originalUrl = URL.createObjectURL(originalFile);
+    
+    document.getElementById(widgetId + '-loading').style.display = 'none';
+    document.getElementById(widgetId + '-results').style.display = 'block';
+    
+    document.getElementById(widgetId + '-images').innerHTML = `
+      <div class="glimpse-result-item">
+        <img src="${originalUrl}" alt="Before">
+        <p>Before</p>
+      </div>
+      <div class="glimpse-result-item">
+        <img src="data:image/jpeg;base64,${transformedBase64}" alt="After">
+        <p>After ✨</p>
+      </div>
+    `;
+    
+    console.log('✅ Transformation complete!');
+  }
+  
+  function showError(widgetId, message) {
+    document.getElementById(widgetId + '-loading').style.display = 'none';
+    document.getElementById(widgetId + '-upload').style.display = 'block';
+    
+    const errorDiv = document.getElementById(widgetId + '-error');
+    errorDiv.textContent = message;
+    errorDiv.style.display = 'block';
+    
+    setTimeout(function() {
+      errorDiv.style.display = 'none';
+    }, 5000);
+  }
+  
+  // Global API
+  window.glimpseWidget = {
+    init: initGlimpseWidgets,
+    retry: function(widgetId) {
+      document.getElementById(widgetId + '-results').style.display = 'none';
+      document.getElementById(widgetId + '-upload').style.display = 'block';
+      document.getElementById(widgetId + '-file').value = '';
+    }
+  };
+  
+  // Auto-init
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initGlimpseWidgets);
+  } else {
+    initGlimpseWidgets();
+  }
+  
+  // Watch for dynamic additions
+  if (window.MutationObserver) {
+    const observer = new MutationObserver(initGlimpseWidgets);
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+})();
+
