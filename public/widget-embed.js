@@ -184,44 +184,56 @@
     container.innerHTML = `
       <style>
         .glimpse-embed-widget {
-          max-width: 600px;
-          margin: 20px auto;
-          padding: 30px;
-          border: 2px solid #e0e0e0;
-          border-radius: 12px;
-          background: #ffffff;
+          max-width: 100%;
+          margin: 30px 0;
+          padding: 40px 20px;
+          border: 1px solid #e5e5e5;
+          border-radius: 16px;
+          background: linear-gradient(135deg, #f8f9ff 0%, #fff5f7 100%);
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          box-shadow: 0 2px 12px rgba(0,0,0,0.08);
         }
         .glimpse-embed-header {
           text-align: center;
-          margin-bottom: 20px;
+          margin-bottom: 25px;
         }
         .glimpse-embed-header h3 {
-          margin: 0 0 10px 0;
-          font-size: 24px;
-          font-weight: 600;
+          margin: 0 0 12px 0;
+          font-size: 28px;
+          font-weight: 700;
+          color: #2d2d2d;
+          letter-spacing: -0.5px;
         }
         .glimpse-embed-header p {
           margin: 0;
           color: #666;
-          font-size: 14px;
+          font-size: 16px;
+          line-height: 1.5;
         }
         .glimpse-upload-btn {
-          display: block;
-          width: 100%;
-          padding: 15px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          padding: 18px 40px;
           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
           color: white;
           border: none;
-          border-radius: 8px;
-          font-size: 16px;
-          font-weight: 600;
+          border-radius: 12px;
+          font-size: 18px;
+          font-weight: 700;
           cursor: pointer;
-          transition: transform 0.2s;
+          transition: all 0.3s ease;
+          box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+          margin: 0 auto;
+          display: block;
         }
         .glimpse-upload-btn:hover {
           transform: translateY(-2px);
-          box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+          box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+        .glimpse-upload-btn:active {
+          transform: translateY(0);
         }
         .glimpse-loading {
           text-align: center;
@@ -290,7 +302,7 @@
             <h3>✨ See Your Transformation!</h3>
             <p>Upload your photo to see how this product looks on you</p>
           </div>
-          <button class="glimpse-upload-btn" onclick="document.getElementById('${widgetId}-file').click()">
+          <button type="button" class="glimpse-upload-btn" onclick="document.getElementById('${widgetId}-file').click(); return false;">
             📸 Upload Your Photo
           </button>
           <input type="file" id="${widgetId}-file" accept="image/*" style="display:none;">
@@ -304,7 +316,7 @@
         
         <div id="${widgetId}-results" style="display:none;">
           <div class="glimpse-results" id="${widgetId}-images"></div>
-          <button class="glimpse-retry-btn" onclick="glimpseWidget.retry('${widgetId}')">
+          <button type="button" class="glimpse-retry-btn" onclick="glimpseWidget.retry('${widgetId}'); return false;">
             🔄 Try Another Photo
           </button>
         </div>
