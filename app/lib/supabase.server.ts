@@ -13,13 +13,48 @@ export const supabase = createClient(
   process.env.SUPABASE_API_KEY
 );
 
-// Helper functions for product configurations
-export async function getConfiguredProducts(shopDomain: string) {
-  const { data: shop } = await supabase
+// Helper function to find shop with fallback logic
+async function findShopByDomain(shopDomain: string) {
+  // Try exact match first
+  let { data: shop } = await supabase
     .from('shops')
-    .select('id')
+    .select('id, shop_domain')
     .eq('shop_domain', shopDomain)
     .single();
+
+  // If not found and it's not a .myshopify.com domain, try alternatives
+  if (!shop && !shopDomain.includes('.myshopify.com')) {
+    const storeName = shopDomain.split('.')[0];
+    
+    // Try by shopify_id
+    const { data: altShop } = await supabase
+      .from('shops')
+      .select('id, shop_domain')
+      .eq('shopify_id', storeName)
+      .single();
+    
+    if (altShop) {
+      shop = altShop;
+    } else {
+      // Try fuzzy match
+      const { data: fuzzyShop } = await supabase
+        .from('shops')
+        .select('id, shop_domain')
+        .ilike('shop_domain', `${storeName}.myshopify.com%`)
+        .single();
+      
+      if (fuzzyShop) {
+        shop = fuzzyShop;
+      }
+    }
+  }
+
+  return shop;
+}
+
+// Helper functions for product configurations
+export async function getConfiguredProducts(shopDomain: string) {
+  const shop = await findShopByDomain(shopDomain);
 
   if (!shop) return [];
 
@@ -39,14 +74,11 @@ export async function getConfiguredProducts(shopDomain: string) {
 export async function getProductConfiguration(shopDomain: string, shopifyId: string) {
   console.log('Looking for product config:', { shopDomain, shopifyId });
   
-  const { data: shop } = await supabase
-    .from('shops')
-    .select('id')
-    .eq('shop_domain', shopDomain)
-    .single();
+  const shop = await findShopByDomain(shopDomain);
 
   if (!shop) {
-    console.log('Shop not found for domain:', shopDomain);
+    console.log('❌ Shop not found for domain:', shopDomain);
+    console.log('💡 TIP: Make sure the shop is configured with the .myshopify.com domain');
     return null;
   }
 
@@ -239,12 +271,8 @@ export async function trackTransformationEvent(
   eventType: string = 'transformation'
 ) {
   try {
-    // Get shop
-    const { data: shop } = await supabase
-      .from('shops')
-      .select('id')
-      .eq('shop_domain', shopDomain)
-      .single();
+    // Get shop with fallback logic
+    const shop = await findShopByDomain(shopDomain);
 
     if (!shop) {
       console.log('Shop not found for analytics tracking:', shopDomain);
@@ -327,12 +355,8 @@ export async function trackTransformationEvent(
 
 export async function getAnalytics(shopDomain: string, daysBack: number = 7) {
   try {
-    // Get shop
-    const { data: shop } = await supabase
-      .from('shops')
-      .select('id')
-      .eq('shop_domain', shopDomain)
-      .single();
+    // Get shop with fallback logic
+    const shop = await findShopByDomain(shopDomain);
 
     if (!shop) {
       console.log('Shop not found for analytics:', shopDomain);

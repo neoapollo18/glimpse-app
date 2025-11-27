@@ -555,31 +555,54 @@
   }
 
   function autoDetectShopDomain() {
-    // Method 1: Shopify global
+    // CRITICAL: Always try to get the .myshopify.com domain, not custom domains
+    // This prevents "product not configured" errors when custom domains are used
+    
+    // Method 1: Shopify global (most reliable - always returns .myshopify.com)
     if (window.Shopify && window.Shopify.shop) {
+      console.log('✅ Found shop domain from Shopify.shop:', window.Shopify.shop);
       return window.Shopify.shop;
     }
     
-    // Method 2: Check hostname
-    const hostname = window.location.hostname;
-    if (hostname.includes('.myshopify.com')) {
-      return hostname;
-    }
-    
-    // Method 3: Extract from scripts
+    // Method 2: Extract from Shopify scripts (second most reliable)
     const scripts = document.querySelectorAll('script[src*="myshopify.com"]');
     for (let script of scripts) {
       const match = script.src.match(/\/\/([^\/]+\.myshopify\.com)/);
-      if (match) return match[1];
+      if (match) {
+        console.log('✅ Found shop domain from script:', match[1]);
+        return match[1];
+      }
+    }
+    
+    // Method 3: Check if current hostname is .myshopify.com
+    const hostname = window.location.hostname;
+    if (hostname.includes('.myshopify.com')) {
+      console.log('✅ Found shop domain from hostname:', hostname);
+      return hostname;
     }
     
     // Method 4: Meta tag
     const shopMeta = document.querySelector('meta[name="shopify-shop-domain"]');
     if (shopMeta && shopMeta.content) {
+      console.log('✅ Found shop domain from meta tag:', shopMeta.content);
       return shopMeta.content;
     }
     
-    return hostname; // Fallback
+    // Method 5: ShopifyAnalytics (another Shopify global)
+    if (window.ShopifyAnalytics && window.ShopifyAnalytics.meta && window.ShopifyAnalytics.meta.page && window.ShopifyAnalytics.meta.page.customerId) {
+      // Try to extract shop from ShopifyAnalytics
+      const analyticsShop = window.ShopifyAnalytics.lib && window.ShopifyAnalytics.lib.config && window.ShopifyAnalytics.lib.config.Trekkie && window.ShopifyAnalytics.lib.config.Trekkie.defaultAttributes && window.ShopifyAnalytics.lib.config.Trekkie.defaultAttributes.shopId;
+      if (analyticsShop) {
+        console.log('✅ Found shop ID from ShopifyAnalytics:', analyticsShop);
+        // Note: This might be a shop ID, not domain, but worth trying
+      }
+    }
+    
+    // FALLBACK WARNING: If we get here, we're using custom domain which may cause issues
+    console.warn('⚠️  Could not find .myshopify.com domain. Using hostname as fallback:', hostname);
+    console.warn('⚠️  This may cause "product not configured" errors if the shop uses a custom domain.');
+    console.warn('⚠️  Please ensure products are configured with the correct shop domain.');
+    return hostname;
   }
 
 })();
