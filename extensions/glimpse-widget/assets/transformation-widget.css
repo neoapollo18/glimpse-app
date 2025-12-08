@@ -309,11 +309,12 @@
 .comparison-image {
   width: 100%;
   height: 220px;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
   border: 2px solid #e5e7eb;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  object-position: center;
+  background: #f9fafb;
   image-orientation: from-image;
   /* Ensure proper orientation on all devices */
   -webkit-transform: none;
@@ -513,6 +514,7 @@
   
   .comparison-image {
     height: 200px;
+    object-fit: contain;
   }
   
   .results-actions {
@@ -686,6 +688,7 @@
 
   .glimpse-ai-widget.layout-horizontal .comparison-image {
     height: 280px;
+    object-fit: contain;
   }
 
   .glimpse-ai-widget.layout-horizontal .upload-button {
@@ -742,6 +745,7 @@
 
   .glimpse-ai-widget.layout-horizontal .comparison-image {
     height: 320px;
+    object-fit: contain;
   }
 
   .glimpse-ai-widget.layout-horizontal .upload-button,
