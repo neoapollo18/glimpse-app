@@ -265,12 +265,10 @@
         box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
       }
       
-        .glimpse-comparison-image {
+      .glimpse-comparison-image {
         width: 100%;
         height: 220px;
-        object-fit: contain;
-        object-position: center;
-        background: #f9fafb;
+        object-fit: cover;
         border: 2px solid #e5e7eb;
         border-radius: 12px;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
