@@ -38,8 +38,8 @@
     assign widget_shadow = '0 4px 20px rgba(0, 0, 0, 0.1)'
   endif
   
-  # Image corner radius customization
-  assign image_border_radius = block.settings.image_border_radius | default: 12
+  # Widget container corner radius customization
+  assign widget_border_radius = block.settings.widget_border_radius | default: 16
 %}
 
 <!-- Glimpse AI Transformation Widget -->
@@ -51,7 +51,7 @@
             --caption-color-1: {{ caption_color_1 }};
             --caption-color-2: {{ caption_color_2 }};
             --icon-color: {{ icon_color }};
-            --image-border-radius: {{ image_border_radius }}px;
+            --widget-border-radius: {{ widget_border_radius }}px;
             --background-color: {{ background_color }}; 
             --text-color: {{ text_color }};
             --button-text-color: {{ button_text_color }};
@@ -1123,13 +1123,13 @@
     },
     {
       "type": "range",
-      "id": "image_border_radius",
-      "label": "Image Corner Radius (px)",
+      "id": "widget_border_radius",
+      "label": "Widget Corner Radius (px)",
       "min": 0,
-      "max": 30,
+      "max": 40,
       "step": 2,
-      "default": 12,
-      "info": "Roundness of transformation image corners (0 = square, 30 = very rounded)"
+      "default": 16,
+      "info": "Roundness of the entire widget container corners (0 = square, 40 = very rounded)"
     },
     {
       "type": "header",

@@ -21,11 +21,11 @@
   --body-font-family: inherit;
   --body-font-weight: inherit;
   --widget-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-  --image-border-radius: 12px;
+  --widget-border-radius: 16px;
   
   /* Widget styles */
   background: var(--background-color);
-  border-radius: 16px;
+  border-radius: var(--widget-border-radius, 16px);
   padding: 24px;
   margin-top: var(--widget-margin-top);
   margin-bottom: var(--widget-margin-bottom);
@@ -312,7 +312,7 @@
   height: 300px;
   object-fit: cover;
   border: 2px solid #e5e7eb;
-  border-radius: var(--image-border-radius, 12px);
+  border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   object-position: center;
   image-orientation: from-image;
