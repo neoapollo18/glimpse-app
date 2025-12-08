@@ -308,7 +308,7 @@
 
 .comparison-image {
   width: 100%;
-  height: 220px;
+  height: 260px;
   object-fit: cover;
   border: 2px solid #e5e7eb;
   border-radius: 12px;
@@ -685,7 +685,7 @@
   }
 
   .glimpse-ai-widget.layout-horizontal .comparison-image {
-    height: 280px;
+    height: 320px;
   }
 
   .glimpse-ai-widget.layout-horizontal .upload-button {
@@ -741,7 +741,7 @@
   }
 
   .glimpse-ai-widget.layout-horizontal .comparison-image {
-    height: 320px;
+    height: 360px;
   }
 
   .glimpse-ai-widget.layout-horizontal .upload-button,
