@@ -37,6 +37,9 @@
   else
     assign widget_shadow = '0 4px 20px rgba(0, 0, 0, 0.1)'
   endif
+  
+  # Image corner radius customization
+  assign image_border_radius = block.settings.image_border_radius | default: 12
 %}
 
 <!-- Glimpse AI Transformation Widget -->
@@ -51,6 +54,7 @@
             --background-color: {{ background_color }}; 
             --text-color: {{ text_color }};
             --button-text-color: {{ button_text_color }};
+            --image-border-radius: {{ image_border_radius }}px;
             --widget-margin-top: {{ widget_margin_top }}px;
             --widget-margin-bottom: {{ widget_margin_bottom }}px;
             --title-font-size: {{ title_font_size }}px;
@@ -1116,6 +1120,16 @@
       "step": 1,
       "default": 16,
       "info": "Size of the description text"
+    },
+    {
+      "type": "range",
+      "id": "image_border_radius",
+      "label": "Image Corner Radius (px)",
+      "min": 0,
+      "max": 30,
+      "step": 2,
+      "default": 12,
+      "info": "Roundness of transformation image corners (0 = square, 30 = very rounded)"
     },
     {
       "type": "header",

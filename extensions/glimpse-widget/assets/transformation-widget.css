@@ -311,7 +311,7 @@
   height: 300px;
   object-fit: cover;
   border: 2px solid #e5e7eb;
-  border-radius: 12px;
+  border-radius: calc(var(--image-border-radius, 12) * 1px);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   object-position: center;
   image-orientation: from-image;
