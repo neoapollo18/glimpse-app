@@ -512,10 +512,13 @@
     gap: 0;
   }
   
-  .comparison-image {
-    height: 200px;
+  #beforeImage {
     transform: scaleX(-1);
     -webkit-transform: scaleX(-1);
+  }
+  
+  .comparison-image {
+    height: 200px;
   }
   
   .results-actions {
