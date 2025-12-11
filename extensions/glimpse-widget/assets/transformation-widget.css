@@ -514,6 +514,8 @@
   
   .comparison-image {
     height: 200px;
+    transform: scaleX(-1);
+    -webkit-transform: scaleX(-1);
   }
   
   .results-actions {
