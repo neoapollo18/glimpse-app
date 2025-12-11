@@ -512,11 +512,6 @@
     gap: 0;
   }
   
-  #beforeImage {
-    transform: scaleX(-1);
-    -webkit-transform: scaleX(-1);
-  }
-  
   .comparison-image {
     height: 200px;
   }
