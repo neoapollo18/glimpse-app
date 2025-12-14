@@ -103,6 +103,57 @@ async function compressImage(base64Image: string, mimeType: string): Promise<{
   }
 }
 
+// Call Gemini API with retry logic
+async function callGeminiWithRetry(prompt: any[], maxRetries: number = 2): Promise<string> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      if (attempt > 0) {
+        console.log(`Retry attempt ${attempt}/${maxRetries}...`);
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Exponential backoff
+      }
+      
+      const response = await client.models.generateContent({
+        model: "gemini-2.5-flash-image-preview",
+        contents: prompt,
+      });
+
+      // Check if response exists and has candidates
+      if (!response || !response.candidates || response.candidates.length === 0) {
+        throw new Error('No response generated from Gemini API');
+      }
+
+      const candidate = response.candidates[0];
+      if (!candidate || !candidate.content || !candidate.content.parts) {
+        throw new Error('Invalid response structure from Gemini API');
+      }
+
+      // Find the image part in the response
+      for (const part of candidate.content.parts) {
+        if (part.inlineData && part.inlineData.data) {
+          return part.inlineData.data;
+        }
+      }
+
+      throw new Error('No image data found in Gemini API response');
+      
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.error(`Gemini API attempt ${attempt + 1} failed:`, lastError.message);
+      
+      // Don't retry on certain errors
+      if (lastError.message.includes('PERMISSION_DENIED') || 
+          lastError.message.includes('401') ||
+          lastError.message.includes('INVALID_ARGUMENT')) {
+        break;
+      }
+    }
+  }
+  
+  throw lastError || new Error('Gemini API failed after retries');
+}
+
 // AI image transformation function
 export async function transformImage(
   request: ImageTransformationRequest
@@ -125,33 +176,7 @@ export async function transformImage(
       }
     ]
 
-    const response = await client.models.generateContent({
-      model: "gemini-2.5-flash-image-preview",
-      contents: prompt,
-    });
-
-    // Check if response exists and has candidates
-    if (!response || !response.candidates || response.candidates.length === 0) {
-      throw new Error('No response generated from Gemini API');
-    }
-
-    const candidate = response.candidates[0];
-    if (!candidate || !candidate.content || !candidate.content.parts) {
-      throw new Error('Invalid response structure from Gemini API');
-    }
-
-    // Find the image part in the response
-    let generatedImageData = null;
-    for (const part of candidate.content.parts) {
-      if (part.inlineData && part.inlineData.data) {
-        generatedImageData = part.inlineData.data;
-        break;
-      }
-    }
-
-    if (!generatedImageData) {
-      throw new Error('No image data found in Gemini API response');
-    }
+    const generatedImageData = await callGeminiWithRetry(prompt);
 
     return {
       success: true,
