@@ -1,5 +1,6 @@
 import { GoogleGenAI, Modality } from "@google/genai";
 import sharp from "sharp";
+import heicConvert from "heic-convert";
 
 const client = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
@@ -18,6 +19,32 @@ interface ImageTransformationResponse {
   error?: string;
 }
 
+// Convert HEIC to JPEG using heic-convert (Sharp doesn't support HEIC on all platforms)
+async function convertHeicToJpeg(inputBuffer: Buffer): Promise<Buffer> {
+  try {
+    const outputBuffer = await heicConvert({
+      buffer: inputBuffer,
+      format: 'JPEG',
+      quality: 0.92
+    });
+    console.log('HEIC converted to JPEG successfully');
+    return Buffer.from(outputBuffer);
+  } catch (error) {
+    console.error('HEIC conversion failed:', error);
+    throw error;
+  }
+}
+
+// Check if buffer is HEIC format (check magic bytes)
+function isHeicBuffer(buffer: Buffer): boolean {
+  // HEIC files have 'ftyp' at offset 4 and 'heic' or 'mif1' shortly after
+  if (buffer.length < 12) return false;
+  const ftypOffset = buffer.indexOf('ftyp');
+  if (ftypOffset === -1) return false;
+  const brandArea = buffer.slice(ftypOffset, ftypOffset + 12).toString();
+  return brandArea.includes('heic') || brandArea.includes('mif1') || brandArea.includes('heif');
+}
+
 // Compress image for faster processing and lower costs
 async function compressImage(base64Image: string, mimeType: string): Promise<{
   compressedBase64: string;
@@ -27,8 +54,18 @@ async function compressImage(base64Image: string, mimeType: string): Promise<{
 }> {
   try {
     // Convert base64 to buffer
-    const inputBuffer = Buffer.from(base64Image, 'base64');
+    let inputBuffer = Buffer.from(base64Image, 'base64');
     const originalSize = inputBuffer.length;
+    
+    // Check if it's HEIC and convert first (Sharp doesn't support HEIC on all platforms)
+    const isHeic = mimeType?.toLowerCase().includes('heic') || 
+                   mimeType?.toLowerCase().includes('heif') ||
+                   isHeicBuffer(inputBuffer);
+    
+    if (isHeic) {
+      console.log('Detected HEIC image, converting to JPEG first...');
+      inputBuffer = await convertHeicToJpeg(inputBuffer);
+    }
     
     // Use Sharp to resize image to max 720px on the larger dimension
     const compressedBuffer = await sharp(inputBuffer)
@@ -46,6 +83,7 @@ async function compressImage(base64Image: string, mimeType: string): Promise<{
       .toBuffer();
     
     const compressedSize = compressedBuffer.length;
+    console.log(`Image compressed: ${originalSize} -> ${compressedSize} bytes`);
     
     return {
       compressedBase64: compressedBuffer.toString('base64'),

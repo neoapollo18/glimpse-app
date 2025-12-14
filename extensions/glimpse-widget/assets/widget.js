@@ -1,5 +1,6 @@
-// Glimpse Widget JavaScript
+// Glimpse Widget JavaScript v2.0 - HEIC Support
 // Shared by both horizontal and vertical layouts
+console.log('Glimpse Widget v2.0 loaded');
 
 (function() {
   window.widgetFunctions = window.widgetFunctions || {};
@@ -384,13 +385,11 @@
       const afterImg = document.getElementById('afterImage');
       const beforeImg = document.getElementById('beforeImage');
       
-      // If server returned processed input image (for HEIC), use it for "before"
-      // Check if beforeImg doesn't have a data URL (HEIC files won't have preview set)
-      if (result.processedInputImage && beforeImg) {
-        const currentSrc = beforeImg.src || '';
-        if (!currentSrc.startsWith('data:image')) {
-          beforeImg.src = `data:image/jpeg;base64,${result.processedInputImage}`;
-        }
+      // Always set before image from server's processed input (handles HEIC conversion)
+      console.log('processedInputImage received:', !!result.processedInputImage);
+      if (beforeImg && result.processedInputImage) {
+        console.log('Setting before image from server');
+        beforeImg.src = `data:image/jpeg;base64,${result.processedInputImage}`;
       }
       
       if (afterImg) {
