@@ -1,0 +1,1446 @@
+{% liquid
+  assign product = block.settings.product | default: product
+  unless product
+    assign product = product
+  endunless
+  
+  assign product_id = product.id
+  
+  # Use custom colors or defaults
+  assign primary_color_1 = block.settings.primary_color_1 | default: '#8b5cf6'
+  assign primary_color_2 = block.settings.primary_color_2 | default: '#7c3aed'
+  assign caption_color_1 = block.settings.caption_color_1 | default: '#6b7280'
+  assign caption_color_2 = block.settings.caption_color_2 | default: '#9ca3af'
+  assign icon_color = block.settings.icon_color | default: '#8b5cf6'
+  assign background_color = block.settings.background_color | default: '#ffffff'
+  assign text_color = block.settings.text_color | default: '#1f2937'
+  assign button_text_color = block.settings.button_text_color | default: '#ffffff'
+  assign manual_shop_domain = block.settings.manual_shop_domain
+  
+  # Customization variables
+  assign widget_margin_top = block.settings.widget_margin_top | default: 20
+  assign widget_margin_bottom = block.settings.widget_margin_bottom | default: 20
+  assign title_font_size = block.settings.title_font_size | default: 24
+  assign description_font_size = block.settings.description_font_size | default: 16
+  assign disclaimer_text = block.settings.disclaimer_text | default: 'Results are not guaranteed, just a generated image. Images are never saved.'
+  
+  # Font customization variables
+  assign header_font_family = block.settings.header_font_family | default: 'inherit'
+  assign header_font_weight = block.settings.header_font_weight | default: 'inherit'
+  assign body_font_family = block.settings.body_font_family | default: 'inherit'
+  assign body_font_weight = block.settings.body_font_weight | default: 'inherit'
+  
+  # Shadow customization
+  assign enable_widget_shadow = block.settings.enable_widget_shadow
+  if enable_widget_shadow == false
+    assign widget_shadow = 'none'
+  else
+    assign widget_shadow = '0 4px 20px rgba(0, 0, 0, 0.1)'
+  endif
+  
+  # Widget container corner radius customization
+  assign widget_border_radius = block.settings.widget_border_radius | default: 16
+%}
+
+<!-- Glimpse AI Transformation Widget -->
+<div class="glimpse-ai-widget" 
+     data-product-id="{{ product_id }}"{% if manual_shop_domain != blank %}
+     data-manual-shop-domain="{{ manual_shop_domain }}"{% endif %}
+     style="--primary-color-1: {{ primary_color_1 }}; 
+            --primary-color-2: {{ primary_color_2 }};
+            --caption-color-1: {{ caption_color_1 }};
+            --caption-color-2: {{ caption_color_2 }};
+            --icon-color: {{ icon_color }};
+            --widget-border-radius: {{ widget_border_radius }}px;
+            --background-color: {{ background_color }}; 
+            --text-color: {{ text_color }};
+            --button-text-color: {{ button_text_color }};
+            --widget-margin-top: {{ widget_margin_top }}px;
+            --widget-margin-bottom: {{ widget_margin_bottom }}px;
+            --title-font-size: {{ title_font_size }}px;
+            --description-font-size: {{ description_font_size }}px;
+            --button-shadow-color: {{ primary_color_1 }};
+            --header-font-family: {{ header_font_family }};
+            --header-font-weight: {{ header_font_weight }};
+            --body-font-family: {{ body_font_family }};
+            --body-font-weight: {{ body_font_weight }};
+            --widget-shadow: {{ widget_shadow }};">
+  
+  <!-- Desktop Left Section -->
+  <div class="widget-left">
+    <!-- Widget Header -->
+    <div class="widget-header">
+      <h2 class="widget-title">{{ block.settings.widget_title | default: "See My Glowup!" }}</h2>
+      
+      <!-- Star Icon -->
+      <div class="star-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sparkle-icon lucide-sparkle"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/></svg>
+      </div>
+      
+      <p class="widget-description">{{ block.settings.widget_description | default: "Upload an image of yourself and see your transformation" }}</p>
+    </div>
+    
+    <!-- Widget Footer (Desktop Left) -->
+    <div class="widget-footer">
+      <div class="info-icon-container">
+        <svg class="info-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 16v-4"/>
+          <path d="M12 8h.01"/>
+        </svg>
+      </div>
+      <p class="disclaimer">
+        {{ disclaimer_text }}
+      </p>
+    </div>
+  </div>
+  
+  <!-- Desktop Right Section / Mobile Full Width -->
+  <div class="widget-right">
+    <!-- Widget Content Area -->
+    <div class="widget-content">
+    
+    <!-- Initial/Upload State -->
+    <div class="upload-state" id="uploadState">
+      <div class="placeholder-image-container" onclick="window.widgetFunctions.triggerFileInput()">
+        {% if block.settings.placeholder_image %}
+          <img src="{{ block.settings.placeholder_image | image_url: width: 400 }}" 
+               alt="Transformation preview" 
+               class="placeholder-image"
+               width="400"
+               height="200">
+        {% else %}
+          <div class="default-placeholder">
+            <div class="placeholder-split">
+              <div class="placeholder-half placeholder-before"></div>
+              <div class="placeholder-half placeholder-after"></div>
+            </div>
+          </div>
+        {% endif %}
+      </div>
+      
+      <input type="file" 
+             id="imageUpload" 
+             accept="image/*,.heic,.heif" 
+             capture="user"
+             style="display: none;">
+      
+      <button class="upload-button" 
+              type="button" 
+              onclick="window.widgetFunctions.triggerFileInput()">
+        {{ block.settings.button_text | default: "Take A Photo" }}
+      </button>
+    </div>
+    
+    <!-- Processing State -->
+    <div class="processing-state" id="processingState" style="display: none;">
+      <div class="loading-container">
+        <div class="loading-spinner"></div>
+        <p class="loading-text">Analyzing image...</p>
+      </div>
+    </div>
+    
+    <!-- Results State -->
+    <div class="results-state" id="resultsState" style="display: none;">
+      <div class="before-after-grid">
+        <div class="image-comparison">
+          <div class="comparison-item">
+            <div class="image-label">{{ 'transformation.me' | t: default: 'Me' }}</div>
+            <img id="beforeImage" alt="Before transformation" class="comparison-image" width="150" height="150">
+          </div>
+          <div class="comparison-item">
+            <div class="image-label">{{ 'transformation.future_me' | t: default: 'Future Me' }}</div>
+            <img id="afterImage" alt="After transformation" class="comparison-image" width="150" height="150">
+          </div>
+        </div>
+      </div>
+      
+      <div class="results-actions">
+        <button class="retry-button" 
+                type="button" 
+                onclick="window.widgetFunctions.resetTransformation()">
+          <svg class="retry-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+            <path d="M21 3v5h-5"/>
+            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+            <path d="M3 21v-5h5"/>
+          </svg>
+          {{ 'transformation.retry' | t: default: 'Retry' }}
+        </button>
+      </div>
+    </div>
+    
+    <!-- Error State -->
+    <div class="error-state" id="errorState" style="display: none;">
+      <div class="error-container">
+        <svg class="error-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 9v4"/>
+          <path d="M12 17h.01"/>
+          <path d="M3 7v12a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1z"/>
+          <path d="M21 7 12 2 3 7"/>
+        </svg>
+        <p class="error-message" id="errorMessage"></p>
+        <button class="retry-button" 
+                type="button" 
+                onclick="window.widgetFunctions.resetTransformation()">
+          <svg class="retry-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+            <path d="M21 3v5h-5"/>
+            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+            <path d="M3 21v-5h5"/>
+          </svg>
+          {{ 'transformation.try_again' | t: default: 'Try Again' }}
+        </button>
+      </div>
+    </div>
+    
+    <!-- Widget Footer (Mobile/Tablet) -->
+    <div class="widget-footer widget-footer-mobile">
+      <div class="info-icon-container">
+        <svg class="info-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 16v-4"/>
+          <path d="M12 8h.01"/>
+        </svg>
+      </div>
+      <p class="disclaimer">
+        {{ disclaimer_text }}
+      </p>
+    </div>
+    
+    </div>
+  </div>
+  
+</div>
+
+<script>
+  // Global namespace for widget functions
+  window.widgetFunctions = window.widgetFunctions || {};
+  
+  let currentProductId = null;
+  let currentShopDomain = null;
+  let currentVariantId = null;  // Phase 4: Track selected variant
+  let loadingTextInterval = null;
+  
+  // Loading messages array
+  const loadingMessages = [
+    'Analyzing image...',
+    'Creating your transformation...',
+    'Working our magic...',
+    'Almost there...'
+  ];
+  
+  // =====================================================
+  // CONFIGURATION: Update this URL to your deployed app
+  const SHOPIFY_APP_URL = 'https://glimpse-app-charles.onrender.com';
+  // =====================================================
+  
+  // Get shop domain with multiple fallback methods
+  function getShopDomain() {
+    const widget = document.querySelector('.glimpse-ai-widget');
+    
+    // First priority: Check for manually configured domain
+    const manualDomain = widget?.getAttribute('data-manual-shop-domain');
+    if (manualDomain) {
+      console.log('Using manual shop domain:', manualDomain);
+      return manualDomain;
+    }
+    
+    const hostname = window.location.hostname;
+    
+    // Second priority: Direct .myshopify.com domain
+    if (hostname.includes('.myshopify.com')) {
+      console.log('Using direct myshopify domain:', hostname);
+      return hostname;
+    }
+    
+    // Third priority: Extract from Shopify scripts (multiple methods)
+    const shopifyScripts = document.querySelectorAll('script[src*="myshopify.com"]');
+    for (let script of shopifyScripts) {
+      const scriptSrc = script.src;
+      const match = scriptSrc.match(/\/\/([^\/]+\.myshopify\.com)/);
+      if (match) {
+        console.log('Found shop domain in script:', match[1]);
+        return match[1];
+      }
+    }
+    
+    // Fourth priority: Check for Shopify global variables
+    if (window.Shopify && window.Shopify.shop) {
+      console.log('Using Shopify.shop global:', window.Shopify.shop);
+      return window.Shopify.shop;
+    }
+    
+    // Fifth priority: Check meta tags
+    const shopMeta = document.querySelector('meta[name="shopify-shop-domain"]');
+    if (shopMeta) {
+      console.log('Found shop domain in meta tag:', shopMeta.content);
+      return shopMeta.content;
+    }
+    
+    // Sixth priority: Extract from any Shopify URLs in the page
+    const allLinks = document.querySelectorAll('link[href*="myshopify.com"], a[href*="myshopify.com"]');
+    for (let link of allLinks) {
+      const href = link.href;
+      const match = href.match(/\/\/([^\/]+\.myshopify\.com)/);
+      if (match) {
+        console.log('Found shop domain in link:', match[1]);
+        return match[1];
+      }
+    }
+    
+    console.warn('Could not auto-detect shop domain, using hostname as fallback:', hostname);
+    return hostname; // Fallback to current hostname
+  }
+  
+  // Phase 4: Get currently selected variant ID with multiple fallback methods
+  function getCurrentVariantId() {
+    console.log('=== DETECTING CURRENT VARIANT ===');
+    
+    // Method 1: Check form select with name="id" (most common)
+    const variantSelect = document.querySelector('select[name="id"]');
+    if (variantSelect && variantSelect.value) {
+      console.log('Found variant via select[name="id"]:', variantSelect.value);
+      return variantSelect.value;
+    }
+    
+    // Method 2: Check radio button with name="id"
+    const variantRadio = document.querySelector('input[name="id"]:checked');
+    if (variantRadio && variantRadio.value) {
+      console.log('Found variant via radio input:', variantRadio.value);
+      return variantRadio.value;
+    }
+    
+    // Method 3: Check hidden input with name="id"
+    const variantHidden = document.querySelector('input[name="id"][type="hidden"]');
+    if (variantHidden && variantHidden.value) {
+      console.log('Found variant via hidden input:', variantHidden.value);
+      return variantHidden.value;
+    }
+    
+    // Method 4: Check any input with name="id" (broader search), GREATER DETECTION
+    const anyIdInput = document.querySelector('input[name="id"]');
+    if (anyIdInput && anyIdInput.value) {
+      console.log('Found variant via any input[name="id"]:', anyIdInput.value);
+      return anyIdInput.value;
+    }
+    
+    // Method 5: Check Shopify Analytics global
+    if (window.ShopifyAnalytics?.meta?.selectedVariantId) {
+      const variantId = window.ShopifyAnalytics.meta.selectedVariantId.toString();
+      console.log('Found variant via ShopifyAnalytics:', variantId);
+      return variantId;
+    }
+    
+    // Method 6: Check modern theme globals
+    if (window.productVariants?.current?.id) {
+      const variantId = window.productVariants.current.id.toString();
+      console.log('Found variant via productVariants:', variantId);
+      return variantId;
+    }
+    
+    // Method 7: Check theme.product.selected_or_first_available_variant (Dawn theme)
+    if (window.theme?.product?.selected_or_first_available_variant?.id) {
+      const variantId = window.theme.product.selected_or_first_available_variant.id.toString();
+      console.log('Found variant via theme.product:', variantId);
+      return variantId;
+    }
+    
+    // Method 8: Check URL parameter
+    const urlParams = new URLSearchParams(window.location.search);
+    const variantParam = urlParams.get('variant');
+    if (variantParam) {
+      console.log('Found variant in URL param:', variantParam);
+      return variantParam;
+    }
+    
+    // Method 9: Try to find variant in product form data
+    try {
+      const productForm = document.querySelector('form[action*="/cart/add"]');
+      if (productForm) {
+        const formData = new FormData(productForm);
+        const formVariantId = formData.get('id');
+        if (formVariantId) {
+          console.log('Found variant via product form:', formVariantId);
+          return formVariantId.toString();
+        }
+      }
+    } catch (e) {
+      console.log('Could not check product form:', e.message);
+    }
+    
+    // Method 10: Check data-variant-id attribute on product form
+    const formWithVariant = document.querySelector('[data-variant-id]');
+    if (formWithVariant) {
+      const variantId = formWithVariant.getAttribute('data-variant-id');
+      if (variantId) {
+        console.log('Found variant via data-variant-id:', variantId);
+        return variantId;
+      }
+    }
+    
+    // Method 11: Check variant-selects component (Shopify 2.0 themes)
+    const variantSelectsComponent = document.querySelector('variant-selects');
+    if (variantSelectsComponent && variantSelectsComponent.currentVariant) {
+      const variantId = variantSelectsComponent.currentVariant.id.toString();
+      console.log('Found variant via variant-selects component:', variantId);
+      return variantId;
+    }
+    
+    // Method 12: Check for selected option buttons/fieldsets
+    try {
+      const selectedOptions = document.querySelectorAll('input[type="radio"][name^="options"]:checked');
+      if (selectedOptions.length > 0) {
+        // Try to find matching variant from product JSON
+        const productJson = document.querySelector('[data-product-json], script[data-product-json], script[type="application/json"][data-product]');
+        if (productJson) {
+          const productData = JSON.parse(productJson.textContent);
+          if (productData.variants) {
+            const selectedOptionValues = Array.from(selectedOptions).map(opt => opt.value);
+            const matchedVariant = productData.variants.find(variant => {
+              return variant.options.every((opt, idx) => opt === selectedOptionValues[idx]);
+            });
+            if (matchedVariant) {
+              console.log('Found variant via option matching:', matchedVariant.id);
+              return matchedVariant.id.toString();
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.log('Could not match variant via options:', e.message);
+    }
+    
+    console.log('No specific variant detected - will use product-level prompt');
+    return null;
+  }
+  
+  // Initialize the widget
+  window.widgetFunctions.initWidget = function() {
+    console.log('=== INITIALIZING WIDGET ===');
+    
+    const widget = document.querySelector('.glimpse-ai-widget');
+    if (!widget) {
+      console.error('Widget not found');
+      return;
+    }
+    
+    currentProductId = widget.getAttribute('data-product-id');
+    currentShopDomain = getShopDomain();
+    currentVariantId = getCurrentVariantId();  // Phase 4: Detect initial variant
+    
+    console.log('Product ID:', currentProductId);
+    console.log('Shop domain:', currentShopDomain);
+    console.log('Variant ID:', currentVariantId);  // Phase 4: Log variant
+    console.log('App URL:', SHOPIFY_APP_URL);
+    
+    // Show initial upload state
+    window.widgetFunctions.showState('upload');
+  };
+  
+  window.widgetFunctions.triggerFileInput = function() {
+    console.log('=== TRIGGERING FILE INPUT ===');
+    const fileInput = document.getElementById('imageUpload');
+    if (fileInput) {
+      fileInput.click();
+    }
+  };
+  
+  // Phase 4: Listen for variant changes on the product page
+  function setupVariantChangeListeners() {
+    console.log('=== SETTING UP VARIANT LISTENERS ===');
+    
+    // Listen to select dropdown changes
+    const variantSelect = document.querySelector('select[name="id"]');
+    if (variantSelect) {
+      variantSelect.addEventListener('change', function(e) {
+        currentVariantId = e.target.value;
+        console.log('✓ Variant changed via select:', currentVariantId);
+      });
+      console.log('Added listener to select[name="id"]');
+    }
+    
+    // Listen to radio button changes
+    const variantRadios = document.querySelectorAll('input[name="id"][type="radio"]');
+    if (variantRadios.length > 0) {
+      variantRadios.forEach(radio => {
+        radio.addEventListener('change', function(e) {
+          if (e.target.checked) {
+            currentVariantId = e.target.value;
+            console.log('✓ Variant changed via radio:', currentVariantId);
+          }
+        });
+      });
+      console.log('Added listeners to', variantRadios.length, 'radio buttons');
+    }
+    
+    // Listen to ALL inputs with name="id" (catches custom implementations), GREATER DETECTION
+    const allIdInputs = document.querySelectorAll('input[name="id"]');
+    allIdInputs.forEach(input => {
+      input.addEventListener('change', function(e) {
+        currentVariantId = e.target.value;
+        console.log('✓ Variant changed via input:', currentVariantId);
+      });
+    });
+    if (allIdInputs.length > 0) {
+      console.log('Added listeners to', allIdInputs.length, 'inputs with name="id"');
+    }
+    
+    // Listen for Shopify theme variant change events, GREATER DETECTION
+    document.addEventListener('variant:change', function(event) {
+      if (event.detail && event.detail.variant && event.detail.variant.id) {
+        currentVariantId = event.detail.variant.id.toString();
+        console.log('✓ Variant changed via theme event:', currentVariantId);
+      }
+    });
+    console.log('Added listener for variant:change event');
+    
+    // Monitor product form for any changes (catches color swatches)
+    const productForm = document.querySelector('form[action*="/cart/add"]');
+    if (productForm) {
+      const observer = new MutationObserver(function(mutations) {
+        const newVariantId = getCurrentVariantId();
+        if (newVariantId && newVariantId !== currentVariantId) {
+          currentVariantId = newVariantId;
+          console.log('✓ Variant changed via form mutation:', currentVariantId);
+        }
+      });
+      observer.observe(productForm, { 
+        attributes: true, 
+        childList: true, 
+        subtree: true 
+      });
+      console.log('Added mutation observer to product form');
+    }
+    
+    console.log('Variant change listeners setup complete');
+  }
+  
+  window.widgetFunctions.resetTransformation = function() {
+    console.log('=== RESETTING TRANSFORMATION ===');
+    
+    try {
+      const imageUpload = document.getElementById('imageUpload');
+      const beforeImage = document.getElementById('beforeImage');
+      const afterImage = document.getElementById('afterImage');
+      
+      // Clear file input
+      if (imageUpload) {
+        imageUpload.value = '';
+        console.log('File input cleared');
+      }
+      
+      // Clear images safely (remove event handlers first to prevent errors)
+      if (beforeImage) {
+        beforeImage.onload = null;
+        beforeImage.onerror = null;
+        beforeImage.src = '';
+        console.log('Before image cleared');
+      }
+      
+      if (afterImage) {
+        afterImage.onload = null;
+        afterImage.onerror = null;
+        afterImage.src = '';
+        console.log('After image cleared');
+      }
+      
+      // Show upload state
+      window.widgetFunctions.showState('upload');
+      console.log('Reset to upload state');
+      
+    } catch (error) {
+      console.error('Error during reset:', error);
+      // Even if there's an error, make sure we show the upload state
+      window.widgetFunctions.showState('upload');
+    }
+  };
+  
+
+  window.widgetFunctions.showState = function(state) {
+    console.log('Showing state:', state);
+    const states = ['upload', 'processing', 'results', 'error'];
+    states.forEach(s => {
+      const el = document.getElementById(`${s}State`);
+      if (el) {
+        el.style.display = s === state ? 'block' : 'none';
+      }
+    });
+    
+    // Handle loading text animation
+    if (state === 'processing') {
+      startLoadingTextAnimation();
+    } else {
+      stopLoadingTextAnimation();
+    }
+
+  };
+  
+  function startLoadingTextAnimation() {
+    const loadingTextEl = document.querySelector('.loading-text');
+    if (!loadingTextEl) return;
+    
+    let currentIndex = 0;
+    loadingTextEl.textContent = loadingMessages[currentIndex];
+    
+    loadingTextInterval = setInterval(() => {
+      currentIndex++;
+      if (currentIndex < loadingMessages.length) {
+        loadingTextEl.textContent = loadingMessages[currentIndex];
+      } else {
+        // Stop on the last message
+        clearInterval(loadingTextInterval);
+        loadingTextInterval = null;
+      }
+    }, 3000); // Change every 3 seconds
+  }
+  
+  function stopLoadingTextAnimation() {
+    if (loadingTextInterval) {
+      clearInterval(loadingTextInterval);
+      loadingTextInterval = null;
+    }
+  }
+
+  // === MOBILE SELFIE CORRECTION HELPERS ===
+  
+  // Detect if user is on a mobile device
+  function isMobileDevice() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+           (navigator.maxTouchPoints && navigator.maxTouchPoints > 2);
+  }
+  
+  // Check if photo was just taken (within last 2 minutes) - likely a fresh camera capture
+  function isRecentlyTakenPhoto(file) {
+    const now = Date.now();
+    const twoMinutesAgo = now - 120000; // 2 minutes
+    return file.lastModified > twoMinutesAgo;
+  }
+  
+  // Flip image horizontally using Canvas (to correct mirrored selfies)
+  function flipImageHorizontally(dataUrl) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = function() {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          
+          // Flip horizontally by scaling -1 on x-axis
+          ctx.translate(canvas.width, 0);
+          ctx.scale(-1, 1);
+          ctx.drawImage(img, 0, 0);
+          
+          // Return as JPEG for smaller size
+          const flippedDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+          console.log('Image flipped successfully');
+          resolve(flippedDataUrl);
+        } catch (err) {
+          console.error('Error flipping image:', err);
+          resolve(dataUrl); // Return original on error
+        }
+      };
+      img.onerror = function() {
+        console.error('Error loading image for flip');
+        resolve(dataUrl); // Return original on error
+      };
+      img.src = dataUrl;
+    });
+  }
+  
+  // Convert data URL to File object (needed for API submission)
+  function dataUrlToFile(dataUrl, fileName) {
+    const arr = dataUrl.split(',');
+    const mime = arr[0].match(/:(.*?);/)[1];
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new File([u8arr], fileName, { type: mime });
+  }
+  
+  // Track if current image was flipped (for consistent behavior)
+  let currentImageWasFlipped = false;
+  
+  // === HEIC/HEIF SUPPORT HELPERS ===
+  
+  // Check if file is a valid image by extension (fallback for HEIC/HEIF)
+  function isValidImageByExtension(fileName) {
+    if (!fileName) return false;
+    const ext = fileName.toLowerCase().split('.').pop();
+    const validExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic', 'heif', 'avif'];
+    return validExtensions.includes(ext);
+  }
+  
+  // Check if file is HEIC/HEIF format
+  function isHeicOrHeif(file) {
+    // Check MIME type
+    const heicMimeTypes = ['image/heic', 'image/heif', 'image/heic-sequence', 'image/heif-sequence'];
+    if (heicMimeTypes.includes(file.type.toLowerCase())) {
+      return true;
+    }
+    // Check file extension (browsers often don't recognize HEIC MIME type)
+    const ext = file.name?.toLowerCase().split('.').pop();
+    return ext === 'heic' || ext === 'heif';
+  }
+  
+  // Check if file is a valid image (including HEIC/HEIF support)
+  function isValidImageFile(file) {
+    // Standard image MIME type check
+    if (file.type && file.type.startsWith('image/')) {
+      return true;
+    }
+    // HEIC/HEIF specific check (some browsers report empty or wrong MIME type)
+    if (isHeicOrHeif(file)) {
+      return true;
+    }
+    // Fallback: check by file extension for unrecognized MIME types
+    if (!file.type || file.type === '' || file.type === 'application/octet-stream') {
+      return isValidImageByExtension(file.name);
+    }
+    return false;
+  }
+
+  window.widgetFunctions.showError = function(message) {
+    console.error('Widget error:', message);
+    const errorMessage = document.getElementById('errorMessage');
+    if (errorMessage) {
+      errorMessage.textContent = message;
+    }
+    window.widgetFunctions.showState('error');
+  };
+
+
+  
+  document.addEventListener('DOMContentLoaded', function() {
+    console.log('=== WIDGET INITIALIZING ===');
+    
+    // Initialize the widget
+    window.widgetFunctions.initWidget();
+    
+    // Phase 4: Set up variant change listeners
+    setupVariantChangeListeners();
+    
+    const imageUpload = document.getElementById('imageUpload');
+    const beforeImage = document.getElementById('beforeImage');
+    const afterImage = document.getElementById('afterImage');
+    const placeholderContainer = document.querySelector('.placeholder-image-container');
+    
+    console.log('Elements found:', {
+      imageUpload: !!imageUpload,
+      beforeImage: !!beforeImage,
+      afterImage: !!afterImage,
+      placeholderContainer: !!placeholderContainer
+    });
+    
+    // Ensure critical elements exist
+    if (!imageUpload || !beforeImage || !afterImage) {
+      console.error('Required widget elements not found');
+      return;
+    }
+    
+    // FILE INPUT HANDLER
+    imageUpload.addEventListener('change', function(event) {
+      console.log('=== FILE INPUT CHANGED ===');
+      const files = event.target.files;
+      console.log('Files object:', files);
+      console.log('Number of files:', files ? files.length : 0);
+      
+      if (files && files.length > 0) {
+        const file = files[0];
+        console.log('Selected file from input:', {
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          lastModified: file.lastModified
+        });
+        
+        // Process the file
+        processSelectedFile(file);
+      } else {
+        console.log('No files selected from input');
+      }
+    });
+    
+    // DRAG AND DROP HANDLER for placeholder container
+    if (placeholderContainer) {
+      // Prevent default drag behaviors
+      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        placeholderContainer.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }, false);
+      });
+      
+      // Visual feedback for drag over
+      ['dragenter', 'dragover'].forEach(eventName => {
+        placeholderContainer.addEventListener(eventName, () => {
+          placeholderContainer.style.opacity = '0.8';
+          placeholderContainer.style.transform = 'scale(1.02)';
+        }, false);
+      });
+      
+      ['dragleave', 'drop'].forEach(eventName => {
+        placeholderContainer.addEventListener(eventName, () => {
+          placeholderContainer.style.opacity = '1';
+          placeholderContainer.style.transform = 'scale(1)';
+        }, false);
+      });
+      
+      // Handle file drop
+      placeholderContainer.addEventListener('drop', (e) => {
+        console.log('=== FILES DROPPED ===');
+        const files = Array.from(e.dataTransfer.files);
+        console.log('Dropped files:', files.length);
+        
+        if (files.length > 0) {
+          const file = files[0];
+          console.log('Processing dropped file:', {
+            name: file.name,
+            size: file.size,
+            type: file.type
+          });
+          
+          // Process the file
+          processSelectedFile(file);
+        }
+      }, false);
+    }
+    
+    function processSelectedFile(file) {
+      console.log('=== PROCESSING SELECTED FILE ===');
+      
+      if (!file) {
+        console.log('No file provided');
+        return;
+      }
+      
+      console.log('File details:', {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        lastModified: file.lastModified
+      });
+      
+      // Reset any previous errors and show upload state
+      window.widgetFunctions.showState('upload');
+      
+      // Validate file type - check if it's an image (with HEIC/HEIF support)
+      if (!isValidImageFile(file)) {
+        console.error('Invalid file type:', file.type, 'name:', file.name);
+        window.widgetFunctions.showError('Please upload an image file (JPG, PNG, HEIC, etc.).');
+        return;
+      }
+      
+      // Log if HEIC/HEIF file detected
+      if (isHeicOrHeif(file)) {
+        console.log('HEIC/HEIF file detected - will be converted server-side');
+      }
+      
+      // Validate file size (5MB limit for storefront)
+      const maxSize = 5 * 1024 * 1024;
+      if (file.size > maxSize) {
+        console.error('File too large:', file.size, 'bytes. Max:', maxSize, 'bytes');
+        window.widgetFunctions.showError('Image too large. Please upload an image smaller than 5MB.');
+        return;
+      }
+      
+      // Validate file is not empty
+      if (file.size === 0) {
+        console.error('Empty file');
+        window.widgetFunctions.showError('The selected file appears to be empty. Please try another image.');
+        return;
+      }
+      
+      console.log('File validation passed, reading file...');
+      
+      // Show preview and start transformation
+      const reader = new FileReader();
+      
+      reader.onload = async function(e) {
+        console.log('=== FILE READ COMPLETE ===');
+        console.log('Data URL length:', e.target.result.length);
+        
+        try {
+          let imageDataUrl = e.target.result;
+          let fileToSend = file;
+          currentImageWasFlipped = false;
+          
+          // Check if this is a HEIC/HEIF file that the browser might not be able to display
+          const isHeic = isHeicOrHeif(file);
+          
+          // Check if this is a mobile selfie that needs to be flipped
+          const isMobile = isMobileDevice();
+          const isRecent = isRecentlyTakenPhoto(file);
+          console.log('Mobile detection:', { isMobile, isRecent, isHeic, lastModified: file.lastModified });
+          
+          // On mobile, if photo was just taken, it's likely a selfie - flip it
+          // Note: Flipping may fail silently for HEIC on non-Safari browsers, which is fine
+          // because the server will handle the original file correctly
+          if (isMobile && isRecent && !isHeic) {
+            // Only attempt client-side flip for non-HEIC files
+            // HEIC files on mobile Safari will work, but we skip flip to avoid issues
+            console.log('Mobile selfie detected - flipping image to correct mirror effect...');
+            imageDataUrl = await flipImageHorizontally(imageDataUrl);
+            fileToSend = dataUrlToFile(imageDataUrl, file.name || 'selfie.jpg');
+            currentImageWasFlipped = true;
+            console.log('Image flipped successfully, new file size:', fileToSend.size);
+          } else if (isMobile && isRecent && isHeic) {
+            console.log('Mobile HEIC selfie detected - skipping client-side flip (server handles orientation)');
+          }
+          
+          // Set the preview image
+          const beforeImg = document.getElementById('beforeImage');
+          if (beforeImg) {
+            // Clear any existing handlers first
+            beforeImg.onload = null;
+            beforeImg.onerror = null;
+            
+            // Track if we've already started the transformation (prevent double-trigger)
+            let transformationStarted = false;
+            
+            // Set up new handlers
+            beforeImg.onload = function() {
+              console.log('Preview image loaded successfully, starting transformation...');
+              // Clear the handlers to prevent them from firing later
+              beforeImg.onload = null;
+              beforeImg.onerror = null;
+              if (!transformationStarted) {
+                transformationStarted = true;
+                transformImage(fileToSend);
+              }
+            };
+            
+            beforeImg.onerror = function() {
+              // Clear the handlers
+              beforeImg.onload = null;
+              beforeImg.onerror = null;
+              
+              // For HEIC/HEIF files, the browser may not be able to display them
+              // but the server CAN process them via Sharp - so proceed anyway!
+              if (isHeic) {
+                console.log('HEIC/HEIF preview failed (browser cannot decode) - proceeding with server-side processing');
+                if (!transformationStarted) {
+                  transformationStarted = true;
+                  // Use original file for HEIC since browser can't process it
+                  transformImage(file);
+                }
+              } else {
+                console.error('Error loading preview image for non-HEIC file');
+                window.widgetFunctions.showError('Error displaying image preview. Please try again.');
+              }
+            };
+            
+            // Set the image source (this will trigger onload or onerror)
+            beforeImg.src = imageDataUrl;
+            console.log('Preview image source set', currentImageWasFlipped ? '(flipped)' : '(original)', isHeic ? '(HEIC - may fail on some browsers)' : '');
+          } else {
+            console.error('beforeImage element not found');
+            transformImage(fileToSend); // Try transformation anyway
+          }
+        } catch (error) {
+          console.error('Error setting image preview:', error);
+          window.widgetFunctions.showError('Error loading image preview. Please try again.');
+        }
+      };
+      
+      reader.onerror = function(error) {
+        console.error('FileReader error:', error);
+        window.widgetFunctions.showError('Error reading the image file. Please try again.');
+      };
+      
+      reader.onabort = function() {
+        console.log('FileReader aborted');
+        window.widgetFunctions.showError('File reading was interrupted. Please try again.');
+      };
+      
+      reader.onprogress = function(e) {
+        if (e.lengthComputable) {
+          const percentLoaded = Math.round((e.loaded / e.total) * 100);
+          console.log('File reading progress:', percentLoaded + '%');
+        }
+      };
+      
+      // Read the file as data URL
+      try {
+        console.log('Starting file read...');
+        reader.readAsDataURL(file);
+      } catch (error) {
+        console.error('Error starting file read:', error);
+        window.widgetFunctions.showError('Error reading the image file. Please try again.');
+      }
+    }
+    
+    async function transformImage(file) {
+      window.widgetFunctions.showState('processing');
+      
+      try {
+        // Phase 4: Re-detect variant just before transformation (catches theme updates)
+        const freshVariantId = getCurrentVariantId();
+        if (freshVariantId && freshVariantId !== currentVariantId) {
+          console.log('Variant updated since init:', currentVariantId, '→', freshVariantId);
+          currentVariantId = freshVariantId;
+        }
+        
+        console.log('=== STARTING TRANSFORMATION ===');
+        console.log('Product ID:', currentProductId);
+        console.log('Shop domain:', currentShopDomain);
+        console.log('Variant ID (current):', currentVariantId);
+        console.log('File name:', file.name);
+        console.log('File size:', file.size);
+        console.log('File type:', file.type);
+        console.log('Current location:', window.location.href);
+        console.log('Using app URL:', SHOPIFY_APP_URL);
+        
+        // Validate configuration
+        if (!currentShopDomain) {
+          throw new Error('Could not determine shop domain. Please refresh the page and try again.');
+        }
+        
+        if (!SHOPIFY_APP_URL) {
+          throw new Error('App URL not configured. Please update the APP_URL in the widget code.');
+        }
+        
+        const formData = new FormData();
+        formData.append('image', file);
+        formData.append('productId', currentProductId);
+        formData.append('shopDomain', currentShopDomain);
+        
+        // Phase 4: Include variant ID if available
+        if (currentVariantId) {
+          formData.append('variantId', currentVariantId);
+          console.log('Including variant ID in request:', currentVariantId);
+        } else {
+          console.log('No variant ID - using product-level prompt');
+        }
+        
+        console.log('FormData contents:');
+        for (let [key, value] of formData.entries()) {
+          console.log('-', key + ':', typeof value === 'object' ? value.name : value);
+        }
+        
+        // Use the app's domain for API calls
+        const apiUrl = SHOPIFY_APP_URL.endsWith('/') 
+          ? SHOPIFY_APP_URL + 'api/storefront/transform-image'
+          : SHOPIFY_APP_URL + '/api/storefront/transform-image';
+        
+        console.log('Making API request to:', apiUrl);
+        
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+          }
+        });
+        
+        console.log('=== API RESPONSE ===');
+        console.log('Status:', response.status);
+        console.log('Status text:', response.statusText);
+        console.log('Headers:', Object.fromEntries(response.headers.entries()));
+        
+        let result;
+        const responseText = await response.text();
+        console.log('Raw response body:', responseText);
+        console.log('Response length:', responseText.length);
+        
+        try {
+          result = JSON.parse(responseText);
+          console.log('Parsed result:', result);
+        } catch (parseError) {
+          console.error('JSON parse error:', parseError);
+          console.error('Failed to parse response:', responseText.substring(0, 500));
+          throw new Error('Invalid server response. Please try again.');
+        }
+        
+        if (!response.ok) {
+          throw new Error(result.error || `Server error: ${response.status}`);
+        }
+        
+        if (!result.success) {
+          throw new Error(result.error || 'Transformation failed');
+        }
+        
+        if (!result.generatedImage) {
+          throw new Error('No transformed image received');
+        }
+        
+        // Show result
+        const afterImg = document.getElementById('afterImage');
+        if (afterImg) {
+          // Clear any existing handlers
+          afterImg.onload = null;
+          afterImg.onerror = null;
+          
+          // Set up orientation handling
+          afterImg.onload = function() {
+            // Ensure proper orientation by forcing browser to respect image data
+            afterImg.style.imageOrientation = 'from-image';
+            afterImg.style.transform = 'none';
+            console.log('After image loaded successfully with proper orientation');
+          };
+          
+          afterImg.onerror = function() {
+            console.error('Error loading after image');
+          };
+          
+          afterImg.src = `data:image/jpeg;base64,${result.generatedImage}`;
+        }
+        window.widgetFunctions.showState('results');
+        
+        console.log('Transformation completed successfully!');
+        
+      } catch (error) {
+        console.error('Transformation error:', error);
+        window.widgetFunctions.showError(error.message || 'Something went wrong. Please try again.');
+      }
+    }
+  });
+</script>
+
+{% schema %}
+{
+  "name": "Glimpse",
+  "target": "section",
+  "stylesheet": "transformation-widget.css",
+  "settings": [
+    {
+      "type": "product",
+      "id": "product",
+      "label": "Product",
+      "autofill": true
+    },
+    {
+      "type": "header",
+      "content": "Configuration"
+    },
+    {
+      "type": "text",
+      "id": "manual_shop_domain",
+      "label": "Shop Domain (Optional)",
+      "placeholder": "shop123.myshopify.com",
+      "info": "If you're using a custom domain and experiencing issues, manually enter your .myshopify.com domain here. This ensures proper connection to the transformation service."
+    },
+    {
+      "type": "header",
+      "content": "Widget Content"
+    },
+    {
+      "type": "text",
+      "id": "widget_title",
+      "label": "Widget Title",
+      "default": "See My Glowup!"
+    },
+    {
+      "type": "textarea",
+      "id": "widget_description",
+      "label": "Widget Description",
+      "default": "Upload an image of yourself and see your transformation"
+    },
+    {
+      "type": "text",
+      "id": "button_text",
+      "label": "Upload Button Text",
+      "default": "Take A New Photo"
+    },
+    {
+      "type": "textarea",
+      "id": "disclaimer_text",
+      "label": "Disclaimer Text",
+      "default": "Results are not guaranteed, just a generated image. Images are never saved.",
+      "info": "Text shown at the bottom of the widget"
+    },
+    {
+      "type": "header",
+      "content": "Placeholder Image"
+    },
+    {
+      "type": "image_picker",
+      "id": "placeholder_image",
+      "label": "Custom Placeholder Image",
+      "info": "Upload a custom before/after preview image."
+    },
+    {
+      "type": "header",
+      "content": "Colors & Styling"
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_widget_shadow",
+      "label": "Enable Widget Drop Shadow",
+      "default": true,
+      "info": "Toggle the shadow effect around the entire widget"
+    },
+    {
+      "type": "color",
+      "id": "primary_color_1",
+      "label": "Primary Color 1 (Start)",
+      "default": "#8b5cf6",
+      "info": "First color for primary gradient"
+    },
+    {
+      "type": "color",
+      "id": "primary_color_2",
+      "label": "Primary Color 2 (End)",
+      "default": "#7c3aed",
+      "info": "Second color for primary gradient"
+    },
+    {
+      "type": "color",
+      "id": "caption_color_1",
+      "label": "Caption Color 1 (Start)",
+      "default": "#6b7280",
+      "info": "First color for caption text gradient"
+    },
+    {
+      "type": "color",
+      "id": "caption_color_2",
+      "label": "Caption Color 2 (End)",
+      "default": "#9ca3af",
+      "info": "Second color for caption text gradient"
+    },
+    {
+      "type": "color",
+      "id": "icon_color",
+      "label": "Icon Color",
+      "default": "#8b5cf6",
+      "info": "Color for star and other icons"
+    },
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": "Widget Background",
+      "default": "#ffffff",
+      "info": "Background color of the entire widget"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Text Color",
+      "default": "#1f2937",
+      "info": "Main text color for titles"
+    },
+    {
+      "type": "color",
+      "id": "button_text_color",
+      "label": "Button Text Color",
+      "default": "#ffffff",
+      "info": "Text color for buttons (upload, add to cart, etc.)"
+    },
+    {
+      "type": "header",
+      "content": "Layout"
+    },
+    {
+      "type": "range",
+      "id": "widget_margin_top",
+      "label": "Margin Top (px)",
+      "min": 0,
+      "max": 100,
+      "step": 5,
+      "default": 20,
+      "info": "Space above the widget"
+    },
+    {
+      "type": "range",
+      "id": "widget_margin_bottom",
+      "label": "Margin Bottom (px)",
+      "min": 0,
+      "max": 100,
+      "step": 5,
+      "default": 20,
+      "info": "Space below the widget"
+    },
+    {
+      "type": "range",
+      "id": "title_font_size",
+      "label": "Title Font Size (px)",
+      "min": 12,
+      "max": 48,
+      "step": 2,
+      "default": 24,
+      "info": "Size of the widget title text"
+    },
+    {
+      "type": "range",
+      "id": "description_font_size",
+      "label": "Description Font Size (px)",
+      "min": 10,
+      "max": 24,
+      "step": 1,
+      "default": 16,
+      "info": "Size of the description text"
+    },
+    {
+      "type": "range",
+      "id": "widget_border_radius",
+      "label": "Widget Corner Radius (px)",
+      "min": 0,
+      "max": 40,
+      "step": 2,
+      "default": 16,
+      "info": "Roundness of the entire widget container corners (0 = square, 40 = very rounded)"
+    },
+    {
+      "type": "header",
+      "content": "Typography"
+    },
+    {
+      "type": "select",
+      "id": "header_font_family",
+      "label": "Header/Title Font Family",
+      "default": "inherit",
+      "options": [
+        {
+          "value": "inherit",
+          "label": "Inherit from page (Recommended)"
+        },
+        {
+          "value": "system-ui, sans-serif",
+          "label": "System Default"
+        },
+        {
+          "value": "Helvetica, Arial, sans-serif",
+          "label": "Helvetica"
+        },
+        {
+          "value": "Georgia, serif",
+          "label": "Georgia (Serif)"
+        },
+        {
+          "value": "Inter, sans-serif",
+          "label": "Inter (Modern)"
+        },
+        {
+          "value": "Prompt, sans-serif",
+          "label": "Prompt Black"
+        },
+        {
+          "value": "Sonus-Medium, sans-serif",
+          "label": "Sonus Medium"
+        },
+        {
+          "value": "serif",
+          "label": "Elegant Serif"
+        }
+      ],
+      "info": "Font for widget title and headings. Separate control allows for typography hierarchy."
+    },
+    {
+      "type": "select",
+      "id": "header_font_weight",
+      "label": "Header/Title Font Weight",
+      "default": "700",
+      "options": [
+        {
+          "value": "inherit",
+          "label": "Inherit from page"
+        },
+        {
+          "value": "300",
+          "label": "Light (300)"
+        },
+        {
+          "value": "400",
+          "label": "Normal (400)"
+        },
+        {
+          "value": "500",
+          "label": "Medium (500)"
+        },
+        {
+          "value": "600",
+          "label": "Semi-bold (600)"
+        },
+        {
+          "value": "700",
+          "label": "Bold (700)"
+        },
+        {
+          "value": "800",
+          "label": "Extra Bold (800)"
+        }
+      ],
+      "info": "Weight for widget title and headings"
+    },
+    {
+      "type": "select",
+      "id": "body_font_family",
+      "label": "Body Text Font Family",
+      "default": "inherit",
+      "options": [
+        {
+          "value": "inherit",
+          "label": "Inherit from page (Recommended)"
+        },
+        {
+          "value": "system-ui, sans-serif",
+          "label": "System Default"
+        },
+        {
+          "value": "Helvetica, Arial, sans-serif",
+          "label": "Helvetica"
+        },
+        {
+          "value": "Georgia, serif",
+          "label": "Georgia (Serif)"
+        },
+        {
+          "value": "Inter, sans-serif",
+          "label": "Inter (Modern)"
+        },
+        {
+          "value": "Prompt, sans-serif",
+          "label": "Prompt Black"
+        },
+        {
+          "value": "Sonus-Medium, sans-serif",
+          "label": "Sonus Medium"
+        },
+        {
+          "value": "serif",
+          "label": "Elegant Serif"
+        }
+      ],
+      "info": "Font for descriptions, buttons, and body text"
+    },
+    {
+      "type": "select",
+      "id": "body_font_weight",
+      "label": "Body Text Font Weight",
+      "default": "inherit",
+      "options": [
+        {
+          "value": "inherit",
+          "label": "Inherit from page"
+        },
+        {
+          "value": "300",
+          "label": "Light (300)"
+        },
+        {
+          "value": "400",
+          "label": "Normal (400)"
+        },
+        {
+          "value": "500",
+          "label": "Medium (500)"
+        },
+        {
+          "value": "600",
+          "label": "Semi-bold (600)"
+        },
+        {
+          "value": "700",
+          "label": "Bold (700)"
+        }
+      ],
+      "info": "Weight for descriptions, buttons, and body text"
+    }
+  ]
+}
+{% endschema %} 
