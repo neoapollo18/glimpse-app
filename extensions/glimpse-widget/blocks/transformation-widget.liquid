@@ -601,6 +601,70 @@
     }
   }
 
+  // === MOBILE SELFIE CORRECTION HELPERS ===
+  
+  // Detect if user is on a mobile device
+  function isMobileDevice() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+           (navigator.maxTouchPoints && navigator.maxTouchPoints > 2);
+  }
+  
+  // Check if photo was just taken (within last 2 minutes) - likely a fresh camera capture
+  function isRecentlyTakenPhoto(file) {
+    const now = Date.now();
+    const twoMinutesAgo = now - 120000; // 2 minutes
+    return file.lastModified > twoMinutesAgo;
+  }
+  
+  // Flip image horizontally using Canvas (to correct mirrored selfies)
+  function flipImageHorizontally(dataUrl) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = function() {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          
+          // Flip horizontally by scaling -1 on x-axis
+          ctx.translate(canvas.width, 0);
+          ctx.scale(-1, 1);
+          ctx.drawImage(img, 0, 0);
+          
+          // Return as JPEG for smaller size
+          const flippedDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+          console.log('Image flipped successfully');
+          resolve(flippedDataUrl);
+        } catch (err) {
+          console.error('Error flipping image:', err);
+          resolve(dataUrl); // Return original on error
+        }
+      };
+      img.onerror = function() {
+        console.error('Error loading image for flip');
+        resolve(dataUrl); // Return original on error
+      };
+      img.src = dataUrl;
+    });
+  }
+  
+  // Convert data URL to File object (needed for API submission)
+  function dataUrlToFile(dataUrl, fileName) {
+    const arr = dataUrl.split(',');
+    const mime = arr[0].match(/:(.*?);/)[1];
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new File([u8arr], fileName, { type: mime });
+  }
+  
+  // Track if current image was flipped (for consistent behavior)
+  let currentImageWasFlipped = false;
+
   window.widgetFunctions.showError = function(message) {
     console.error('Widget error:', message);
     const errorMessage = document.getElementById('errorMessage');
@@ -752,11 +816,29 @@
       // Show preview and start transformation
       const reader = new FileReader();
       
-      reader.onload = function(e) {
+      reader.onload = async function(e) {
         console.log('=== FILE READ COMPLETE ===');
         console.log('Data URL length:', e.target.result.length);
         
         try {
+          let imageDataUrl = e.target.result;
+          let fileToSend = file;
+          currentImageWasFlipped = false;
+          
+          // Check if this is a mobile selfie that needs to be flipped
+          const isMobile = isMobileDevice();
+          const isRecent = isRecentlyTakenPhoto(file);
+          console.log('Mobile detection:', { isMobile, isRecent, lastModified: file.lastModified });
+          
+          // On mobile, if photo was just taken, it's likely a selfie - flip it
+          if (isMobile && isRecent) {
+            console.log('Mobile selfie detected - flipping image to correct mirror effect...');
+            imageDataUrl = await flipImageHorizontally(imageDataUrl);
+            fileToSend = dataUrlToFile(imageDataUrl, file.name || 'selfie.jpg');
+            currentImageWasFlipped = true;
+            console.log('Image flipped successfully, new file size:', fileToSend.size);
+          }
+          
           // Set the preview image
           const beforeImg = document.getElementById('beforeImage');
           if (beforeImg) {
@@ -770,7 +852,7 @@
               // Clear the handlers to prevent them from firing later
               beforeImg.onload = null;
               beforeImg.onerror = null;
-              transformImage(file);
+              transformImage(fileToSend);
             };
             
             beforeImg.onerror = function() {
@@ -782,11 +864,11 @@
             };
             
             // Set the image source (this will trigger onload or onerror)
-            beforeImg.src = e.target.result;
-            console.log('Preview image source set');
+            beforeImg.src = imageDataUrl;
+            console.log('Preview image source set', currentImageWasFlipped ? '(flipped)' : '(original)');
           } else {
             console.error('beforeImage element not found');
-            transformImage(file); // Try transformation anyway
+            transformImage(fileToSend); // Try transformation anyway
           }
         } catch (error) {
           console.error('Error setting image preview:', error);
