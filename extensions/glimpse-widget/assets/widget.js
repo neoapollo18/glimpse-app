@@ -385,8 +385,12 @@
       const beforeImg = document.getElementById('beforeImage');
       
       // If server returned processed input image (for HEIC), use it for "before"
-      if (result.processedInputImage && beforeImg && !beforeImg.src) {
-        beforeImg.src = `data:image/jpeg;base64,${result.processedInputImage}`;
+      // Check if beforeImg doesn't have a data URL (HEIC files won't have preview set)
+      if (result.processedInputImage && beforeImg) {
+        const currentSrc = beforeImg.src || '';
+        if (!currentSrc.startsWith('data:image')) {
+          beforeImg.src = `data:image/jpeg;base64,${result.processedInputImage}`;
+        }
       }
       
       if (afterImg) {
