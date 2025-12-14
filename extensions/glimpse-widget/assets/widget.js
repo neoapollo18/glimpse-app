@@ -305,32 +305,29 @@
           
           let transformationStarted = false;
           
-          beforeImg.onload = function() {
-            beforeImg.onload = null;
-            beforeImg.onerror = null;
-            if (!transformationStarted) {
-              transformationStarted = true;
-              transformImage(fileToSend);
-            }
-          };
-          
-          beforeImg.onerror = function() {
-            beforeImg.onload = null;
-            beforeImg.onerror = null;
-            
-            if (isHeic) {
+          // For HEIC files, browser can't display - just start transform immediately
+          if (isHeic) {
+            transformImage(file);
+          } else {
+            beforeImg.onload = function() {
+              beforeImg.onload = null;
+              beforeImg.onerror = null;
               if (!transformationStarted) {
                 transformationStarted = true;
-                transformImage(file);
+                transformImage(fileToSend);
               }
-            } else {
+            };
+            
+            beforeImg.onerror = function() {
+              beforeImg.onload = null;
+              beforeImg.onerror = null;
               window.widgetFunctions.showError('Error displaying image preview. Please try again.');
-            }
-          };
-          
-          beforeImg.src = imageDataUrl;
+            };
+            
+            beforeImg.src = imageDataUrl;
+          }
         } else {
-          transformImage(fileToSend);
+          transformImage(isHeic ? file : fileToSend);
         }
       } catch (error) {
         window.widgetFunctions.showError('Error loading image preview. Please try again.');
@@ -385,6 +382,13 @@
       if (!result.generatedImage) throw new Error('No transformed image received');
       
       const afterImg = document.getElementById('afterImage');
+      const beforeImg = document.getElementById('beforeImage');
+      
+      // If server returned processed input image (for HEIC), use it for "before"
+      if (result.processedInputImage && beforeImg && !beforeImg.src) {
+        beforeImg.src = `data:image/jpeg;base64,${result.processedInputImage}`;
+      }
+      
       if (afterImg) {
         afterImg.onload = null;
         afterImg.onerror = null;

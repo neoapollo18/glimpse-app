@@ -156,6 +156,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({
       success: true,
       generatedImage: result.generatedImage,
+      processedInputImage: result.processedInputImage,
     }, {
       headers: {
         "Access-Control-Allow-Origin": "*",

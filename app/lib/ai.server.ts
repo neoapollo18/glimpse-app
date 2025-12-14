@@ -14,6 +14,7 @@ interface ImageTransformationRequest {
 interface ImageTransformationResponse {
   success: boolean;
   generatedImage?: string; // base64 encoded image
+  processedInputImage?: string; // base64 encoded converted input (for HEIC display)
   error?: string;
 }
 
@@ -116,7 +117,8 @@ export async function transformImage(
 
     return {
       success: true,
-      generatedImage: generatedImageData
+      generatedImage: generatedImageData,
+      processedInputImage: compressedBase64 // Return converted input for HEIC display
     };
 
   } catch (error) {
