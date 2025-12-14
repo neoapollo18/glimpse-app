@@ -121,7 +121,8 @@
       
       <input type="file" 
              id="imageUpload" 
-             accept="image/*" 
+             accept="image/*,.heic,.heif" 
+             capture="user"
              style="display: none;">
       
       <button class="upload-button" 
@@ -664,6 +665,45 @@
   
   // Track if current image was flipped (for consistent behavior)
   let currentImageWasFlipped = false;
+  
+  // === HEIC/HEIF SUPPORT HELPERS ===
+  
+  // Check if file is a valid image by extension (fallback for HEIC/HEIF)
+  function isValidImageByExtension(fileName) {
+    if (!fileName) return false;
+    const ext = fileName.toLowerCase().split('.').pop();
+    const validExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic', 'heif', 'avif'];
+    return validExtensions.includes(ext);
+  }
+  
+  // Check if file is HEIC/HEIF format
+  function isHeicOrHeif(file) {
+    // Check MIME type
+    const heicMimeTypes = ['image/heic', 'image/heif', 'image/heic-sequence', 'image/heif-sequence'];
+    if (heicMimeTypes.includes(file.type.toLowerCase())) {
+      return true;
+    }
+    // Check file extension (browsers often don't recognize HEIC MIME type)
+    const ext = file.name?.toLowerCase().split('.').pop();
+    return ext === 'heic' || ext === 'heif';
+  }
+  
+  // Check if file is a valid image (including HEIC/HEIF support)
+  function isValidImageFile(file) {
+    // Standard image MIME type check
+    if (file.type && file.type.startsWith('image/')) {
+      return true;
+    }
+    // HEIC/HEIF specific check (some browsers report empty or wrong MIME type)
+    if (isHeicOrHeif(file)) {
+      return true;
+    }
+    // Fallback: check by file extension for unrecognized MIME types
+    if (!file.type || file.type === '' || file.type === 'application/octet-stream') {
+      return isValidImageByExtension(file.name);
+    }
+    return false;
+  }
 
   window.widgetFunctions.showError = function(message) {
     console.error('Widget error:', message);
@@ -789,11 +829,16 @@
       // Reset any previous errors and show upload state
       window.widgetFunctions.showState('upload');
       
-      // Validate file type - check if it's an image
-      if (!file.type.startsWith('image/')) {
-        console.error('Invalid file type:', file.type);
-        window.widgetFunctions.showError('Please upload an image file.');
+      // Validate file type - check if it's an image (with HEIC/HEIF support)
+      if (!isValidImageFile(file)) {
+        console.error('Invalid file type:', file.type, 'name:', file.name);
+        window.widgetFunctions.showError('Please upload an image file (JPG, PNG, HEIC, etc.).');
         return;
+      }
+      
+      // Log if HEIC/HEIF file detected
+      if (isHeicOrHeif(file)) {
+        console.log('HEIC/HEIF file detected - will be converted server-side');
       }
       
       // Validate file size (5MB limit for storefront)
@@ -825,18 +870,27 @@
           let fileToSend = file;
           currentImageWasFlipped = false;
           
+          // Check if this is a HEIC/HEIF file that the browser might not be able to display
+          const isHeic = isHeicOrHeif(file);
+          
           // Check if this is a mobile selfie that needs to be flipped
           const isMobile = isMobileDevice();
           const isRecent = isRecentlyTakenPhoto(file);
-          console.log('Mobile detection:', { isMobile, isRecent, lastModified: file.lastModified });
+          console.log('Mobile detection:', { isMobile, isRecent, isHeic, lastModified: file.lastModified });
           
           // On mobile, if photo was just taken, it's likely a selfie - flip it
-          if (isMobile && isRecent) {
+          // Note: Flipping may fail silently for HEIC on non-Safari browsers, which is fine
+          // because the server will handle the original file correctly
+          if (isMobile && isRecent && !isHeic) {
+            // Only attempt client-side flip for non-HEIC files
+            // HEIC files on mobile Safari will work, but we skip flip to avoid issues
             console.log('Mobile selfie detected - flipping image to correct mirror effect...');
             imageDataUrl = await flipImageHorizontally(imageDataUrl);
             fileToSend = dataUrlToFile(imageDataUrl, file.name || 'selfie.jpg');
             currentImageWasFlipped = true;
             console.log('Image flipped successfully, new file size:', fileToSend.size);
+          } else if (isMobile && isRecent && isHeic) {
+            console.log('Mobile HEIC selfie detected - skipping client-side flip (server handles orientation)');
           }
           
           // Set the preview image
@@ -846,26 +900,44 @@
             beforeImg.onload = null;
             beforeImg.onerror = null;
             
+            // Track if we've already started the transformation (prevent double-trigger)
+            let transformationStarted = false;
+            
             // Set up new handlers
             beforeImg.onload = function() {
               console.log('Preview image loaded successfully, starting transformation...');
               // Clear the handlers to prevent them from firing later
               beforeImg.onload = null;
               beforeImg.onerror = null;
-              transformImage(fileToSend);
+              if (!transformationStarted) {
+                transformationStarted = true;
+                transformImage(fileToSend);
+              }
             };
             
             beforeImg.onerror = function() {
-              console.error('Error loading preview image');
               // Clear the handlers
               beforeImg.onload = null;
               beforeImg.onerror = null;
-              window.widgetFunctions.showError('Error displaying image preview. Please try again.');
+              
+              // For HEIC/HEIF files, the browser may not be able to display them
+              // but the server CAN process them via Sharp - so proceed anyway!
+              if (isHeic) {
+                console.log('HEIC/HEIF preview failed (browser cannot decode) - proceeding with server-side processing');
+                if (!transformationStarted) {
+                  transformationStarted = true;
+                  // Use original file for HEIC since browser can't process it
+                  transformImage(file);
+                }
+              } else {
+                console.error('Error loading preview image for non-HEIC file');
+                window.widgetFunctions.showError('Error displaying image preview. Please try again.');
+              }
             };
             
             // Set the image source (this will trigger onload or onerror)
             beforeImg.src = imageDataUrl;
-            console.log('Preview image source set', currentImageWasFlipped ? '(flipped)' : '(original)');
+            console.log('Preview image source set', currentImageWasFlipped ? '(flipped)' : '(original)', isHeic ? '(HEIC - may fail on some browsers)' : '');
           } else {
             console.error('beforeImage element not found');
             transformImage(fileToSend); // Try transformation anyway

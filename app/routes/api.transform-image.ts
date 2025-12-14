@@ -27,10 +27,30 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // Validate image file
     const maxSize = 10 * 1024 * 1024; // 10MB
 
-    // Check if it's actually an image by checking the file type starts with 'image/'
-    if (!imageFile.type.startsWith('image/')) {
+    // Helper function to check if file is a valid image (including HEIC/HEIF)
+    const isValidImageFile = (file: File): boolean => {
+      // Standard image MIME type check
+      if (file.type.startsWith('image/')) {
+        return true;
+      }
+      // HEIC/HEIF specific MIME types
+      const heicMimeTypes = ['image/heic', 'image/heif', 'image/heic-sequence', 'image/heif-sequence'];
+      if (heicMimeTypes.includes(file.type.toLowerCase())) {
+        return true;
+      }
+      // Fallback: check by file extension for unrecognized MIME types (common with HEIC on some browsers)
+      if (!file.type || file.type === '' || file.type === 'application/octet-stream') {
+        const ext = file.name?.toLowerCase().split('.').pop();
+        const validExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic', 'heif', 'avif'];
+        return validExtensions.includes(ext || '');
+      }
+      return false;
+    };
+
+    // Check if it's actually an image (with HEIC/HEIF support)
+    if (!isValidImageFile(imageFile)) {
       return json({ 
-        error: "Please upload an image file." 
+        error: "Please upload an image file (JPG, PNG, HEIC, etc.)." 
       }, { status: 400 });
     }
 
