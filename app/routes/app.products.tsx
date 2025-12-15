@@ -477,25 +477,29 @@ export default function Products() {
     const imageUrl = shopifyProduct?.images?.edges?.[0]?.node?.url || "";
     
     return [
-      <div style={{ width: '200px', minWidth: '200px' }} key={product.id}>
+      <div style={{ width: '280px', minWidth: '280px' }} key={product.id}>
         <InlineStack gap="300" wrap={false} blockAlign="center">
-          <Thumbnail
-            source={imageUrl}
-            alt={product.product_name}
-            size="small"
-          />
+          <div style={{ width: '40px', height: '40px', flexShrink: 0 }}>
+            <Thumbnail
+              source={imageUrl || "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png"}
+              alt={product.product_name}
+              size="small"
+            />
+          </div>
           <Text as="span" variant="bodyMd" fontWeight="semibold">
-            {product.product_name.length > 25 
-              ? `${product.product_name.substring(0, 25)}...` 
+            {product.product_name.length > 35 
+              ? `${product.product_name.substring(0, 35)}...` 
               : product.product_name}
           </Text>
         </InlineStack>
       </div>,
-      <Text as="span" variant="bodySm">
-        {product.transformation_prompt.length > 100 
-          ? `${product.transformation_prompt.substring(0, 100)}...` 
-          : product.transformation_prompt}
-      </Text>,
+      <div style={{ paddingLeft: '8px' }}>
+        <Text as="span" variant="bodySm">
+          {product.transformation_prompt.length > 100 
+            ? `${product.transformation_prompt.substring(0, 100)}...` 
+            : product.transformation_prompt}
+        </Text>
+      </div>,
       <InlineStack gap="200">
         <Button size="slim" onClick={() => handleTest(product)}>
           Test
@@ -518,17 +522,19 @@ export default function Products() {
     const configured = isConfigured(product.id);
 
     return [
-      <div style={{ width: '250px', minWidth: '250px' }} key={product.id}>
+      <div style={{ width: '300px', minWidth: '300px' }} key={product.id}>
         <InlineStack gap="300" wrap={false} blockAlign="center">
-          <Thumbnail
-            source={image?.url || ""}
-            alt={image?.altText || product.title}
-            size="small"
-          />
+          <div style={{ width: '40px', height: '40px', flexShrink: 0 }}>
+            <Thumbnail
+              source={image?.url || "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png"}
+              alt={image?.altText || product.title}
+              size="small"
+            />
+          </div>
           <BlockStack gap="100">
             <Text as="span" variant="bodyMd" fontWeight="semibold">
-              {product.title.length > 25 
-                ? `${product.title.substring(0, 25)}...` 
+              {product.title.length > 35 
+                ? `${product.title.substring(0, 35)}...` 
                 : product.title}
             </Text>
             <Text as="span" variant="bodySm" tone="subdued">
