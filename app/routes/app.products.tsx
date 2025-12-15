@@ -477,17 +477,15 @@ export default function Products() {
     const imageUrl = shopifyProduct?.images?.edges?.[0]?.node?.url || "";
     
     return [
-      <InlineStack gap="300" key={product.id}>
+      <InlineStack gap="300" wrap={false} blockAlign="center" key={product.id}>
         <Thumbnail
           source={imageUrl}
           alt={product.product_name}
           size="small"
         />
-        <BlockStack gap="100">
-          <Text as="span" variant="bodyMd" fontWeight="semibold">
-            {product.product_name}
-          </Text>
-        </BlockStack>
+        <Text as="span" variant="bodyMd" fontWeight="semibold">
+          {product.product_name}
+        </Text>
       </InlineStack>,
       <Text as="span" variant="bodySm">
         {product.transformation_prompt.length > 100 
