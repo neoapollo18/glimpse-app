@@ -487,8 +487,8 @@ export default function Products() {
             />
           </div>
           <Text as="span" variant="bodyMd" fontWeight="semibold">
-            {product.product_name.length > 45 
-              ? `${product.product_name.substring(0, 45)}...` 
+            {product.product_name.length > 50 
+              ? `${product.product_name.substring(0, 50)}...` 
               : product.product_name}
           </Text>
         </InlineStack>
