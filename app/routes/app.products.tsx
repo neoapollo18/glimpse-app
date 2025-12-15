@@ -495,8 +495,8 @@ export default function Products() {
       </div>,
       <div style={{ paddingLeft: '4px'}}>
         <Text as="span" variant="bodySm">
-          {product.transformation_prompt.length > 70
-            ? `${product.transformation_prompt.substring(0, 70)}...` 
+          {product.transformation_prompt.length > 75
+            ? `${product.transformation_prompt.substring(0, 75)}...` 
             : product.transformation_prompt}
         </Text>
       </div>,
