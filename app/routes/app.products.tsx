@@ -493,14 +493,14 @@ export default function Products() {
           </Text>
         </InlineStack>
       </div>,
-      <div style={{ paddingLeft: '4px' }}>
+      <div style={{ paddingLeft: '4px'}}>
         <Text as="span" variant="bodySm">
           {product.transformation_prompt.length > 70
-            ? `${product.transformation_prompt.substring(0, 80)}...` 
+            ? `${product.transformation_prompt.substring(0, 70)}...` 
             : product.transformation_prompt}
         </Text>
       </div>,
-      <InlineStack gap="200">
+      <InlineStack gap="200" wrap={false}>
         <Button size="slim" onClick={() => handleTest(product)}>
           Test
         </Button>
