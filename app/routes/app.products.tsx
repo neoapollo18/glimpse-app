@@ -466,32 +466,51 @@ export default function Products() {
     }
   };
 
-  // Configured Products Table
-  const configuredProductsRows = configuredProducts.map((product) => [
-    <InlineStack gap="300" key={product.id}>
-      <BlockStack gap="100">
-        <Text as="span" variant="bodyMd" fontWeight="semibold">
-          {product.product_name}
-        </Text>
-      </BlockStack>
-    </InlineStack>,
-    <Text as="span" variant="bodySm">
-      {product.transformation_prompt.length > 100 
-        ? `${product.transformation_prompt.substring(0, 100)}...` 
-        : product.transformation_prompt}
-    </Text>,
-    <InlineStack gap="200">
-      <Button size="slim" onClick={() => handleTest(product)}>
-        Test
-      </Button>
-      <Button variant="plain" size="slim" onClick={() => handleEdit(product)}>
-        Edit
-      </Button>
-    </InlineStack>,
-  ]);
+  // Configured Products Table - sorted alphabetically with product images
+  const sortedConfiguredProducts = [...configuredProducts].sort((a, b) => 
+    a.product_name.localeCompare(b.product_name)
+  );
+  
+  const configuredProductsRows = sortedConfiguredProducts.map((product) => {
+    // Find the corresponding Shopify product to get the image
+    const shopifyProduct = shopifyProducts.find((sp: ShopifyProduct) => sp.id === product.shopify_id);
+    const imageUrl = shopifyProduct?.images?.edges?.[0]?.node?.url || "";
+    
+    return [
+      <InlineStack gap="300" key={product.id}>
+        <Thumbnail
+          source={imageUrl}
+          alt={product.product_name}
+          size="small"
+        />
+        <BlockStack gap="100">
+          <Text as="span" variant="bodyMd" fontWeight="semibold">
+            {product.product_name}
+          </Text>
+        </BlockStack>
+      </InlineStack>,
+      <Text as="span" variant="bodySm">
+        {product.transformation_prompt.length > 100 
+          ? `${product.transformation_prompt.substring(0, 100)}...` 
+          : product.transformation_prompt}
+      </Text>,
+      <InlineStack gap="200">
+        <Button size="slim" onClick={() => handleTest(product)}>
+          Test
+        </Button>
+        <Button variant="plain" size="slim" onClick={() => handleEdit(product)}>
+          Edit
+        </Button>
+      </InlineStack>,
+    ];
+  });
 
-  // All Shopify Products Table
-  const allProductsRows = shopifyProducts.map((product: ShopifyProduct) => {
+  // All Shopify Products Table - sorted alphabetically
+  const sortedShopifyProducts = [...shopifyProducts].sort((a: ShopifyProduct, b: ShopifyProduct) => 
+    a.title.localeCompare(b.title)
+  );
+  
+  const allProductsRows = sortedShopifyProducts.map((product: ShopifyProduct) => {
     const image = product.images.edges[0]?.node;
     const price = product.variants.edges[0]?.node?.price || "0";
     const configured = isConfigured(product.id);
