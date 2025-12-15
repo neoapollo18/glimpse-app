@@ -477,16 +477,20 @@ export default function Products() {
     const imageUrl = shopifyProduct?.images?.edges?.[0]?.node?.url || "";
     
     return [
-      <InlineStack gap="300" wrap={false} blockAlign="center" key={product.id}>
-        <Thumbnail
-          source={imageUrl}
-          alt={product.product_name}
-          size="small"
-        />
-        <Text as="span" variant="bodyMd" fontWeight="semibold">
-          {product.product_name}
-        </Text>
-      </InlineStack>,
+      <div style={{ width: '200px', minWidth: '200px' }} key={product.id}>
+        <InlineStack gap="300" wrap={false} blockAlign="center">
+          <Thumbnail
+            source={imageUrl}
+            alt={product.product_name}
+            size="small"
+          />
+          <Text as="span" variant="bodyMd" fontWeight="semibold">
+            {product.product_name.length > 25 
+              ? `${product.product_name.substring(0, 25)}...` 
+              : product.product_name}
+          </Text>
+        </InlineStack>
+      </div>,
       <Text as="span" variant="bodySm">
         {product.transformation_prompt.length > 100 
           ? `${product.transformation_prompt.substring(0, 100)}...` 
@@ -514,21 +518,25 @@ export default function Products() {
     const configured = isConfigured(product.id);
 
     return [
-      <InlineStack gap="300" key={product.id}>
-        <Thumbnail
-          source={image?.url || ""}
-          alt={image?.altText || product.title}
-          size="small"
-        />
-        <BlockStack gap="100">
-          <Text as="span" variant="bodyMd" fontWeight="semibold">
-            {product.title}
-          </Text>
-          <Text as="span" variant="bodySm" tone="subdued">
-            ${price} • {product.productType}
-          </Text>
-        </BlockStack>
-      </InlineStack>,
+      <div style={{ width: '250px', minWidth: '250px' }} key={product.id}>
+        <InlineStack gap="300" wrap={false} blockAlign="center">
+          <Thumbnail
+            source={image?.url || ""}
+            alt={image?.altText || product.title}
+            size="small"
+          />
+          <BlockStack gap="100">
+            <Text as="span" variant="bodyMd" fontWeight="semibold">
+              {product.title.length > 25 
+                ? `${product.title.substring(0, 25)}...` 
+                : product.title}
+            </Text>
+            <Text as="span" variant="bodySm" tone="subdued">
+              ${price} • {product.productType}
+            </Text>
+          </BlockStack>
+        </InlineStack>
+      </div>,
       <Button
         variant={configured ? "plain" : "primary"}
         onClick={() => handleConfigure(product)}
