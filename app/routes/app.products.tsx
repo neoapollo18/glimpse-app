@@ -533,8 +533,8 @@ export default function Products() {
           </div>
           <BlockStack gap="100">
             <Text as="span" variant="bodyMd" fontWeight="semibold">
-              {product.title.length > 35 
-                ? `${product.title.substring(0, 35)}...` 
+              {product.title.length > 50 
+                ? `${product.title.substring(0, 50)}...` 
                 : product.title}
             </Text>
             <Text as="span" variant="bodySm" tone="subdued">
