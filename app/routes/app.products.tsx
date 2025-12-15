@@ -493,10 +493,10 @@ export default function Products() {
           </Text>
         </InlineStack>
       </div>,
-      <div style={{ paddingLeft: '8px' }}>
+      <div style={{ paddingLeft: '5px' }}>
         <Text as="span" variant="bodySm">
-          {product.transformation_prompt.length > 100 
-            ? `${product.transformation_prompt.substring(0, 100)}...` 
+          {product.transformation_prompt.length > 80
+            ? `${product.transformation_prompt.substring(0, 80)}...` 
             : product.transformation_prompt}
         </Text>
       </div>,
