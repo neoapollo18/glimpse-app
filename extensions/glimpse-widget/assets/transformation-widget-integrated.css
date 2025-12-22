@@ -188,9 +188,9 @@
 
 /* Solid Button Style */
 .integrated-upload-button.button-style-solid {
-  background: var(--solid-button-color);
-  color: var(--button-text-color);
-  border: none;
+  background: var(--solid-button-color) !important;
+  color: var(--button-text-color) !important;
+  border: none !important;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
@@ -202,9 +202,9 @@
 
 /* Outlined Button Style */
 .integrated-upload-button.button-style-outlined {
-  background: transparent;
-  color: var(--text-color);
-  border: 2px solid var(--border-color);
+  background: transparent !important;
+  color: var(--text-color) !important;
+  border: 2px solid var(--border-color) !important;
 }
 
 .integrated-upload-button.button-style-outlined:hover {
