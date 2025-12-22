@@ -46,9 +46,9 @@
   
   # Typography
   assign header_font_family = block.settings.header_font_family | default: 'inherit'
-  assign header_font_weight = block.settings.header_font_weight | default: '700'
+  assign header_font_weight = block.settings.header_font_weight | default: '500'
   assign body_font_family = block.settings.body_font_family | default: 'inherit'
-  assign body_font_weight = block.settings.body_font_weight | default: '400'
+  assign body_font_weight = block.settings.body_font_weight | default: '300'
   
   # Computed styles
   if enable_widget_shadow
@@ -489,7 +489,7 @@
       "type": "select",
       "id": "header_font_weight",
       "label": "Title Font Weight",
-      "default": "700",
+      "default": "500",
       "options": [
         { "value": "inherit", "label": "Inherit from theme" },
         { "value": "300", "label": "Light (300)" },
@@ -520,7 +520,7 @@
       "type": "select",
       "id": "body_font_weight",
       "label": "Body Font Weight",
-      "default": "400",
+      "default": "300",
       "options": [
         { "value": "inherit", "label": "Inherit from theme" },
         { "value": "300", "label": "Light (300)" },
