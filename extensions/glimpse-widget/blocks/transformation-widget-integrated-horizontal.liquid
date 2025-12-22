@@ -73,8 +73,8 @@
   endif
 %}
 
-<!-- Glimpse AI Transformation Widget - Integrated Design -->
-<div class="glimpse-integrated-widget{% unless enable_container %} no-container{% endunless %}" 
+<!-- Glimpse AI Transformation Widget - Integrated Horizontal Design -->
+<div class="glimpse-integrated-horizontal{% unless enable_container %} no-container{% endunless %}" 
      data-product-id="{{ product_id }}"{% if manual_shop_domain != blank %}
      data-manual-shop-domain="{{ manual_shop_domain }}"{% endif %}
      style="--primary-color-1: {{ primary_color_1 }}; 
@@ -103,128 +103,133 @@
             --body-font-family: {{ body_font_family }};
             --body-font-weight: {{ body_font_weight }};">
   
-  <!-- Widget Header -->
-  <div class="integrated-header">
-    <h2 class="integrated-title">{{ block.settings.widget_title | default: "Try It Virtually" }}</h2>
-    <p class="integrated-description">{{ block.settings.widget_description | default: "Upload an image of yourself and see your transformation" }}</p>
-  </div>
-  
-  <!-- Widget Content Area -->
-  <div class="integrated-content">
-    
-    <!-- Initial/Upload State -->
-    <div class="upload-state" id="uploadState">
-      <div class="integrated-placeholder" onclick="window.widgetFunctions.triggerFileInput()">
-        {% if block.settings.placeholder_image %}
-          <img src="{{ block.settings.placeholder_image | image_url: width: 600 }}" 
-               alt="Transformation preview" 
-               class="integrated-placeholder-image"
-               width="600"
-               height="300"
-               loading="lazy">
-        {% else %}
-          <!-- Default side-by-side placeholder -->
-          <div class="integrated-default-placeholder">
-            <div class="placeholder-side placeholder-before-side">
-              <div class="placeholder-silhouette"></div>
-            </div>
-            <div class="placeholder-side placeholder-after-side">
-              <div class="placeholder-silhouette placeholder-silhouette-glow"></div>
-            </div>
-          </div>
-        {% endif %}
-      </div>
-      
-      <input type="file" 
-             id="imageUpload" 
-             accept="image/*,.heic,.heif" 
-             style="display: none;">
-      
-      <button class="integrated-upload-button button-style-{{ button_style }}" 
-              type="button" 
-              onclick="window.widgetFunctions.triggerFileInput()">
-        {% if show_camera_icon %}
-          <svg class="camera-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
-            <circle cx="12" cy="13" r="3"/>
-          </svg>
-        {% endif %}
-        <span class="button-text">{{ block.settings.button_text | default: "Upload a Photo" }}</span>
-      </button>
+  <!-- Horizontal Layout: Text Left, Images Right -->
+  <div class="horizontal-top-section">
+    <!-- Left Side: Text Content -->
+    <div class="horizontal-text-side">
+      <h2 class="horizontal-title">{{ block.settings.widget_title | default: "Try It Virtually" }}</h2>
+      <p class="horizontal-description">{{ block.settings.widget_description | default: "Upload an image of yourself and see your transformation" }}</p>
     </div>
     
-    <!-- Processing State -->
-    <div class="processing-state" id="processingState" style="display: none;">
-      <div class="integrated-loading">
-        <div class="integrated-spinner"></div>
-        <p class="loading-text">Analyzing image...</p>
+    <!-- Right Side: Images -->
+    <div class="horizontal-images-side">
+      <!-- Initial/Upload State -->
+      <div class="upload-state" id="uploadState">
+        <div class="horizontal-placeholder" onclick="window.widgetFunctions.triggerFileInputHorizontal()">
+          {% if block.settings.placeholder_image %}
+            <img src="{{ block.settings.placeholder_image | image_url: width: 600 }}" 
+                 alt="Transformation preview" 
+                 class="horizontal-placeholder-image"
+                 width="600"
+                 height="300"
+                 loading="lazy">
+          {% else %}
+            <!-- Default side-by-side placeholder -->
+            <div class="horizontal-default-placeholder">
+              <div class="placeholder-side placeholder-before-side">
+                <div class="placeholder-silhouette"></div>
+              </div>
+              <div class="placeholder-side placeholder-after-side">
+                <div class="placeholder-silhouette placeholder-silhouette-glow"></div>
+              </div>
+            </div>
+          {% endif %}
+        </div>
       </div>
-    </div>
-    
-    <!-- Results State -->
-    <div class="results-state" id="resultsState" style="display: none;">
-      <div class="integrated-results">
-        <div class="integrated-comparison">
-          <div class="comparison-side">
-            <img id="beforeImage" alt="Before" class="comparison-img" width="300" height="300">
-          </div>
-          <div class="comparison-side">
-            <img id="afterImage" alt="After" class="comparison-img" width="300" height="300">
+      
+      <!-- Processing State -->
+      <div class="processing-state" id="processingState" style="display: none;">
+        <div class="horizontal-loading">
+          <div class="horizontal-spinner"></div>
+          <p class="loading-text">Analyzing image...</p>
+        </div>
+      </div>
+      
+      <!-- Results State -->
+      <div class="results-state" id="resultsState" style="display: none;">
+        <div class="horizontal-results">
+          <div class="horizontal-comparison">
+            <div class="comparison-side">
+              <img id="beforeImage" alt="Before" class="comparison-img" width="300" height="300">
+            </div>
+            <div class="comparison-side">
+              <img id="afterImage" alt="After" class="comparison-img" width="300" height="300">
+            </div>
           </div>
         </div>
       </div>
       
-      <button class="integrated-upload-button button-style-{{ button_style }}" 
-              type="button" 
-              onclick="window.widgetFunctions.resetTransformation()">
-        <svg class="retry-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-          <path d="M21 3v5h-5"/>
-          <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
-          <path d="M3 21v-5h5"/>
-        </svg>
-        <span class="button-text">{{ 'transformation.try_again' | t: default: 'Try Again' }}</span>
-      </button>
-    </div>
-    
-    <!-- Error State -->
-    <div class="error-state" id="errorState" style="display: none;">
-      <div class="integrated-error">
-        <svg class="error-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"/>
-          <path d="M12 8v4"/>
-          <path d="M12 16h.01"/>
-        </svg>
-        <p class="error-message" id="errorMessage"></p>
-        <button class="integrated-upload-button button-style-{{ button_style }}" 
-                type="button" 
-                onclick="window.widgetFunctions.resetTransformation()">
-          <span class="button-text">{{ 'transformation.try_again' | t: default: 'Try Again' }}</span>
-        </button>
+      <!-- Error State -->
+      <div class="error-state" id="errorState" style="display: none;">
+        <div class="horizontal-error">
+          <svg class="error-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 8v4"/>
+            <path d="M12 16h.01"/>
+          </svg>
+          <p class="error-message" id="errorMessage"></p>
+        </div>
       </div>
     </div>
+  </div>
+  
+  <!-- Hidden file input -->
+  <input type="file" 
+         id="imageUpload" 
+         accept="image/*,.heic,.heif" 
+         style="display: none;">
+  
+  <!-- Button Section (Full Width) -->
+  <div class="horizontal-button-section">
+    <!-- Upload Button (shown in upload state) -->
+    <button class="horizontal-upload-button button-style-{{ button_style }} upload-btn" 
+            id="uploadButton"
+            type="button" 
+            onclick="window.widgetFunctions.triggerFileInputHorizontal()">
+      {% if show_camera_icon %}
+        <svg class="camera-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+          <circle cx="12" cy="13" r="3"/>
+        </svg>
+      {% endif %}
+      <span class="button-text">{{ block.settings.button_text | default: "Upload a Photo" }}</span>
+    </button>
     
+    <!-- Try Again Button (shown in results/error state) -->
+    <button class="horizontal-upload-button button-style-{{ button_style }} retry-btn" 
+            id="retryButton"
+            type="button" 
+            style="display: none;"
+            onclick="window.widgetFunctions.resetTransformationHorizontal()">
+      <svg class="retry-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+        <path d="M21 3v5h-5"/>
+        <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+        <path d="M3 21v-5h5"/>
+      </svg>
+      <span class="button-text">{{ 'transformation.try_again' | t: default: 'Try Again' }}</span>
+    </button>
   </div>
   
   <!-- Widget Footer / Disclaimer -->
-  <div class="integrated-footer">
+  <div class="horizontal-footer">
     <svg class="info-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="10"/>
       <path d="M12 16v-4"/>
       <path d="M12 8h.01"/>
     </svg>
-    <p class="integrated-disclaimer">{{ disclaimer_text }}</p>
+    <p class="horizontal-disclaimer">{{ disclaimer_text }}</p>
   </div>
   
 </div>
 
-<script src="{{ 'widget-integrated.js' | asset_url }}" defer></script>
+<script src="{{ 'widget-integrated-horizontal.js' | asset_url }}" defer></script>
 
 {% schema %}
 {
-  "name": "Glimpse (Integrated)",
+  "name": "Glimpse (Integrated Horizontal)",
   "target": "section",
-  "stylesheet": "transformation-widget-integrated.css",
+  "stylesheet": "transformation-widget-integrated-horizontal.css",
   "settings": [
     {
       "type": "product",
