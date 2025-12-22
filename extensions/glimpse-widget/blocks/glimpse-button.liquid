@@ -1,0 +1,358 @@
+{% liquid
+  assign product = block.settings.product | default: product
+  unless product
+    assign product = product
+  endunless
+  
+  assign product_id = product.id
+  assign manual_shop_domain = block.settings.manual_shop_domain
+  
+  # Button styling
+  assign button_style = block.settings.button_style | default: 'outlined'
+  assign button_text = block.settings.button_text | default: 'TRY IT ON'
+  assign button_text_case = block.settings.button_text_case | default: 'uppercase'
+  assign button_border_radius = block.settings.button_border_radius | default: 50
+  assign button_padding_x = block.settings.button_padding_x | default: 32
+  assign button_padding_y = block.settings.button_padding_y | default: 16
+  assign button_font_size = block.settings.button_font_size | default: 14
+  assign button_font_weight = block.settings.button_font_weight | default: '500'
+  assign show_camera_icon = block.settings.show_camera_icon
+  assign button_width = block.settings.button_width | default: 'auto'
+  
+  # Colors
+  assign primary_color_1 = block.settings.primary_color_1 | default: '#8b5cf6'
+  assign primary_color_2 = block.settings.primary_color_2 | default: '#7c3aed'
+  assign solid_button_color = block.settings.solid_button_color | default: '#1f2937'
+  assign button_text_color = block.settings.button_text_color | default: '#1f2937'
+  assign button_border_color = block.settings.button_border_color | default: '#d1d5db'
+  assign button_border_width = block.settings.button_border_width | default: 1
+  
+  # Results styling
+  assign results_background = block.settings.results_background | default: '#ffffff'
+  assign image_border_radius = block.settings.image_border_radius | default: 8
+  
+  # Layout
+  assign widget_margin_top = block.settings.widget_margin_top | default: 10
+  assign widget_margin_bottom = block.settings.widget_margin_bottom | default: 10
+  assign button_alignment = block.settings.button_alignment | default: 'center'
+%}
+
+<!-- Glimpse Button Widget -->
+<div class="glimpse-button-widget" 
+     data-product-id="{{ product_id }}"{% if manual_shop_domain != blank %}
+     data-manual-shop-domain="{{ manual_shop_domain }}"{% endif %}
+     style="--primary-color-1: {{ primary_color_1 }}; 
+            --primary-color-2: {{ primary_color_2 }};
+            --solid-button-color: {{ solid_button_color }};
+            --button-text-color: {{ button_text_color }};
+            --button-border-color: {{ button_border_color }};
+            --button-border-width: {{ button_border_width }}px;
+            --button-border-radius: {{ button_border_radius }}px;
+            --button-padding-x: {{ button_padding_x }}px;
+            --button-padding-y: {{ button_padding_y }}px;
+            --button-font-size: {{ button_font_size }}px;
+            --button-font-weight: {{ button_font_weight }};
+            --button-text-case: {{ button_text_case }};
+            --button-width: {{ button_width }};
+            --results-background: {{ results_background }};
+            --image-border-radius: {{ image_border_radius }}px;
+            --widget-margin-top: {{ widget_margin_top }}px;
+            --widget-margin-bottom: {{ widget_margin_bottom }}px;
+            --button-alignment: {{ button_alignment }};">
+  
+  <!-- Upload State (Button Only) -->
+  <div class="button-upload-state" id="uploadState">
+    <button class="glimpse-btn btn-style-{{ button_style }}" 
+            type="button" 
+            onclick="window.glimpseButton.triggerUpload()">
+      {% if show_camera_icon %}
+        <svg class="btn-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+          <circle cx="12" cy="13" r="3"/>
+        </svg>
+      {% endif %}
+      <span class="btn-text">{{ button_text }}</span>
+    </button>
+  </div>
+  
+  <!-- Hidden file input -->
+  <input type="file" 
+         id="imageUpload" 
+         accept="image/*,.heic,.heif" 
+         style="display: none;">
+  
+  <!-- Processing State -->
+  <div class="button-processing-state" id="processingState" style="display: none;">
+    <div class="button-loading">
+      <div class="button-spinner"></div>
+      <span class="loading-text">Processing...</span>
+    </div>
+  </div>
+  
+  <!-- Results State -->
+  <div class="button-results-state" id="resultsState" style="display: none;">
+    <div class="button-results-container">
+      <div class="button-comparison">
+        <div class="button-comparison-side">
+          <img id="beforeImage" alt="Before" class="button-result-img" width="200" height="200">
+        </div>
+        <div class="button-comparison-side">
+          <img id="afterImage" alt="After" class="button-result-img" width="200" height="200">
+        </div>
+      </div>
+      <button class="glimpse-btn btn-style-{{ button_style }}" 
+              type="button" 
+              onclick="window.glimpseButton.reset()">
+        <svg class="btn-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+          <path d="M21 3v5h-5"/>
+          <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+          <path d="M3 21v-5h5"/>
+        </svg>
+        <span class="btn-text">Try Again</span>
+      </button>
+    </div>
+  </div>
+  
+  <!-- Error State -->
+  <div class="button-error-state" id="errorState" style="display: none;">
+    <div class="button-error-container">
+      <p class="button-error-message" id="errorMessage"></p>
+      <button class="glimpse-btn btn-style-{{ button_style }}" 
+              type="button" 
+              onclick="window.glimpseButton.reset()">
+        <span class="btn-text">Try Again</span>
+      </button>
+    </div>
+  </div>
+  
+</div>
+
+<script src="{{ 'glimpse-button.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "Glimpse Button",
+  "target": "section",
+  "stylesheet": "glimpse-button.css",
+  "settings": [
+    {
+      "type": "product",
+      "id": "product",
+      "label": "Product",
+      "autofill": true
+    },
+    {
+      "type": "header",
+      "content": "Configuration"
+    },
+    {
+      "type": "text",
+      "id": "manual_shop_domain",
+      "label": "Shop Domain (Optional)",
+      "placeholder": "shop123.myshopify.com",
+      "info": "If using a custom domain, enter your .myshopify.com domain here."
+    },
+    {
+      "type": "header",
+      "content": "Button Text & Style"
+    },
+    {
+      "type": "text",
+      "id": "button_text",
+      "label": "Button Text",
+      "default": "TRY IT ON"
+    },
+    {
+      "type": "select",
+      "id": "button_style",
+      "label": "Button Style",
+      "default": "outlined",
+      "options": [
+        { "value": "gradient", "label": "Gradient Filled" },
+        { "value": "solid", "label": "Solid Filled" },
+        { "value": "outlined", "label": "Outlined" }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "button_text_case",
+      "label": "Text Case",
+      "default": "uppercase",
+      "options": [
+        { "value": "none", "label": "As Typed" },
+        { "value": "uppercase", "label": "UPPERCASE" },
+        { "value": "lowercase", "label": "lowercase" },
+        { "value": "capitalize", "label": "Capitalize" }
+      ]
+    },
+    {
+      "type": "checkbox",
+      "id": "show_camera_icon",
+      "label": "Show Camera Icon",
+      "default": false
+    },
+    {
+      "type": "select",
+      "id": "button_width",
+      "label": "Button Width",
+      "default": "auto",
+      "options": [
+        { "value": "auto", "label": "Auto (fit content)" },
+        { "value": "100%", "label": "Full Width" },
+        { "value": "200px", "label": "200px" },
+        { "value": "250px", "label": "250px" },
+        { "value": "300px", "label": "300px" }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "button_alignment",
+      "label": "Button Alignment",
+      "default": "center",
+      "options": [
+        { "value": "flex-start", "label": "Left" },
+        { "value": "center", "label": "Center" },
+        { "value": "flex-end", "label": "Right" }
+      ]
+    },
+    {
+      "type": "header",
+      "content": "Button Appearance"
+    },
+    {
+      "type": "range",
+      "id": "button_border_radius",
+      "label": "Corner Radius (px)",
+      "min": 0,
+      "max": 50,
+      "step": 2,
+      "default": 50,
+      "info": "50 = pill shape"
+    },
+    {
+      "type": "range",
+      "id": "button_padding_x",
+      "label": "Horizontal Padding (px)",
+      "min": 16,
+      "max": 64,
+      "step": 4,
+      "default": 32
+    },
+    {
+      "type": "range",
+      "id": "button_padding_y",
+      "label": "Vertical Padding (px)",
+      "min": 8,
+      "max": 32,
+      "step": 2,
+      "default": 16
+    },
+    {
+      "type": "range",
+      "id": "button_font_size",
+      "label": "Font Size (px)",
+      "min": 12,
+      "max": 24,
+      "step": 1,
+      "default": 14
+    },
+    {
+      "type": "select",
+      "id": "button_font_weight",
+      "label": "Font Weight",
+      "default": "500",
+      "options": [
+        { "value": "400", "label": "Normal" },
+        { "value": "500", "label": "Medium" },
+        { "value": "600", "label": "Semi-bold" },
+        { "value": "700", "label": "Bold" }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "button_border_width",
+      "label": "Border Width (px)",
+      "min": 1,
+      "max": 4,
+      "step": 1,
+      "default": 1,
+      "info": "For outlined style"
+    },
+    {
+      "type": "header",
+      "content": "Colors"
+    },
+    {
+      "type": "color",
+      "id": "primary_color_1",
+      "label": "Gradient Start",
+      "default": "#8b5cf6"
+    },
+    {
+      "type": "color",
+      "id": "primary_color_2",
+      "label": "Gradient End",
+      "default": "#7c3aed"
+    },
+    {
+      "type": "color",
+      "id": "solid_button_color",
+      "label": "Solid Fill Color",
+      "default": "#1f2937"
+    },
+    {
+      "type": "color",
+      "id": "button_text_color",
+      "label": "Text Color",
+      "default": "#1f2937",
+      "info": "For outlined/solid styles"
+    },
+    {
+      "type": "color",
+      "id": "button_border_color",
+      "label": "Border Color",
+      "default": "#d1d5db",
+      "info": "For outlined style"
+    },
+    {
+      "type": "color",
+      "id": "results_background",
+      "label": "Results Background",
+      "default": "#ffffff"
+    },
+    {
+      "type": "header",
+      "content": "Layout"
+    },
+    {
+      "type": "range",
+      "id": "widget_margin_top",
+      "label": "Margin Top (px)",
+      "min": 0,
+      "max": 50,
+      "step": 5,
+      "default": 10
+    },
+    {
+      "type": "range",
+      "id": "widget_margin_bottom",
+      "label": "Margin Bottom (px)",
+      "min": 0,
+      "max": 50,
+      "step": 5,
+      "default": 10
+    },
+    {
+      "type": "range",
+      "id": "image_border_radius",
+      "label": "Result Image Radius (px)",
+      "min": 0,
+      "max": 20,
+      "step": 2,
+      "default": 8
+    }
+  ]
+}
+{% endschema %}
+

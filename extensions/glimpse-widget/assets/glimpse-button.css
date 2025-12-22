@@ -1,0 +1,206 @@
+/* Glimpse Button Widget */
+
+.glimpse-button-widget {
+  margin-top: var(--widget-margin-top);
+  margin-bottom: var(--widget-margin-bottom);
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* Upload State - Button container */
+.button-upload-state {
+  display: flex;
+  justify-content: var(--button-alignment);
+}
+
+/* Main Button Styles */
+.glimpse-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: var(--button-padding-y) var(--button-padding-x);
+  border-radius: var(--button-border-radius);
+  font-size: var(--button-font-size);
+  font-weight: var(--button-font-weight);
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  box-sizing: border-box;
+  width: var(--button-width);
+  /* Reset */
+  background: none;
+  border: none;
+}
+
+.glimpse-btn .btn-text {
+  text-transform: var(--button-text-case);
+  letter-spacing: 0.5px;
+}
+
+.glimpse-btn .btn-icon {
+  flex-shrink: 0;
+}
+
+/* Outlined Style (Default) */
+.glimpse-btn.btn-style-outlined {
+  background: transparent;
+  color: var(--button-text-color);
+  border: var(--button-border-width) solid var(--button-border-color);
+}
+
+.glimpse-btn.btn-style-outlined:hover {
+  background: rgba(0, 0, 0, 0.03);
+  transform: translateY(-1px);
+}
+
+/* Solid Style */
+.glimpse-btn.btn-style-solid {
+  background: var(--solid-button-color);
+  color: #ffffff;
+  border: var(--button-border-width) solid var(--solid-button-color);
+}
+
+.glimpse-btn.btn-style-solid:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+/* Gradient Style */
+.glimpse-btn.btn-style-gradient {
+  background: linear-gradient(135deg, var(--primary-color-1), var(--primary-color-2));
+  color: #ffffff;
+  border: none;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--primary-color-1) 30%, transparent);
+}
+
+.glimpse-btn.btn-style-gradient:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--primary-color-1) 40%, transparent);
+}
+
+/* Focus States */
+.glimpse-btn:focus {
+  outline: 2px solid var(--primary-color-1);
+  outline-offset: 2px;
+}
+
+.glimpse-btn:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Processing State */
+.button-processing-state {
+  display: flex;
+  justify-content: var(--button-alignment);
+}
+
+.button-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: var(--button-padding-y) var(--button-padding-x);
+  color: var(--button-text-color);
+  font-size: var(--button-font-size);
+}
+
+.button-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--button-border-color);
+  border-top-color: var(--primary-color-1);
+  border-radius: 50%;
+  animation: btn-spin 0.8s linear infinite;
+}
+
+@keyframes btn-spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-text {
+  font-weight: var(--button-font-weight);
+  text-transform: var(--button-text-case);
+  letter-spacing: 0.5px;
+}
+
+/* Results State */
+.button-results-state {
+  display: flex;
+  justify-content: var(--button-alignment);
+}
+
+.button-results-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  background: var(--results-background);
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+.button-comparison {
+  display: flex;
+  gap: 12px;
+}
+
+.button-comparison-side {
+  flex: 1;
+}
+
+.button-result-img {
+  width: 140px;
+  height: 140px;
+  object-fit: cover;
+  border-radius: var(--image-border-radius);
+  display: block;
+}
+
+/* Error State */
+.button-error-state {
+  display: flex;
+  justify-content: var(--button-alignment);
+}
+
+.button-error-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: var(--results-background);
+  border-radius: 12px;
+}
+
+.button-error-message {
+  color: #ef4444;
+  font-size: 14px;
+  margin: 0;
+  text-align: center;
+}
+
+/* State Transitions */
+.button-upload-state,
+.button-processing-state,
+.button-results-state,
+.button-error-state {
+  transition: opacity 0.2s ease;
+}
+
+/* Mobile Responsive */
+@media (max-width: 480px) {
+  .button-result-img {
+    width: 120px;
+    height: 120px;
+  }
+  
+  .button-results-container {
+    padding: 12px;
+  }
+  
+  .button-comparison {
+    gap: 8px;
+  }
+}
+
