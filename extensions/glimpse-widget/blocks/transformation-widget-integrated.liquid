@@ -1,0 +1,541 @@
+{% liquid
+  assign product = block.settings.product | default: product
+  unless product
+    assign product = product
+  endunless
+  
+  assign product_id = product.id
+  
+  # Colors
+  assign primary_color_1 = block.settings.primary_color_1 | default: '#8b5cf6'
+  assign primary_color_2 = block.settings.primary_color_2 | default: '#7c3aed'
+  assign solid_button_color = block.settings.solid_button_color | default: '#1f2937'
+  assign background_color = block.settings.background_color | default: '#ffffff'
+  assign text_color = block.settings.text_color | default: '#1f2937'
+  assign description_color = block.settings.description_color | default: '#6b7280'
+  assign button_text_color = block.settings.button_text_color | default: '#ffffff'
+  assign border_color = block.settings.border_color | default: '#e5e7eb'
+  assign manual_shop_domain = block.settings.manual_shop_domain
+  
+  # Layout
+  assign widget_margin_top = block.settings.widget_margin_top | default: 20
+  assign widget_margin_bottom = block.settings.widget_margin_bottom | default: 20
+  assign widget_padding = block.settings.widget_padding | default: 24
+  assign title_font_size = block.settings.title_font_size | default: 24
+  assign description_font_size = block.settings.description_font_size | default: 16
+  assign disclaimer_text = block.settings.disclaimer_text | default: 'Results are never guaranteed, just a generated image. Images are never saved.'
+  
+  # Widget container styling
+  assign widget_border_radius = block.settings.widget_border_radius | default: 16
+  assign enable_container = block.settings.enable_container
+  assign enable_widget_shadow = block.settings.enable_widget_shadow
+  assign enable_widget_border = block.settings.enable_widget_border
+  
+  # Handle "no container" mode
+  if enable_container == false
+    assign background_color = 'transparent'
+    assign enable_widget_shadow = false
+    assign enable_widget_border = false
+  endif
+  
+  # Button styling
+  assign button_style = block.settings.button_style | default: 'gradient'
+  assign button_text_case = block.settings.button_text_case | default: 'none'
+  assign button_border_radius = block.settings.button_border_radius | default: 12
+  assign show_camera_icon = block.settings.show_camera_icon
+  
+  # Typography
+  assign header_font_family = block.settings.header_font_family | default: 'inherit'
+  assign header_font_weight = block.settings.header_font_weight | default: '700'
+  assign body_font_family = block.settings.body_font_family | default: 'inherit'
+  assign body_font_weight = block.settings.body_font_weight | default: '400'
+  
+  # Computed styles
+  if enable_widget_shadow
+    assign widget_shadow = '0 4px 20px rgba(0, 0, 0, 0.08)'
+  else
+    assign widget_shadow = 'none'
+  endif
+  
+  if enable_widget_border
+    assign widget_border = '1px solid ' | append: border_color
+  else
+    assign widget_border = 'none'
+  endif
+%}
+
+<!-- Glimpse AI Transformation Widget - Integrated Design -->
+<div class="glimpse-integrated-widget{% unless enable_container %} no-container{% endunless %}" 
+     data-product-id="{{ product_id }}"{% if manual_shop_domain != blank %}
+     data-manual-shop-domain="{{ manual_shop_domain }}"{% endif %}
+     style="--primary-color-1: {{ primary_color_1 }}; 
+            --primary-color-2: {{ primary_color_2 }};
+            --solid-button-color: {{ solid_button_color }};
+            --background-color: {{ background_color }}; 
+            --text-color: {{ text_color }};
+            --description-color: {{ description_color }};
+            --button-text-color: {{ button_text_color }};
+            --border-color: {{ border_color }};
+            --widget-margin-top: {{ widget_margin_top }}px;
+            --widget-margin-bottom: {{ widget_margin_bottom }}px;
+            --widget-padding: {{ widget_padding }}px;
+            --widget-border-radius: {{ widget_border_radius }}px;
+            --widget-shadow: {{ widget_shadow }};
+            --widget-border: {{ widget_border }};
+            --title-font-size: {{ title_font_size }}px;
+            --description-font-size: {{ description_font_size }}px;
+            --button-border-radius: {{ button_border_radius }}px;
+            --button-text-case: {{ button_text_case }};
+            --header-font-family: {{ header_font_family }};
+            --header-font-weight: {{ header_font_weight }};
+            --body-font-family: {{ body_font_family }};
+            --body-font-weight: {{ body_font_weight }};">
+  
+  <!-- Widget Header -->
+  <div class="integrated-header">
+    <h2 class="integrated-title">{{ block.settings.widget_title | default: "Try It Virtually" }}</h2>
+    <p class="integrated-description">{{ block.settings.widget_description | default: "Upload an image of yourself and see your transformation" }}</p>
+  </div>
+  
+  <!-- Widget Content Area -->
+  <div class="integrated-content">
+    
+    <!-- Initial/Upload State -->
+    <div class="upload-state" id="uploadState">
+      <div class="integrated-placeholder" onclick="window.widgetFunctions.triggerFileInput()">
+        {% if block.settings.placeholder_image %}
+          <img src="{{ block.settings.placeholder_image | image_url: width: 600 }}" 
+               alt="Transformation preview" 
+               class="integrated-placeholder-image">
+        {% else %}
+          <!-- Default side-by-side placeholder -->
+          <div class="integrated-default-placeholder">
+            <div class="placeholder-side placeholder-before-side">
+              <div class="placeholder-silhouette"></div>
+            </div>
+            <div class="placeholder-side placeholder-after-side">
+              <div class="placeholder-silhouette placeholder-silhouette-glow"></div>
+            </div>
+          </div>
+        {% endif %}
+      </div>
+      
+      <input type="file" 
+             id="imageUpload" 
+             accept="image/*,.heic,.heif" 
+             style="display: none;">
+      
+      <button class="integrated-upload-button button-style-{{ button_style }}" 
+              type="button" 
+              onclick="window.widgetFunctions.triggerFileInput()">
+        {% if show_camera_icon %}
+          <svg class="camera-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+            <circle cx="12" cy="13" r="3"/>
+          </svg>
+        {% endif %}
+        <span class="button-text">{{ block.settings.button_text | default: "Upload a Photo" }}</span>
+      </button>
+    </div>
+    
+    <!-- Processing State -->
+    <div class="processing-state" id="processingState" style="display: none;">
+      <div class="integrated-loading">
+        <div class="integrated-spinner"></div>
+        <p class="loading-text">Analyzing image...</p>
+      </div>
+    </div>
+    
+    <!-- Results State -->
+    <div class="results-state" id="resultsState" style="display: none;">
+      <div class="integrated-results">
+        <div class="integrated-comparison">
+          <div class="comparison-side">
+            <img id="beforeImage" alt="Before" class="comparison-img">
+          </div>
+          <div class="comparison-side">
+            <img id="afterImage" alt="After" class="comparison-img">
+          </div>
+        </div>
+      </div>
+      
+      <button class="integrated-upload-button button-style-{{ button_style }}" 
+              type="button" 
+              onclick="window.widgetFunctions.resetTransformation()">
+        <svg class="retry-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+          <path d="M21 3v5h-5"/>
+          <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+          <path d="M3 21v-5h5"/>
+        </svg>
+        <span class="button-text">{{ 'transformation.try_again' | t: default: 'Try Again' }}</span>
+      </button>
+    </div>
+    
+    <!-- Error State -->
+    <div class="error-state" id="errorState" style="display: none;">
+      <div class="integrated-error">
+        <svg class="error-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 8v4"/>
+          <path d="M12 16h.01"/>
+        </svg>
+        <p class="error-message" id="errorMessage"></p>
+        <button class="integrated-upload-button button-style-{{ button_style }}" 
+                type="button" 
+                onclick="window.widgetFunctions.resetTransformation()">
+          <span class="button-text">{{ 'transformation.try_again' | t: default: 'Try Again' }}</span>
+        </button>
+      </div>
+    </div>
+    
+  </div>
+  
+  <!-- Widget Footer / Disclaimer -->
+  <div class="integrated-footer">
+    <svg class="info-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/>
+      <path d="M12 16v-4"/>
+      <path d="M12 8h.01"/>
+    </svg>
+    <p class="integrated-disclaimer">{{ disclaimer_text }}</p>
+  </div>
+  
+</div>
+
+<script src="{{ 'widget-integrated.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "Glimpse (Integrated)",
+  "target": "section",
+  "stylesheet": "transformation-widget-integrated.css",
+  "settings": [
+    {
+      "type": "product",
+      "id": "product",
+      "label": "Product",
+      "autofill": true
+    },
+    {
+      "type": "header",
+      "content": "Configuration"
+    },
+    {
+      "type": "text",
+      "id": "manual_shop_domain",
+      "label": "Shop Domain (Optional)",
+      "placeholder": "shop123.myshopify.com",
+      "info": "If using a custom domain, enter your .myshopify.com domain here."
+    },
+    {
+      "type": "header",
+      "content": "Widget Content"
+    },
+    {
+      "type": "text",
+      "id": "widget_title",
+      "label": "Widget Title",
+      "default": "Try It Virtually"
+    },
+    {
+      "type": "textarea",
+      "id": "widget_description",
+      "label": "Widget Description",
+      "default": "Upload an image of yourself and see your transformation"
+    },
+    {
+      "type": "text",
+      "id": "button_text",
+      "label": "Button Text",
+      "default": "Upload a Photo"
+    },
+    {
+      "type": "textarea",
+      "id": "disclaimer_text",
+      "label": "Disclaimer Text",
+      "default": "Results are never guaranteed, just a generated image. Images are never saved."
+    },
+    {
+      "type": "header",
+      "content": "Placeholder Image"
+    },
+    {
+      "type": "image_picker",
+      "id": "placeholder_image",
+      "label": "Custom Before/After Image",
+      "info": "Upload a custom before/after preview image (recommended: 600x300px)"
+    },
+    {
+      "type": "header",
+      "content": "Button Styling"
+    },
+    {
+      "type": "select",
+      "id": "button_style",
+      "label": "Button Style",
+      "default": "gradient",
+      "options": [
+        {
+          "value": "gradient",
+          "label": "Gradient Filled"
+        },
+        {
+          "value": "solid",
+          "label": "Solid Filled"
+        },
+        {
+          "value": "outlined",
+          "label": "Outlined"
+        }
+      ],
+      "info": "Choose the button appearance style"
+    },
+    {
+      "type": "select",
+      "id": "button_text_case",
+      "label": "Button Text Case",
+      "default": "none",
+      "options": [
+        {
+          "value": "none",
+          "label": "As Typed"
+        },
+        {
+          "value": "uppercase",
+          "label": "UPPERCASE"
+        },
+        {
+          "value": "lowercase",
+          "label": "lowercase"
+        },
+        {
+          "value": "capitalize",
+          "label": "Capitalize Each Word"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "button_border_radius",
+      "label": "Button Corner Radius (px)",
+      "min": 0,
+      "max": 50,
+      "step": 2,
+      "default": 12,
+      "info": "0 = square corners, 50 = pill shape"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_camera_icon",
+      "label": "Show Camera Icon",
+      "default": true,
+      "info": "Display camera icon in the upload button"
+    },
+    {
+      "type": "header",
+      "content": "Colors"
+    },
+    {
+      "type": "color",
+      "id": "primary_color_1",
+      "label": "Gradient Start Color",
+      "default": "#8b5cf6",
+      "info": "First color for gradient button"
+    },
+    {
+      "type": "color",
+      "id": "primary_color_2",
+      "label": "Gradient End Color",
+      "default": "#7c3aed",
+      "info": "Second color for gradient button"
+    },
+    {
+      "type": "color",
+      "id": "solid_button_color",
+      "label": "Solid Button Color",
+      "default": "#1f2937",
+      "info": "Color for solid-style button"
+    },
+    {
+      "type": "color",
+      "id": "button_text_color",
+      "label": "Button Text Color",
+      "default": "#ffffff",
+      "info": "Text color inside buttons"
+    },
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": "Widget Background",
+      "default": "#ffffff"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Title Color",
+      "default": "#1f2937"
+    },
+    {
+      "type": "color",
+      "id": "description_color",
+      "label": "Description Color",
+      "default": "#6b7280"
+    },
+    {
+      "type": "color",
+      "id": "border_color",
+      "label": "Border Color",
+      "default": "#e5e7eb",
+      "info": "Used for widget border and outlined button"
+    },
+    {
+      "type": "header",
+      "content": "Widget Container"
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_container",
+      "label": "Enable Container Card",
+      "default": true,
+      "info": "When disabled, widget floats without card background"
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_widget_shadow",
+      "label": "Enable Drop Shadow",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_widget_border",
+      "label": "Enable Border",
+      "default": true
+    },
+    {
+      "type": "range",
+      "id": "widget_border_radius",
+      "label": "Widget Corner Radius (px)",
+      "min": 0,
+      "max": 40,
+      "step": 2,
+      "default": 16
+    },
+    {
+      "type": "range",
+      "id": "widget_padding",
+      "label": "Widget Padding (px)",
+      "min": 12,
+      "max": 48,
+      "step": 4,
+      "default": 24
+    },
+    {
+      "type": "header",
+      "content": "Spacing"
+    },
+    {
+      "type": "range",
+      "id": "widget_margin_top",
+      "label": "Margin Top (px)",
+      "min": 0,
+      "max": 100,
+      "step": 5,
+      "default": 20
+    },
+    {
+      "type": "range",
+      "id": "widget_margin_bottom",
+      "label": "Margin Bottom (px)",
+      "min": 0,
+      "max": 100,
+      "step": 5,
+      "default": 20
+    },
+    {
+      "type": "header",
+      "content": "Typography"
+    },
+    {
+      "type": "range",
+      "id": "title_font_size",
+      "label": "Title Font Size (px)",
+      "min": 16,
+      "max": 40,
+      "step": 2,
+      "default": 24
+    },
+    {
+      "type": "range",
+      "id": "description_font_size",
+      "label": "Description Font Size (px)",
+      "min": 12,
+      "max": 20,
+      "step": 1,
+      "default": 16
+    },
+    {
+      "type": "select",
+      "id": "header_font_family",
+      "label": "Title Font",
+      "default": "inherit",
+      "options": [
+        { "value": "inherit", "label": "Inherit from theme (Recommended)" },
+        { "value": "system-ui, sans-serif", "label": "System Default" },
+        { "value": "Helvetica, Arial, sans-serif", "label": "Helvetica" },
+        { "value": "Georgia, serif", "label": "Georgia (Serif)" },
+        { "value": "Inter, sans-serif", "label": "Inter (Modern)" },
+        { "value": "Prompt, sans-serif", "label": "Prompt" },
+        { "value": "Sonus-Medium, sans-serif", "label": "Sonus Medium" },
+        { "value": "serif", "label": "Elegant Serif" }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "header_font_weight",
+      "label": "Title Font Weight",
+      "default": "700",
+      "options": [
+        { "value": "inherit", "label": "Inherit from theme" },
+        { "value": "300", "label": "Light (300)" },
+        { "value": "400", "label": "Normal (400)" },
+        { "value": "500", "label": "Medium (500)" },
+        { "value": "600", "label": "Semi-bold (600)" },
+        { "value": "700", "label": "Bold (700)" },
+        { "value": "800", "label": "Extra Bold (800)" }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "body_font_family",
+      "label": "Body Font",
+      "default": "inherit",
+      "options": [
+        { "value": "inherit", "label": "Inherit from theme (Recommended)" },
+        { "value": "system-ui, sans-serif", "label": "System Default" },
+        { "value": "Helvetica, Arial, sans-serif", "label": "Helvetica" },
+        { "value": "Georgia, serif", "label": "Georgia (Serif)" },
+        { "value": "Inter, sans-serif", "label": "Inter (Modern)" },
+        { "value": "Prompt, sans-serif", "label": "Prompt" },
+        { "value": "Sonus-Medium, sans-serif", "label": "Sonus Medium" },
+        { "value": "serif", "label": "Elegant Serif" }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "body_font_weight",
+      "label": "Body Font Weight",
+      "default": "400",
+      "options": [
+        { "value": "inherit", "label": "Inherit from theme" },
+        { "value": "300", "label": "Light (300)" },
+        { "value": "400", "label": "Normal (400)" },
+        { "value": "500", "label": "Medium (500)" },
+        { "value": "600", "label": "Semi-bold (600)" },
+        { "value": "700", "label": "Bold (700)" }
+      ]
+    }
+  ]
+}
+{% endschema %}
+

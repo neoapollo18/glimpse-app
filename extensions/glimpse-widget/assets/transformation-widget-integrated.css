@@ -1,0 +1,407 @@
+/* Glimpse AI Transformation Widget - Integrated Design */
+
+/* Widget Container */
+.glimpse-integrated-widget {
+  --primary-color-1: #8b5cf6;
+  --primary-color-2: #7c3aed;
+  --solid-button-color: #1f2937;
+  --background-color: #ffffff;
+  --text-color: #1f2937;
+  --description-color: #6b7280;
+  --button-text-color: #ffffff;
+  --border-color: #e5e7eb;
+  --widget-margin-top: 20px;
+  --widget-margin-bottom: 20px;
+  --widget-padding: 24px;
+  --widget-border-radius: 16px;
+  --widget-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  --widget-border: 1px solid #e5e7eb;
+  --title-font-size: 24px;
+  --description-font-size: 16px;
+  --button-border-radius: 12px;
+  --button-text-case: none;
+  --header-font-family: inherit;
+  --header-font-weight: 700;
+  --body-font-family: inherit;
+  --body-font-weight: 400;
+  
+  background: var(--background-color);
+  border-radius: var(--widget-border-radius);
+  padding: var(--widget-padding);
+  margin-top: var(--widget-margin-top);
+  margin-bottom: var(--widget-margin-bottom);
+  margin-left: auto;
+  margin-right: auto;
+  box-shadow: var(--widget-shadow);
+  border: var(--widget-border);
+  max-width: 480px;
+  width: 100%;
+  font-family: var(--body-font-family);
+  font-weight: var(--body-font-weight);
+  box-sizing: border-box;
+}
+
+/* No Container Mode */
+.glimpse-integrated-widget.no-container {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+  padding: 0;
+}
+
+/* Header */
+.integrated-header {
+  margin-bottom: 20px;
+}
+
+.integrated-title {
+  color: var(--text-color);
+  font-size: var(--title-font-size);
+  font-family: var(--header-font-family);
+  font-weight: var(--header-font-weight);
+  margin: 0 0 8px 0;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.integrated-description {
+  color: var(--description-color);
+  font-size: var(--description-font-size);
+  font-family: var(--body-font-family);
+  font-weight: var(--body-font-weight);
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Placeholder Area */
+.integrated-placeholder {
+  margin-bottom: 20px;
+  cursor: pointer;
+  border-radius: 8px;
+  overflow: hidden;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.integrated-placeholder:hover {
+  transform: scale(1.01);
+  opacity: 0.95;
+}
+
+.integrated-placeholder-image {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 8px;
+}
+
+/* Default Placeholder - Side by Side */
+.integrated-default-placeholder {
+  display: flex;
+  gap: 8px;
+  height: 200px;
+}
+
+.placeholder-side {
+  flex: 1;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.placeholder-before-side {
+  background: linear-gradient(145deg, #f3f4f6 0%, #e5e7eb 100%);
+}
+
+.placeholder-after-side {
+  background: linear-gradient(145deg, #fef3c7 0%, #fde68a 100%);
+}
+
+.placeholder-silhouette {
+  width: 80px;
+  height: 100px;
+  background: linear-gradient(180deg, #d1d5db 0%, #9ca3af 100%);
+  border-radius: 40px 40px 20px 20px;
+  position: relative;
+}
+
+.placeholder-silhouette::before {
+  content: '';
+  position: absolute;
+  top: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 50px;
+  height: 50px;
+  background: linear-gradient(180deg, #d1d5db 0%, #9ca3af 100%);
+  border-radius: 50%;
+}
+
+.placeholder-silhouette-glow {
+  background: linear-gradient(180deg, #fbbf24 0%, #f59e0b 100%);
+}
+
+.placeholder-silhouette-glow::before {
+  background: linear-gradient(180deg, #fbbf24 0%, #f59e0b 100%);
+}
+
+/* Button Styles */
+.integrated-upload-button {
+  width: 100%;
+  padding: 16px 24px;
+  border-radius: var(--button-border-radius);
+  font-family: var(--body-font-family);
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
+.integrated-upload-button .button-text {
+  text-transform: var(--button-text-case);
+}
+
+/* Gradient Button Style */
+.integrated-upload-button.button-style-gradient {
+  background: linear-gradient(135deg, var(--primary-color-1), var(--primary-color-2));
+  color: var(--button-text-color);
+  border: none;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--primary-color-1) 30%, transparent);
+}
+
+.integrated-upload-button.button-style-gradient:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--primary-color-1) 40%, transparent);
+}
+
+/* Solid Button Style */
+.integrated-upload-button.button-style-solid {
+  background: var(--solid-button-color);
+  color: var(--button-text-color);
+  border: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.integrated-upload-button.button-style-solid:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  filter: brightness(1.1);
+}
+
+/* Outlined Button Style */
+.integrated-upload-button.button-style-outlined {
+  background: transparent;
+  color: var(--text-color);
+  border: 2px solid var(--border-color);
+}
+
+.integrated-upload-button.button-style-outlined:hover {
+  background: var(--border-color);
+  transform: translateY(-1px);
+}
+
+.integrated-upload-button.button-style-outlined .camera-icon,
+.integrated-upload-button.button-style-outlined .retry-icon {
+  color: var(--text-color);
+}
+
+/* Icons */
+.camera-icon,
+.retry-icon {
+  flex-shrink: 0;
+}
+
+/* Processing State */
+.processing-state {
+  padding: 40px 20px;
+}
+
+.integrated-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.integrated-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border-color);
+  border-top-color: var(--primary-color-1);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-text {
+  color: var(--description-color);
+  font-size: 15px;
+  margin: 0;
+}
+
+/* Results State */
+.integrated-results {
+  margin-bottom: 20px;
+}
+
+.integrated-comparison {
+  display: flex;
+  gap: 8px;
+}
+
+.comparison-side {
+  flex: 1;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.comparison-img {
+  width: 100%;
+  height: 220px;
+  object-fit: cover;
+  display: block;
+  border-radius: 8px;
+  image-orientation: from-image;
+}
+
+/* Error State */
+.error-state {
+  padding: 20px;
+}
+
+.integrated-error {
+  text-align: center;
+  padding: 20px;
+  background: #fef2f2;
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+
+.integrated-error .error-icon {
+  color: #dc2626;
+  margin-bottom: 12px;
+}
+
+.integrated-error .error-message {
+  color: #dc2626;
+  font-size: 14px;
+  margin: 0 0 16px 0;
+  line-height: 1.4;
+}
+
+/* Footer / Disclaimer */
+.integrated-footer {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 12px;
+}
+
+.integrated-footer .info-icon {
+  color: #9ca3af;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.integrated-disclaimer {
+  color: #9ca3af;
+  font-size: 12px;
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 480px) {
+  .glimpse-integrated-widget {
+    padding: 20px;
+    border-radius: 12px;
+    max-width: 100%;
+  }
+  
+  .integrated-title {
+    font-size: calc(var(--title-font-size) * 0.9);
+  }
+  
+  .integrated-default-placeholder {
+    height: 160px;
+  }
+  
+  .placeholder-silhouette {
+    width: 60px;
+    height: 80px;
+  }
+  
+  .placeholder-silhouette::before {
+    width: 40px;
+    height: 40px;
+    top: -24px;
+  }
+  
+  .integrated-upload-button {
+    padding: 14px 20px;
+    font-size: 15px;
+  }
+  
+  .comparison-img {
+    height: 180px;
+  }
+}
+
+/* Drag and Drop Feedback */
+.integrated-placeholder.drag-over {
+  opacity: 0.7;
+  transform: scale(1.02);
+  outline: 2px dashed var(--primary-color-1);
+  outline-offset: 4px;
+}
+
+/* Focus States for Accessibility */
+.integrated-upload-button:focus {
+  outline: 2px solid var(--primary-color-1);
+  outline-offset: 2px;
+}
+
+.integrated-upload-button:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Smooth State Transitions */
+.upload-state,
+.processing-state,
+.results-state,
+.error-state {
+  transition: opacity 0.3s ease;
+}
+
+/* Theme Editor Preview */
+.shopify-theme-editor .glimpse-integrated-widget::after {
+  content: "Glimpse Widget (Preview Mode)";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(135deg, var(--primary-color-1), var(--primary-color-2));
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px;
+  text-align: center;
+  border-radius: 0 0 var(--widget-border-radius) var(--widget-border-radius);
+}
+
+.shopify-theme-editor .glimpse-integrated-widget {
+  position: relative;
+}
+
