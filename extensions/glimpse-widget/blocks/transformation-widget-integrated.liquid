@@ -9,7 +9,7 @@
   # Colors
   assign primary_color_1 = block.settings.primary_color_1 | default: '#8b5cf6'
   assign primary_color_2 = block.settings.primary_color_2 | default: '#7c3aed'
-  assign solid_button_color = block.settings.solid_button_color | default: '#1f2937'
+  assign solid_button_color = block.settings.solid_button_color | default: '#8b5cf6'
   assign background_color = block.settings.background_color | default: '#ffffff'
   assign text_color = block.settings.text_color | default: '#1f2937'
   assign description_color = block.settings.description_color | default: '#6b7280'
@@ -43,6 +43,15 @@
   assign button_text_case = block.settings.button_text_case | default: 'none'
   assign button_border_radius = block.settings.button_border_radius | default: 12
   assign show_camera_icon = block.settings.show_camera_icon
+  assign enable_button_border = block.settings.enable_button_border | default: false
+  assign button_border_color = block.settings.button_border_color | default: '#1f2937'
+  assign button_border_width = block.settings.button_border_width | default: 2
+  
+  # Image styling
+  assign enable_image_border = block.settings.enable_image_border | default: true
+  assign image_border_color = block.settings.image_border_color | default: '#1f2937'
+  assign image_border_width = block.settings.image_border_width | default: 3
+  assign image_border_radius = block.settings.image_border_radius | default: 12
   
   # Typography
   assign header_font_family = block.settings.header_font_family | default: 'inherit'
@@ -86,6 +95,9 @@
             --description-font-size: {{ description_font_size }}px;
             --button-border-radius: {{ button_border_radius }}px;
             --button-text-case: {{ button_text_case }};
+            --button-border: {% if enable_button_border %}{{ button_border_width }}px solid {{ button_border_color }}{% else %}none{% endif %};
+            --image-border: {% if enable_image_border %}{{ image_border_width }}px solid {{ image_border_color }}{% else %}none{% endif %};
+            --image-border-radius: {{ image_border_radius }}px;
             --header-font-family: {{ header_font_family }};
             --header-font-weight: {{ header_font_weight }};
             --body-font-family: {{ body_font_family }};
@@ -332,6 +344,58 @@
       "info": "Display camera icon in the upload button"
     },
     {
+      "type": "checkbox",
+      "id": "enable_button_border",
+      "label": "Enable Button Border",
+      "default": false
+    },
+    {
+      "type": "color",
+      "id": "button_border_color",
+      "label": "Button Border Color",
+      "default": "#1f2937"
+    },
+    {
+      "type": "range",
+      "id": "button_border_width",
+      "label": "Button Border Width (px)",
+      "min": 1,
+      "max": 5,
+      "step": 1,
+      "default": 2
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_image_border",
+      "label": "Enable Image Border",
+      "default": true,
+      "info": "Add border to placeholder and result images"
+    },
+    {
+      "type": "color",
+      "id": "image_border_color",
+      "label": "Image Border Color",
+      "default": "#1f2937"
+    },
+    {
+      "type": "range",
+      "id": "image_border_width",
+      "label": "Image Border Width (px)",
+      "min": 1,
+      "max": 6,
+      "step": 1,
+      "default": 3
+    },
+    {
+      "type": "range",
+      "id": "image_border_radius",
+      "label": "Image Corner Radius (px)",
+      "min": 0,
+      "max": 30,
+      "step": 2,
+      "default": 12
+    },
+    {
       "type": "header",
       "content": "Colors"
     },
@@ -353,7 +417,7 @@
       "type": "color",
       "id": "solid_button_color",
       "label": "Solid Button Color",
-      "default": "#1f2937",
+      "default": "#8b5cf6",
       "info": "Color for solid-style button"
     },
     {
