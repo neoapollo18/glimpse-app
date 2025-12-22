@@ -106,7 +106,10 @@
         {% if block.settings.placeholder_image %}
           <img src="{{ block.settings.placeholder_image | image_url: width: 600 }}" 
                alt="Transformation preview" 
-               class="integrated-placeholder-image">
+               class="integrated-placeholder-image"
+               width="600"
+               height="300"
+               loading="lazy">
         {% else %}
           <!-- Default side-by-side placeholder -->
           <div class="integrated-default-placeholder">
@@ -151,10 +154,10 @@
       <div class="integrated-results">
         <div class="integrated-comparison">
           <div class="comparison-side">
-            <img id="beforeImage" alt="Before" class="comparison-img">
+            <img id="beforeImage" alt="Before" class="comparison-img" width="300" height="300">
           </div>
           <div class="comparison-side">
-            <img id="afterImage" alt="After" class="comparison-img">
+            <img id="afterImage" alt="After" class="comparison-img" width="300" height="300">
           </div>
         </div>
       </div>
@@ -255,10 +258,6 @@
       "id": "disclaimer_text",
       "label": "Disclaimer Text",
       "default": "Results are never guaranteed, just a generated image. Images are never saved."
-    },
-    {
-      "type": "header",
-      "content": "Placeholder Image"
     },
     {
       "type": "image_picker",
@@ -391,7 +390,7 @@
     },
     {
       "type": "header",
-      "content": "Widget Container"
+      "content": "Layout"
     },
     {
       "type": "checkbox",
@@ -429,10 +428,6 @@
       "max": 48,
       "step": 4,
       "default": 24
-    },
-    {
-      "type": "header",
-      "content": "Spacing"
     },
     {
       "type": "range",
