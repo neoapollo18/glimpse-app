@@ -27,7 +27,7 @@
   
   # Widget container styling
   assign widget_border_radius = block.settings.widget_border_radius | default: 16
-  assign enable_container = block.settings.enable_container
+  assign enable_container = block.settings.enable_container | default: false
   assign enable_widget_shadow = block.settings.enable_widget_shadow
   assign enable_widget_border = block.settings.enable_widget_border
   
@@ -396,7 +396,7 @@
       "type": "checkbox",
       "id": "enable_container",
       "label": "Enable Container Card",
-      "default": true,
+      "default": false,
       "info": "When disabled, widget floats without card background"
     },
     {

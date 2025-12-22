@@ -163,6 +163,10 @@
   gap: 10px;
   text-decoration: none;
   box-sizing: border-box;
+  /* Reset browser defaults */
+  background: none;
+  border: none;
+  color: inherit;
 }
 
 .integrated-upload-button .button-text {
