@@ -39,7 +39,7 @@
   endif
   
   # Button styling
-  assign button_style = block.settings.button_style | default: 'gradient'
+  assign button_style = block.settings.button_style | default: 'solid'
   assign button_text_case = block.settings.button_text_case | default: 'none'
   assign button_border_radius = block.settings.button_border_radius | default: 12
   assign show_camera_icon = block.settings.show_camera_icon
@@ -273,7 +273,7 @@
       "type": "select",
       "id": "button_style",
       "label": "Button Style",
-      "default": "gradient",
+      "default": "solid",
       "options": [
         {
           "value": "gradient",
