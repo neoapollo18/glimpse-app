@@ -52,6 +52,7 @@
   assign image_border_color = block.settings.image_border_color | default: '#1f2937'
   assign image_border_width = block.settings.image_border_width | default: 3
   assign image_border_radius = block.settings.image_border_radius | default: 12
+  assign show_placeholder = block.settings.show_placeholder
   
   # Typography
   assign header_font_family = block.settings.header_font_family | default: 'inherit'
@@ -114,26 +115,28 @@
     
     <!-- Initial/Upload State -->
     <div class="upload-state" id="uploadState">
-      <div class="integrated-placeholder" onclick="window.widgetFunctions.triggerFileInput()">
-        {% if block.settings.placeholder_image %}
-          <img src="{{ block.settings.placeholder_image | image_url: width: 600 }}" 
-               alt="Transformation preview" 
-               class="integrated-placeholder-image"
-               width="600"
-               height="300"
-               loading="lazy">
-        {% else %}
-          <!-- Default side-by-side placeholder -->
-          <div class="integrated-default-placeholder">
-            <div class="placeholder-side placeholder-before-side">
-              <div class="placeholder-silhouette"></div>
+      {% if show_placeholder %}
+        <div class="integrated-placeholder" onclick="window.widgetFunctions.triggerFileInput()">
+          {% if block.settings.placeholder_image %}
+            <img src="{{ block.settings.placeholder_image | image_url: width: 600 }}" 
+                 alt="Transformation preview" 
+                 class="integrated-placeholder-image"
+                 width="600"
+                 height="300"
+                 loading="lazy">
+          {% else %}
+            <!-- Default side-by-side placeholder -->
+            <div class="integrated-default-placeholder">
+              <div class="placeholder-side placeholder-before-side">
+                <div class="placeholder-silhouette"></div>
+              </div>
+              <div class="placeholder-side placeholder-after-side">
+                <div class="placeholder-silhouette placeholder-silhouette-glow"></div>
+              </div>
             </div>
-            <div class="placeholder-side placeholder-after-side">
-              <div class="placeholder-silhouette placeholder-silhouette-glow"></div>
-            </div>
-          </div>
-        {% endif %}
-      </div>
+          {% endif %}
+        </div>
+      {% endif %}
       
       <input type="file" 
              id="imageUpload" 
@@ -270,6 +273,13 @@
       "id": "disclaimer_text",
       "label": "Disclaimer Text",
       "default": "Results are never guaranteed, just a generated image. Images are never saved."
+    },
+    {
+      "type": "checkbox",
+      "id": "show_placeholder",
+      "label": "Show Placeholder Image",
+      "default": true,
+      "info": "When disabled, only the title, description and button are shown"
     },
     {
       "type": "image_picker",
