@@ -72,9 +72,10 @@
 
 .horizontal-placeholder-image {
   width: 100%;
-  height: var(--placeholder-height, 180px);
-  object-fit: cover;
+  height: auto;
   display: block;
+  transform: scale(var(--placeholder-scale, 1));
+  transform-origin: center center;
   border-radius: var(--image-border-radius);
   border: var(--image-border);
   box-sizing: border-box;
@@ -84,7 +85,9 @@
 .horizontal-default-placeholder {
   display: flex;
   gap: 8px;
-  height: var(--placeholder-height, 180px);
+  height: 180px;
+  transform: scale(var(--placeholder-scale, 1));
+  transform-origin: center center;
 }
 
 .placeholder-side {

@@ -51,7 +51,7 @@
   assign image_border_width = block.settings.image_border_width | default: 3
   assign image_border_radius = block.settings.image_border_radius | default: 12
   assign show_placeholder = block.settings.show_placeholder
-  assign placeholder_height = block.settings.placeholder_height | default: 200
+  assign placeholder_scale = block.settings.placeholder_scale | default: 100
   
   # Typography
   assign header_font_family = block.settings.header_font_family | default: 'inherit'
@@ -96,7 +96,7 @@
             --button-border: {% if enable_button_border %}{{ button_border_width }}px solid {{ button_border_color }}{% else %}none{% endif %};
             --image-border: {% if enable_image_border %}{{ image_border_width }}px solid {{ image_border_color }}{% else %}none{% endif %};
             --image-border-radius: {{ image_border_radius }}px;
-            --placeholder-height: {{ placeholder_height }}px;
+            --placeholder-scale: {{ placeholder_scale | divided_by: 100.0 }};
             --header-font-family: {{ header_font_family }};
             --header-font-weight: {{ header_font_weight }};
             --body-font-family: {{ body_font_family }};
@@ -287,13 +287,13 @@
     },
     {
       "type": "range",
-      "id": "placeholder_height",
-      "label": "Placeholder Size",
-      "min": 100,
-      "max": 400,
-      "step": 10,
-      "default": 200,
-      "info": "Adjust the size of the before/after placeholder area"
+      "id": "placeholder_scale",
+      "label": "Placeholder Size (%)",
+      "min": 50,
+      "max": 150,
+      "step": 5,
+      "default": 100,
+      "info": "Scale the placeholder proportionally (100% = default size)"
     },
     {
       "type": "header",
