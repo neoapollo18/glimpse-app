@@ -7,8 +7,6 @@
   assign product_id = product.id
   
   # Colors
-  assign primary_color_1 = block.settings.primary_color_1 | default: '#8b5cf6'
-  assign primary_color_2 = block.settings.primary_color_2 | default: '#7c3aed'
   assign solid_button_color = block.settings.solid_button_color | default: '#8b5cf6'
   assign background_color = block.settings.background_color | default: '#ffffff'
   assign text_color = block.settings.text_color | default: '#1f2937'
@@ -52,6 +50,7 @@
   assign image_border_color = block.settings.image_border_color | default: '#1f2937'
   assign image_border_width = block.settings.image_border_width | default: 3
   assign image_border_radius = block.settings.image_border_radius | default: 12
+  assign placeholder_height = block.settings.placeholder_height | default: 180
   
   # Typography
   assign header_font_family = block.settings.header_font_family | default: 'inherit'
@@ -77,9 +76,7 @@
 <div class="glimpse-integrated-horizontal{% unless enable_container %} no-container{% endunless %}" 
      data-product-id="{{ product_id }}"{% if manual_shop_domain != blank %}
      data-manual-shop-domain="{{ manual_shop_domain }}"{% endif %}
-     style="--primary-color-1: {{ primary_color_1 }}; 
-            --primary-color-2: {{ primary_color_2 }};
-            --solid-button-color: {{ solid_button_color }};
+     style="--solid-button-color: {{ solid_button_color }};
             --background-color: {{ background_color }}; 
             --text-color: {{ text_color }};
             --description-color: {{ description_color }};
@@ -98,6 +95,7 @@
             --button-border: {% if enable_button_border %}{{ button_border_width }}px solid {{ button_border_color }}{% else %}none{% endif %};
             --image-border: {% if enable_image_border %}{{ image_border_width }}px solid {{ image_border_color }}{% else %}none{% endif %};
             --image-border-radius: {{ image_border_radius }}px;
+            --placeholder-height: {{ placeholder_height }}px;
             --header-font-family: {{ header_font_family }};
             --header-font-weight: {{ header_font_weight }};
             --body-font-family: {{ body_font_family }};
@@ -283,6 +281,16 @@
       "info": "Upload a custom before/after preview image (recommended: 600x300px)"
     },
     {
+      "type": "range",
+      "id": "placeholder_height",
+      "label": "Placeholder Height (px)",
+      "min": 100,
+      "max": 400,
+      "step": 10,
+      "default": 180,
+      "info": "Height of the before/after placeholder area"
+    },
+    {
       "type": "header",
       "content": "Button Styling"
     },
@@ -292,10 +300,6 @@
       "label": "Button Style",
       "default": "solid",
       "options": [
-        {
-          "value": "gradient",
-          "label": "Gradient Filled"
-        },
         {
           "value": "solid",
           "label": "Solid Filled"
@@ -406,24 +410,10 @@
     },
     {
       "type": "color",
-      "id": "primary_color_1",
-      "label": "Gradient Start Color",
-      "default": "#8b5cf6",
-      "info": "First color for gradient button"
-    },
-    {
-      "type": "color",
-      "id": "primary_color_2",
-      "label": "Gradient End Color",
-      "default": "#7c3aed",
-      "info": "Second color for gradient button"
-    },
-    {
-      "type": "color",
       "id": "solid_button_color",
-      "label": "Solid Button Color",
+      "label": "Button Fill Color",
       "default": "#8b5cf6",
-      "info": "Color for solid-style button"
+      "info": "Background color for solid-style button"
     },
     {
       "type": "color",

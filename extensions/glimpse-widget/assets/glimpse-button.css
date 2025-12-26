@@ -66,22 +66,9 @@
   transform: translateY(-1px);
 }
 
-/* Gradient Style */
-.glimpse-btn.btn-style-gradient {
-  background: linear-gradient(135deg, var(--primary-color-1), var(--primary-color-2));
-  color: #ffffff;
-  border: none;
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--primary-color-1) 30%, transparent);
-}
-
-.glimpse-btn.btn-style-gradient:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--primary-color-1) 40%, transparent);
-}
-
 /* Focus States */
 .glimpse-btn:focus {
-  outline: 2px solid var(--primary-color-1);
+  outline: 2px solid var(--solid-button-color);
   outline-offset: 2px;
 }
 

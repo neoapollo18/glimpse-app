@@ -72,7 +72,8 @@
 
 .horizontal-placeholder-image {
   width: 100%;
-  height: auto;
+  height: var(--placeholder-height, 180px);
+  object-fit: cover;
   display: block;
   border-radius: var(--image-border-radius);
   border: var(--image-border);
@@ -83,7 +84,7 @@
 .horizontal-default-placeholder {
   display: flex;
   gap: 8px;
-  height: 180px;
+  height: var(--placeholder-height, 180px);
 }
 
 .placeholder-side {
@@ -241,19 +242,6 @@
 
 .horizontal-upload-button .button-text {
   text-transform: var(--button-text-case);
-}
-
-/* Gradient Button Style */
-.horizontal-upload-button.button-style-gradient {
-  background: linear-gradient(135deg, var(--primary-color-1), var(--primary-color-2));
-  color: var(--button-text-color);
-  border: var(--button-border);
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--primary-color-1) 30%, transparent);
-}
-
-.horizontal-upload-button.button-style-gradient:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px color-mix(in srgb, var(--primary-color-1) 40%, transparent);
 }
 
 /* Solid Button Style */
