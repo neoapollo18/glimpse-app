@@ -1,4 +1,6 @@
 /* Glimpse Banner Widget JavaScript */
+console.log('Glimpse Banner Widget v1.0 loaded');
+
 (function() {
   'use strict';
 
@@ -7,11 +9,13 @@
   let currentProductId = null;
   let currentShopDomain = null;
   let currentVariantId = null;
+  
+  const SHOPIFY_APP_URL = 'https://glimpse-app-charles.onrender.com';
 
   // Initialize namespace
   window.bannerWidgetFunctions = window.bannerWidgetFunctions || {};
 
-  // Get shop domain
+  // Get shop domain (comprehensive detection like integrated widget)
   function getShopDomain() {
     // Check for manual override
     if (widget) {
@@ -19,19 +23,54 @@
       if (manualDomain) return manualDomain;
     }
     
-    // Try Shopify global
-    if (typeof Shopify !== 'undefined' && Shopify.shop) {
-      return Shopify.shop;
+    const hostname = window.location.hostname;
+    if (hostname.includes('.myshopify.com')) return hostname;
+    
+    // Check Shopify scripts
+    const shopifyScripts = document.querySelectorAll('script[src*="myshopify.com"]');
+    for (let script of shopifyScripts) {
+      const match = script.src.match(/\/\/([^\/]+\.myshopify\.com)/);
+      if (match) return match[1];
     }
     
-    // Fallback to hostname
-    return window.location.hostname;
+    // Try Shopify global
+    if (window.Shopify?.shop) return window.Shopify.shop;
+    
+    // Check meta tag
+    const shopMeta = document.querySelector('meta[name="shopify-shop-domain"]');
+    if (shopMeta) return shopMeta.content;
+    
+    // Check links
+    const allLinks = document.querySelectorAll('link[href*="myshopify.com"], a[href*="myshopify.com"]');
+    for (let link of allLinks) {
+      const match = link.href.match(/\/\/([^\/]+\.myshopify\.com)/);
+      if (match) return match[1];
+    }
+    
+    return hostname;
   }
 
-  // Get current variant ID
+  // Get current variant ID (comprehensive detection like integrated widget)
   function getCurrentVariantId() {
+    const variantSelect = document.querySelector('select[name="id"]');
+    if (variantSelect?.value) return variantSelect.value;
+    
+    const variantRadio = document.querySelector('input[name="id"]:checked');
+    if (variantRadio?.value) return variantRadio.value;
+    
+    const variantHidden = document.querySelector('input[name="id"][type="hidden"]');
+    if (variantHidden?.value) return variantHidden.value;
+    
+    const anyIdInput = document.querySelector('input[name="id"]');
+    if (anyIdInput?.value) return anyIdInput.value;
+    
+    if (window.ShopifyAnalytics?.meta?.selectedVariantId) return window.ShopifyAnalytics.meta.selectedVariantId.toString();
+    
     const urlParams = new URLSearchParams(window.location.search);
-    return urlParams.get('variant');
+    const variantParam = urlParams.get('variant');
+    if (variantParam) return variantParam;
+    
+    return null;
   }
 
   // Show state
@@ -143,6 +182,16 @@
 
   // Upload and transform
   async function uploadAndTransform(file) {
+    // Refresh variant ID before sending
+    const freshVariantId = getCurrentVariantId();
+    if (freshVariantId && freshVariantId !== currentVariantId) {
+      currentVariantId = freshVariantId;
+    }
+    
+    if (!currentShopDomain) {
+      throw new Error('Could not determine shop domain. Please refresh and try again.');
+    }
+    
     const formData = new FormData();
     formData.append('image', file);
     formData.append('productId', currentProductId);
@@ -151,32 +200,42 @@
       formData.append('variantId', currentVariantId);
     }
 
-    // Determine API URL
-    let apiUrl = 'https://glimpse-app.onrender.com/api/storefront/transform-image';
-    
-    // Use relative URL if on same domain
-    if (window.location.hostname.includes('glimpse-app') || 
-        window.location.hostname === 'localhost') {
-      apiUrl = '/api/storefront/transform-image';
-    }
+    const apiUrl = SHOPIFY_APP_URL + '/api/storefront/transform-image';
 
     const response = await fetch(apiUrl, {
       method: 'POST',
       body: formData,
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
     });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || 'Transformation failed');
+    const responseText = await response.text();
+    let result;
+    
+    try {
+      result = JSON.parse(responseText);
+    } catch (parseError) {
+      throw new Error('Invalid server response. Please try again.');
     }
 
-    const result = await response.json();
-
-    if (result.success && result.transformedImageUrl) {
-      showResults(URL.createObjectURL(file), result.transformedImageUrl);
-    } else {
+    if (!response.ok) {
+      throw new Error(result.error || `Server error: ${response.status}`);
+    }
+    
+    if (!result.success) {
       throw new Error(result.error || 'Transformation failed');
     }
+    
+    if (!result.generatedImage) {
+      throw new Error('No transformed image received');
+    }
+
+    // Use processedInputImage from server for before (handles HEIC), generatedImage for after
+    const beforeUrl = result.processedInputImage 
+      ? `data:image/jpeg;base64,${result.processedInputImage}`
+      : URL.createObjectURL(file);
+    const afterUrl = `data:image/jpeg;base64,${result.generatedImage}`;
+    
+    showResults(beforeUrl, afterUrl);
   }
 
   // Show results
@@ -207,11 +266,20 @@
   // Initialize
   function init() {
     widget = document.querySelector('.glimpse-banner-widget');
-    if (!widget) return;
+    if (!widget) {
+      console.log('Glimpse Banner: No widget found on page');
+      return;
+    }
 
     currentProductId = widget.getAttribute('data-product-id');
     currentShopDomain = getShopDomain();
     currentVariantId = getCurrentVariantId();
+    
+    console.log('Glimpse Banner initialized:', {
+      productId: currentProductId,
+      shopDomain: currentShopDomain,
+      variantId: currentVariantId
+    });
 
     showState('upload');
   }

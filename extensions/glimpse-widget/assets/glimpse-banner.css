@@ -2,12 +2,15 @@
 
 .glimpse-banner-widget {
   position: relative;
-  width: 100%;
+  width: 100vw;
+  max-width: 100vw;
   height: var(--banner-height);
   border-radius: var(--banner-border-radius);
   overflow: hidden;
   margin-top: var(--margin-top);
   margin-bottom: var(--margin-bottom);
+  margin-left: calc(-50vw + 50%);
+  margin-right: calc(-50vw + 50%);
 }
 
 /* Background Image */
