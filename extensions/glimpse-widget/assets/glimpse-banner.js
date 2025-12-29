@@ -100,6 +100,59 @@ console.log('Glimpse Banner Widget v1.0 loaded');
     showState('upload');
   };
 
+  // Mobile detection
+  function isMobileDevice() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+           (navigator.maxTouchPoints && navigator.maxTouchPoints > 2);
+  }
+
+  // Check if photo was recently taken (within 2 minutes)
+  function isRecentlyTakenPhoto(file) {
+    return file.lastModified > (Date.now() - 120000);
+  }
+
+  // Flip image horizontally (for mobile front camera selfies)
+  function flipImageHorizontally(dataUrl) {
+    return new Promise(resolve => {
+      const img = new Image();
+      img.onload = function() {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          ctx.translate(canvas.width, 0);
+          ctx.scale(-1, 1);
+          ctx.drawImage(img, 0, 0);
+          resolve(canvas.toDataURL('image/jpeg', 0.92));
+        } catch (err) {
+          resolve(dataUrl);
+        }
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    });
+  }
+
+  // Convert data URL to File
+  function dataUrlToFile(dataUrl, fileName) {
+    const arr = dataUrl.split(',');
+    const mime = arr[0].match(/:(.*?);/)[1];
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) u8arr[n] = bstr.charCodeAt(n);
+    return new File([u8arr], fileName, { type: mime });
+  }
+
+  // Check if HEIC/HEIF file
+  function isHeicOrHeif(file) {
+    const heicMimeTypes = ['image/heic', 'image/heif', 'image/heic-sequence', 'image/heif-sequence'];
+    if (heicMimeTypes.includes(file.type?.toLowerCase())) return true;
+    const ext = file.name?.toLowerCase().split('.').pop();
+    return ext === 'heic' || ext === 'heif';
+  }
+
   // Handle file select
   window.bannerWidgetFunctions.handleFileSelect = async function(event) {
     const file = event.target.files[0];
@@ -109,18 +162,21 @@ console.log('Glimpse Banner Widget v1.0 loaded');
 
     try {
       let processedFile = file;
+      const isHeic = isHeicOrHeif(file);
+      const isMobile = isMobileDevice();
+      const isRecent = isRecentlyTakenPhoto(file);
 
-      // Handle HEIC files
-      if (file.type === 'image/heic' || file.type === 'image/heif' || 
-          file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif')) {
-        if (typeof heic2any !== 'undefined') {
-          try {
-            const blob = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 });
-            processedFile = new File([blob], file.name.replace(/\.heic$/i, '.jpg'), { type: 'image/jpeg' });
-          } catch (heicError) {
-            console.warn('HEIC conversion failed, trying original:', heicError);
-          }
-        }
+      // Handle mobile selfie flip (for non-HEIC recent photos)
+      if (isMobile && isRecent && !isHeic) {
+        const reader = new FileReader();
+        const dataUrl = await new Promise((resolve, reject) => {
+          reader.onload = (e) => resolve(e.target.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        
+        const flippedDataUrl = await flipImageHorizontally(dataUrl);
+        processedFile = dataUrlToFile(flippedDataUrl, file.name || 'selfie.jpg');
       }
 
       // Compress image

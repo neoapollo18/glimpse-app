@@ -1,5 +1,5 @@
-// Glimpse Button Widget JavaScript v1.0
-console.log('Glimpse Button Widget v1.0 loaded');
+// Glimpse Button Widget JavaScript v2.0
+console.log('Glimpse Button Widget v2.0 loaded');
 
 (function() {
   window.glimpseButton = window.glimpseButton || {};
@@ -7,8 +7,12 @@ console.log('Glimpse Button Widget v1.0 loaded');
   let currentProductId = null;
   let currentShopDomain = null;
   let currentVariantId = null;
+  let originalButtonText = '';
   
   const SHOPIFY_APP_URL = 'https://glimpse-app-charles.onrender.com';
+  const loadingMessages = ['Processing...', 'Analyzing...', 'Creating magic...', 'Almost there...'];
+  let loadingMessageIndex = 0;
+  let loadingInterval = null;
   
   function getShopDomain() {
     const widget = document.querySelector('.glimpse-button-widget');
@@ -61,9 +65,15 @@ console.log('Glimpse Button Widget v1.0 loaded');
     currentProductId = widget.getAttribute('data-product-id');
     currentShopDomain = getShopDomain();
     currentVariantId = getCurrentVariantId();
+    originalButtonText = widget.getAttribute('data-button-text') || 'TRY IT ON';
     
-    showState('upload');
     setupVariantListeners();
+    
+    console.log('Glimpse Button initialized:', {
+      productId: currentProductId,
+      shopDomain: currentShopDomain,
+      variantId: currentVariantId
+    });
   }
   
   function setupVariantListeners() {
@@ -77,13 +87,102 @@ console.log('Glimpse Button Widget v1.0 loaded');
     });
   }
   
+  // Trigger file upload
   window.glimpseButton.triggerUpload = function() {
     const widget = document.querySelector('.glimpse-button-widget');
     const fileInput = widget?.querySelector('#imageUpload');
     if (fileInput) fileInput.click();
   };
   
-  window.glimpseButton.reset = function() {
+  // Set button to loading state
+  function setButtonLoading(isLoading) {
+    const widget = document.querySelector('.glimpse-button-widget');
+    const button = widget?.querySelector('#mainButton');
+    const btnText = button?.querySelector('.btn-text');
+    const spinner = button?.querySelector('.btn-spinner');
+    
+    if (!button || !btnText) return;
+    
+    if (isLoading) {
+      button.classList.add('is-loading');
+      spinner.style.display = 'block';
+      loadingMessageIndex = 0;
+      btnText.textContent = loadingMessages[0];
+      
+      // Cycle through loading messages
+      loadingInterval = setInterval(() => {
+        loadingMessageIndex++;
+        if (loadingMessageIndex < loadingMessages.length) {
+          btnText.textContent = loadingMessages[loadingMessageIndex];
+        }
+      }, 2500);
+    } else {
+      button.classList.remove('is-loading');
+      spinner.style.display = 'none';
+      btnText.textContent = originalButtonText;
+      
+      if (loadingInterval) {
+        clearInterval(loadingInterval);
+        loadingInterval = null;
+      }
+    }
+  }
+  
+  // Show results modal
+  function showResults(beforeUrl, afterUrl) {
+    const widget = document.querySelector('.glimpse-button-widget');
+    const modal = widget?.querySelector('#resultsModal');
+    const beforeImg = widget?.querySelector('#beforeImage');
+    const afterImg = widget?.querySelector('#afterImage');
+    
+    if (beforeImg) beforeImg.src = beforeUrl;
+    if (afterImg) afterImg.src = afterUrl;
+    if (modal) modal.style.display = 'flex';
+    
+    // Prevent body scroll
+    document.body.style.overflow = 'hidden';
+  }
+  
+  // Close results modal
+  window.glimpseButton.closeResults = function() {
+    const widget = document.querySelector('.glimpse-button-widget');
+    const modal = widget?.querySelector('#resultsModal');
+    if (modal) modal.style.display = 'none';
+    
+    // Restore body scroll
+    document.body.style.overflow = '';
+  };
+  
+  // Show error modal
+  function showError(message) {
+    setButtonLoading(false);
+    
+    const widget = document.querySelector('.glimpse-button-widget');
+    const modal = widget?.querySelector('#errorModal');
+    const errorMessage = widget?.querySelector('#errorMessage');
+    
+    if (errorMessage) errorMessage.textContent = message;
+    if (modal) modal.style.display = 'flex';
+    
+    // Prevent body scroll
+    document.body.style.overflow = 'hidden';
+  }
+  
+  // Close error modal
+  window.glimpseButton.closeError = function() {
+    const widget = document.querySelector('.glimpse-button-widget');
+    const modal = widget?.querySelector('#errorModal');
+    if (modal) modal.style.display = 'none';
+    
+    // Restore body scroll
+    document.body.style.overflow = '';
+  };
+  
+  // Try again - close modal and reset
+  window.glimpseButton.tryAgain = function() {
+    window.glimpseButton.closeResults();
+    window.glimpseButton.closeError();
+    
     const widget = document.querySelector('.glimpse-button-widget');
     const imageUpload = widget?.querySelector('#imageUpload');
     const beforeImage = widget?.querySelector('#beforeImage');
@@ -93,25 +192,25 @@ console.log('Glimpse Button Widget v1.0 loaded');
     if (beforeImage) { beforeImage.onload = null; beforeImage.onerror = null; beforeImage.src = ''; }
     if (afterImage) { afterImage.onload = null; afterImage.onerror = null; afterImage.src = ''; }
     
-    showState('upload');
+    // Trigger new upload
+    window.glimpseButton.triggerUpload();
   };
   
-  function showState(state) {
-    const widget = document.querySelector('.glimpse-button-widget');
-    if (!widget) return;
+  // Reset to initial state
+  window.glimpseButton.reset = function() {
+    setButtonLoading(false);
+    window.glimpseButton.closeResults();
+    window.glimpseButton.closeError();
     
-    ['upload', 'processing', 'results', 'error'].forEach(s => {
-      const el = widget.querySelector(`#${s}State`);
-      if (el) el.style.display = s === state ? 'flex' : 'none';
-    });
-  }
-  
-  function showError(message) {
     const widget = document.querySelector('.glimpse-button-widget');
-    const errorMessage = widget?.querySelector('#errorMessage');
-    if (errorMessage) errorMessage.textContent = message;
-    showState('error');
-  }
+    const imageUpload = widget?.querySelector('#imageUpload');
+    const beforeImage = widget?.querySelector('#beforeImage');
+    const afterImage = widget?.querySelector('#afterImage');
+    
+    if (imageUpload) imageUpload.value = '';
+    if (beforeImage) { beforeImage.onload = null; beforeImage.onerror = null; beforeImage.src = ''; }
+    if (afterImage) { afterImage.onload = null; afterImage.onerror = null; afterImage.src = ''; }
+  };
   
   // Mobile detection
   function isMobileDevice() {
@@ -182,6 +281,9 @@ console.log('Glimpse Button Widget v1.0 loaded');
       return;
     }
     
+    // Start loading state on button
+    setButtonLoading(true);
+    
     const reader = new FileReader();
     
     reader.onload = async function(e) {
@@ -209,8 +311,6 @@ console.log('Glimpse Button Widget v1.0 loaded');
   }
   
   async function transformImage(file) {
-    showState('processing');
-    
     try {
       const freshVariantId = getCurrentVariantId();
       if (freshVariantId) currentVariantId = freshVariantId;
@@ -235,22 +335,38 @@ console.log('Glimpse Button Widget v1.0 loaded');
         throw new Error(result.error || 'Transformation failed');
       }
       
-      const widget = document.querySelector('.glimpse-button-widget');
-      const beforeImg = widget?.querySelector('#beforeImage');
-      const afterImg = widget?.querySelector('#afterImage');
+      // Stop loading state
+      setButtonLoading(false);
       
-      if (beforeImg && result.processedInputImage) {
-        beforeImg.src = `data:image/jpeg;base64,${result.processedInputImage}`;
-      }
+      // Build image URLs
+      const beforeUrl = result.processedInputImage 
+        ? `data:image/jpeg;base64,${result.processedInputImage}`
+        : URL.createObjectURL(file);
+      const afterUrl = `data:image/jpeg;base64,${result.generatedImage}`;
       
-      if (afterImg && result.generatedImage) {
-        afterImg.src = `data:image/jpeg;base64,${result.generatedImage}`;
-      }
-      
-      showState('results');
+      // Show results in modal
+      showResults(beforeUrl, afterUrl);
       
     } catch (error) {
       showError(error.message || 'Something went wrong. Please try again.');
+    }
+  }
+  
+  // Close modal when clicking outside
+  function handleOverlayClick(e) {
+    if (e.target.classList.contains('results-modal-overlay')) {
+      window.glimpseButton.closeResults();
+    }
+    if (e.target.classList.contains('error-modal-overlay')) {
+      window.glimpseButton.closeError();
+    }
+  }
+  
+  // Close modal on escape key
+  function handleEscapeKey(e) {
+    if (e.key === 'Escape') {
+      window.glimpseButton.closeResults();
+      window.glimpseButton.closeError();
     }
   }
   
@@ -267,6 +383,15 @@ console.log('Glimpse Button Widget v1.0 loaded');
         if (files?.length > 0) processFile(files[0]);
       });
     }
+    
+    // Add click outside to close
+    const resultsModal = widget.querySelector('#resultsModal');
+    const errorModal = widget.querySelector('#errorModal');
+    
+    if (resultsModal) resultsModal.addEventListener('click', handleOverlayClick);
+    if (errorModal) errorModal.addEventListener('click', handleOverlayClick);
+    
+    // Add escape key listener
+    document.addEventListener('keydown', handleEscapeKey);
   });
 })();
-

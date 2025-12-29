@@ -18,7 +18,7 @@
   # Layout
   assign widget_margin_top = block.settings.widget_margin_top | default: 20
   assign widget_margin_bottom = block.settings.widget_margin_bottom | default: 20
-  assign widget_padding = block.settings.widget_padding | default: 24
+  assign widget_padding = 24
   assign title_font_size = block.settings.title_font_size | default: 24
   assign description_font_size = block.settings.description_font_size | default: 16
   assign disclaimer_text = block.settings.disclaimer_text | default: 'Results are never guaranteed, just a generated image. Images are never saved.'
@@ -26,8 +26,8 @@
   # Widget container styling
   assign widget_border_radius = block.settings.widget_border_radius | default: 16
   assign enable_container = block.settings.enable_container | default: false
-  assign enable_widget_shadow = block.settings.enable_widget_shadow
-  assign enable_widget_border = block.settings.enable_widget_border
+  assign enable_widget_shadow = true
+  assign enable_widget_border = true
   
   # Handle "no container" mode
   if enable_container == false
@@ -38,7 +38,7 @@
   
   # Button styling
   assign button_style = block.settings.button_style | default: 'solid'
-  assign button_text_case = block.settings.button_text_case | default: 'none'
+  assign button_text_case = 'none'
   assign button_border_radius = block.settings.button_border_radius | default: 12
   assign show_camera_icon = block.settings.show_camera_icon
   assign enable_button_border = block.settings.enable_button_border
@@ -317,30 +317,6 @@
       "info": "Choose the button appearance style"
     },
     {
-      "type": "select",
-      "id": "button_text_case",
-      "label": "Button Text Case",
-      "default": "none",
-      "options": [
-        {
-          "value": "none",
-          "label": "As Typed"
-        },
-        {
-          "value": "uppercase",
-          "label": "UPPERCASE"
-        },
-        {
-          "value": "lowercase",
-          "label": "lowercase"
-        },
-        {
-          "value": "capitalize",
-          "label": "Capitalize Each Word"
-        }
-      ]
-    },
-    {
       "type": "range",
       "id": "button_border_radius",
       "label": "Button Corner Radius (px)",
@@ -464,18 +440,6 @@
       "info": "When disabled, widget floats without card background"
     },
     {
-      "type": "checkbox",
-      "id": "enable_widget_shadow",
-      "label": "Enable Drop Shadow",
-      "default": true
-    },
-    {
-      "type": "checkbox",
-      "id": "enable_widget_border",
-      "label": "Enable Border",
-      "default": true
-    },
-    {
       "type": "range",
       "id": "widget_border_radius",
       "label": "Widget Corner Radius (px)",
@@ -483,15 +447,6 @@
       "max": 40,
       "step": 2,
       "default": 16
-    },
-    {
-      "type": "range",
-      "id": "widget_padding",
-      "label": "Widget Padding (px)",
-      "min": 12,
-      "max": 48,
-      "step": 4,
-      "default": 24
     },
     {
       "type": "range",
