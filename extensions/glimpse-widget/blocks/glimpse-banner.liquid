@@ -1,0 +1,370 @@
+{% liquid
+  # Content
+  assign title_text = block.settings.title_text | default: 'VIRTUAL TRY-ON'
+  assign description_text = block.settings.description_text | default: 'Upload your photo to see yourself in our products.'
+  assign button_text = block.settings.button_text | default: 'discover now'
+  assign banner_image = block.settings.banner_image
+  assign disclaimer_text = block.settings.disclaimer_text | default: 'Results are AI-generated previews. Images are never saved.'
+  assign show_disclaimer = block.settings.show_disclaimer
+  
+  # Product
+  assign product = block.settings.product | default: product
+  assign product_id = product.id
+  assign manual_shop_domain = block.settings.manual_shop_domain
+  
+  # Colors
+  assign overlay_color = block.settings.overlay_color | default: '#ffffff'
+  assign overlay_opacity = block.settings.overlay_opacity | default: 70
+  assign title_color = block.settings.title_color | default: '#8b5cf6'
+  assign description_color = block.settings.description_color | default: '#4b5563'
+  assign button_color = block.settings.button_color | default: '#8b5cf6'
+  assign button_text_color = block.settings.button_text_color | default: '#ffffff'
+  
+  # Layout
+  assign banner_height = block.settings.banner_height | default: 400
+  assign banner_border_radius = block.settings.banner_border_radius | default: 0
+  assign content_max_width = block.settings.content_max_width | default: 600
+  assign title_font_size = block.settings.title_font_size | default: 36
+  assign description_font_size = block.settings.description_font_size | default: 18
+  assign margin_top = block.settings.margin_top | default: 0
+  assign margin_bottom = block.settings.margin_bottom | default: 0
+  
+  # Button
+  assign button_style = block.settings.button_style | default: 'solid'
+  assign button_border_radius = block.settings.button_border_radius | default: 8
+  
+  # Typography
+  assign header_font_family = block.settings.header_font_family | default: 'inherit'
+  assign header_font_weight = block.settings.header_font_weight | default: '700'
+  assign body_font_family = block.settings.body_font_family | default: 'inherit'
+  
+  # Compute overlay rgba
+  assign opacity_decimal = overlay_opacity | divided_by: 100.0
+%}
+
+<!-- Glimpse Banner Widget -->
+<div class="glimpse-banner-widget"
+     data-product-id="{{ product_id }}"
+     {% if manual_shop_domain != blank %}data-manual-shop-domain="{{ manual_shop_domain }}"{% endif %}
+     style="--banner-height: {{ banner_height }}px;
+            --banner-border-radius: {{ banner_border_radius }}px;
+            --overlay-color: {{ overlay_color }};
+            --overlay-opacity: {{ opacity_decimal }};
+            --title-color: {{ title_color }};
+            --description-color: {{ description_color }};
+            --button-color: {{ button_color }};
+            --button-text-color: {{ button_text_color }};
+            --content-max-width: {{ content_max_width }}px;
+            --title-font-size: {{ title_font_size }}px;
+            --description-font-size: {{ description_font_size }}px;
+            --button-border-radius: {{ button_border_radius }}px;
+            --margin-top: {{ margin_top }}px;
+            --margin-bottom: {{ margin_bottom }}px;
+            --header-font-family: {{ header_font_family }};
+            --header-font-weight: {{ header_font_weight }};
+            --body-font-family: {{ body_font_family }};">
+  
+  <!-- Background Image -->
+  {% if banner_image != blank %}
+    <img class="banner-background" 
+         src="{{ banner_image | image_url: width: 1920 }}" 
+         alt="Banner background"
+         width="1920"
+         height="{{ banner_height }}"
+         loading="lazy">
+  {% else %}
+    <div class="banner-background banner-placeholder"></div>
+  {% endif %}
+  
+  <!-- Overlay -->
+  <div class="banner-overlay"></div>
+  
+  <!-- Content -->
+  <div class="banner-content">
+    <!-- Upload State -->
+    <div class="banner-state upload-state">
+      <h2 class="banner-title">{{ title_text }}</h2>
+      <p class="banner-description">{{ description_text }}</p>
+      <button type="button" class="banner-button button-style-{{ button_style }}" onclick="window.bannerWidgetFunctions.triggerFileInput()">
+        <span class="button-text">{{ button_text }}</span>
+      </button>
+      {% if show_disclaimer %}
+        <p class="banner-disclaimer">{{ disclaimer_text }}</p>
+      {% endif %}
+    </div>
+    
+    <!-- Processing State -->
+    <div class="banner-state processing-state" style="display: none;">
+      <div class="banner-spinner"></div>
+      <p class="banner-loading-text">Creating your preview...</p>
+    </div>
+    
+    <!-- Results State -->
+    <div class="banner-state results-state" style="display: none;">
+      <div class="banner-results-container">
+        <div class="banner-result-images">
+          <div class="result-image-wrapper">
+            <span class="result-label">Before</span>
+            <img class="result-image result-before" src="" alt="Before" width="200" height="200">
+          </div>
+          <div class="result-image-wrapper">
+            <span class="result-label">After</span>
+            <img class="result-image result-after" src="" alt="After" width="200" height="200">
+          </div>
+        </div>
+        <button type="button" class="banner-button button-style-{{ button_style }}" onclick="window.bannerWidgetFunctions.resetBanner()">
+          <span class="button-text">Try Again</span>
+        </button>
+      </div>
+    </div>
+    
+    <!-- Error State -->
+    <div class="banner-state error-state" style="display: none;">
+      <p class="banner-error-message"></p>
+      <button type="button" class="banner-button button-style-{{ button_style }}" onclick="window.bannerWidgetFunctions.resetBanner()">
+        <span class="button-text">Try Again</span>
+      </button>
+    </div>
+  </div>
+  
+  <!-- Hidden File Input -->
+  <input type="file" 
+         class="banner-file-input" 
+         accept="image/*,.heic,.heif" 
+         style="display: none;"
+         onchange="window.bannerWidgetFunctions.handleFileSelect(event)">
+</div>
+
+<script src="{{ 'glimpse-banner.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "Glimpse Banner",
+  "target": "section",
+  "stylesheet": "glimpse-banner.css",
+  "settings": [
+    {
+      "type": "header",
+      "content": "Content"
+    },
+    {
+      "type": "image_picker",
+      "id": "banner_image",
+      "label": "Banner Background Image"
+    },
+    {
+      "type": "text",
+      "id": "title_text",
+      "label": "Title",
+      "default": "VIRTUAL TRY-ON"
+    },
+    {
+      "type": "textarea",
+      "id": "description_text",
+      "label": "Description",
+      "default": "Upload your photo to see yourself in our products."
+    },
+    {
+      "type": "text",
+      "id": "button_text",
+      "label": "Button Text",
+      "default": "discover now"
+    },
+    {
+      "type": "product",
+      "id": "product",
+      "label": "Product (for transformation)"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_disclaimer",
+      "label": "Show Disclaimer",
+      "default": true
+    },
+    {
+      "type": "text",
+      "id": "disclaimer_text",
+      "label": "Disclaimer Text",
+      "default": "Results are AI-generated previews. Images are never saved."
+    },
+    {
+      "type": "header",
+      "content": "Layout"
+    },
+    {
+      "type": "range",
+      "id": "banner_height",
+      "label": "Banner Height (px)",
+      "min": 200,
+      "max": 600,
+      "step": 20,
+      "default": 400
+    },
+    {
+      "type": "range",
+      "id": "banner_border_radius",
+      "label": "Banner Corner Radius (px)",
+      "min": 0,
+      "max": 32,
+      "step": 4,
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "content_max_width",
+      "label": "Content Max Width (px)",
+      "min": 400,
+      "max": 900,
+      "step": 50,
+      "default": 600
+    },
+    {
+      "type": "range",
+      "id": "margin_top",
+      "label": "Margin Top (px)",
+      "min": 0,
+      "max": 100,
+      "step": 10,
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "margin_bottom",
+      "label": "Margin Bottom (px)",
+      "min": 0,
+      "max": 100,
+      "step": 10,
+      "default": 0
+    },
+    {
+      "type": "header",
+      "content": "Colors"
+    },
+    {
+      "type": "color",
+      "id": "overlay_color",
+      "label": "Overlay Color",
+      "default": "#ffffff"
+    },
+    {
+      "type": "range",
+      "id": "overlay_opacity",
+      "label": "Overlay Opacity (%)",
+      "min": 0,
+      "max": 100,
+      "step": 5,
+      "default": 70
+    },
+    {
+      "type": "color",
+      "id": "title_color",
+      "label": "Title Color",
+      "default": "#8b5cf6"
+    },
+    {
+      "type": "color",
+      "id": "description_color",
+      "label": "Description Color",
+      "default": "#4b5563"
+    },
+    {
+      "type": "color",
+      "id": "button_color",
+      "label": "Button Color",
+      "default": "#8b5cf6"
+    },
+    {
+      "type": "color",
+      "id": "button_text_color",
+      "label": "Button Text Color",
+      "default": "#ffffff"
+    },
+    {
+      "type": "header",
+      "content": "Typography"
+    },
+    {
+      "type": "range",
+      "id": "title_font_size",
+      "label": "Title Font Size (px)",
+      "min": 20,
+      "max": 60,
+      "step": 2,
+      "default": 36
+    },
+    {
+      "type": "range",
+      "id": "description_font_size",
+      "label": "Description Font Size (px)",
+      "min": 14,
+      "max": 24,
+      "step": 1,
+      "default": 18
+    },
+    {
+      "type": "font_picker",
+      "id": "header_font_family",
+      "label": "Title Font",
+      "default": "assistant_n4"
+    },
+    {
+      "type": "select",
+      "id": "header_font_weight",
+      "label": "Title Font Weight",
+      "options": [
+        { "value": "400", "label": "Normal" },
+        { "value": "500", "label": "Medium" },
+        { "value": "600", "label": "Semi-Bold" },
+        { "value": "700", "label": "Bold" },
+        { "value": "800", "label": "Extra Bold" }
+      ],
+      "default": "700"
+    },
+    {
+      "type": "font_picker",
+      "id": "body_font_family",
+      "label": "Body Font",
+      "default": "assistant_n4"
+    },
+    {
+      "type": "header",
+      "content": "Button"
+    },
+    {
+      "type": "select",
+      "id": "button_style",
+      "label": "Button Style",
+      "options": [
+        { "value": "solid", "label": "Solid Filled" },
+        { "value": "outlined", "label": "Outlined" }
+      ],
+      "default": "solid"
+    },
+    {
+      "type": "range",
+      "id": "button_border_radius",
+      "label": "Button Corner Radius (px)",
+      "min": 0,
+      "max": 30,
+      "step": 2,
+      "default": 8
+    },
+    {
+      "type": "header",
+      "content": "Advanced"
+    },
+    {
+      "type": "text",
+      "id": "manual_shop_domain",
+      "label": "Manual Shop Domain (optional)",
+      "info": "Only needed if automatic domain detection fails"
+    }
+  ],
+  "presets": [
+    {
+      "name": "Glimpse Banner"
+    }
+  ]
+}
+{% endschema %}
+
