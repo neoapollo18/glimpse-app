@@ -73,7 +73,7 @@
 .banner-description {
   font-family: var(--body-font-family);
   font-size: var(--description-font-size);
-  font-weight: 400;
+  font-weight: var(--body-font-weight);
   color: var(--description-color);
   margin: 0 0 24px 0;
   line-height: 1.5;
@@ -84,7 +84,7 @@
   padding: 14px 32px;
   font-family: var(--body-font-family);
   font-size: 16px;
-  font-weight: 500;
+  font-weight: var(--body-font-weight);
   cursor: pointer;
   border-radius: var(--button-border-radius);
   transition: all 0.2s ease;
