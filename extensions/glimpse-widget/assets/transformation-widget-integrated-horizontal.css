@@ -7,10 +7,13 @@
   padding: var(--widget-padding);
   margin-top: var(--widget-margin-top);
   margin-bottom: var(--widget-margin-bottom);
+  margin-left: 0;
+  margin-right: 0;
   box-shadow: var(--widget-shadow);
   border: var(--widget-border);
   font-family: var(--body-font-family);
   max-width: 100%;
+  width: 100%;
   box-sizing: border-box;
 }
 

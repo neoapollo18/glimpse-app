@@ -30,8 +30,8 @@
   padding: var(--widget-padding);
   margin-top: var(--widget-margin-top);
   margin-bottom: var(--widget-margin-bottom);
-  margin-left: auto;
-  margin-right: auto;
+  margin-left: 0;
+  margin-right: 0;
   box-shadow: var(--widget-shadow);
   border: var(--widget-border);
   max-width: 480px;
