@@ -1,5 +1,5 @@
-/* Glimpse Banner Widget JavaScript */
-console.log('Glimpse Banner Widget v1.0 loaded');
+/* Glimpse Banner Widget JavaScript v2.0 - Modal UI */
+console.log('Glimpse Banner Widget v2.0 loaded');
 
 (function() {
   'use strict';
@@ -9,8 +9,12 @@ console.log('Glimpse Banner Widget v1.0 loaded');
   let currentProductId = null;
   let currentShopDomain = null;
   let currentVariantId = null;
+  let originalButtonText = '';
   
   const SHOPIFY_APP_URL = 'https://glimpse-app-charles.onrender.com';
+  const loadingMessages = ['Processing...', 'Analyzing...', 'Creating magic...', 'Almost there...'];
+  let loadingMessageIndex = 0;
+  let loadingInterval = null;
 
   // Initialize namespace
   window.bannerWidgetFunctions = window.bannerWidgetFunctions || {};
@@ -73,31 +77,110 @@ console.log('Glimpse Banner Widget v1.0 loaded');
     return null;
   }
 
-  // Show state
-  function showState(stateName) {
-    if (!widget) return;
+  // Get button elements
+  function getButton() {
+    return widget?.querySelector('#bannerMainButton');
+  }
+  
+  function getButtonText() {
+    const btn = getButton();
+    return btn?.querySelector('.button-text');
+  }
+  
+  function getSpinner() {
+    const btn = getButton();
+    return btn?.querySelector('.banner-spinner-inline');
+  }
+
+  // Set button loading state
+  function setButtonLoading(isLoading) {
+    const btn = getButton();
+    const btnText = getButtonText();
+    const spinner = getSpinner();
     
-    const states = widget.querySelectorAll('.banner-state');
-    states.forEach(state => {
-      state.style.display = 'none';
-    });
+    if (!btn || !btnText || !spinner) return;
     
-    const targetState = widget.querySelector('.' + stateName + '-state');
-    if (targetState) {
-      targetState.style.display = 'flex';
+    if (isLoading) {
+      originalButtonText = btnText.textContent;
+      btn.classList.add('is-loading');
+      spinner.style.display = 'inline-block';
+      btnText.textContent = loadingMessages[0];
+      
+      // Cycle through loading messages
+      loadingMessageIndex = 0;
+      loadingInterval = setInterval(() => {
+        loadingMessageIndex = (loadingMessageIndex + 1) % loadingMessages.length;
+        btnText.textContent = loadingMessages[loadingMessageIndex];
+      }, 2000);
+    } else {
+      btn.classList.remove('is-loading');
+      spinner.style.display = 'none';
+      btnText.textContent = originalButtonText;
+      
+      if (loadingInterval) {
+        clearInterval(loadingInterval);
+        loadingInterval = null;
+      }
     }
   }
+
+  // Show results modal
+  function showResultsModal(beforeUrl, afterUrl) {
+    const modal = document.getElementById('bannerResultsModal');
+    if (!modal) return;
+    
+    const beforeImg = modal.querySelector('.result-before');
+    const afterImg = modal.querySelector('.result-after');
+    
+    if (beforeImg) beforeImg.src = beforeUrl;
+    if (afterImg) afterImg.src = afterUrl;
+    
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+  }
+
+  // Show error modal
+  function showErrorModal(message) {
+    const modal = document.getElementById('bannerErrorModal');
+    const errorText = document.getElementById('bannerErrorMessage');
+    
+    if (!modal) return;
+    
+    if (errorText) errorText.textContent = message;
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+  }
+
+  // Close modal
+  window.bannerWidgetFunctions.closeModal = function() {
+    const resultsModal = document.getElementById('bannerResultsModal');
+    const errorModal = document.getElementById('bannerErrorModal');
+    
+    if (resultsModal) resultsModal.style.display = 'none';
+    if (errorModal) errorModal.style.display = 'none';
+    
+    document.body.style.overflow = '';
+  };
+
+  // Try again - close modal and open file picker
+  window.bannerWidgetFunctions.tryAgain = function() {
+    window.bannerWidgetFunctions.closeModal();
+    window.bannerWidgetFunctions.triggerFileInput();
+  };
 
   // Trigger file input
   window.bannerWidgetFunctions.triggerFileInput = function() {
     if (!widget) return;
+    const btn = getButton();
+    if (btn?.classList.contains('is-loading')) return; // Don't allow if loading
+    
     const fileInput = widget.querySelector('.banner-file-input');
     if (fileInput) fileInput.click();
   };
 
-  // Reset banner
+  // Reset banner (legacy - now just closes modal)
   window.bannerWidgetFunctions.resetBanner = function() {
-    showState('upload');
+    window.bannerWidgetFunctions.closeModal();
   };
 
   // Mobile detection
@@ -158,7 +241,7 @@ console.log('Glimpse Banner Widget v1.0 loaded');
     const file = event.target.files[0];
     if (!file) return;
 
-    showState('processing');
+    setButtonLoading(true);
 
     try {
       let processedFile = file;
@@ -186,7 +269,8 @@ console.log('Glimpse Banner Widget v1.0 loaded');
       await uploadAndTransform(compressedFile);
     } catch (error) {
       console.error('Error processing image:', error);
-      showError(error.message || 'Failed to process image');
+      setButtonLoading(false);
+      showErrorModal(error.message || 'Failed to process image');
     }
 
     // Reset file input
@@ -291,32 +375,9 @@ console.log('Glimpse Banner Widget v1.0 loaded');
       : URL.createObjectURL(file);
     const afterUrl = `data:image/jpeg;base64,${result.generatedImage}`;
     
-    showResults(beforeUrl, afterUrl);
-  }
-
-  // Show results
-  function showResults(originalUrl, transformedUrl) {
-    if (!widget) return;
-    
-    const beforeImg = widget.querySelector('.result-before');
-    const afterImg = widget.querySelector('.result-after');
-    
-    if (beforeImg) beforeImg.src = originalUrl;
-    if (afterImg) afterImg.src = transformedUrl;
-    
-    showState('results');
-  }
-
-  // Show error
-  function showError(message) {
-    if (!widget) return;
-    
-    const errorMessage = widget.querySelector('.banner-error-message');
-    if (errorMessage) {
-      errorMessage.textContent = message;
-    }
-    
-    showState('error');
+    // Reset button and show modal
+    setButtonLoading(false);
+    showResultsModal(beforeUrl, afterUrl);
   }
 
   // Initialize
@@ -331,13 +392,34 @@ console.log('Glimpse Banner Widget v1.0 loaded');
     currentShopDomain = getShopDomain();
     currentVariantId = getCurrentVariantId();
     
+    // Store original button text
+    const btnText = getButtonText();
+    if (btnText) {
+      originalButtonText = btnText.textContent;
+    }
+    
+    // Close modal on clicking overlay background
+    const overlays = widget.querySelectorAll('.banner-modal-overlay');
+    overlays.forEach(overlay => {
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+          window.bannerWidgetFunctions.closeModal();
+        }
+      });
+    });
+    
+    // Close modal on Escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        window.bannerWidgetFunctions.closeModal();
+      }
+    });
+    
     console.log('Glimpse Banner initialized:', {
       productId: currentProductId,
       shopDomain: currentShopDomain,
       variantId: currentVariantId
     });
-
-    showState('upload');
   }
 
   // Run on DOM ready
@@ -347,4 +429,3 @@ console.log('Glimpse Banner Widget v1.0 loaded');
     init();
   }
 })();
-

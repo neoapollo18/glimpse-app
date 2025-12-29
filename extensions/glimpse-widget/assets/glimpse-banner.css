@@ -51,8 +51,8 @@
   box-sizing: border-box;
 }
 
-/* States */
-.banner-state {
+/* Main Content */
+.banner-main-content {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -123,84 +123,155 @@
   color: var(--button-text-color) !important;
 }
 
+/* Button Loading State */
+.banner-button.is-loading {
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+.banner-spinner-inline {
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: banner-btn-spin 0.8s linear infinite;
+}
+
+@keyframes banner-btn-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* Disclaimer */
 .banner-disclaimer {
   font-family: var(--body-font-family);
   font-size: 12px;
+  font-weight: var(--body-font-weight);
   color: var(--description-color);
   margin: 16px 0 0 0;
   opacity: 0.8;
 }
 
-/* Processing State */
-.processing-state {
-  gap: 16px;
-}
+/* ==================== */
+/* Modal Overlay Styles */
+/* ==================== */
 
-.banner-spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid rgba(0, 0, 0, 0.1);
-  border-top-color: var(--button-color);
-  border-radius: 50%;
-  animation: banner-spin 1s linear infinite;
-}
-
-@keyframes banner-spin {
-  to { transform: rotate(360deg); }
-}
-
-.banner-loading-text {
-  font-family: var(--body-font-family);
-  font-size: var(--description-font-size);
-  color: var(--description-color);
-  margin: 0;
-}
-
-/* Results State */
-.banner-results-container {
+.banner-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 20px;
-}
-
-.banner-result-images {
-  display: flex;
-  gap: 16px;
   justify-content: center;
+  z-index: 10000;
+  opacity: 0;
+  animation: bannerModalFadeIn 0.25s ease forwards;
 }
 
-.result-image-wrapper {
+@keyframes bannerModalFadeIn {
+  to { opacity: 1; }
+}
+
+.banner-modal {
+  position: relative;
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 32px;
+  max-width: 90vw;
+  max-height: 90vh;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: bannerModalSlideIn 0.3s ease forwards;
+  overflow: auto;
+}
+
+@keyframes bannerModalSlideIn {
+  from { 
+    transform: translateY(20px) scale(0.95);
+    opacity: 0;
+  }
+  to { 
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+.banner-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: #f3f4f6;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+  transition: all 0.2s ease;
+}
+
+.banner-modal-close:hover {
+  background: #e5e7eb;
+  color: #1f2937;
+}
+
+.banner-modal-content {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 24px;
 }
 
-.result-label {
-  font-family: var(--body-font-family);
+.banner-modal-comparison {
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.banner-modal-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.banner-modal-label {
+  font-family: system-ui, -apple-system, sans-serif;
   font-size: 14px;
   font-weight: 600;
-  color: var(--description-color);
+  color: #6b7280;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
-.result-image {
-  width: 150px;
-  height: 150px;
+.banner-modal-img {
+  width: 200px;
+  height: 200px;
   object-fit: cover;
   border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
 }
 
-/* Error State */
-.banner-error-message {
-  font-family: var(--body-font-family);
-  font-size: var(--description-font-size);
+.banner-modal-btn {
+  margin-top: 8px;
+}
+
+/* Error Modal */
+.banner-modal-error {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 16px;
   color: #dc2626;
-  margin: 0 0 16px 0;
+  margin: 0;
+  text-align: center;
+  padding: 16px;
 }
 
 /* Mobile Responsiveness */
@@ -222,13 +293,18 @@
     font-size: calc(var(--description-font-size) * 0.9);
   }
   
-  .banner-result-images {
-    flex-direction: column;
+  .banner-modal {
+    padding: 24px;
+    margin: 16px;
   }
   
-  .result-image {
-    width: 120px;
-    height: 120px;
+  .banner-modal-comparison {
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .banner-modal-img {
+    width: 150px;
+    height: 150px;
   }
 }
-
