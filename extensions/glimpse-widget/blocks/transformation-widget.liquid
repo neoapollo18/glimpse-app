@@ -43,7 +43,7 @@
 %}
 
 <!-- Glimpse AI Transformation Widget -->
-<div class="glimpse-ai-widget" 
+<div class="glimpse-ai-widget{% if block.settings.layout_orientation == 'horizontal' %} layout-horizontal{% endif %}" 
      data-product-id="{{ product_id }}"{% if manual_shop_domain != blank %}
      data-manual-shop-domain="{{ manual_shop_domain }}"{% endif %}
      style="--primary-color-1: {{ primary_color_1 }}; 
@@ -229,6 +229,23 @@
     {
       "type": "header",
       "content": "Configuration"
+    },
+    {
+      "type": "select",
+      "id": "layout_orientation",
+      "label": "Layout Orientation",
+      "options": [
+        {
+          "value": "vertical",
+          "label": "Vertical"
+        },
+        {
+          "value": "horizontal",
+          "label": "Horizontal"
+        }
+      ],
+      "default": "vertical",
+      "info": "Choose between vertical (stacked) or horizontal (side-by-side) layout"
     },
     {
       "type": "text",
