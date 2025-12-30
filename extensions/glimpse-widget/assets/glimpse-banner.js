@@ -236,10 +236,30 @@ console.log('Glimpse Banner Widget v2.0 loaded');
     return ext === 'heic' || ext === 'heif';
   }
 
+  // Check if valid image file
+  function isValidImageFile(file) {
+    if (file.type?.startsWith('image/')) return true;
+    if (isHeicOrHeif(file)) return true;
+    const ext = file.name?.toLowerCase().split('.').pop();
+    return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic', 'heif', 'avif'].includes(ext);
+  }
+
   // Handle file select
   window.bannerWidgetFunctions.handleFileSelect = async function(event) {
     const file = event.target.files[0];
     if (!file) return;
+
+    // Validate file type
+    if (!isValidImageFile(file)) {
+      showErrorModal('Please upload an image file (JPG, PNG, HEIC, etc.).');
+      return;
+    }
+
+    // Check file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      showErrorModal('Image too large. Please upload an image smaller than 5MB.');
+      return;
+    }
 
     setButtonLoading(true);
 
@@ -249,8 +269,15 @@ console.log('Glimpse Banner Widget v2.0 loaded');
       const isMobile = isMobileDevice();
       const isRecent = isRecentlyTakenPhoto(file);
 
+      // For HEIC files, send directly to server (browser can't process them)
+      if (isHeic) {
+        await uploadAndTransform(file);
+        event.target.value = '';
+        return;
+      }
+
       // Handle mobile selfie flip (for non-HEIC recent photos)
-      if (isMobile && isRecent && !isHeic) {
+      if (isMobile && isRecent) {
         const reader = new FileReader();
         const dataUrl = await new Promise((resolve, reject) => {
           reader.onload = (e) => resolve(e.target.result);
@@ -262,7 +289,7 @@ console.log('Glimpse Banner Widget v2.0 loaded');
         processedFile = dataUrlToFile(flippedDataUrl, file.name || 'selfie.jpg');
       }
 
-      // Compress image
+      // Compress image (only for non-HEIC)
       const compressedFile = await compressImage(processedFile);
       
       // Upload and transform
