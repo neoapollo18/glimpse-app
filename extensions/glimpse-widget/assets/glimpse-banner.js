@@ -426,13 +426,17 @@ console.log('Glimpse Banner Widget v2.0 loaded');
     }
     
     // Move modals to body for proper full-screen overlay
+    // Copy CSS variables from widget to modals so they inherit the configuration
     const resultsModal = widget.querySelector('#bannerResultsModal');
     const errorModal = widget.querySelector('#bannerErrorModal');
+    const widgetStyles = widget.getAttribute('style') || '';
     
     if (resultsModal) {
+      resultsModal.setAttribute('style', resultsModal.getAttribute('style') + ';' + widgetStyles);
       document.body.appendChild(resultsModal);
     }
     if (errorModal) {
+      errorModal.setAttribute('style', errorModal.getAttribute('style') + ';' + widgetStyles);
       document.body.appendChild(errorModal);
     }
     
