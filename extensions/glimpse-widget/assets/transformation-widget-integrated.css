@@ -224,26 +224,31 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
-}
-
-.integrated-spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid var(--border-color);
-  border-top-color: var(--primary-color-1);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
+  justify-content: center;
 }
 
 .loading-text {
-  color: var(--description-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--text-color);
   font-size: 15px;
   margin: 0;
+}
+
+.loading-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--text-color);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: integrated-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes integrated-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* Results State */

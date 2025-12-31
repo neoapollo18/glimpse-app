@@ -181,7 +181,7 @@ console.log('Glimpse Integrated Widget v1.0 loaded');
   };
   
   function startLoadingTextAnimation() {
-    const loadingTextEl = document.querySelector('.loading-text');
+    const loadingTextEl = document.querySelector('.loading-text-content');
     if (!loadingTextEl) return;
     
     let currentIndex = 0;
