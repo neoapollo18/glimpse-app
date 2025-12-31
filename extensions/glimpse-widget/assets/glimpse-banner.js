@@ -425,8 +425,19 @@ console.log('Glimpse Banner Widget v2.0 loaded');
       originalButtonText = btnText.textContent;
     }
     
+    // Move modals to body for proper full-screen overlay
+    const resultsModal = widget.querySelector('#bannerResultsModal');
+    const errorModal = widget.querySelector('#bannerErrorModal');
+    
+    if (resultsModal) {
+      document.body.appendChild(resultsModal);
+    }
+    if (errorModal) {
+      document.body.appendChild(errorModal);
+    }
+    
     // Close modal on clicking overlay background
-    const overlays = widget.querySelectorAll('.banner-modal-overlay');
+    const overlays = document.querySelectorAll('.banner-modal-overlay');
     overlays.forEach(overlay => {
       overlay.addEventListener('click', (e) => {
         if (e.target === overlay) {
