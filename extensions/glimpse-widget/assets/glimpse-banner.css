@@ -156,19 +156,23 @@
 /* Modal Overlay Styles */
 /* ==================== */
 
+.glimpse-banner-widget:has(.banner-modal-overlay[style*="flex"]) {
+  overflow: visible;
+}
+
 .banner-modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
+  inset: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(0, 0, 0, 0.7);
+  min-height: 100dvh;
+  background: rgba(0, 0, 0, 0.75);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 10000;
+  z-index: 999999;
   opacity: 0;
   animation: bannerModalFadeIn 0.25s ease forwards;
 }
