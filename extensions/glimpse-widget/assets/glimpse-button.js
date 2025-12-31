@@ -67,6 +67,21 @@ console.log('Glimpse Button Widget v2.0 loaded');
     currentVariantId = getCurrentVariantId();
     originalButtonText = widget.getAttribute('data-button-text') || 'TRY IT ON';
     
+    // Move modals to body for proper full-screen overlay
+    // Copy CSS variables from widget to modals so they inherit the configuration
+    const resultsModal = widget.querySelector('#resultsModal');
+    const errorModal = widget.querySelector('#errorModal');
+    const widgetStyles = widget.getAttribute('style') || '';
+    
+    if (resultsModal) {
+      resultsModal.setAttribute('style', (resultsModal.getAttribute('style') || '') + ';' + widgetStyles);
+      document.body.appendChild(resultsModal);
+    }
+    if (errorModal) {
+      errorModal.setAttribute('style', (errorModal.getAttribute('style') || '') + ';' + widgetStyles);
+      document.body.appendChild(errorModal);
+    }
+    
     setupVariantListeners();
     
     console.log('Glimpse Button initialized:', {
@@ -130,10 +145,9 @@ console.log('Glimpse Button Widget v2.0 loaded');
   
   // Show results modal
   function showResults(beforeUrl, afterUrl) {
-    const widget = document.querySelector('.glimpse-button-widget');
-    const modal = widget?.querySelector('#resultsModal');
-    const beforeImg = widget?.querySelector('#beforeImage');
-    const afterImg = widget?.querySelector('#afterImage');
+    const modal = document.getElementById('resultsModal');
+    const beforeImg = document.getElementById('beforeImage');
+    const afterImg = document.getElementById('afterImage');
     
     if (beforeImg) beforeImg.src = beforeUrl;
     if (afterImg) afterImg.src = afterUrl;
@@ -145,8 +159,7 @@ console.log('Glimpse Button Widget v2.0 loaded');
   
   // Close results modal
   window.glimpseButton.closeResults = function() {
-    const widget = document.querySelector('.glimpse-button-widget');
-    const modal = widget?.querySelector('#resultsModal');
+    const modal = document.getElementById('resultsModal');
     if (modal) modal.style.display = 'none';
     
     // Restore body scroll
@@ -157,9 +170,8 @@ console.log('Glimpse Button Widget v2.0 loaded');
   function showError(message) {
     setButtonLoading(false);
     
-    const widget = document.querySelector('.glimpse-button-widget');
-    const modal = widget?.querySelector('#errorModal');
-    const errorMessage = widget?.querySelector('#errorMessage');
+    const modal = document.getElementById('errorModal');
+    const errorMessage = document.getElementById('errorMessage');
     
     if (errorMessage) errorMessage.textContent = message;
     if (modal) modal.style.display = 'flex';
@@ -170,8 +182,7 @@ console.log('Glimpse Button Widget v2.0 loaded');
   
   // Close error modal
   window.glimpseButton.closeError = function() {
-    const widget = document.querySelector('.glimpse-button-widget');
-    const modal = widget?.querySelector('#errorModal');
+    const modal = document.getElementById('errorModal');
     if (modal) modal.style.display = 'none';
     
     // Restore body scroll
@@ -185,8 +196,8 @@ console.log('Glimpse Button Widget v2.0 loaded');
     
     const widget = document.querySelector('.glimpse-button-widget');
     const imageUpload = widget?.querySelector('#imageUpload');
-    const beforeImage = widget?.querySelector('#beforeImage');
-    const afterImage = widget?.querySelector('#afterImage');
+    const beforeImage = document.getElementById('beforeImage');
+    const afterImage = document.getElementById('afterImage');
     
     if (imageUpload) imageUpload.value = '';
     if (beforeImage) { beforeImage.onload = null; beforeImage.onerror = null; beforeImage.src = ''; }
@@ -204,8 +215,8 @@ console.log('Glimpse Button Widget v2.0 loaded');
     
     const widget = document.querySelector('.glimpse-button-widget');
     const imageUpload = widget?.querySelector('#imageUpload');
-    const beforeImage = widget?.querySelector('#beforeImage');
-    const afterImage = widget?.querySelector('#afterImage');
+    const beforeImage = document.getElementById('beforeImage');
+    const afterImage = document.getElementById('afterImage');
     
     if (imageUpload) imageUpload.value = '';
     if (beforeImage) { beforeImage.onload = null; beforeImage.onerror = null; beforeImage.src = ''; }
@@ -384,9 +395,9 @@ console.log('Glimpse Button Widget v2.0 loaded');
       });
     }
     
-    // Add click outside to close
-    const resultsModal = widget.querySelector('#resultsModal');
-    const errorModal = widget.querySelector('#errorModal');
+    // Add click outside to close (modals are now on body)
+    const resultsModal = document.getElementById('resultsModal');
+    const errorModal = document.getElementById('errorModal');
     
     if (resultsModal) resultsModal.addEventListener('click', handleOverlayClick);
     if (errorModal) errorModal.addEventListener('click', handleOverlayClick);
