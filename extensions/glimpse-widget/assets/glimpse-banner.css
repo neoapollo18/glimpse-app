@@ -179,14 +179,14 @@
 
 .banner-modal {
   position: relative;
-  background: #ffffff;
-  border-radius: 16px;
-  padding: 32px;
-  max-width: 90vw;
-  max-height: 90vh;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  background: var(--results-bg, rgba(255, 255, 255, 0.95));
+  border-radius: var(--button-border-radius);
+  padding: 32px 40px;
+  max-width: 520px;
+  width: 90%;
+  box-shadow: 0 25px 80px rgba(0, 0, 0, 0.4);
   animation: bannerModalSlideIn 0.3s ease forwards;
-  overflow: auto;
+  overflow: visible;
 }
 
 @keyframes bannerModalSlideIn {
@@ -202,76 +202,81 @@
 
 .banner-modal-close {
   position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 36px;
-  height: 36px;
+  top: 16px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
   border: none;
-  background: #f3f4f6;
+  background: rgba(0, 0, 0, 0.05);
   border-radius: 50%;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #6b7280;
+  color: var(--description-color);
   transition: all 0.2s ease;
 }
 
 .banner-modal-close:hover {
-  background: #e5e7eb;
-  color: #1f2937;
+  background: rgba(0, 0, 0, 0.1);
+  color: var(--title-color);
+  transform: scale(1.05);
 }
 
 .banner-modal-content {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 24px;
+  gap: 28px;
 }
 
 .banner-modal-comparison {
   display: flex;
-  gap: 24px;
+  gap: 20px;
   justify-content: center;
-  flex-wrap: wrap;
+  width: 100%;
 }
 
 .banner-modal-side {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  flex: 1;
 }
 
 .banner-modal-label {
-  font-family: system-ui, -apple-system, sans-serif;
-  font-size: 14px;
-  font-weight: 600;
-  color: #6b7280;
+  font-family: var(--header-font-family);
+  font-size: 13px;
+  font-weight: var(--header-font-weight);
+  color: var(--description-color);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.1em;
 }
 
 .banner-modal-img {
-  width: 200px;
-  height: 200px;
+  width: 100%;
+  max-width: 200px;
+  aspect-ratio: 1;
   object-fit: cover;
-  border-radius: 12px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  border-radius: calc(var(--button-border-radius) * 1.5);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
 }
 
 .banner-modal-btn {
-  margin-top: 8px;
+  margin-top: 4px;
 }
 
 /* Error Modal */
 .banner-modal-error {
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: var(--body-font-family);
   font-size: 16px;
+  font-weight: var(--body-font-weight);
   color: #dc2626;
   margin: 0;
   text-align: center;
-  padding: 16px;
+  padding: 16px 8px;
+  line-height: 1.5;
 }
 
 /* Mobile Responsiveness */
@@ -294,17 +299,26 @@
   }
   
   .banner-modal {
-    padding: 24px;
-    margin: 16px;
+    padding: 24px 20px;
+    width: 92%;
+  }
+  
+  .banner-modal-close {
+    top: 12px;
+    right: 12px;
+    width: 36px;
+    height: 36px;
   }
   
   .banner-modal-comparison {
-    flex-direction: column;
     gap: 16px;
   }
   
   .banner-modal-img {
-    width: 150px;
-    height: 150px;
+    max-width: 140px;
+  }
+  
+  .banner-modal-label {
+    font-size: 11px;
   }
 }
