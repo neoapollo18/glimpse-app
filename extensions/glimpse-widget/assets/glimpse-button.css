@@ -132,7 +132,7 @@
 .results-modal,
 .error-modal {
   background: var(--results-background, #ffffff);
-  border-radius: 16px;
+  border-radius: 0px;
   box-shadow: 0 25px 80px rgba(0, 0, 0, 0.4);
   max-width: 520px;
   width: 90%;
