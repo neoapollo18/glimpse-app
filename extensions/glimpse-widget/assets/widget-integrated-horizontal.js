@@ -12,7 +12,7 @@ console.log('Glimpse Integrated Horizontal Widget v1.0 loaded');
   let loadingTextInterval = null;
   let currentImageWasFlipped = false;
   
-  const loadingMessages = ['Analyzing image...', 'Creating your transformation...', 'Working our magic...', 'Almost there...'];
+  const loadingMessages = ['Analyzing image...', 'Creating preview...', 'Working our magic...', 'Almost there...'];
   const SHOPIFY_APP_URL = 'https://glimpse-app-charles.onrender.com';
   
   function getShopDomain() {
