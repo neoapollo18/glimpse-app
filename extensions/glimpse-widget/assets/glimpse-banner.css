@@ -354,13 +354,13 @@
 }
 
 .banner-modal-btn-primary {
-  background: #374151;
-  color: #ffffff;
+  background: #e5e7eb;
+  color: #374151;
   border: none;
 }
 
 .banner-modal-btn-primary:hover {
-  background: #1f2937;
+  background: #d1d5db;
 }
 
 /* Error Modal */
