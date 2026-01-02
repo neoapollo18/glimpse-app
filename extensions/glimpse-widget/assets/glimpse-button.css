@@ -301,13 +301,13 @@
 }
 
 .modal-btn-primary {
-  background: var(--solid-button-color, #6b7280);
+  background: #374151;
   color: #ffffff;
   border: none;
 }
 
 .modal-btn-primary:hover {
-  filter: brightness(1.1);
+  background: #1f2937;
 }
 
 /* Error Modal */
