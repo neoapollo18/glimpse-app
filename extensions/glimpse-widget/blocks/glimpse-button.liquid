@@ -90,27 +90,37 @@
         </svg>
       </button>
       <div class="modal-content">
-        <div class="modal-comparison">
-          <div class="modal-comparison-side">
-            <span class="comparison-label">Before</span>
-            <img id="beforeImage" alt="Before" class="modal-result-img" width="200" height="200">
-          </div>
-          <div class="modal-comparison-side">
-            <span class="comparison-label">After</span>
-            <img id="afterImage" alt="After" class="modal-result-img" width="200" height="200">
+        <div class="modal-header">
+          <h2 class="modal-title">Your personalized preview</h2>
+          <p class="modal-subtitle">Generated based on your photo and this product</p>
+        </div>
+        <div class="modal-comparison-card">
+          <div class="modal-comparison">
+            <div class="modal-comparison-side">
+              <span class="comparison-label">BEFORE</span>
+              <img id="beforeImage" alt="Before" class="modal-result-img" width="200" height="200">
+            </div>
+            <div class="modal-divider">
+              <div class="divider-handle">
+                <span></span>
+                <span></span>
+              </div>
+            </div>
+            <div class="modal-comparison-side">
+              <span class="comparison-label">AFTER</span>
+              <img id="afterImage" alt="After" class="modal-result-img" width="200" height="200">
+            </div>
           </div>
         </div>
-        <button class="glimpse-btn btn-style-{{ button_style }} modal-try-again-btn" 
-                type="button" 
-                onclick="window.glimpseButton.tryAgain()">
-          <svg class="btn-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-            <path d="M21 3v5h-5"/>
-            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
-            <path d="M3 21v-5h5"/>
-          </svg>
-          <span class="btn-text">Try Again</span>
-        </button>
+        <p class="modal-disclaimer">Results may vary. Preview is a visual simulation.</p>
+        <div class="modal-actions">
+          <button class="modal-btn modal-btn-secondary" type="button" onclick="window.glimpseButton.tryAgain()">
+            Try a different photo
+          </button>
+          <button class="modal-btn modal-btn-primary" type="button" onclick="window.glimpseButton.closeResults()">
+            Close
+          </button>
+        </div>
       </div>
     </div>
   </div>

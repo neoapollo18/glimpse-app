@@ -114,25 +114,37 @@
         </svg>
       </button>
       <div class="banner-modal-content">
-        <div class="banner-modal-comparison">
-          <div class="banner-modal-side">
-            <span class="banner-modal-label">Before</span>
-            <img class="banner-modal-img result-before" src="" alt="Before" width="200" height="200">
-          </div>
-          <div class="banner-modal-side">
-            <span class="banner-modal-label">After</span>
-            <img class="banner-modal-img result-after" src="" alt="After" width="200" height="200">
+        <div class="banner-modal-header">
+          <h2 class="banner-modal-title">Your personalized preview</h2>
+          <p class="banner-modal-subtitle">Generated based on your photo and this product</p>
+        </div>
+        <div class="banner-modal-comparison-card">
+          <div class="banner-modal-comparison">
+            <div class="banner-modal-side">
+              <span class="banner-modal-label">BEFORE</span>
+              <img class="banner-modal-img result-before" src="" alt="Before" width="200" height="200">
+            </div>
+            <div class="banner-modal-divider">
+              <div class="banner-divider-handle">
+                <span></span>
+                <span></span>
+              </div>
+            </div>
+            <div class="banner-modal-side">
+              <span class="banner-modal-label">AFTER</span>
+              <img class="banner-modal-img result-after" src="" alt="After" width="200" height="200">
+            </div>
           </div>
         </div>
-        <button type="button" class="banner-button button-style-{{ button_style }} banner-modal-btn" onclick="window.bannerWidgetFunctions.tryAgain()">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-            <path d="M21 3v5h-5"/>
-            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
-            <path d="M3 21v-5h5"/>
-          </svg>
-          <span class="button-text">Try Again</span>
-        </button>
+        <p class="banner-modal-disclaimer">Results may vary. Preview is a visual simulation.</p>
+        <div class="banner-modal-actions">
+          <button type="button" class="banner-modal-btn banner-modal-btn-secondary" onclick="window.bannerWidgetFunctions.tryAgain()">
+            Try a different photo
+          </button>
+          <button type="button" class="banner-modal-btn banner-modal-btn-primary" onclick="window.bannerWidgetFunctions.closeModal()">
+            Close
+          </button>
+        </div>
       </div>
     </div>
   </div>

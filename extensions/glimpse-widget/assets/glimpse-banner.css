@@ -162,15 +162,18 @@
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgba(156, 163, 175, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 999999;
+  padding: 20px;
+  box-sizing: border-box;
   opacity: 0;
   animation: bannerModalFadeIn 0.25s ease forwards;
+  font-family: system-ui, -apple-system, sans-serif;
 }
 
 @keyframes bannerModalFadeIn {
@@ -179,12 +182,11 @@
 
 .banner-modal {
   position: relative;
-  background: var(--results-bg, rgba(255, 255, 255, 0.95));
-  border-radius: 0px;
-  padding: 32px 40px;
-  max-width: 520px;
-  width: 90%;
-  box-shadow: 0 25px 80px rgba(0, 0, 0, 0.4);
+  background: #ffffff;
+  border-radius: 24px;
+  max-width: 560px;
+  width: 94%;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.2);
   animation: bannerModalSlideIn 0.3s ease forwards;
   overflow: visible;
 }
@@ -202,38 +204,70 @@
 
 .banner-modal-close {
   position: absolute;
-  top: 16px;
-  right: 16px;
-  width: 40px;
-  height: 40px;
+  top: 20px;
+  right: 20px;
+  width: 36px;
+  height: 36px;
   border: none;
-  background: rgba(0, 0, 0, 0.05);
+  background: #f3f4f6;
   border-radius: 50%;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--description-color);
+  color: #6b7280;
   transition: all 0.2s ease;
+  z-index: 1;
 }
 
 .banner-modal-close:hover {
-  background: rgba(0, 0, 0, 0.1);
-  color: var(--title-color);
-  transform: scale(1.05);
+  background: #e5e7eb;
+  color: #374151;
 }
 
 .banner-modal-content {
+  padding: 40px 36px 36px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 28px;
+  gap: 20px;
+}
+
+/* Modal Header */
+.banner-modal-header {
+  text-align: center;
+}
+
+.banner-modal-title {
+  font-family: var(--header-font-family, system-ui);
+  font-size: 24px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 8px 0;
+  line-height: 1.3;
+}
+
+.banner-modal-subtitle {
+  font-family: var(--body-font-family, system-ui);
+  font-size: 15px;
+  color: #6b7280;
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* Comparison Card */
+.banner-modal-comparison-card {
+  background: #f3f4f6;
+  border-radius: 16px;
+  padding: 20px;
+  width: 100%;
 }
 
 .banner-modal-comparison {
   display: flex;
-  gap: 20px;
+  align-items: flex-start;
   justify-content: center;
+  gap: 0;
   width: 100%;
 }
 
@@ -246,25 +280,101 @@
 }
 
 .banner-modal-label {
-  font-family: var(--header-font-family);
-  font-size: 13px;
-  font-weight: var(--header-font-weight);
-  color: var(--description-color);
+  font-family: var(--header-font-family, system-ui);
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
 }
 
 .banner-modal-img {
   width: 100%;
-  max-width: 200px;
+  max-width: 180px;
   aspect-ratio: 1;
   object-fit: cover;
-  border-radius: calc(var(--button-border-radius) * 1.5);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* Decorative Divider */
+.banner-modal-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  margin-top: 32px;
+}
+
+.banner-divider-handle {
+  width: 22px;
+  height: 44px;
+  background: #ffffff;
+  border-radius: 11px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.banner-divider-handle span {
+  width: 5px;
+  height: 5px;
+  background: #d1d5db;
+  border-radius: 50%;
+}
+
+/* Modal Disclaimer */
+.banner-modal-disclaimer {
+  font-family: var(--body-font-family, system-ui);
+  font-size: 13px;
+  color: #9ca3af;
+  margin: 0;
+  text-align: center;
+}
+
+/* Modal Action Buttons */
+.banner-modal-actions {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  justify-content: center;
+  margin-top: 4px;
 }
 
 .banner-modal-btn {
-  margin-top: 4px;
+  flex: 1;
+  max-width: 200px;
+  padding: 14px 24px;
+  border-radius: var(--button-border-radius, 8px);
+  font-family: var(--body-font-family, system-ui);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.banner-modal-btn-secondary {
+  background: transparent;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.banner-modal-btn-secondary:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+}
+
+.banner-modal-btn-primary {
+  background: var(--button-color, #6b7280);
+  color: #ffffff;
+  border: none;
+}
+
+.banner-modal-btn-primary:hover {
+  filter: brightness(1.1);
 }
 
 /* Error Modal */
@@ -297,28 +407,74 @@
   .banner-description {
     font-size: calc(var(--description-font-size) * 0.9);
   }
+}
+
+@media (max-width: 540px) {
+  .banner-modal-overlay {
+    padding: 16px;
+    align-items: flex-end;
+  }
   
   .banner-modal {
-    padding: 24px 20px;
-    width: 92%;
+    width: 100%;
+    max-width: none;
+    border-radius: 24px 24px 0 0;
   }
   
-  .banner-modal-close {
-    top: 12px;
-    right: 12px;
-    width: 36px;
-    height: 36px;
-  }
-  
-  .banner-modal-comparison {
+  .banner-modal-content {
+    padding: 32px 24px 28px;
     gap: 16px;
   }
   
+  .banner-modal-title {
+    font-size: 20px;
+  }
+  
+  .banner-modal-subtitle {
+    font-size: 14px;
+  }
+  
+  .banner-modal-comparison-card {
+    padding: 16px;
+    border-radius: 12px;
+  }
+  
   .banner-modal-img {
-    max-width: 140px;
+    max-width: 130px;
+  }
+  
+  .banner-modal-close {
+    top: 16px;
+    right: 16px;
+    width: 32px;
+    height: 32px;
+  }
+  
+  .banner-modal-close svg {
+    width: 18px;
+    height: 18px;
   }
   
   .banner-modal-label {
     font-size: 11px;
+  }
+  
+  .banner-divider-handle {
+    width: 18px;
+    height: 36px;
+  }
+  
+  .banner-divider-handle span {
+    width: 4px;
+    height: 4px;
+  }
+  
+  .banner-modal-actions {
+    flex-direction: column;
+  }
+  
+  .banner-modal-btn {
+    max-width: none;
+    width: 100%;
   }
 }
