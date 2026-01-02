@@ -6,21 +6,13 @@
   
   assign product_id = product.id
   
-  # Colors - support "inherit" option
+  # Colors
   assign solid_button_color = block.settings.solid_button_color | default: '#8b5cf6'
   assign background_color = block.settings.background_color | default: '#ffffff'
   assign text_color = block.settings.text_color | default: '#1f2937'
   assign description_color = block.settings.description_color | default: '#6b7280'
   assign button_text_color = block.settings.button_text_color | default: '#ffffff'
   assign border_color = block.settings.border_color | default: '#e5e7eb'
-  
-  # Check for "inherit" color scheme
-  assign color_scheme = block.settings.color_scheme | default: 'custom'
-  if color_scheme == 'inherit'
-    assign solid_button_color = 'inherit'
-    assign background_color = 'transparent'
-    assign border_color = 'currentColor'
-  endif
   assign manual_shop_domain = block.settings.manual_shop_domain
   
   # Layout
@@ -432,17 +424,6 @@
     {
       "type": "header",
       "content": "Colors"
-    },
-    {
-      "type": "select",
-      "id": "color_scheme",
-      "label": "Color Scheme",
-      "default": "custom",
-      "options": [
-        { "value": "inherit", "label": "Inherit from theme" },
-        { "value": "custom", "label": "Custom colors" }
-      ],
-      "info": "Inherit uses your theme's button color"
     },
     {
       "type": "color",
