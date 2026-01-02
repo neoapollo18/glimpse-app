@@ -17,8 +17,7 @@
   # Check for "inherit" color scheme
   assign color_scheme = block.settings.color_scheme | default: 'custom'
   if color_scheme == 'inherit'
-    assign text_color = 'inherit'
-    assign description_color = 'inherit'
+    assign solid_button_color = 'inherit'
     assign background_color = 'transparent'
     assign border_color = 'currentColor'
   endif
@@ -440,10 +439,10 @@
       "label": "Color Scheme",
       "default": "custom",
       "options": [
-        { "value": "inherit", "label": "Inherit from theme (Recommended)" },
+        { "value": "inherit", "label": "Inherit from theme" },
         { "value": "custom", "label": "Custom colors" }
       ],
-      "info": "Inherit uses your theme's text and background colors"
+      "info": "Inherit uses your theme's button color"
     },
     {
       "type": "color",

@@ -31,7 +31,7 @@
   
   # Apply inherit scheme
   if color_scheme == 'inherit'
-    assign button_text_color = 'inherit'
+    assign solid_button_color = 'inherit'
     assign button_border_color = 'currentColor'
   endif
   assign image_border_radius = block.settings.image_border_radius | default: 8
@@ -311,10 +311,10 @@
       "label": "Color Scheme",
       "default": "custom",
       "options": [
-        { "value": "inherit", "label": "Inherit from theme (Recommended)" },
+        { "value": "inherit", "label": "Inherit from theme" },
         { "value": "custom", "label": "Custom colors" }
       ],
-      "info": "Inherit uses your theme's text colors for outlined style"
+      "info": "Inherit uses your theme's button color"
     },
     {
       "type": "color",

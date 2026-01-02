@@ -23,8 +23,7 @@
   
   # Apply inherit scheme
   if color_scheme == 'inherit'
-    assign title_color = 'inherit'
-    assign description_color = 'inherit'
+    assign button_color = 'inherit'
   endif
   
   # Layout
@@ -284,10 +283,10 @@
       "label": "Color Scheme",
       "default": "custom",
       "options": [
-        { "value": "inherit", "label": "Inherit from theme (Recommended)" },
+        { "value": "inherit", "label": "Inherit from theme" },
         { "value": "custom", "label": "Custom colors" }
       ],
-      "info": "Inherit uses your theme's text colors for title and description"
+      "info": "Inherit uses your theme's button color"
     },
     {
       "type": "color",
