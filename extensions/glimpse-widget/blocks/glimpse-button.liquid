@@ -19,7 +19,8 @@
   assign show_camera_icon = block.settings.show_camera_icon
   assign button_width = block.settings.button_width | default: 'auto'
   
-  # Colors
+  # Colors - support "inherit" option
+  assign color_scheme = block.settings.color_scheme | default: 'custom'
   assign solid_button_color = block.settings.solid_button_color | default: '#1f2937'
   assign button_text_color = block.settings.button_text_color | default: '#1f2937'
   assign button_border_color = block.settings.button_border_color | default: '#d1d5db'
@@ -27,6 +28,12 @@
   
   # Results styling
   assign results_background = block.settings.results_background | default: '#ffffff'
+  
+  # Apply inherit scheme
+  if color_scheme == 'inherit'
+    assign button_text_color = 'inherit'
+    assign button_border_color = 'currentColor'
+  endif
   assign image_border_radius = block.settings.image_border_radius | default: 8
   
   # Layout
@@ -297,6 +304,17 @@
     {
       "type": "header",
       "content": "Colors"
+    },
+    {
+      "type": "select",
+      "id": "color_scheme",
+      "label": "Color Scheme",
+      "default": "custom",
+      "options": [
+        { "value": "inherit", "label": "Inherit from theme (Recommended)" },
+        { "value": "custom", "label": "Custom colors" }
+      ],
+      "info": "Inherit uses your theme's text colors for outlined style"
     },
     {
       "type": "color",
