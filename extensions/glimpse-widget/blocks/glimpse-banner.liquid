@@ -174,53 +174,44 @@
   "stylesheet": "glimpse-banner.css",
   "settings": [
     {
-      "type": "header",
-      "content": "Content"
-    },
-    {
-      "type": "image_picker",
-      "id": "banner_image",
-      "label": "Banner Background Image"
-    },
-    {
-      "type": "text",
-      "id": "title_text",
-      "label": "Title",
-      "default": "VIRTUAL TRY-ON"
-    },
-    {
-      "type": "textarea",
-      "id": "description_text",
-      "label": "Description",
-      "default": "Upload your photo to see yourself in our products."
-    },
-    {
-      "type": "text",
-      "id": "button_text",
-      "label": "Button Text",
-      "default": "discover now"
-    },
-    {
       "type": "product",
       "id": "product",
       "label": "Product (optional)",
       "info": "Auto-detects on product pages. Only needed on homepage/collection pages."
     },
     {
-      "type": "checkbox",
-      "id": "show_disclaimer",
-      "label": "Show Disclaimer",
-      "default": true
+      "type": "header",
+      "content": "Configuration"
     },
     {
       "type": "text",
-      "id": "disclaimer_text",
-      "label": "Disclaimer Text",
-      "default": "Results are AI-generated previews. Images are never saved."
+      "id": "manual_shop_domain",
+      "label": "Shop Domain (Optional)",
+      "info": "Only needed if automatic domain detection fails"
     },
     {
       "type": "header",
-      "content": "Layout"
+      "content": "Banner Background"
+    },
+    {
+      "type": "image_picker",
+      "id": "banner_image",
+      "label": "Background Image"
+    },
+    {
+      "type": "color",
+      "id": "overlay_color",
+      "label": "Overlay Color",
+      "default": "#ffffff"
+    },
+    {
+      "type": "range",
+      "id": "overlay_opacity",
+      "label": "Overlay Opacity (%)",
+      "min": 0,
+      "max": 100,
+      "step": 5,
+      "default": 70
     },
     {
       "type": "range",
@@ -250,69 +241,20 @@
       "default": 600
     },
     {
-      "type": "range",
-      "id": "margin_top",
-      "label": "Margin Top (px)",
-      "min": 0,
-      "max": 100,
-      "step": 10,
-      "default": 0
-    },
-    {
-      "type": "range",
-      "id": "margin_bottom",
-      "label": "Margin Bottom (px)",
-      "min": 0,
-      "max": 100,
-      "step": 10,
-      "default": 0
-    },
-    {
       "type": "header",
-      "content": "Colors"
+      "content": "Title"
     },
     {
-      "type": "color",
-      "id": "overlay_color",
-      "label": "Overlay Color",
-      "default": "#ffffff"
-    },
-    {
-      "type": "range",
-      "id": "overlay_opacity",
-      "label": "Overlay Opacity (%)",
-      "min": 0,
-      "max": 100,
-      "step": 5,
-      "default": 70
+      "type": "text",
+      "id": "title_text",
+      "label": "Title Text",
+      "default": "VIRTUAL TRY-ON"
     },
     {
       "type": "color",
       "id": "title_color",
       "label": "Title Color",
       "default": "#1f2937"
-    },
-    {
-      "type": "color",
-      "id": "description_color",
-      "label": "Description Color",
-      "default": "#6b7280"
-    },
-    {
-      "type": "color",
-      "id": "button_color",
-      "label": "Button Color",
-      "default": "#8b5cf6"
-    },
-    {
-      "type": "color",
-      "id": "button_text_color",
-      "label": "Button Text Color",
-      "default": "#ffffff"
-    },
-    {
-      "type": "header",
-      "content": "Typography"
     },
     {
       "type": "range",
@@ -322,15 +264,6 @@
       "max": 60,
       "step": 2,
       "default": 36
-    },
-    {
-      "type": "range",
-      "id": "description_font_size",
-      "label": "Description Font Size (px)",
-      "min": 14,
-      "max": 24,
-      "step": 1,
-      "default": 18
     },
     {
       "type": "select",
@@ -364,9 +297,34 @@
       ]
     },
     {
+      "type": "header",
+      "content": "Description"
+    },
+    {
+      "type": "textarea",
+      "id": "description_text",
+      "label": "Description Text",
+      "default": "Upload your photo to see yourself in our products."
+    },
+    {
+      "type": "color",
+      "id": "description_color",
+      "label": "Description Color",
+      "default": "#6b7280"
+    },
+    {
+      "type": "range",
+      "id": "description_font_size",
+      "label": "Description Font Size (px)",
+      "min": 14,
+      "max": 24,
+      "step": 1,
+      "default": 18
+    },
+    {
       "type": "select",
       "id": "body_font_family",
-      "label": "Body Font",
+      "label": "Description Font",
       "default": "inherit",
       "options": [
         { "value": "inherit", "label": "Inherit from theme (Recommended)" },
@@ -382,7 +340,7 @@
     {
       "type": "select",
       "id": "body_font_weight",
-      "label": "Body Font Weight",
+      "label": "Description Font Weight",
       "default": "300",
       "options": [
         { "value": "inherit", "label": "Inherit from theme" },
@@ -396,6 +354,12 @@
     {
       "type": "header",
       "content": "Button"
+    },
+    {
+      "type": "text",
+      "id": "button_text",
+      "label": "Button Text",
+      "default": "discover now"
     },
     {
       "type": "select",
@@ -417,14 +381,54 @@
       "default": 8
     },
     {
+      "type": "color",
+      "id": "button_color",
+      "label": "Button Fill Color",
+      "default": "#8b5cf6"
+    },
+    {
+      "type": "color",
+      "id": "button_text_color",
+      "label": "Button Text Color",
+      "default": "#ffffff"
+    },
+    {
       "type": "header",
-      "content": "Advanced"
+      "content": "Disclaimer"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_disclaimer",
+      "label": "Show Disclaimer",
+      "default": true
     },
     {
       "type": "text",
-      "id": "manual_shop_domain",
-      "label": "Manual Shop Domain (optional)",
-      "info": "Only needed if automatic domain detection fails"
+      "id": "disclaimer_text",
+      "label": "Disclaimer Text",
+      "default": "Results are AI-generated previews. Images are never saved."
+    },
+    {
+      "type": "header",
+      "content": "Widget Layout"
+    },
+    {
+      "type": "range",
+      "id": "margin_top",
+      "label": "Margin Top (px)",
+      "min": 0,
+      "max": 100,
+      "step": 10,
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "margin_bottom",
+      "label": "Margin Bottom (px)",
+      "min": 0,
+      "max": 100,
+      "step": 10,
+      "default": 0
     }
   ]
 }

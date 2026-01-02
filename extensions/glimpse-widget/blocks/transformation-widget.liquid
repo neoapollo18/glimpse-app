@@ -252,23 +252,133 @@
       "id": "manual_shop_domain",
       "label": "Shop Domain (Optional)",
       "placeholder": "shop123.myshopify.com",
-      "info": "If you're using a custom domain and experiencing issues, manually enter your .myshopify.com domain here. This ensures proper connection to the transformation service."
+      "info": "If you're using a custom domain and experiencing issues, manually enter your .myshopify.com domain here."
     },
     {
       "type": "header",
-      "content": "Widget Content"
+      "content": "Title"
     },
     {
       "type": "text",
       "id": "widget_title",
-      "label": "Widget Title",
+      "label": "Title Text",
       "default": "See My Glowup!"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Title Color",
+      "default": "#1f2937",
+      "info": "Main text color for titles"
+    },
+    {
+      "type": "range",
+      "id": "title_font_size",
+      "label": "Title Font Size (px)",
+      "min": 12,
+      "max": 48,
+      "step": 2,
+      "default": 24,
+      "info": "Size of the widget title text"
+    },
+    {
+      "type": "select",
+      "id": "header_font_family",
+      "label": "Title Font Family",
+      "default": "inherit",
+      "options": [
+        { "value": "inherit", "label": "Inherit from page (Recommended)" },
+        { "value": "system-ui, sans-serif", "label": "System Default" },
+        { "value": "Helvetica, Arial, sans-serif", "label": "Helvetica" },
+        { "value": "Georgia, serif", "label": "Georgia (Serif)" },
+        { "value": "Inter, sans-serif", "label": "Inter (Modern)" },
+        { "value": "Prompt, sans-serif", "label": "Prompt Black" },
+        { "value": "Sonus-Medium, sans-serif", "label": "Sonus Medium" },
+        { "value": "serif", "label": "Elegant Serif" }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "header_font_weight",
+      "label": "Title Font Weight",
+      "default": "700",
+      "options": [
+        { "value": "inherit", "label": "Inherit from page" },
+        { "value": "300", "label": "Light (300)" },
+        { "value": "400", "label": "Normal (400)" },
+        { "value": "500", "label": "Medium (500)" },
+        { "value": "600", "label": "Semi-bold (600)" },
+        { "value": "700", "label": "Bold (700)" },
+        { "value": "800", "label": "Extra Bold (800)" }
+      ]
+    },
+    {
+      "type": "header",
+      "content": "Description"
     },
     {
       "type": "textarea",
       "id": "widget_description",
-      "label": "Widget Description",
+      "label": "Description Text",
       "default": "Upload an image of yourself and see your transformation"
+    },
+    {
+      "type": "color",
+      "id": "caption_color_1",
+      "label": "Description Color 1 (Start)",
+      "default": "#6b7280",
+      "info": "First color for caption text gradient"
+    },
+    {
+      "type": "color",
+      "id": "caption_color_2",
+      "label": "Description Color 2 (End)",
+      "default": "#9ca3af",
+      "info": "Second color for caption text gradient"
+    },
+    {
+      "type": "range",
+      "id": "description_font_size",
+      "label": "Description Font Size (px)",
+      "min": 10,
+      "max": 24,
+      "step": 1,
+      "default": 16,
+      "info": "Size of the description text"
+    },
+    {
+      "type": "select",
+      "id": "body_font_family",
+      "label": "Description Font Family",
+      "default": "inherit",
+      "options": [
+        { "value": "inherit", "label": "Inherit from page (Recommended)" },
+        { "value": "system-ui, sans-serif", "label": "System Default" },
+        { "value": "Helvetica, Arial, sans-serif", "label": "Helvetica" },
+        { "value": "Georgia, serif", "label": "Georgia (Serif)" },
+        { "value": "Inter, sans-serif", "label": "Inter (Modern)" },
+        { "value": "Prompt, sans-serif", "label": "Prompt Black" },
+        { "value": "Sonus-Medium, sans-serif", "label": "Sonus Medium" },
+        { "value": "serif", "label": "Elegant Serif" }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "body_font_weight",
+      "label": "Description Font Weight",
+      "default": "inherit",
+      "options": [
+        { "value": "inherit", "label": "Inherit from page" },
+        { "value": "300", "label": "Light (300)" },
+        { "value": "400", "label": "Normal (400)" },
+        { "value": "500", "label": "Medium (500)" },
+        { "value": "600", "label": "Semi-bold (600)" },
+        { "value": "700", "label": "Bold (700)" }
+      ]
+    },
+    {
+      "type": "header",
+      "content": "Button"
     },
     {
       "type": "text",
@@ -277,11 +387,25 @@
       "default": "Take A Photo"
     },
     {
-      "type": "textarea",
-      "id": "disclaimer_text",
-      "label": "Disclaimer Text",
-      "default": "Results are not guaranteed, just a generated image. Images are never saved.",
-      "info": "Text shown at the bottom of the widget"
+      "type": "color",
+      "id": "primary_color_1",
+      "label": "Button Color 1 (Start)",
+      "default": "#8b5cf6",
+      "info": "First color for button gradient"
+    },
+    {
+      "type": "color",
+      "id": "primary_color_2",
+      "label": "Button Color 2 (End)",
+      "default": "#7c3aed",
+      "info": "Second color for button gradient"
+    },
+    {
+      "type": "color",
+      "id": "button_text_color",
+      "label": "Button Text Color",
+      "default": "#ffffff",
+      "info": "Text color for buttons"
     },
     {
       "type": "header",
@@ -295,7 +419,25 @@
     },
     {
       "type": "header",
-      "content": "Colors & Styling"
+      "content": "Disclaimer"
+    },
+    {
+      "type": "textarea",
+      "id": "disclaimer_text",
+      "label": "Disclaimer Text",
+      "default": "Results are not guaranteed, just a generated image. Images are never saved.",
+      "info": "Text shown at the bottom of the widget"
+    },
+    {
+      "type": "color",
+      "id": "icon_color",
+      "label": "Info Icon Color",
+      "default": "#8b5cf6",
+      "info": "Color for star and other icons"
+    },
+    {
+      "type": "header",
+      "content": "Widget Container"
     },
     {
       "type": "checkbox",
@@ -306,63 +448,20 @@
     },
     {
       "type": "color",
-      "id": "primary_color_1",
-      "label": "Primary Color 1 (Start)",
-      "default": "#8b5cf6",
-      "info": "First color for primary gradient"
-    },
-    {
-      "type": "color",
-      "id": "primary_color_2",
-      "label": "Primary Color 2 (End)",
-      "default": "#7c3aed",
-      "info": "Second color for primary gradient"
-    },
-    {
-      "type": "color",
-      "id": "caption_color_1",
-      "label": "Caption Color 1 (Start)",
-      "default": "#6b7280",
-      "info": "First color for caption text gradient"
-    },
-    {
-      "type": "color",
-      "id": "caption_color_2",
-      "label": "Caption Color 2 (End)",
-      "default": "#9ca3af",
-      "info": "Second color for caption text gradient"
-    },
-    {
-      "type": "color",
-      "id": "icon_color",
-      "label": "Icon Color",
-      "default": "#8b5cf6",
-      "info": "Color for star and other icons"
-    },
-    {
-      "type": "color",
       "id": "background_color",
       "label": "Widget Background",
       "default": "#ffffff",
       "info": "Background color of the entire widget"
     },
     {
-      "type": "color",
-      "id": "text_color",
-      "label": "Text Color",
-      "default": "#1f2937",
-      "info": "Main text color for titles"
-    },
-    {
-      "type": "color",
-      "id": "button_text_color",
-      "label": "Button Text Color",
-      "default": "#ffffff",
-      "info": "Text color for buttons (upload, add to cart, etc.)"
-    },
-    {
-      "type": "header",
-      "content": "Layout"
+      "type": "range",
+      "id": "widget_border_radius",
+      "label": "Widget Corner Radius (px)",
+      "min": 0,
+      "max": 40,
+      "step": 2,
+      "default": 16,
+      "info": "Roundness of the entire widget container corners (0 = square, 40 = very rounded)"
     },
     {
       "type": "range",
@@ -383,192 +482,6 @@
       "step": 5,
       "default": 20,
       "info": "Space below the widget"
-    },
-    {
-      "type": "range",
-      "id": "title_font_size",
-      "label": "Title Font Size (px)",
-      "min": 12,
-      "max": 48,
-      "step": 2,
-      "default": 24,
-      "info": "Size of the widget title text"
-    },
-    {
-      "type": "range",
-      "id": "description_font_size",
-      "label": "Description Font Size (px)",
-      "min": 10,
-      "max": 24,
-      "step": 1,
-      "default": 16,
-      "info": "Size of the description text"
-    },
-    {
-      "type": "range",
-      "id": "widget_border_radius",
-      "label": "Widget Corner Radius (px)",
-      "min": 0,
-      "max": 40,
-      "step": 2,
-      "default": 16,
-      "info": "Roundness of the entire widget container corners (0 = square, 40 = very rounded)"
-    },
-    {
-      "type": "header",
-      "content": "Typography"
-    },
-    {
-      "type": "select",
-      "id": "header_font_family",
-      "label": "Header/Title Font Family",
-      "default": "inherit",
-      "options": [
-        {
-          "value": "inherit",
-          "label": "Inherit from page (Recommended)"
-        },
-        {
-          "value": "system-ui, sans-serif",
-          "label": "System Default"
-        },
-        {
-          "value": "Helvetica, Arial, sans-serif",
-          "label": "Helvetica"
-        },
-        {
-          "value": "Georgia, serif",
-          "label": "Georgia (Serif)"
-        },
-        {
-          "value": "Inter, sans-serif",
-          "label": "Inter (Modern)"
-        },
-        {
-          "value": "Prompt, sans-serif",
-          "label": "Prompt Black"
-        },
-        {
-          "value": "Sonus-Medium, sans-serif",
-          "label": "Sonus Medium"
-        },
-        {
-          "value": "serif",
-          "label": "Elegant Serif"
-        }
-      ],
-      "info": "Font for widget title and headings. Separate control allows for typography hierarchy."
-    },
-    {
-      "type": "select",
-      "id": "header_font_weight",
-      "label": "Header/Title Font Weight",
-      "default": "700",
-      "options": [
-        {
-          "value": "inherit",
-          "label": "Inherit from page"
-        },
-        {
-          "value": "300",
-          "label": "Light (300)"
-        },
-        {
-          "value": "400",
-          "label": "Normal (400)"
-        },
-        {
-          "value": "500",
-          "label": "Medium (500)"
-        },
-        {
-          "value": "600",
-          "label": "Semi-bold (600)"
-        },
-        {
-          "value": "700",
-          "label": "Bold (700)"
-        },
-        {
-          "value": "800",
-          "label": "Extra Bold (800)"
-        }
-      ],
-      "info": "Weight for widget title and headings"
-    },
-    {
-      "type": "select",
-      "id": "body_font_family",
-      "label": "Body Text Font Family",
-      "default": "inherit",
-      "options": [
-        {
-          "value": "inherit",
-          "label": "Inherit from page (Recommended)"
-        },
-        {
-          "value": "system-ui, sans-serif",
-          "label": "System Default"
-        },
-        {
-          "value": "Helvetica, Arial, sans-serif",
-          "label": "Helvetica"
-        },
-        {
-          "value": "Georgia, serif",
-          "label": "Georgia (Serif)"
-        },
-        {
-          "value": "Inter, sans-serif",
-          "label": "Inter (Modern)"
-        },
-        {
-          "value": "Prompt, sans-serif",
-          "label": "Prompt Black"
-        },
-        {
-          "value": "Sonus-Medium, sans-serif",
-          "label": "Sonus Medium"
-        },
-        {
-          "value": "serif",
-          "label": "Elegant Serif"
-        }
-      ],
-      "info": "Font for descriptions, buttons, and body text"
-    },
-    {
-      "type": "select",
-      "id": "body_font_weight",
-      "label": "Body Text Font Weight",
-      "default": "inherit",
-      "options": [
-        {
-          "value": "inherit",
-          "label": "Inherit from page"
-        },
-        {
-          "value": "300",
-          "label": "Light (300)"
-        },
-        {
-          "value": "400",
-          "label": "Normal (400)"
-        },
-        {
-          "value": "500",
-          "label": "Medium (500)"
-        },
-        {
-          "value": "600",
-          "label": "Semi-bold (600)"
-        },
-        {
-          "value": "700",
-          "label": "Bold (700)"
-        }
-      ],
-      "info": "Weight for descriptions, buttons, and body text"
     }
   ]
 }

@@ -272,19 +272,118 @@
     },
     {
       "type": "header",
-      "content": "Widget Content"
+      "content": "Title"
     },
     {
       "type": "text",
       "id": "widget_title",
-      "label": "Widget Title",
+      "label": "Title Text",
       "default": "Try It Virtually"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Title Color",
+      "default": "#1f2937"
+    },
+    {
+      "type": "range",
+      "id": "title_font_size",
+      "label": "Title Font Size (px)",
+      "min": 16,
+      "max": 40,
+      "step": 2,
+      "default": 24
+    },
+    {
+      "type": "select",
+      "id": "header_font_family",
+      "label": "Title Font",
+      "default": "inherit",
+      "options": [
+        { "value": "inherit", "label": "Inherit from theme (Recommended)" },
+        { "value": "system-ui, sans-serif", "label": "System Default" },
+        { "value": "Helvetica, Arial, sans-serif", "label": "Helvetica" },
+        { "value": "Georgia, serif", "label": "Georgia (Serif)" },
+        { "value": "Inter, sans-serif", "label": "Inter (Modern)" },
+        { "value": "Prompt, sans-serif", "label": "Prompt" },
+        { "value": "Sonus-Medium, sans-serif", "label": "Sonus Medium" },
+        { "value": "serif", "label": "Elegant Serif" }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "header_font_weight",
+      "label": "Title Font Weight",
+      "default": "500",
+      "options": [
+        { "value": "inherit", "label": "Inherit from theme" },
+        { "value": "300", "label": "Light (300)" },
+        { "value": "400", "label": "Normal (400)" },
+        { "value": "500", "label": "Medium (500)" },
+        { "value": "600", "label": "Semi-bold (600)" },
+        { "value": "700", "label": "Bold (700)" },
+        { "value": "800", "label": "Extra Bold (800)" }
+      ]
+    },
+    {
+      "type": "header",
+      "content": "Description"
     },
     {
       "type": "textarea",
       "id": "widget_description",
-      "label": "Widget Description",
+      "label": "Description Text",
       "default": "Upload an image of yourself and see your transformation"
+    },
+    {
+      "type": "color",
+      "id": "description_color",
+      "label": "Description Color",
+      "default": "#6b7280"
+    },
+    {
+      "type": "range",
+      "id": "description_font_size",
+      "label": "Description Font Size (px)",
+      "min": 12,
+      "max": 20,
+      "step": 1,
+      "default": 16
+    },
+    {
+      "type": "select",
+      "id": "body_font_family",
+      "label": "Description Font",
+      "default": "inherit",
+      "options": [
+        { "value": "inherit", "label": "Inherit from theme (Recommended)" },
+        { "value": "system-ui, sans-serif", "label": "System Default" },
+        { "value": "Helvetica, Arial, sans-serif", "label": "Helvetica" },
+        { "value": "Georgia, serif", "label": "Georgia (Serif)" },
+        { "value": "Inter, sans-serif", "label": "Inter (Modern)" },
+        { "value": "Prompt, sans-serif", "label": "Prompt" },
+        { "value": "Sonus-Medium, sans-serif", "label": "Sonus Medium" },
+        { "value": "serif", "label": "Elegant Serif" }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "body_font_weight",
+      "label": "Description Font Weight",
+      "default": "300",
+      "options": [
+        { "value": "inherit", "label": "Inherit from theme" },
+        { "value": "300", "label": "Light (300)" },
+        { "value": "400", "label": "Normal (400)" },
+        { "value": "500", "label": "Medium (500)" },
+        { "value": "600", "label": "Semi-bold (600)" },
+        { "value": "700", "label": "Bold (700)" }
+      ]
+    },
+    {
+      "type": "header",
+      "content": "Button"
     },
     {
       "type": "text",
@@ -293,10 +392,71 @@
       "default": "Upload a Photo"
     },
     {
-      "type": "textarea",
-      "id": "disclaimer_text",
-      "label": "Disclaimer Text",
-      "default": "Results are never guaranteed, just a generated image. Images are never saved."
+      "type": "select",
+      "id": "button_style",
+      "label": "Button Style",
+      "default": "solid",
+      "options": [
+        { "value": "solid", "label": "Solid Filled" },
+        { "value": "outlined", "label": "Outlined" }
+      ],
+      "info": "Choose the button appearance style"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_camera_icon",
+      "label": "Show Camera Icon",
+      "default": true,
+      "info": "Display camera icon in the upload button"
+    },
+    {
+      "type": "range",
+      "id": "button_border_radius",
+      "label": "Button Corner Radius (px)",
+      "min": 0,
+      "max": 50,
+      "step": 2,
+      "default": 12,
+      "info": "0 = square corners, 50 = pill shape"
+    },
+    {
+      "type": "color",
+      "id": "solid_button_color",
+      "label": "Button Fill Color",
+      "default": "#8b5cf6",
+      "info": "Background color for solid-style button"
+    },
+    {
+      "type": "color",
+      "id": "button_text_color",
+      "label": "Button Text Color",
+      "default": "#ffffff",
+      "info": "Text color inside buttons"
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_button_border",
+      "label": "Enable Button Border",
+      "default": false
+    },
+    {
+      "type": "color",
+      "id": "button_border_color",
+      "label": "Button Border Color",
+      "default": "#1f2937"
+    },
+    {
+      "type": "range",
+      "id": "button_border_width",
+      "label": "Button Border Width (px)",
+      "min": 1,
+      "max": 5,
+      "step": 1,
+      "default": 2
+    },
+    {
+      "type": "header",
+      "content": "Placeholder Images"
     },
     {
       "type": "image_picker",
@@ -325,65 +485,6 @@
       "step": 5,
       "default": 100,
       "info": "Adjust the height of the placeholder area"
-    },
-    {
-      "type": "header",
-      "content": "Button Styling"
-    },
-    {
-      "type": "select",
-      "id": "button_style",
-      "label": "Button Style",
-      "default": "solid",
-      "options": [
-        {
-          "value": "solid",
-          "label": "Solid Filled"
-        },
-        {
-          "value": "outlined",
-          "label": "Outlined"
-        }
-      ],
-      "info": "Choose the button appearance style"
-    },
-    {
-      "type": "range",
-      "id": "button_border_radius",
-      "label": "Button Corner Radius (px)",
-      "min": 0,
-      "max": 50,
-      "step": 2,
-      "default": 12,
-      "info": "0 = square corners, 50 = pill shape"
-    },
-    {
-      "type": "checkbox",
-      "id": "show_camera_icon",
-      "label": "Show Camera Icon",
-      "default": true,
-      "info": "Display camera icon in the upload button"
-    },
-    {
-      "type": "checkbox",
-      "id": "enable_button_border",
-      "label": "Enable Button Border",
-      "default": false
-    },
-    {
-      "type": "color",
-      "id": "button_border_color",
-      "label": "Button Border Color",
-      "default": "#1f2937"
-    },
-    {
-      "type": "range",
-      "id": "button_border_width",
-      "label": "Button Border Width (px)",
-      "min": 1,
-      "max": 5,
-      "step": 1,
-      "default": 2
     },
     {
       "type": "checkbox",
@@ -418,21 +519,24 @@
     },
     {
       "type": "header",
-      "content": "Colors"
+      "content": "Disclaimer"
     },
     {
-      "type": "color",
-      "id": "solid_button_color",
-      "label": "Button Fill Color",
-      "default": "#8b5cf6",
-      "info": "Background color for solid-style button"
+      "type": "textarea",
+      "id": "disclaimer_text",
+      "label": "Disclaimer Text",
+      "default": "Results are never guaranteed, just a generated image. Images are never saved."
     },
     {
-      "type": "color",
-      "id": "button_text_color",
-      "label": "Button Text Color",
-      "default": "#ffffff",
-      "info": "Text color inside buttons"
+      "type": "header",
+      "content": "Widget Container"
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_container",
+      "label": "Enable Container Card",
+      "default": false,
+      "info": "When disabled, widget floats without card background"
     },
     {
       "type": "color",
@@ -442,33 +546,10 @@
     },
     {
       "type": "color",
-      "id": "text_color",
-      "label": "Title Color",
-      "default": "#1f2937"
-    },
-    {
-      "type": "color",
-      "id": "description_color",
-      "label": "Description Color",
-      "default": "#6b7280"
-    },
-    {
-      "type": "color",
       "id": "border_color",
-      "label": "Border Color",
+      "label": "Widget Border Color",
       "default": "#e5e7eb",
       "info": "Used for widget border and outlined button"
-    },
-    {
-      "type": "header",
-      "content": "Layout"
-    },
-    {
-      "type": "checkbox",
-      "id": "enable_container",
-      "label": "Enable Container Card",
-      "default": false,
-      "info": "When disabled, widget floats without card background"
     },
     {
       "type": "range",
@@ -496,89 +577,6 @@
       "max": 100,
       "step": 5,
       "default": 20
-    },
-    {
-      "type": "header",
-      "content": "Typography"
-    },
-    {
-      "type": "range",
-      "id": "title_font_size",
-      "label": "Title Font Size (px)",
-      "min": 16,
-      "max": 40,
-      "step": 2,
-      "default": 24
-    },
-    {
-      "type": "range",
-      "id": "description_font_size",
-      "label": "Description Font Size (px)",
-      "min": 12,
-      "max": 20,
-      "step": 1,
-      "default": 16
-    },
-    {
-      "type": "select",
-      "id": "header_font_family",
-      "label": "Title Font",
-      "default": "inherit",
-      "options": [
-        { "value": "inherit", "label": "Inherit from theme (Recommended)" },
-        { "value": "system-ui, sans-serif", "label": "System Default" },
-        { "value": "Helvetica, Arial, sans-serif", "label": "Helvetica" },
-        { "value": "Georgia, serif", "label": "Georgia (Serif)" },
-        { "value": "Inter, sans-serif", "label": "Inter (Modern)" },
-        { "value": "Prompt, sans-serif", "label": "Prompt" },
-        { "value": "Sonus-Medium, sans-serif", "label": "Sonus Medium" },
-        { "value": "serif", "label": "Elegant Serif" }
-      ]
-    },
-    {
-      "type": "select",
-      "id": "header_font_weight",
-      "label": "Title Font Weight",
-      "default": "500",
-      "options": [
-        { "value": "inherit", "label": "Inherit from theme" },
-        { "value": "300", "label": "Light (300)" },
-        { "value": "400", "label": "Normal (400)" },
-        { "value": "500", "label": "Medium (500)" },
-        { "value": "600", "label": "Semi-bold (600)" },
-        { "value": "700", "label": "Bold (700)" },
-        { "value": "800", "label": "Extra Bold (800)" }
-      ]
-    },
-    {
-      "type": "select",
-      "id": "body_font_family",
-      "label": "Body Font",
-      "default": "inherit",
-      "options": [
-        { "value": "inherit", "label": "Inherit from theme (Recommended)" },
-        { "value": "system-ui, sans-serif", "label": "System Default" },
-        { "value": "Helvetica, Arial, sans-serif", "label": "Helvetica" },
-        { "value": "Georgia, serif", "label": "Georgia (Serif)" },
-        { "value": "Inter, sans-serif", "label": "Inter (Modern)" },
-        { "value": "Prompt, sans-serif", "label": "Prompt" },
-        { "value": "Sonus-Medium, sans-serif", "label": "Sonus Medium" },
-        { "value": "serif", "label": "Elegant Serif" }
-      ]
-    },
-    {
-      "type": "select",
-      "id": "body_font_weight",
-      "label": "Body Font Weight",
-      "default": "300",
-      "options": [
-        { "value": "inherit", "label": "Inherit from theme" },
-        { "value": "300", "label": "Light (300)" },
-        { "value": "400", "label": "Normal (400)" },
-        { "value": "500", "label": "Medium (500)" },
-        { "value": "600", "label": "Semi-bold (600)" },
-        { "value": "700", "label": "Bold (700)" }
-      ]
     }
   ]
 }
