@@ -332,35 +332,36 @@
 
 .banner-modal-btn {
   flex: 1;
-  max-width: 200px;
-  padding: 14px 24px;
-  border-radius: var(--button-border-radius, 8px);
+  max-width: 220px;
+  padding: 14px 28px;
+  border-radius: 50px;
   font-family: var(--body-font-family, system-ui);
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 15px;
+  font-weight: 400;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .banner-modal-btn-secondary {
-  background: transparent;
+  background: #ffffff;
   color: #374151;
-  border: 1px solid #d1d5db;
+  border: 1px solid #e5e7eb;
 }
 
 .banner-modal-btn-secondary:hover {
   background: #f9fafb;
-  border-color: #9ca3af;
+  border-color: #d1d5db;
 }
 
 .banner-modal-btn-primary {
   background: #e5e7eb;
   color: #374151;
-  border: none;
+  border: 1px solid #d1d5db;
 }
 
 .banner-modal-btn-primary:hover {
   background: #d1d5db;
+  border-color: #c4c9cf;
 }
 
 /* Error Modal */
