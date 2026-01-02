@@ -281,7 +281,7 @@
   flex: 1;
   max-width: 220px;
   padding: 14px 28px;
-  border-radius: 8px;
+  border-radius: 5px;
   font-size: 15px;
   font-weight: 400;
   cursor: pointer;
@@ -301,14 +301,14 @@
 }
 
 .modal-btn-primary {
-  background: #e5e7eb;
+  background: #EBF0F1;
   color: #374151;
-  border: 1px solid #d1d5db;
+  border: 1px solid #D1D5DB;
 }
 
 .modal-btn-primary:hover {
-  background: #d1d5db;
-  border-color: #c4c9cf;
+  background: #e5e7eb;
+  border-color: #d1d5db;
 }
 
 /* Error Modal */
