@@ -116,12 +116,37 @@
       {% if show_placeholder %}
         <div class="integrated-placeholder" onclick="window.widgetFunctions.triggerFileInput()">
           {% if block.settings.placeholder_image %}
+            <!-- Single combined before/after image -->
             <img src="{{ block.settings.placeholder_image | image_url: width: 600 }}" 
                  alt="Transformation preview" 
                  class="integrated-placeholder-image"
                  width="600"
                  height="300"
                  loading="lazy">
+          {% elsif block.settings.placeholder_before_image or block.settings.placeholder_after_image %}
+            <!-- Separate before/after images -->
+            <div class="integrated-default-placeholder">
+              <div class="placeholder-side placeholder-before-side">
+                {% if block.settings.placeholder_before_image %}
+                  <img src="{{ block.settings.placeholder_before_image | image_url: width: 300 }}" 
+                       alt="Before" 
+                       class="placeholder-side-image"
+                       loading="lazy">
+                {% else %}
+                  <div class="placeholder-silhouette"></div>
+                {% endif %}
+              </div>
+              <div class="placeholder-side placeholder-after-side">
+                {% if block.settings.placeholder_after_image %}
+                  <img src="{{ block.settings.placeholder_after_image | image_url: width: 300 }}" 
+                       alt="After" 
+                       class="placeholder-side-image"
+                       loading="lazy">
+                {% else %}
+                  <div class="placeholder-silhouette placeholder-silhouette-glow"></div>
+                {% endif %}
+              </div>
+            </div>
           {% else %}
             <!-- Default side-by-side placeholder -->
             <div class="integrated-default-placeholder">
@@ -281,8 +306,20 @@
     {
       "type": "image_picker",
       "id": "placeholder_image",
-      "label": "Custom Before/After Image",
-      "info": "Upload a custom before/after preview image (recommended: 600x300px)"
+      "label": "Custom Combined Image",
+      "info": "Upload a single before/after preview image (recommended: 600x300px). Takes priority over separate images."
+    },
+    {
+      "type": "image_picker",
+      "id": "placeholder_before_image",
+      "label": "Before Image (Left Side)",
+      "info": "Upload a separate 'before' image for the left side"
+    },
+    {
+      "type": "image_picker",
+      "id": "placeholder_after_image",
+      "label": "After Image (Right Side)",
+      "info": "Upload a separate 'after' image for the right side"
     },
     {
       "type": "range",
