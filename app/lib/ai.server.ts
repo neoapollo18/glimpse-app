@@ -33,7 +33,7 @@ async function convertHeicToJpeg(inputBuffer: Buffer): Promise<Buffer> {
       quality: 0.92
     });
     console.log('HEIC converted to JPEG successfully');
-    return Buffer.from(outputBuffer);
+    return Buffer.from(new Uint8Array(outputBuffer));
   } catch (error) {
     console.error('HEIC conversion failed:', error);
     throw error;
@@ -59,7 +59,7 @@ async function compressImage(base64Image: string, mimeType: string): Promise<{
 }> {
   try {
     // Convert base64 to buffer
-    let inputBuffer = Buffer.from(base64Image, 'base64');
+    let inputBuffer: Buffer = Buffer.from(base64Image, 'base64');
     const originalSize = inputBuffer.length;
     
     // Check if it's HEIC and convert first (Sharp doesn't support HEIC on all platforms)
