@@ -6,10 +6,15 @@ const client = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
 });
 
+// Model constants
+export const GEMINI_MODEL_PRO = "gemini-3-pro-image-preview"; // For products with variant configs (makeup)
+export const GEMINI_MODEL_FLASH = "gemini-2.5-flash-image";   // For products without variant configs (skincare)
+
 interface ImageTransformationRequest {
   inputImage: string; // base64 encoded image
   transformationPrompt: string;
   mimeType: string;
+  model?: string; // Optional: defaults to FLASH model
 }
 
 interface ImageTransformationResponse {
@@ -104,8 +109,10 @@ async function compressImage(base64Image: string, mimeType: string): Promise<{
 }
 
 // Call Gemini API with retry logic
-async function callGeminiWithRetry(prompt: any[], maxRetries: number = 2): Promise<string> {
+async function callGeminiWithRetry(prompt: any[], model: string = GEMINI_MODEL_FLASH, maxRetries: number = 2): Promise<string> {
   let lastError: Error | null = null;
+  
+  console.log(`Using Gemini model: ${model}`);
   
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
@@ -115,7 +122,7 @@ async function callGeminiWithRetry(prompt: any[], maxRetries: number = 2): Promi
       }
       
       const response = await client.models.generateContent({
-        model: "gemini-2.5-flash-image-preview",
+        model: model,
         contents: prompt,
       });
 
@@ -176,7 +183,9 @@ export async function transformImage(
       }
     ]
 
-    const generatedImageData = await callGeminiWithRetry(prompt);
+    // Use specified model or default to FLASH
+    const modelToUse = request.model || GEMINI_MODEL_FLASH;
+    const generatedImageData = await callGeminiWithRetry(prompt, modelToUse);
 
     return {
       success: true,

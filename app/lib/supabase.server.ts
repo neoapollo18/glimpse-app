@@ -737,4 +737,33 @@ export async function getProductVariants(productId: string) {
     console.error('Error in getProductVariants:', error);
     return [];
   }
+}
+
+/**
+ * Check if a product has any configured variants in the database
+ * Used to determine which AI model to use (Pro for products with variant configs, Flash otherwise)
+ * @param productId - Internal product ID from products table (UUID)
+ * @returns true if product has at least one variant configuration
+ */
+export async function productHasVariantConfigs(productId: string): Promise<boolean> {
+  console.log('Checking if product has variant configs:', productId);
+  
+  try {
+    const { count, error } = await supabase
+      .from('product_variants')
+      .select('id', { count: 'exact', head: true })
+      .eq('product_id', productId);
+    
+    if (error) {
+      console.error('Error checking variant configs:', error);
+      return false;
+    }
+    
+    const hasVariants = (count || 0) > 0;
+    console.log(`Product ${productId} has variant configs: ${hasVariants}`);
+    return hasVariants;
+  } catch (error) {
+    console.error('Error in productHasVariantConfigs:', error);
+    return false;
+  }
 } 

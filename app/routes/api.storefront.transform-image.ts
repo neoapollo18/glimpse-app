@@ -1,7 +1,7 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { transformImage } from "../lib/ai.server";
-import { getProductOrVariantConfiguration, trackTransformationEvent } from "../lib/supabase.server";
+import { transformImage, GEMINI_MODEL_PRO, GEMINI_MODEL_FLASH } from "../lib/ai.server";
+import { getProductOrVariantConfiguration, trackTransformationEvent, productHasVariantConfigs } from "../lib/supabase.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   try {
@@ -127,11 +127,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const arrayBuffer = await imageFile.arrayBuffer();
     const base64Image = Buffer.from(arrayBuffer).toString('base64');
 
-    // Call OpenAI API with the product's transformation prompt
+    // Determine which model to use based on whether product has variant configs
+    // Products with variant configs (makeup) use Pro model, others (skincare) use Flash
+    const hasVariantConfigs = await productHasVariantConfigs(productConfig.id);
+    const modelToUse = hasVariantConfigs ? GEMINI_MODEL_PRO : GEMINI_MODEL_FLASH;
+    console.log(`Model selection: hasVariantConfigs=${hasVariantConfigs}, using ${modelToUse}`);
+
+    // Call Gemini API with the product's transformation prompt and selected model
     const result = await transformImage({
       inputImage: base64Image,
       transformationPrompt: productConfig.transformation_prompt,
       mimeType: imageFile.type,
+      model: modelToUse,
     });
 
     if (!result.success) {

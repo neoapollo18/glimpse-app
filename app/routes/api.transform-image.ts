@@ -64,7 +64,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const arrayBuffer = await imageFile.arrayBuffer();
     const base64Image = Buffer.from(arrayBuffer).toString('base64');
 
-    // Call OpenAI API
+    // Call Gemini API (admin uses default FLASH model)
     const result = await transformImage({
       inputImage: base64Image,
       transformationPrompt: transformationPrompt,
