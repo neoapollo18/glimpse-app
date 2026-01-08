@@ -1,5 +1,5 @@
-// Glimpse Button Widget JavaScript v2.0
-console.log('Glimpse Button Widget v2.0 loaded');
+// Gleame Button Widget JavaScript v2.0
+console.log('Gleame Button Widget v2.0 loaded');
 
 (function() {
   window.glimpseButton = window.glimpseButton || {};
@@ -84,7 +84,7 @@ console.log('Glimpse Button Widget v2.0 loaded');
     
     setupVariantListeners();
     
-    console.log('Glimpse Button initialized:', {
+    console.log('Gleame Button initialized:', {
       productId: currentProductId,
       shopDomain: currentShopDomain,
       variantId: currentVariantId

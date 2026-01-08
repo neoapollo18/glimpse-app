@@ -1,5 +1,5 @@
 /**
- * Glimpse AI Widget - Standalone Embed Script
+ * Gleame AI Widget - Standalone Embed Script
  * Matches the Theme App Extension UI exactly
  * Hosted at: https://glimpse-app-charles.onrender.com/widget-embed.js
  *
@@ -21,12 +21,12 @@
   }
 
   function initGlimpseWidgets() {
-    console.log('🎨 Glimpse AI Widget - Initializing');
+    console.log('🎨 Gleame AI Widget - Initializing');
     
     const widgets = document.querySelectorAll('.glimpse-ai-widget:not([data-embed-initialized])');
     
     if (widgets.length === 0) {
-      console.log('No Glimpse widgets found on page');
+      console.log('No Gleame widgets found on page');
       return;
     }
     
@@ -39,8 +39,8 @@
       const shopDomain = autoDetectShopDomain();
       
       if (!productId || !shopDomain) {
-        console.error('Glimpse Widget: Could not detect product ID or shop domain');
-        container.innerHTML = '<p style="color:red;padding:20px;text-align:center;">Glimpse Widget: Must be on a product page</p>';
+        console.error('Gleame Widget: Could not detect product ID or shop domain');
+        container.innerHTML = '<p style="color:red;padding:20px;text-align:center;">Gleame Widget: Must be on a product page</p>';
         return;
       }
       
@@ -61,7 +61,7 @@
     const style = document.createElement('style');
     style.id = 'glimpse-widget-embed-css';
     style.textContent = `
-      /* Glimpse AI Widget Embed Styles */
+      /* Gleame AI Widget Embed Styles */
       .glimpse-ai-widget {
         --primary-color-1: #8b5cf6;
         --primary-color-2: #7c3aed;
@@ -444,7 +444,7 @@
   }
 
   async function handleUpload(file, widgetId, productId, shopDomain) {
-    console.log('Glimpse Widget: File selected:', file.name);
+    console.log('Gleame Widget: File selected:', file.name);
     
     // Validate file
     if (!file.type.startsWith('image/')) {
@@ -489,7 +489,7 @@
           showError(widgetId, data.error || 'Transformation failed. Please try again.');
         }
       } catch (error) {
-        console.error('Glimpse Widget: Transform error:', error);
+        console.error('Gleame Widget: Transform error:', error);
         showError(widgetId, 'Network error. Please try again.');
       }
     };

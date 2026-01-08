@@ -1,9 +1,9 @@
-// Glimpse Widget JavaScript - Integrated Design v1.0
+// Gleame Widget JavaScript - Integrated Design v1.0
 // Full feature parity with original widget (HEIC, mobile selfie flip, variant detection)
-console.log('Glimpse Integrated Widget v1.0 loaded');
+console.log('Gleame Integrated Widget v1.0 loaded');
 
 (function() {
-  // Namespace for this widget (shared with other Glimpse widgets)
+  // Namespace for this widget (shared with other Gleame widgets)
   window.widgetFunctions = window.widgetFunctions || {};
   
   let currentProductId = null;

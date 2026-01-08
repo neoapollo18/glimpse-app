@@ -1,4 +1,4 @@
-/* Glimpse AI Widget - Integrated Horizontal Design */
+/* Gleame AI Widget - Integrated Horizontal Design */
 
 /* Main Widget Container */
 .glimpse-integrated-horizontal {
@@ -418,7 +418,7 @@
 
 /* Theme Editor Preview */
 .shopify-theme-editor .glimpse-integrated-horizontal::after {
-  content: "Glimpse Widget - Horizontal (Preview Mode)";
+  content: "Gleame Widget - Horizontal (Preview Mode)";
   position: absolute;
   bottom: 8px;
   right: 8px;

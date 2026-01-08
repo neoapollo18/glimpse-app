@@ -1,4 +1,4 @@
-/* Glimpse AI Transformation Widget - Integrated Design */
+/* Gleame AI Transformation Widget - Integrated Design */
 
 /* Widget Container */
 .glimpse-integrated-widget {
@@ -396,7 +396,7 @@
 
 /* Theme Editor Preview */
 .shopify-theme-editor .glimpse-integrated-widget::after {
-  content: "Glimpse Widget (Preview Mode)";
+  content: "Gleame Widget (Preview Mode)";
   position: absolute;
   bottom: 0;
   left: 0;

@@ -1,6 +1,6 @@
-// Glimpse Widget JavaScript v2.0 - HEIC Support
+// Gleame Widget JavaScript v2.0 - HEIC Support
 // Shared by both horizontal and vertical layouts
-console.log('Glimpse Widget v2.0 loaded');
+console.log('Gleame Widget v2.0 loaded');
 
 (function() {
   window.widgetFunctions = window.widgetFunctions || {};

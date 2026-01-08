@@ -1,6 +1,6 @@
 # Supabase Migrations
 
-This directory contains SQL migrations for the Glimpse App database.
+This directory contains SQL migrations for the Gleame App database.
 
 ## Current Database Schema (Before Migration)
 

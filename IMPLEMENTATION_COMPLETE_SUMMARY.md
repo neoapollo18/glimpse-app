@@ -201,7 +201,7 @@ supabase-migrations/001_add_product_variants_table.sql
 See: `QUICK_START_TESTING.md`
 
 1. Run `npm run dev`
-2. Open Shopify admin → Apps → Glimpse App
+2. Open Shopify admin → Apps → Gleame App
 3. Click "Edit" on configured product
 4. See variants section
 5. Configure a variant

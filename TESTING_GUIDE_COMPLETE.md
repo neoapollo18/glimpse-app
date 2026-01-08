@@ -127,7 +127,7 @@ curl -X POST http://localhost:3000/api/storefront/transform-image \
 ### **Test 1: View Products**
 
 1. **Open your Shopify admin**
-2. **Go to Apps** → **Glimpse App** (your app name)
+2. **Go to Apps** → **Gleame App** (your app name)
 3. **Click "Product Configuration"**
 4. **You should see:**
    - List of Shopify products

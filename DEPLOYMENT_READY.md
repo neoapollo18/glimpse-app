@@ -61,7 +61,7 @@ All 4 phases implemented, tested, and verified!
 1. **Go to Shopify Admin** → **Online Store** → **Themes**
 2. **Click "Customize"** on your active theme
 3. **Navigate to** the product with variants (Peppermint Lip Balm?)
-4. **Add App Block** → **Glimpse** (or Glimpse Horizontal)
+4. **Add App Block** → **Gleame** (or Gleame Horizontal)
 5. **Make sure** the product setting is set correctly
 6. **Save theme**
 

@@ -1,5 +1,5 @@
-/* Glimpse Banner Widget JavaScript v2.0 - Modal UI */
-console.log('Glimpse Banner Widget v2.0 loaded');
+/* Gleame Banner Widget JavaScript v2.0 - Modal UI */
+console.log('Gleame Banner Widget v2.0 loaded');
 
 (function() {
   'use strict';
@@ -411,7 +411,7 @@ console.log('Glimpse Banner Widget v2.0 loaded');
   function init() {
     widget = document.querySelector('.glimpse-banner-widget');
     if (!widget) {
-      console.log('Glimpse Banner: No widget found on page');
+      console.log('Gleame Banner: No widget found on page');
       return;
     }
 
@@ -457,7 +457,7 @@ console.log('Glimpse Banner Widget v2.0 loaded');
       }
     });
     
-    console.log('Glimpse Banner initialized:', {
+    console.log('Gleame Banner initialized:', {
       productId: currentProductId,
       shopDomain: currentShopDomain,
       variantId: currentVariantId

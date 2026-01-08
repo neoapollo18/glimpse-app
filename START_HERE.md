@@ -37,7 +37,7 @@ Follow the 5-minute test plan!
 ## 🚀 **Quick Test Steps**
 
 1. **Start dev:** `npm run dev`
-2. **Open Shopify admin** → Apps → Glimpse App
+2. **Open Shopify admin** → Apps → Gleame App
 3. **Click "Edit"** on a configured product
 4. **Look for "Variant-Specific Prompts" section**
 5. **Click "Configure Variant"** on any variant

@@ -1,4 +1,4 @@
-# Glimpse AI Transformation Widget
+# Gleame AI Transformation Widget
 
 This Theme App Extension provides customers with AI-powered product visualizations directly on product pages through a beautiful static widget design.
 
@@ -23,11 +23,11 @@ The widget features a modern, static rectangular design that integrates seamless
 
 ## Installation for Merchants
 
-1. Install the Glimpse app
+1. Install the Gleame app
 2. Configure products with transformation prompts in the app admin
 3. Go to your theme editor (Online Store > Themes > Customize)
 4. Navigate to a product page
-5. Add the "Glimpse AI Transformation" block to your product page
+5. Add the "Gleame" block to your product page
 6. Customize colors, text, and placeholder images in the theme editor
 7. Save and publish
 

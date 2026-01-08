@@ -18,7 +18,7 @@ Wait for: `Local: http://localhost:3000`
 1. Open browser
 2. Go to your Shopify store admin
 3. Click **Apps** (left sidebar)
-4. Click **Glimpse App** (or your app name)
+4. Click **Gleame App** (or your app name)
 
 ---
 
@@ -113,7 +113,7 @@ Want to see your data?
 Quick verification:
 
 ### **Admin UI:**
-- [ ] Can open Glimpse App in Shopify admin
+- [ ] Can open Gleame App in Shopify admin
 - [ ] Can see product list
 - [ ] Can configure a product
 - [ ] Can edit product
@@ -150,7 +150,7 @@ npm run dev
 ### **Issue: "No products showing"**
 **Fix:**
 - Add products in Shopify admin first
-- Refresh Glimpse App page
+- Refresh Gleame App page
 
 ### **Issue: "Can't see variants section"**
 **Fix:**

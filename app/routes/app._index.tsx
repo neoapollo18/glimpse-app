@@ -18,14 +18,14 @@ export default function Dashboard() {
 
   return (
     <Page>
-      <TitleBar title="Glimpse Dashboard" />
+      <TitleBar title="Gleame Dashboard" />
       <BlockStack gap="500">
         <Layout>
           <Layout.Section>
             <Card>
               <BlockStack gap="400">
                 <Text as="h2" variant="headingMd">
-                  Welcome to Glimpse
+                  Welcome to Gleame
                 </Text>
                 <Text variant="bodyMd" as="p">
                   Let customers see how they'll look with your products using AI-powered transformations. 
@@ -57,7 +57,7 @@ export default function Dashboard() {
                   <BlockStack gap="100">
                     <Text as="span" variant="bodyMd" fontWeight="semibold">2. Add Widget to Store</Text>
                     <Text as="p" variant="bodyMd" tone="subdued">
-                      In your theme editor, add the "Glimpse" block to your product pages
+                      In your theme editor, add the "Gleame" block to your product pages
                     </Text>
                   </BlockStack>
                    

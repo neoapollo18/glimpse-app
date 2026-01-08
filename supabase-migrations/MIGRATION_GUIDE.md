@@ -26,7 +26,7 @@
 ### Step 1: Access Supabase Dashboard
 
 1. Go to [Supabase Dashboard](https://supabase.com/dashboard)
-2. Select your Glimpse App project
+2. Select your Gleame App project
 3. Navigate to **SQL Editor** in the left sidebar
 
 ### Step 2: Backup Current Data (Optional but Recommended)

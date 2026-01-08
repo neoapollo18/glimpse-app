@@ -22,7 +22,7 @@ export default function App() {
   return (
     <div className={styles.index}>
       <div className={styles.content}>
-        <h1 className={styles.heading}>Glimpse - AI Product Visualizations</h1>
+        <h1 className={styles.heading}>Gleame - AI Product Visualizations</h1>
         <p className={styles.text}>
           Let customers see how they'll look with your products using AI-powered transformations. Increase conversions by letting shoppers try before they buy.
         </p>
