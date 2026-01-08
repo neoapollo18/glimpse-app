@@ -5,6 +5,7 @@
   background-color: var(--background-color);
   border-radius: var(--widget-border-radius);
   padding: var(--widget-padding);
+  padding-left: 0; /* No left padding - flush with page edge */
   margin-top: var(--widget-margin-top);
   margin-bottom: var(--widget-margin-bottom);
   margin-left: 0;
@@ -22,6 +23,7 @@
   box-shadow: none;
   border: none;
   padding: var(--widget-padding);
+  padding-left: 0; /* No left padding */
   background-color: transparent;
 }
 
