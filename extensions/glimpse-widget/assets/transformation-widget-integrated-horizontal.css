@@ -4,8 +4,10 @@
 .glimpse-integrated-horizontal {
   background-color: var(--background-color);
   border-radius: var(--widget-border-radius);
-  padding: var(--widget-padding);
+  padding-top: var(--widget-padding);
+  padding-bottom: var(--widget-padding);
   padding-left: 0; /* No left padding - flush with page edge */
+  padding-right: 0; /* No right padding - flush with page edge */
   margin-top: var(--widget-margin-top);
   margin-bottom: var(--widget-margin-bottom);
   margin-left: 0;
@@ -22,8 +24,10 @@
 .glimpse-integrated-horizontal.no-container {
   box-shadow: none;
   border: none;
-  padding: var(--widget-padding);
+  padding-top: var(--widget-padding);
+  padding-bottom: var(--widget-padding);
   padding-left: 0; /* No left padding */
+  padding-right: 0; /* No right padding */
   background-color: transparent;
 }
 
@@ -389,7 +393,10 @@
 
 @media (max-width: 480px) {
   .glimpse-integrated-horizontal {
-    padding: 16px;
+    padding-top: 16px;
+    padding-bottom: 16px;
+    padding-left: 0;
+    padding-right: 0;
   }
   
   .horizontal-title {
