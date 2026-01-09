@@ -14,6 +14,8 @@ console.log('Gleame Integrated Widget v1.0 loaded');
   
   const loadingMessages = ['Analyzing image...', 'Creating your transformation...', 'Working our magic...', 'Almost there...'];
   const SHOPIFY_APP_URL = 'https://glimpse-app-charles.onrender.com';
+  const WIDGET_TYPE = 'embedded';
+  let viewTracked = false;
   
   function getShopDomain() {
     // Check integrated widget first, then fall back to original
@@ -101,6 +103,22 @@ console.log('Gleame Integrated Widget v1.0 loaded');
     return null;
   }
   
+  // Track analytics event (widget view, add to cart, etc.)
+  function trackEvent(eventType) {
+    if (!currentShopDomain || !currentProductId) return;
+    
+    fetch(SHOPIFY_APP_URL + '/api/storefront/track-event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        shopDomain: currentShopDomain,
+        productId: currentProductId,
+        eventType: eventType,
+        widgetType: WIDGET_TYPE
+      })
+    }).catch(() => {}); // Silent fail
+  }
+
   window.widgetFunctions.initWidget = function() {
     // Prioritize integrated widget, but support original if this JS is used there
     const widget = document.querySelector('.glimpse-integrated-widget') || document.querySelector('.glimpse-ai-widget');
@@ -110,6 +128,12 @@ console.log('Gleame Integrated Widget v1.0 loaded');
     currentShopDomain = getShopDomain();
     currentVariantId = getCurrentVariantId();
     window.widgetFunctions.showState('upload');
+    
+    // Track widget view (only once per page load)
+    if (!viewTracked) {
+      viewTracked = true;
+      trackEvent('widget_view');
+    }
   };
   
   // Separate init for integrated widget specifically
@@ -121,6 +145,12 @@ console.log('Gleame Integrated Widget v1.0 loaded');
     currentShopDomain = getShopDomain();
     currentVariantId = getCurrentVariantId();
     window.widgetFunctions.showState('upload');
+    
+    // Track widget view (only once per page load)
+    if (!viewTracked) {
+      viewTracked = true;
+      trackEvent('widget_view');
+    }
   };
   
   window.widgetFunctions.triggerFileInput = function() {
@@ -378,7 +408,9 @@ console.log('Gleame Integrated Widget v1.0 loaded');
       formData.append('image', file);
       formData.append('productId', currentProductId);
       formData.append('shopDomain', currentShopDomain);
+      formData.append('widgetType', 'embedded');
       if (currentVariantId) formData.append('variantId', currentVariantId);
+      console.log('Gleame: Sending transform with widgetType=embedded');
       
       const apiUrl = SHOPIFY_APP_URL + '/api/storefront/transform-image';
       

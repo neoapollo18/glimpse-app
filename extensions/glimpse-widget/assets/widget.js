@@ -13,7 +13,9 @@ console.log('Gleame Widget v2.0 loaded');
   
   const loadingMessages = ['Analyzing image...', 'Creating your transformation...', 'Working our magic...', 'Almost there...'];
   const SHOPIFY_APP_URL = 'https://glimpse-app-charles.onrender.com';
-  
+  const WIDGET_TYPE = 'legacy';
+  let viewTracked = false;
+
   function getShopDomain() {
     const widget = document.querySelector('.glimpse-ai-widget');
     const manualDomain = widget?.getAttribute('data-manual-shop-domain');
@@ -359,6 +361,7 @@ console.log('Gleame Widget v2.0 loaded');
       formData.append('image', file);
       formData.append('productId', currentProductId);
       formData.append('shopDomain', currentShopDomain);
+      formData.append('widgetType', 'legacy');
       if (currentVariantId) formData.append('variantId', currentVariantId);
       
       const apiUrl = SHOPIFY_APP_URL + '/api/storefront/transform-image';

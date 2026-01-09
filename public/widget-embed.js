@@ -154,10 +154,45 @@
       
       .glimpse-placeholder-before {
         background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
       
       .glimpse-placeholder-after {
-        background: linear-gradient(135deg, #fef3c7 0%, #f59e0b 100%);
+        background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      
+      .glimpse-placeholder-silhouette {
+        width: 60px;
+        height: 75px;
+        background: linear-gradient(180deg, rgba(209, 213, 219, 0.5) 0%, rgba(156, 163, 175, 0.5) 100%);
+        border-radius: 30px 30px 20px 20px;
+        position: relative;
+        opacity: 0.6;
+      }
+      
+      .glimpse-placeholder-silhouette::before {
+        content: '';
+        position: absolute;
+        top: -22px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 40px;
+        height: 40px;
+        background: linear-gradient(180deg, rgba(209, 213, 219, 0.5) 0%, rgba(156, 163, 175, 0.5) 100%);
+        border-radius: 50%;
+      }
+      
+      .glimpse-placeholder-silhouette-glow {
+        background: linear-gradient(180deg, rgba(167, 139, 250, 0.5) 0%, rgba(139, 92, 246, 0.5) 100%);
+      }
+      
+      .glimpse-placeholder-silhouette-glow::before {
+        background: linear-gradient(180deg, rgba(167, 139, 250, 0.5) 0%, rgba(139, 92, 246, 0.5) 100%);
       }
       
       .glimpse-placeholder-split::after {
@@ -345,6 +380,15 @@
         .glimpse-comparison-image {
           height: 180px;
         }
+        .glimpse-placeholder-silhouette {
+          width: 45px;
+          height: 55px;
+        }
+        .glimpse-placeholder-silhouette::before {
+          width: 30px;
+          height: 30px;
+          top: -16px;
+        }
       }
     `;
     document.head.appendChild(style);
@@ -368,8 +412,12 @@
         <div class="glimpse-placeholder-container" onclick="document.getElementById('${widgetId}-file').click()">
           <div class="glimpse-default-placeholder">
             <div class="glimpse-placeholder-split">
-              <div class="glimpse-placeholder-half glimpse-placeholder-before"></div>
-              <div class="glimpse-placeholder-half glimpse-placeholder-after"></div>
+              <div class="glimpse-placeholder-half glimpse-placeholder-before">
+                <div class="glimpse-placeholder-silhouette"></div>
+              </div>
+              <div class="glimpse-placeholder-half glimpse-placeholder-after">
+                <div class="glimpse-placeholder-silhouette glimpse-placeholder-silhouette-glow"></div>
+              </div>
             </div>
           </div>
         </div>

@@ -1,4 +1,5 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
+import { json } from "@remix-run/node";
 import { useLoaderData } from "@remix-run/react";
 import {
   Page,
@@ -7,245 +8,328 @@ import {
   Card,
   BlockStack,
   InlineStack,
-  DataTable,
   Select,
+  Box,
+  InlineGrid,
+  Divider,
+  Button,
+  Collapsible,
+  Icon,
+  Thumbnail,
+  Badge,
 } from "@shopify/polaris";
+import {
+  ChevronRightIcon,
+  ChevronDownIcon,
+  ImageIcon,
+} from "@shopify/polaris-icons";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { getAnalytics } from "../lib/supabase.server";
-import { useState } from "react";
+import { useState, useCallback } from "react";
+
+interface WidgetBreakdown {
+  [widgetType: string]: number;
+}
+
+interface ProductBreakdown {
+  product_id: string;
+  product_name: string;
+  shopify_id: string;
+  transformations: number;
+  widgets: WidgetBreakdown;
+}
+
+interface AnalyticsData {
+  totalTransformations: number;
+  widgetViews: number;
+  addToCarts: number;
+  uploadToATCRate: number;
+  productBreakdown: ProductBreakdown[];
+}
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
 
-  // Fetch real analytics data from Supabase
   const analytics7Days = await getAnalytics(session.shop, 7);
   const analytics30Days = await getAnalytics(session.shop, 30);
 
-  // Default to empty data if no analytics found
-  const safeAnalytics = {
+  const safeAnalytics7: AnalyticsData = {
     totalTransformations: analytics7Days?.totalTransformations || 0,
-    totalTransformations30Days: analytics30Days?.totalTransformations || 0,
+    widgetViews: analytics7Days?.widgetViews || 0,
+    addToCarts: analytics7Days?.addToCarts || 0,
+    uploadToATCRate: analytics7Days?.uploadToATCRate || 0,
     productBreakdown: analytics7Days?.productBreakdown || [],
-    productBreakdown30Days: analytics30Days?.productBreakdown || [],
   };
 
-  return { analytics: safeAnalytics };
+  const safeAnalytics30: AnalyticsData = {
+    totalTransformations: analytics30Days?.totalTransformations || 0,
+    widgetViews: analytics30Days?.widgetViews || 0,
+    addToCarts: analytics30Days?.addToCarts || 0,
+    uploadToATCRate: analytics30Days?.uploadToATCRate || 0,
+    productBreakdown: analytics30Days?.productBreakdown || [],
+  };
+
+  return json({ analytics7: safeAnalytics7, analytics30: safeAnalytics30 });
 };
 
 export default function Analytics() {
-  const { analytics } = useLoaderData<typeof loader>();
-  const [timeRange, setTimeRange] = useState("last-7-days");
+  const { analytics7, analytics30 } = useLoaderData<typeof loader>();
+  const [timeRange, setTimeRange] = useState("30");
+  const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
 
   const timeRangeOptions = [
-    { label: "Last 7 days", value: "last-7-days" },
-    { label: "Last 30 days", value: "last-30-days" },
+    { label: "Last 7 days", value: "7" },
+    { label: "Last 30 days", value: "30" },
   ];
 
-  // Choose data based on selected time range
-  const currentData = timeRange === "last-7-days" 
-    ? {
-        total: analytics.totalTransformations,
-        breakdown: analytics.productBreakdown
-      }
-    : {
-        total: analytics.totalTransformations30Days,
-        breakdown: analytics.productBreakdown30Days
-      };
+  const currentData = timeRange === "7" ? analytics7 : analytics30;
 
-  const topProductsRows = currentData.breakdown.map((product: any) => [
-    <Text as="span" variant="bodyMd" fontWeight="semibold" key={product.product_id}>
-      {product.product_name}
-    </Text>,
-    <Text as="span" variant="bodyMd" key={`${product.product_id}-trans`}>
-      {product.transformations}
-    </Text>,
-  ]);
+  const toggleProduct = useCallback((productId: string) => {
+    setExpandedProducts((prev) => {
+      const next = new Set(prev);
+      if (next.has(productId)) {
+        next.delete(productId);
+      } else {
+        next.add(productId);
+      }
+      return next;
+    });
+  }, []);
+
+  // Sort products by transformations descending
+  const sortedProducts = [...currentData.productBreakdown].sort(
+    (a, b) => b.transformations - a.transformations
+  );
 
   return (
     <Page>
       <TitleBar title="Analytics" />
       
-      <BlockStack gap="500">
-        <Layout>
-          <Layout.Section>
-            <InlineStack align="space-between">
-              <Text as="h2" variant="headingLg">
-                Transformation Analytics
+      <BlockStack gap="600">
+        {/* Header with time selector */}
+        <InlineStack align="space-between" blockAlign="center">
+          <Text as="h1" variant="headingXl">Analytics</Text>
+          <InlineStack gap="300">
+            <Select
+              label="Time range"
+              labelHidden
+              options={timeRangeOptions}
+              value={timeRange}
+              onChange={setTimeRange}
+            />
+          </InlineStack>
+        </InlineStack>
+
+        {/* Stats Cards */}
+        <InlineGrid columns={{ xs: 1, sm: 3, md: 3 }} gap="400">
+          <Card padding="400">
+            <BlockStack gap="200">
+              <Text as="span" variant="bodySm" tone="subdued">
+                Selfie Uploads
               </Text>
-              <Select
-                label="Time Range"
-                labelHidden
-                options={timeRangeOptions}
-                value={timeRange}
-                onChange={setTimeRange}
-              />
-            </InlineStack>
-          </Layout.Section>
-        </Layout>
-
-        {/* Key Metrics */}
-        <Layout>
-          <Layout.Section>
-            <InlineStack gap="400">
-              <Card>
-                <BlockStack gap="200">
-                  <Text as="h3" variant="headingMd">
-                    Total Transformations ({timeRange === "last-7-days" ? "7 days" : "30 days"})
-                  </Text>
-                  <Text as="span" variant="heading2xl" fontWeight="bold">
-                    {currentData.total.toLocaleString()}
-                  </Text>
-                  <Text as="span" variant="bodyMd" tone="subdued">
-                    Widget usage by customers
-                  </Text>
-                </BlockStack>
-              </Card>
-
-              <Card>
-                <BlockStack gap="200">
-                  <Text as="h3" variant="headingMd">Products with Transformations</Text>
-                  <Text as="span" variant="heading2xl" fontWeight="bold">
-                    {currentData.breakdown.length}
-                  </Text>
-                  <Text as="span" variant="bodyMd" tone="subdued">
-                    Active products being transformed
-                  </Text>
-                </BlockStack>
-              </Card>
-
-              <Card>
-                <BlockStack gap="200">
-                  <Text as="h3" variant="headingMd">Most Popular Product</Text>
-                  <Text as="span" variant="headingLg" fontWeight="bold">
-                    {currentData.breakdown.length > 0 
-                      ? (currentData.breakdown as any).sort((a: any, b: any) => b.transformations - a.transformations)[0].product_name
-                      : "No data"
-                    }
-                  </Text>
-                  <Text as="span" variant="bodyMd" tone="subdued">
-                    {currentData.breakdown.length > 0 
-                      ? `${(currentData.breakdown as any).sort((a: any, b: any) => b.transformations - a.transformations)[0].transformations} transformations`
-                      : "Add product configurations to see data"
-                    }
-                  </Text>
-                </BlockStack>
-              </Card>
-            </InlineStack>
-          </Layout.Section>
-        </Layout>
-
-        {/* Product Performance */}
-        <Layout>
-          <Layout.Section>
-            <Card>
-              <BlockStack gap="400">
-                <Text as="h3" variant="headingMd">
-                  Product Performance ({timeRange === "last-7-days" ? "Last 7 days" : "Last 30 days"})
-                </Text>
-                
-                {currentData.breakdown.length > 0 ? (
-                  <DataTable
-                    columnContentTypes={["text", "numeric"]}
-                    headings={["Product Name", "Transformations"]}
-                    rows={topProductsRows}
-                  />
-                ) : (
-                  <BlockStack gap="300">
-                    <Text as="p" variant="bodyMd" tone="subdued">
-                      No transformation data available for the selected time period.
-                    </Text>
-                    <Text as="p" variant="bodyMd" tone="subdued">
-                      Make sure you have:
-                    </Text>
-                    <Text as="p" variant="bodyMd" tone="subdued">
-                      • Configured products with transformation prompts
-                    </Text>
-                    <Text as="p" variant="bodyMd" tone="subdued">
-                      • Customers are using the widget on your storefront
-                    </Text>
-                  </BlockStack>
-                )}
-              </BlockStack>
-            </Card>
-          </Layout.Section>
-
-          <Layout.Section variant="oneThird">
-            <BlockStack gap="400">
-              <Card>
-                <BlockStack gap="300">
-                  <Text as="h3" variant="headingMd">Quick Stats</Text>
-                  <BlockStack gap="200">
-                    <InlineStack align="space-between">
-                      <Text as="span" variant="bodyMd">7-day total:</Text>
-                      <Text as="span" variant="bodyMd" fontWeight="semibold">
-                        {analytics.totalTransformations}
-                      </Text>
-                    </InlineStack>
-                    <InlineStack align="space-between">
-                      <Text as="span" variant="bodyMd">30-day total:</Text>
-                      <Text as="span" variant="bodyMd" fontWeight="semibold">
-                        {analytics.totalTransformations30Days}
-                      </Text>
-                    </InlineStack>
-                    <InlineStack align="space-between">
-                      <Text as="span" variant="bodyMd">Daily average:</Text>
-                      <Text as="span" variant="bodyMd" fontWeight="semibold">
-                        {timeRange === "last-7-days" 
-                          ? Math.round(analytics.totalTransformations / 7)
-                          : Math.round(analytics.totalTransformations30Days / 30)
-                        }
-                      </Text>
-                    </InlineStack>
-                  </BlockStack>
-                </BlockStack>
-              </Card>
-
-              <Card>
-                <BlockStack gap="300">
-                  <Text as="h3" variant="headingMd">Getting Started</Text>
-                  <BlockStack gap="200">
-                    <Text as="p" variant="bodyMd">
-                      • Configure products in the Products tab
-                    </Text>
-                    <Text as="p" variant="bodyMd">
-                      • Add the widget to your product pages
-                    </Text>
-                    <Text as="p" variant="bodyMd">
-                      • Analytics will appear as customers use transformations
-                    </Text>
-                    <Text as="p" variant="bodyMd">
-                      • Data refreshes in real-time
-                    </Text>
-                  </BlockStack>
-                </BlockStack>
-              </Card>
+              <Text as="p" variant="headingXl" fontWeight="bold">
+                {currentData.totalTransformations.toLocaleString()}
+              </Text>
             </BlockStack>
-          </Layout.Section>
-        </Layout>
+          </Card>
 
-        {/* Usage Insights */}
-        <Layout>
-          <Layout.Section>
-            <Card>
-              <BlockStack gap="400">
-                <Text as="h3" variant="headingMd">
-                  Usage Overview
-                </Text>
+          <Card padding="400">
+            <BlockStack gap="200">
+              <Text as="span" variant="bodySm" tone="subdued">
+                Active Products
+              </Text>
+              <Text as="p" variant="headingXl" fontWeight="bold">
+                {currentData.productBreakdown.length}
+              </Text>
+            </BlockStack>
+          </Card>
+
+          <Card padding="400">
+            <BlockStack gap="200">
+              <Text as="span" variant="bodySm" tone="subdued">
+                Daily Average
+              </Text>
+              <Text as="p" variant="headingXl" fontWeight="bold">
+                {(currentData.totalTransformations / parseInt(timeRange)).toFixed(1)}
+              </Text>
+            </BlockStack>
+          </Card>
+        </InlineGrid>
+
+        {/* Product Breakdown */}
+        <Card padding="0">
+          <Box padding="400" paddingBlockEnd="300">
+            <Text as="h2" variant="headingMd">
+              See how shoppers are engaging with Gleame across products
+            </Text>
+          </Box>
+          
+          <Divider />
+
+          {/* Table Header */}
+          <Box padding="400" paddingBlockStart="300" paddingBlockEnd="300" background="bg-surface-secondary">
+            <InlineGrid columns={{ xs: "1fr 1fr 1fr", md: "2fr 1fr 1fr 1fr" }} gap="400" alignItems="center">
+              <Text as="span" variant="bodySm" fontWeight="semibold">Product</Text>
+              <Box>
+                <Text as="span" variant="bodySm" fontWeight="semibold">Uploads</Text>
+              </Box>
+              <Box>
+                <Text as="span" variant="bodySm" fontWeight="semibold">Widgets</Text>
+              </Box>
+              <Box display={{ xs: "none", md: "block" }}>
+                <Text as="span" variant="bodySm" fontWeight="semibold">Share</Text>
+              </Box>
+            </InlineGrid>
+          </Box>
+
+          {/* Product Rows */}
+          {sortedProducts.length > 0 ? (
+            <BlockStack>
+              {sortedProducts.map((product, index) => {
+                const isExpanded = expandedProducts.has(product.product_id);
+                const sharePercent = currentData.totalTransformations > 0 
+                  ? ((product.transformations / currentData.totalTransformations) * 100).toFixed(1)
+                  : "0";
                 
-                <BlockStack gap="300">
-                  <Text as="p" variant="bodyMd">
-                    This analytics dashboard tracks customer usage of your AI transformation widget. 
-                    Each time a customer uploads a photo and gets a transformation, it's recorded here.
-                  </Text>
-                </BlockStack>
+                return (
+                  <div key={product.product_id}>
+                    {index > 0 && <Divider />}
+                    <Box padding="400">
+                      <InlineGrid columns={{ xs: "1fr 1fr 1fr", md: "2fr 1fr 1fr 1fr" }} gap="400" alignItems="center">
+                        {/* Product Info */}
+                        <InlineStack gap="300" blockAlign="center" wrap={false}>
+                          <Button
+                            variant="plain"
+                            onClick={() => toggleProduct(product.product_id)}
+                            icon={isExpanded ? ChevronDownIcon : ChevronRightIcon}
+                            accessibilityLabel={isExpanded ? "Collapse" : "Expand"}
+                          />
+                          <Thumbnail
+                            source={ImageIcon}
+                            alt={product.product_name}
+                            size="small"
+                          />
+                          <BlockStack gap="050">
+                            <Text as="span" variant="bodyMd" fontWeight="semibold">
+                              {product.product_name}
+                            </Text>
+                          </BlockStack>
+                        </InlineStack>
+
+                        {/* Uploads */}
+                        <Text as="span" variant="bodyMd" fontWeight="semibold">
+                          {product.transformations.toLocaleString()}
+                        </Text>
+
+                        {/* Widgets count */}
+                        <Text as="span" variant="bodyMd">
+                          {Object.keys(product.widgets || {}).length || 1}
+                        </Text>
+
+                        {/* Share */}
+                        <Box display={{ xs: "none", md: "block" }}>
+                          <Badge tone="info">{sharePercent}%</Badge>
+                        </Box>
+                      </InlineGrid>
+
+                      {/* Expanded Widget Details */}
+                      <Collapsible
+                        open={isExpanded}
+                        id={`widget-details-${product.product_id}`}
+                        transition={{ duration: "200ms", timingFunction: "ease-in-out" }}
+                      >
+                        <Box paddingBlockStart="400" paddingInlineStart="1200">
+                          <BlockStack gap="200">
+                            {Object.entries(product.widgets || {}).map(([widgetType, count]) => {
+                              const widgetNames: Record<string, string> = {
+                                embedded: "Gleame Embedded",
+                                horizontal: "Gleame Horizontal", 
+                                button: "Gleame Button",
+                                legacy: "Gleame Legacy",
+                                unknown: "Unknown Widget"
+                              };
+                              const displayName = widgetNames[widgetType] || widgetType;
+                              const widgetSharePercent = product.transformations > 0 
+                                ? ((count / product.transformations) * 100).toFixed(0)
+                                : "0";
+                              
+                              return (
+                                <Box 
+                                  key={widgetType}
+                                  padding="300" 
+                                  background="bg-surface-secondary" 
+                                  borderRadius="200"
+                                >
+                                  <InlineGrid columns={{ xs: "1fr 1fr 1fr", md: "2fr 1fr 1fr 1fr" }} gap="400" alignItems="center">
+                                    <Text as="span" variant="bodySm">{displayName}</Text>
+                                    <Text as="span" variant="bodySm">{count}</Text>
+                                    <Text as="span" variant="bodySm">—</Text>
+                                    <Box display={{ xs: "none", md: "block" }}>
+                                      <Text as="span" variant="bodySm">{widgetSharePercent}%</Text>
+                                    </Box>
+                                  </InlineGrid>
+                                </Box>
+                              );
+                            })}
+                            {(!product.widgets || Object.keys(product.widgets).length === 0) && (
+                              <Box 
+                                padding="300" 
+                                background="bg-surface-secondary" 
+                                borderRadius="200"
+                              >
+                                <InlineGrid columns={{ xs: "1fr 1fr 1fr", md: "2fr 1fr 1fr 1fr" }} gap="400" alignItems="center">
+                                  <Text as="span" variant="bodySm">Gleame Widget</Text>
+                                  <Text as="span" variant="bodySm">{product.transformations}</Text>
+                                  <Text as="span" variant="bodySm">—</Text>
+                                  <Box display={{ xs: "none", md: "block" }}>
+                                    <Text as="span" variant="bodySm">100%</Text>
+                                  </Box>
+                                </InlineGrid>
+                              </Box>
+                            )}
+                          </BlockStack>
+                        </Box>
+                      </Collapsible>
+                    </Box>
+                  </div>
+                );
+              })}
+            </BlockStack>
+          ) : (
+            <Box padding="800">
+              <BlockStack gap="300" inlineAlign="center">
+                <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
+                  No data yet for the selected time period.
+                </Text>
+                <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+                  Analytics will appear as customers use the transformation widget on your store.
+                </Text>
               </BlockStack>
-            </Card>
-          </Layout.Section>
-        </Layout>
+            </Box>
+          )}
+        </Card>
 
-
+        {/* Help Section */}
+        {currentData.productBreakdown.length === 0 && (
+          <Card>
+            <BlockStack gap="300">
+              <Text as="h3" variant="headingMd">Getting Started</Text>
+              <BlockStack gap="200">
+                <Text as="p" variant="bodyMd">
+                  • Configure products in the Products tab with transformation prompts
+                </Text>
+                <Text as="p" variant="bodyMd">
+                  • Add a Gleame widget block to your product pages in the theme editor
+                </Text>
+                <Text as="p" variant="bodyMd">
+                  • Analytics will populate as customers upload selfies
+                </Text>
+              </BlockStack>
+            </BlockStack>
+          </Card>
+        )}
       </BlockStack>
     </Page>
   );
-} 
+}

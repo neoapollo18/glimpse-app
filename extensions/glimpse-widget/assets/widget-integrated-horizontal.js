@@ -14,7 +14,9 @@ console.log('Gleame Integrated Horizontal Widget v1.0 loaded');
   
   const loadingMessages = ['Analyzing image...', 'Creating preview...', 'Working our magic...', 'Almost there...'];
   const SHOPIFY_APP_URL = 'https://glimpse-app-charles.onrender.com';
-  
+  const WIDGET_TYPE = 'horizontal';
+  let viewTracked = false;
+
   function getShopDomain() {
     const widget = document.querySelector('.glimpse-integrated-horizontal');
     const manualDomain = widget?.getAttribute('data-manual-shop-domain');
@@ -100,6 +102,22 @@ console.log('Gleame Integrated Horizontal Widget v1.0 loaded');
     return null;
   }
   
+  // Track analytics event (widget view, add to cart, etc.)
+  function trackEvent(eventType) {
+    if (!currentShopDomain || !currentProductId) return;
+    
+    fetch(SHOPIFY_APP_URL + '/api/storefront/track-event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        shopDomain: currentShopDomain,
+        productId: currentProductId,
+        eventType: eventType,
+        widgetType: WIDGET_TYPE
+      })
+    }).catch(() => {}); // Silent fail
+  }
+
   // Initialize horizontal widget
   window.widgetFunctions.initIntegratedHorizontalWidget = function() {
     const widget = document.querySelector('.glimpse-integrated-horizontal');
@@ -109,6 +127,12 @@ console.log('Gleame Integrated Horizontal Widget v1.0 loaded');
     currentShopDomain = getShopDomain();
     currentVariantId = getCurrentVariantId();
     showStateHorizontal('upload');
+    
+    // Track widget view (only once per page load)
+    if (!viewTracked) {
+      viewTracked = true;
+      trackEvent('widget_view');
+    }
   };
   
   // Horizontal-specific trigger
@@ -389,6 +413,7 @@ console.log('Gleame Integrated Horizontal Widget v1.0 loaded');
       formData.append('image', file);
       formData.append('productId', currentProductId);
       formData.append('shopDomain', currentShopDomain);
+      formData.append('widgetType', 'horizontal');
       if (currentVariantId) formData.append('variantId', currentVariantId);
       
       const apiUrl = SHOPIFY_APP_URL + '/api/storefront/transform-image';

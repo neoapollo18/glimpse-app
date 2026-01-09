@@ -10,7 +10,9 @@ console.log('Gleame Button Widget v2.0 loaded');
   let originalButtonText = '';
   
   const SHOPIFY_APP_URL = 'https://glimpse-app-charles.onrender.com';
+  const WIDGET_TYPE = 'button';
   const loadingMessages = ['Processing...', 'Analyzing...', 'Creating magic...', 'Almost there...'];
+  let viewTracked = false;
   let loadingMessageIndex = 0;
   let loadingInterval = null;
   
@@ -58,6 +60,22 @@ console.log('Gleame Button Widget v2.0 loaded');
     return null;
   }
   
+  // Track analytics event (widget view, add to cart, etc.)
+  function trackEvent(eventType) {
+    if (!currentShopDomain || !currentProductId) return;
+    
+    fetch(SHOPIFY_APP_URL + '/api/storefront/track-event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        shopDomain: currentShopDomain,
+        productId: currentProductId,
+        eventType: eventType,
+        widgetType: WIDGET_TYPE
+      })
+    }).catch(() => {}); // Silent fail
+  }
+
   function init() {
     const widget = document.querySelector('.glimpse-button-widget');
     if (!widget) return;
@@ -66,6 +84,12 @@ console.log('Gleame Button Widget v2.0 loaded');
     currentShopDomain = getShopDomain();
     currentVariantId = getCurrentVariantId();
     originalButtonText = widget.getAttribute('data-button-text') || 'TRY IT ON';
+    
+    // Track widget view (only once per page load)
+    if (!viewTracked) {
+      viewTracked = true;
+      trackEvent('widget_view');
+    }
     
     // Move modals to body for proper full-screen overlay
     // Copy CSS variables from widget to modals so they inherit the configuration
@@ -332,6 +356,7 @@ console.log('Gleame Button Widget v2.0 loaded');
       formData.append('image', file);
       formData.append('productId', currentProductId);
       formData.append('shopDomain', currentShopDomain);
+      formData.append('widgetType', 'button');
       if (currentVariantId) formData.append('variantId', currentVariantId);
       
       const response = await fetch(SHOPIFY_APP_URL + '/api/storefront/transform-image', {

@@ -373,7 +373,8 @@ export async function deleteProductConfiguration(configuredProductId: string) {
 export async function trackTransformationEvent(
   shopDomain: string,
   shopifyProductId: string,
-  eventType: string = 'transformation'
+  eventType: string = 'transformation',
+  widgetType: string = 'unknown'
 ) {
   try {
     // Get shop with fallback logic
@@ -415,7 +416,8 @@ export async function trackTransformationEvent(
             .insert([{
               shop_id: shop.id,
               product_id: altProduct.id,
-              event_type: eventType
+              event_type: eventType,
+              widget_type: widgetType
             }])
             .select()
             .single();
@@ -440,7 +442,8 @@ export async function trackTransformationEvent(
       .insert([{
         shop_id: shop.id,
         product_id: product.id,
-        event_type: eventType
+        event_type: eventType,
+        widget_type: widgetType
       }])
       .select()
       .single();
@@ -472,24 +475,52 @@ export async function getAnalytics(shopDomain: string, daysBack: number = 7) {
     const dateThreshold = new Date();
     dateThreshold.setDate(dateThreshold.getDate() - daysBack);
 
-    // Get total transformations in the last N days
-    const { data: totalEvents, error: totalError } = await supabase
+    // Get total transformations (selfie uploads) in the last N days
+    const { data: transformationEvents, error: transformationError } = await supabase
       .from('analytics_events')
       .select('id')
       .eq('shop_id', shop.id)
       .eq('event_type', 'transformation')
       .gte('created_at', dateThreshold.toISOString());
 
-    if (totalError) {
-      console.error('Error fetching total analytics:', totalError);
+    if (transformationError) {
+      console.error('Error fetching transformation analytics:', transformationError);
       return null;
     }
 
-    // Get per-product analytics in the last N days
+    // Get widget views in the last N days
+    const { data: widgetViewEvents, error: viewError } = await supabase
+      .from('analytics_events')
+      .select('id')
+      .eq('shop_id', shop.id)
+      .eq('event_type', 'widget_view')
+      .gte('created_at', dateThreshold.toISOString());
+
+    if (viewError) {
+      console.error('Error fetching widget view analytics:', viewError);
+      // Don't fail entirely, just set to 0
+    }
+
+    // Get add-to-cart events in the last N days
+    const { data: atcEvents, error: atcError } = await supabase
+      .from('analytics_events')
+      .select('id')
+      .eq('shop_id', shop.id)
+      .eq('event_type', 'add_to_cart')
+      .gte('created_at', dateThreshold.toISOString());
+
+    if (atcError) {
+      console.error('Error fetching ATC analytics:', atcError);
+      // Don't fail entirely, just set to 0
+    }
+
+    // Get per-product analytics in the last N days (including widget_type)
     const { data: productEvents, error: productError } = await supabase
       .from('analytics_events')
       .select(`
         product_id,
+        widget_type,
+        event_type,
         products (
           id,
           product_name,
@@ -497,7 +528,7 @@ export async function getAnalytics(shopDomain: string, daysBack: number = 7) {
         )
       `)
       .eq('shop_id', shop.id)
-      .eq('event_type', 'transformation')
+      .in('event_type', ['transformation', 'widget_view', 'add_to_cart'])
       .gte('created_at', dateThreshold.toISOString());
 
     if (productError) {
@@ -505,23 +536,67 @@ export async function getAnalytics(shopDomain: string, daysBack: number = 7) {
       return null;
     }
 
-    // Group by product
-    const productStats = productEvents.reduce((acc: any, event: any) => {
-      const productId = event.product_id;
-      if (!acc[productId]) {
-        acc[productId] = {
-          product_id: productId,
-          product_name: event.products?.product_name || 'Unknown Product',
-          shopify_id: event.products?.shopify_id || '',
-          transformations: 0
-        };
-      }
-      acc[productId].transformations++;
-      return acc;
-    }, {});
+    // Group by product and widget_type (only count transformations for the main number)
+    const productStats = productEvents
+      .filter((e: any) => e.event_type === 'transformation')
+      .reduce((acc: any, event: any) => {
+        const productId = event.product_id;
+        const widgetType = event.widget_type || 'unknown';
+        
+        if (!acc[productId]) {
+          acc[productId] = {
+            product_id: productId,
+            product_name: event.products?.product_name || 'Unknown Product',
+            shopify_id: event.products?.shopify_id || '',
+            transformations: 0,
+            views: 0,
+            addToCarts: 0,
+            widgets: {} // Track per-widget stats
+          };
+        }
+        acc[productId].transformations++;
+        
+        // Track per-widget breakdown
+        if (!acc[productId].widgets[widgetType]) {
+          acc[productId].widgets[widgetType] = 0;
+        }
+        acc[productId].widgets[widgetType]++;
+        
+        return acc;
+      }, {});
+
+    // Add view counts per product
+    productEvents
+      .filter((e: any) => e.event_type === 'widget_view')
+      .forEach((event: any) => {
+        const productId = event.product_id;
+        if (productStats[productId]) {
+          productStats[productId].views++;
+        }
+      });
+
+    // Add ATC counts per product
+    productEvents
+      .filter((e: any) => e.event_type === 'add_to_cart')
+      .forEach((event: any) => {
+        const productId = event.product_id;
+        if (productStats[productId]) {
+          productStats[productId].addToCarts++;
+        }
+      });
+
+    const totalUploads = transformationEvents?.length || 0;
+    const totalViews = widgetViewEvents?.length || 0;
+    const totalATC = atcEvents?.length || 0;
+    
+    // Calculate upload to ATC rate
+    const uploadToATCRate = totalUploads > 0 ? (totalATC / totalUploads) * 100 : 0;
 
     return {
-      totalTransformations: totalEvents?.length || 0,
+      totalTransformations: totalUploads,
+      widgetViews: totalViews,
+      addToCarts: totalATC,
+      uploadToATCRate: uploadToATCRate,
       productBreakdown: Object.values(productStats)
     };
   } catch (error) {

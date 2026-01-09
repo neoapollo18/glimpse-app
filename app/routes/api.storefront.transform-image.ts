@@ -32,7 +32,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const imageFile = formData.get("image") as File;
     const productId = formData.get("productId") as string;
     const shopDomain = formData.get("shopDomain") as string;
-    const variantId = formData.get("variantId") as string | null; // NEW: Optional variant ID
+    const variantId = formData.get("variantId") as string | null;
+    const widgetType = (formData.get("widgetType") as string) || "unknown";
+    
+    // Debug: log received widgetType
+    console.log('Transform API received widgetType:', widgetType);
 
     // Log HEIC/HEIF specifically for debugging
     const isHeicHeif = imageFile?.name?.toLowerCase().match(/\.(heic|heif)$/) || 
@@ -153,7 +157,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     // Track analytics event (don't wait for it to complete)
-    trackTransformationEvent(shopDomain, productId, 'transformation').catch(error => {
+    trackTransformationEvent(shopDomain, productId, 'transformation', widgetType).catch(error => {
       console.error('Failed to track analytics event:', error);
     });
 

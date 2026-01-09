@@ -6,6 +6,9 @@ application_url = "https://into-goal-paying-expiration.trycloudflare.com"
 embedded = true
 handle = "glimpse-app-dev"
 
+[build]
+automatically_update_urls_on_dev = true
+
 [webhooks]
 api_version = "2025-07"
 
