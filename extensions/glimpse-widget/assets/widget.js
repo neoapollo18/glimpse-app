@@ -16,6 +16,22 @@ console.log('Gleame Widget v2.0 loaded');
   const WIDGET_TYPE = 'legacy';
   let viewTracked = false;
 
+  // Track widget events (views, etc.)
+  function trackEvent(eventType) {
+    if (!currentShopDomain || !currentProductId) return;
+    
+    fetch(`${SHOPIFY_APP_URL}/api/storefront/track-event`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        shopDomain: currentShopDomain,
+        productId: currentProductId,
+        eventType: eventType,
+        widgetType: WIDGET_TYPE
+      })
+    }).catch(() => {});
+  }
+
   function getShopDomain() {
     const widget = document.querySelector('.glimpse-ai-widget');
     const manualDomain = widget?.getAttribute('data-manual-shop-domain');
@@ -109,6 +125,12 @@ console.log('Gleame Widget v2.0 loaded');
     currentShopDomain = getShopDomain();
     currentVariantId = getCurrentVariantId();
     window.widgetFunctions.showState('upload');
+    
+    // Track widget view once
+    if (!viewTracked && currentShopDomain && currentProductId) {
+      viewTracked = true;
+      trackEvent('widget_view');
+    }
   };
   
   window.widgetFunctions.triggerFileInput = function() {

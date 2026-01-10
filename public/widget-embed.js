@@ -12,6 +12,22 @@
   'use strict';
 
   const SHOPIFY_APP_URL = 'https://glimpse-app-charles.onrender.com';
+  const WIDGET_TYPE = 'embed';
+  let viewTracked = false;
+
+  // Track widget events (views, etc.)
+  function trackEvent(shopDomain, productId, eventType) {
+    fetch(`${SHOPIFY_APP_URL}/api/storefront/track-event`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        shopDomain: shopDomain,
+        productId: productId,
+        eventType: eventType,
+        widgetType: WIDGET_TYPE
+      })
+    }).catch(() => {});
+  }
 
   // Auto-initialize when DOM is ready
   if (document.readyState === 'loading') {
@@ -51,6 +67,12 @@
       
       // Render widget UI
       renderWidget(container, productId, shopDomain);
+      
+      // Track widget view once
+      if (!viewTracked) {
+        viewTracked = true;
+        trackEvent(shopDomain, productId, 'widget_view');
+      }
     });
   }
 

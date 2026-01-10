@@ -59,7 +59,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     widgetViews: analytics7Days?.widgetViews || 0,
     addToCarts: analytics7Days?.addToCarts || 0,
     uploadToATCRate: analytics7Days?.uploadToATCRate || 0,
-    productBreakdown: analytics7Days?.productBreakdown || [],
+    productBreakdown: (analytics7Days?.productBreakdown || []) as ProductBreakdown[],
   };
 
   const safeAnalytics30: AnalyticsData = {
@@ -67,7 +67,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     widgetViews: analytics30Days?.widgetViews || 0,
     addToCarts: analytics30Days?.addToCarts || 0,
     uploadToATCRate: analytics30Days?.uploadToATCRate || 0,
-    productBreakdown: analytics30Days?.productBreakdown || [],
+    productBreakdown: (analytics30Days?.productBreakdown || []) as ProductBreakdown[],
   };
 
   return json({ analytics7: safeAnalytics7, analytics30: safeAnalytics30 });
@@ -177,7 +177,7 @@ export default function Analytics() {
               <Box>
                 <Text as="span" variant="bodySm" fontWeight="semibold">Widgets</Text>
               </Box>
-              <Box display={{ xs: "none", md: "block" }}>
+              <Box>
                 <Text as="span" variant="bodySm" fontWeight="semibold">Share</Text>
               </Box>
             </InlineGrid>
@@ -228,8 +228,8 @@ export default function Analytics() {
                         </Text>
 
                         {/* Share */}
-                        <Box display={{ xs: "none", md: "block" }}>
-                          <Badge tone="info">{sharePercent}%</Badge>
+                        <Box>
+                          <Badge tone="info">{`${sharePercent}%`}</Badge>
                         </Box>
                       </InlineGrid>
 
@@ -265,7 +265,7 @@ export default function Analytics() {
                                     <Text as="span" variant="bodySm">{displayName}</Text>
                                     <Text as="span" variant="bodySm">{count}</Text>
                                     <Text as="span" variant="bodySm">—</Text>
-                                    <Box display={{ xs: "none", md: "block" }}>
+                                    <Box>
                                       <Text as="span" variant="bodySm">{widgetSharePercent}%</Text>
                                     </Box>
                                   </InlineGrid>
@@ -282,7 +282,7 @@ export default function Analytics() {
                                   <Text as="span" variant="bodySm">Gleame Widget</Text>
                                   <Text as="span" variant="bodySm">{product.transformations}</Text>
                                   <Text as="span" variant="bodySm">—</Text>
-                                  <Box display={{ xs: "none", md: "block" }}>
+                                  <Box>
                                     <Text as="span" variant="bodySm">100%</Text>
                                   </Box>
                                 </InlineGrid>
