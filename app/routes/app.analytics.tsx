@@ -148,10 +148,10 @@ export default function Analytics() {
           <Card padding="400">
             <BlockStack gap="200">
               <Text as="span" variant="bodySm" tone="subdued">
-                Daily Average
+                Widget Views
               </Text>
               <Text as="p" variant="headingXl" fontWeight="bold">
-                {(currentData.totalTransformations / parseInt(timeRange)).toFixed(1)}
+                {currentData.widgetViews.toLocaleString()}
               </Text>
             </BlockStack>
           </Card>
