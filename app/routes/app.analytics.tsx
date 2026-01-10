@@ -247,7 +247,7 @@ export default function Analytics() {
                                 horizontal: "Gleame Horizontal", 
                                 button: "Gleame Button",
                                 legacy: "Gleame Legacy",
-                                unknown: "Unknown Widget"
+                                unknown: "Uncategorized Widget"
                               };
                               const displayName = widgetNames[widgetType] || widgetType;
                               const widgetSharePercent = product.transformations > 0 
