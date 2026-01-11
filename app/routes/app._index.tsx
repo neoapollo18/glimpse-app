@@ -443,7 +443,9 @@ export default function Dashboard() {
                         <IndexTable.Row id={product.id} key={product.id} position={index}>
                           <IndexTable.Cell>
                             <Text as="span" variant="bodyMd" fontWeight="semibold">
-                              {product.product_name}
+                              {product.product_name.length > 43 
+                                ? `${product.product_name.substring(0, 43)}...` 
+                                : product.product_name}
                             </Text>
                           </IndexTable.Cell>
                           <IndexTable.Cell>
