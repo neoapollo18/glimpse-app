@@ -24,7 +24,8 @@ export default function App() {
         <Link to="/app" rel="home">
           Dashboard
         </Link>
-        <Link to="/app/products">Product Configuration</Link>
+        <Link to="/app/widgets">Widgets</Link>
+        <Link to="/app/products">Products</Link>
         <Link to="/app/analytics">Analytics</Link>
       </NavMenu>
       <Outlet />
