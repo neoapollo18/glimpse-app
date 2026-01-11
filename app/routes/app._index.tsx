@@ -1,7 +1,7 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { useLoaderData, useNavigate } from "@remix-run/react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Page,
   Layout,
@@ -95,8 +95,29 @@ export default function Dashboard() {
   } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   
-  // State to track if user has "continued" past setup
+  // State to track if user has "continued" past setup (persisted in localStorage)
   const [showDashboardView, setShowDashboardView] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // Load persisted state from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('gleame_setup_completed');
+    if (saved === 'true') {
+      setShowDashboardView(true);
+    }
+    setIsLoaded(true);
+  }, []);
+
+  // Save to localStorage when user continues to dashboard
+  const handleContinueToDashboard = () => {
+    localStorage.setItem('gleame_setup_completed', 'true');
+    setShowDashboardView(true);
+  };
+
+  // Go back to setup guide (without clearing the saved state)
+  const handleViewSetupGuide = () => {
+    setShowDashboardView(false);
+  };
 
   // Get store name from domain
   const storeName = shopDomain.replace('.myshopify.com', '').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
@@ -143,7 +164,8 @@ export default function Dashboard() {
   });
 
   // Determine if we should show setup or dashboard view
-  const shouldShowSetup = !allStepsComplete || !showDashboardView;
+  // Wait for localStorage to load before deciding
+  const shouldShowSetup = !isLoaded || !allStepsComplete || !showDashboardView;
 
   return (
     <Page>
@@ -325,7 +347,7 @@ export default function Dashboard() {
                     <>
                       <Divider />
                       <InlineStack align="end">
-                        <Button variant="primary" onClick={() => setShowDashboardView(true)}>
+                        <Button variant="primary" onClick={handleContinueToDashboard}>
                           Continue to Dashboard →
                         </Button>
                       </InlineStack>
@@ -489,7 +511,7 @@ export default function Dashboard() {
                     <Text as="p" variant="bodySm" tone="subdued">
                       Completed all steps
                     </Text>
-                    <Button variant="plain" onClick={() => setShowDashboardView(false)}>
+                    <Button variant="plain" onClick={handleViewSetupGuide}>
                       View Setup Guide →
                     </Button>
                   </BlockStack>
