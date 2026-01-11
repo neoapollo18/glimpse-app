@@ -27,16 +27,19 @@ const widgets: Widget[] = [
     id: "integrated-horizontal",
     name: "Gleame Horizontal",
     description: "Side-by-side before/after layout that fits naturally within your product page.",
+    image: "/widget-previews/horizontal.png",
   },
   {
     id: "integrated",
     name: "Gleame Embedded",
     description: "Vertical layout with stacked before/after images. Clean and focused design.",
+    image: "/widget-previews/embedded.png",
   },
   {
     id: "button",
     name: "Gleame Button",
     description: "A simple button that opens the transformation experience in a modal.",
+    image: "/widget-previews/button.png",
   },
   {
     id: "banner",
@@ -48,6 +51,7 @@ const widgets: Widget[] = [
     id: "og",
     name: "Gleame Legacy",
     description: "The original Gleame widget design with full transformation functionality.",
+    image: "/widget-previews/legacy.png",
   },
 ];
 
@@ -203,65 +207,81 @@ export default function Widgets() {
 
         {/* Help Section */}
         <Card>
-          <BlockStack gap="300">
+          <BlockStack gap="400">
             <Text as="h3" variant="headingMd">How to Add a Widget</Text>
-            <BlockStack gap="200">
-              <InlineStack gap="300" blockAlign="start">
-                <Box
-                  background="bg-fill-info"
-                  padding="200"
-                  borderRadius="full"
-                  minWidth="28px"
+            <BlockStack gap="300">
+              <InlineStack gap="300" blockAlign="center">
+                <div
+                  style={{
+                    width: "28px",
+                    height: "28px",
+                    borderRadius: "50%",
+                    background: "#91d5ff",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}
                 >
-                  <Text as="span" variant="bodySm" fontWeight="bold" tone="text-inverse">
-                    1
-                  </Text>
-                </Box>
+                  <span style={{ fontWeight: 600, fontSize: "14px", color: "#1f2937" }}>1</span>
+                </div>
                 <Text as="p" variant="bodyMd">
                   Click "Add to Theme" on your preferred widget
                 </Text>
               </InlineStack>
-              <InlineStack gap="300" blockAlign="start">
-                <Box
-                  background="bg-fill-info"
-                  padding="200"
-                  borderRadius="full"
-                  minWidth="28px"
+              <InlineStack gap="300" blockAlign="center">
+                <div
+                  style={{
+                    width: "28px",
+                    height: "28px",
+                    borderRadius: "50%",
+                    background: "#91d5ff",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}
                 >
-                  <Text as="span" variant="bodySm" fontWeight="bold" tone="text-inverse">
-                    2
-                  </Text>
-                </Box>
+                  <span style={{ fontWeight: 600, fontSize: "14px", color: "#1f2937" }}>2</span>
+                </div>
                 <Text as="p" variant="bodyMd">
                   In the theme editor, navigate to a product page template
                 </Text>
               </InlineStack>
-              <InlineStack gap="300" blockAlign="start">
-                <Box
-                  background="bg-fill-info"
-                  padding="200"
-                  borderRadius="full"
-                  minWidth="28px"
+              <InlineStack gap="300" blockAlign="center">
+                <div
+                  style={{
+                    width: "28px",
+                    height: "28px",
+                    borderRadius: "50%",
+                    background: "#91d5ff",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}
                 >
-                  <Text as="span" variant="bodySm" fontWeight="bold" tone="text-inverse">
-                    3
-                  </Text>
-                </Box>
+                  <span style={{ fontWeight: 600, fontSize: "14px", color: "#1f2937" }}>3</span>
+                </div>
                 <Text as="p" variant="bodyMd">
                   Click "Add block" and select your Gleame widget from the Apps section
                 </Text>
               </InlineStack>
-              <InlineStack gap="300" blockAlign="start">
-                <Box
-                  background="bg-fill-info"
-                  padding="200"
-                  borderRadius="full"
-                  minWidth="28px"
+              <InlineStack gap="300" blockAlign="center">
+                <div
+                  style={{
+                    width: "28px",
+                    height: "28px",
+                    borderRadius: "50%",
+                    background: "#91d5ff",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}
                 >
-                  <Text as="span" variant="bodySm" fontWeight="bold" tone="text-inverse">
-                    4
-                  </Text>
-                </Box>
+                  <span style={{ fontWeight: 600, fontSize: "14px", color: "#1f2937" }}>4</span>
+                </div>
                 <Text as="p" variant="bodyMd">
                   Customize colors and settings, then save your theme
                 </Text>
