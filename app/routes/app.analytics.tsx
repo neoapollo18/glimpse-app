@@ -49,10 +49,41 @@ interface AnalyticsData {
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
 
   const analytics7Days = await getAnalytics(session.shop, 7);
   const analytics30Days = await getAnalytics(session.shop, 30);
+
+  // Fetch product images from Shopify
+  const response = await admin.graphql(`
+    query GetProducts($first: Int!) {
+      products(first: $first) {
+        edges {
+          node {
+            id
+            images(first: 1) {
+              edges {
+                node {
+                  url
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  `, {
+    variables: { first: 100 }
+  });
+
+  const { data } = await response.json();
+  
+  // Create a map of shopify_id to image URL
+  const productImages: Record<string, string> = {};
+  data.products.edges.forEach(({ node }: { node: any }) => {
+    const imageUrl = node.images?.edges?.[0]?.node?.url || "";
+    productImages[node.id] = imageUrl;
+  });
 
   const safeAnalytics7: AnalyticsData = {
     totalTransformations: analytics7Days?.totalTransformations || 0,
@@ -70,11 +101,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     productBreakdown: (analytics30Days?.productBreakdown || []) as ProductBreakdown[],
   };
 
-  return json({ analytics7: safeAnalytics7, analytics30: safeAnalytics30 });
+  return json({ analytics7: safeAnalytics7, analytics30: safeAnalytics30, productImages });
 };
 
 export default function Analytics() {
-  const { analytics7, analytics30 } = useLoaderData<typeof loader>();
+  const { analytics7, analytics30, productImages } = useLoaderData<typeof loader>();
   const [timeRange, setTimeRange] = useState("30");
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
 
@@ -191,6 +222,10 @@ export default function Analytics() {
                 const sharePercent = currentData.totalTransformations > 0 
                   ? ((product.transformations / currentData.totalTransformations) * 100).toFixed(1)
                   : "0";
+                const imageUrl = productImages[product.shopify_id] || "";
+                const truncatedName = product.product_name.length > 35 
+                  ? product.product_name.slice(0, 35) + '...' 
+                  : product.product_name;
                 
                 return (
                   <div key={product.product_id}>
@@ -206,13 +241,13 @@ export default function Analytics() {
                             accessibilityLabel={isExpanded ? "Collapse" : "Expand"}
                           />
                           <Thumbnail
-                            source={ImageIcon}
+                            source={imageUrl || ImageIcon}
                             alt={product.product_name}
                             size="small"
                           />
                           <BlockStack gap="050">
                             <Text as="span" variant="bodyMd" fontWeight="semibold">
-                              {product.product_name}
+                              {truncatedName}
                             </Text>
                           </BlockStack>
                         </InlineStack>
