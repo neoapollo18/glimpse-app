@@ -841,4 +841,145 @@ export async function productHasVariantConfigs(productId: string): Promise<boole
     console.error('Error in productHasVariantConfigs:', error);
     return false;
   }
+}
+
+// ============================================
+// SHOP DATA CLEANUP (for uninstall)
+// ============================================
+
+/**
+ * Delete all data for a shop when they uninstall the app
+ * Called from the APP_UNINSTALLED webhook
+ * 
+ * Deletion order (to respect foreign keys):
+ * 1. analytics_events (references shop_id)
+ * 2. product_variants (references product_id)
+ * 3. products (references shop_id)
+ * 4. shops
+ * 
+ * @param shopDomain - The shop's myshopify.com domain
+ * @returns Object with success status and counts of deleted records
+ */
+export async function deleteShopData(shopDomain: string): Promise<{
+  success: boolean;
+  deleted: {
+    analyticsEvents: number;
+    productVariants: number;
+    products: number;
+    shop: boolean;
+  };
+  error?: string;
+}> {
+  console.log(`[Uninstall Cleanup] Starting data deletion for shop: ${shopDomain}`);
+  
+  const result = {
+    success: false,
+    deleted: {
+      analyticsEvents: 0,
+      productVariants: 0,
+      products: 0,
+      shop: false,
+    },
+  };
+
+  try {
+    // Step 1: Find the shop
+    const { data: shop, error: shopError } = await supabase
+      .from('shops')
+      .select('id')
+      .eq('shop_domain', shopDomain)
+      .single();
+
+    if (shopError || !shop) {
+      // Shop not found - might have been deleted already or never existed
+      // This is OK - webhook can fire multiple times
+      console.log(`[Uninstall Cleanup] Shop not found in Supabase: ${shopDomain}`);
+      result.success = true; // Not an error, just nothing to delete
+      return result;
+    }
+
+    const shopId = shop.id;
+    console.log(`[Uninstall Cleanup] Found shop with ID: ${shopId}`);
+
+    // Step 2: Get all product IDs for this shop (needed for variant deletion)
+    const { data: products, error: productsError } = await supabase
+      .from('products')
+      .select('id')
+      .eq('shop_id', shopId);
+
+    if (productsError) {
+      console.error('[Uninstall Cleanup] Error fetching products:', productsError);
+      // Continue anyway - we'll try to delete what we can
+    }
+
+    const productIds = products?.map(p => p.id) || [];
+    console.log(`[Uninstall Cleanup] Found ${productIds.length} products to clean up`);
+
+    // Step 3: Delete analytics_events
+    const { error: analyticsError, count: analyticsCount } = await supabase
+      .from('analytics_events')
+      .delete({ count: 'exact' })
+      .eq('shop_id', shopId);
+
+    if (analyticsError) {
+      console.error('[Uninstall Cleanup] Error deleting analytics:', analyticsError);
+    } else {
+      result.deleted.analyticsEvents = analyticsCount || 0;
+      console.log(`[Uninstall Cleanup] Deleted ${result.deleted.analyticsEvents} analytics events`);
+    }
+
+    // Step 4: Delete product_variants (if there are products)
+    if (productIds.length > 0) {
+      const { error: variantsError, count: variantsCount } = await supabase
+        .from('product_variants')
+        .delete({ count: 'exact' })
+        .in('product_id', productIds);
+
+      if (variantsError) {
+        console.error('[Uninstall Cleanup] Error deleting variants:', variantsError);
+      } else {
+        result.deleted.productVariants = variantsCount || 0;
+        console.log(`[Uninstall Cleanup] Deleted ${result.deleted.productVariants} product variants`);
+      }
+    }
+
+    // Step 5: Delete products
+    const { error: deleteProductsError, count: productsCount } = await supabase
+      .from('products')
+      .delete({ count: 'exact' })
+      .eq('shop_id', shopId);
+
+    if (deleteProductsError) {
+      console.error('[Uninstall Cleanup] Error deleting products:', deleteProductsError);
+    } else {
+      result.deleted.products = productsCount || 0;
+      console.log(`[Uninstall Cleanup] Deleted ${result.deleted.products} products`);
+    }
+
+    // Step 6: Delete the shop
+    const { error: deleteShopError } = await supabase
+      .from('shops')
+      .delete()
+      .eq('id', shopId);
+
+    if (deleteShopError) {
+      console.error('[Uninstall Cleanup] Error deleting shop:', deleteShopError);
+    } else {
+      result.deleted.shop = true;
+      console.log(`[Uninstall Cleanup] Deleted shop record`);
+    }
+
+    result.success = true;
+    console.log('[Uninstall Cleanup] Cleanup completed successfully:', result.deleted);
+    
+    return result;
+
+  } catch (error) {
+    console.error('[Uninstall Cleanup] Unexpected error:', error);
+    return {
+      ...result,
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
 } 

@@ -138,11 +138,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
   }
 
-  if (action === "test") {
-    // TODO: Implement test transformation
-    return { success: true, message: "Test transformation initiated!" };
-  }
-
   if (action === "save-variant") {
     try {
       const productId = formData.get("productId") as string; // Internal UUID

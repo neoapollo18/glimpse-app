@@ -1,6 +1,7 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { trackTransformationEvent } from "../lib/supabase.server";
+import { checkRateLimit, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
 
 // Simple event tracking endpoint for widget views and add-to-cart events
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -19,6 +20,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (request.method !== "POST") {
     return json({ error: "Method not allowed" }, { 
       status: 405,
+      headers: { "Access-Control-Allow-Origin": "*" }
+    });
+  }
+
+  // Rate limiting - lighter limits since this is just analytics
+  const clientIP = getClientIP(request);
+  const ipLimit = checkRateLimit(
+    `track:ip:${clientIP}:minute`,
+    RATE_LIMITS.TRACK_PER_IP_MINUTE.limit,
+    RATE_LIMITS.TRACK_PER_IP_MINUTE.windowMs
+  );
+  
+  if (!ipLimit.allowed) {
+    // Silently accept but don't process - don't expose rate limit to potential attackers
+    return json({ success: true }, {
       headers: { "Access-Control-Allow-Origin": "*" }
     });
   }

@@ -2,6 +2,7 @@ import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { transformImage, GEMINI_MODEL_PRO, GEMINI_MODEL_FLASH } from "../lib/ai.server";
 import { getProductOrVariantConfiguration, trackTransformationEvent, productHasVariantConfigs } from "../lib/supabase.server";
+import { checkRateLimit, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   try {
@@ -24,6 +25,51 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           "Access-Control-Allow-Origin": "*",
           "Access-Control-Allow-Methods": "POST, OPTIONS",
           "Access-Control-Allow-Headers": "Content-Type, X-Requested-With",
+        }
+      });
+    }
+
+    // ============================================
+    // RATE LIMITING - Protect against abuse
+    // ============================================
+    const clientIP = getClientIP(request);
+    
+    // Check per-IP rate limit (20 requests per minute)
+    const ipMinuteLimit = checkRateLimit(
+      `transform:ip:${clientIP}:minute`,
+      RATE_LIMITS.TRANSFORM_PER_IP_MINUTE.limit,
+      RATE_LIMITS.TRANSFORM_PER_IP_MINUTE.windowMs
+    );
+    
+    if (!ipMinuteLimit.allowed) {
+      console.log(`[RateLimit] IP ${clientIP} exceeded minute limit`);
+      return json({ 
+        error: "Too many requests. Please wait a moment and try again." 
+      }, { 
+        status: 429,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Retry-After": ipMinuteLimit.retryAfterSeconds.toString(),
+        }
+      });
+    }
+
+    // Check per-IP hourly limit (100 requests per hour)
+    const ipHourLimit = checkRateLimit(
+      `transform:ip:${clientIP}:hour`,
+      RATE_LIMITS.TRANSFORM_PER_IP_HOUR.limit,
+      RATE_LIMITS.TRANSFORM_PER_IP_HOUR.windowMs
+    );
+    
+    if (!ipHourLimit.allowed) {
+      console.log(`[RateLimit] IP ${clientIP} exceeded hourly limit`);
+      return json({ 
+        error: "Hourly limit reached. Please try again later." 
+      }, { 
+        status: 429,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Retry-After": ipHourLimit.retryAfterSeconds.toString(),
         }
       });
     }
@@ -58,6 +104,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         status: 400,
         headers: {
           "Access-Control-Allow-Origin": "*",
+        }
+      });
+    }
+
+    // Check per-shop rate limit (500 requests per hour)
+    const shopLimit = checkRateLimit(
+      `transform:shop:${shopDomain}:hour`,
+      RATE_LIMITS.TRANSFORM_PER_SHOP_HOUR.limit,
+      RATE_LIMITS.TRANSFORM_PER_SHOP_HOUR.windowMs
+    );
+    
+    if (!shopLimit.allowed) {
+      console.log(`[RateLimit] Shop ${shopDomain} exceeded hourly limit`);
+      return json({ 
+        error: "This store has reached its hourly limit. Please try again later." 
+      }, { 
+        status: 429,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Retry-After": shopLimit.retryAfterSeconds.toString(),
         }
       });
     }
