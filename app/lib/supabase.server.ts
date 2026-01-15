@@ -47,78 +47,41 @@ async function autoRegisterAlternateDomain(shopId: string, alternateDomain: stri
   }
 }
 
-// Helper function to find shop with fallback logic
-async function findShopByDomain(shopDomain: string) {
+// Helper function to find shop - SECURE VERSION
+// Only uses exact match and explicit alternate_domains whitelist
+// No fuzzy matching or guessing to prevent impersonation attacks
+// Exported for use in API validation
+export async function findShopByDomain(shopDomain: string) {
   console.log('🔍 Finding shop for domain:', shopDomain);
   
-  // Try exact match first
-  let { data: shop } = await supabase
+  // Method 1: Exact match on shop_domain
+  const { data: exactMatch } = await supabase
     .from('shops')
     .select('id, shop_domain')
     .eq('shop_domain', shopDomain)
     .single();
 
-  if (shop) {
+  if (exactMatch) {
     console.log('✅ Found shop by exact domain match');
-    return shop;
+    return exactMatch;
   }
 
-  // Try alternate_domains array (for custom domains, dev domains, etc.)
-  const { data: altDomainShop } = await supabase
+  // Method 2: Check alternate_domains whitelist (merchant-configured)
+  const { data: altDomainMatch } = await supabase
     .from('shops')
     .select('id, shop_domain')
     .contains('alternate_domains', [shopDomain])
     .single();
   
-  if (altDomainShop) {
-    console.log('✅ Found shop via alternate_domains:', altDomainShop.shop_domain);
-    return altDomainShop;
+  if (altDomainMatch) {
+    console.log('✅ Found shop via alternate_domains:', altDomainMatch.shop_domain);
+    return altDomainMatch;
   }
 
-  // If not found and it's not a .myshopify.com domain, try other alternatives
-  if (!shopDomain.includes('.myshopify.com')) {
-    const storeName = shopDomain.split('.')[0];
-    
-    // Try by shopify_id
-    const { data: shopifyIdShop } = await supabase
-      .from('shops')
-      .select('id, shop_domain')
-      .eq('shopify_id', storeName)
-      .single();
-    
-    if (shopifyIdShop) {
-      console.log('✅ Found shop by shopify_id');
-      // Auto-register this domain for future lookups
-      autoRegisterAlternateDomain(shopifyIdShop.id, shopDomain);
-      return shopifyIdShop;
-    }
-    
-    // Try fuzzy match
-    const { data: fuzzyShop } = await supabase
-      .from('shops')
-      .select('id, shop_domain')
-      .ilike('shop_domain', `${storeName}.myshopify.com%`)
-      .single();
-    
-    if (fuzzyShop) {
-      console.log('✅ Found shop by fuzzy match');
-      // Auto-register this domain for future lookups
-      autoRegisterAlternateDomain(fuzzyShop.id, shopDomain);
-      return fuzzyShop;
-    }
-  }
-
-  // NEW: Try to find shop by matching .myshopify.com domains with different prefixes
-  // This handles cases like glimpsedemo.myshopify.com → hx5hqt-na.myshopify.com
-  // We do this by checking if ANY shop has this domain in alternate_domains or
-  // by looking for shops that might be related (same products, etc.)
-  // For now, we'll try a broader search based on partial matching
-  if (shopDomain.endsWith('.myshopify.com')) {
-    // Get all shops and check if any have products - then prompt for manual linking
-    console.log('💡 TIP: This .myshopify.com domain may be an alias. Use manual_shop_domain setting in widget, or add to alternate_domains in Supabase.');
-  }
-
+  // No match found - provide helpful guidance
   console.log('❌ No shop found for domain:', shopDomain);
+  console.log('💡 To fix: Either use manual_shop_domain in widget settings, or add this domain to alternate_domains in Supabase');
+  
   return null;
 }
 
@@ -144,46 +107,12 @@ export async function getConfiguredProducts(shopDomain: string) {
 export async function getProductConfiguration(shopDomain: string, shopifyId: string) {
   console.log('Looking for product config:', { shopDomain, shopifyId });
   
-  let shop = await findShopByDomain(shopDomain);
+  // SECURITY: Shop must exist and be verified first
+  // No cross-shop lookups to prevent impersonation attacks
+  const shop = await findShopByDomain(shopDomain);
 
-  // NEW: If shop not found, try to find by product ID across all shops (auto-linking)
   if (!shop) {
-    console.log('🔍 Shop not found by domain, trying product-based auto-linking...');
-    
-    // Handle both formats: numeric ID and full GID
-    let searchShopifyId = shopifyId;
-    if (!shopifyId.startsWith('gid://')) {
-      searchShopifyId = `gid://shopify/Product/${shopifyId}`;
-    }
-    
-    // Search for this product across ALL shops
-    const { data: productMatch } = await supabase
-      .from('products')
-      .select('id, shop_id, transformation_prompt, product_name, shopify_id')
-      .eq('shopify_id', searchShopifyId)
-      .single();
-    
-    if (productMatch) {
-      // Found the product! Get the shop and auto-register this domain
-      const { data: foundShop } = await supabase
-        .from('shops')
-        .select('id, shop_domain')
-        .eq('id', productMatch.shop_id)
-        .single();
-      
-      if (foundShop) {
-        console.log('✅ Auto-linked domain via product match:', shopDomain, '→', foundShop.shop_domain);
-        // Auto-register this domain for future lookups
-        autoRegisterAlternateDomain(foundShop.id, shopDomain);
-        
-        // Return the product config directly since we found it
-        console.log('Found product:', productMatch);
-        return productMatch;
-      }
-    }
-    
     console.log('❌ Shop not found for domain:', shopDomain);
-    console.log('💡 TIP: Make sure the shop is configured with the .myshopify.com domain');
     return null;
   }
 

@@ -1,7 +1,7 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { transformImage, GEMINI_MODEL_PRO, GEMINI_MODEL_FLASH } from "../lib/ai.server";
-import { getProductOrVariantConfiguration, trackTransformationEvent, productHasVariantConfigs } from "../lib/supabase.server";
+import { getProductOrVariantConfiguration, trackTransformationEvent, productHasVariantConfigs, findShopByDomain } from "../lib/supabase.server";
 import { checkRateLimit, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -30,7 +30,65 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     // ============================================
-    // RATE LIMITING - Protect against abuse
+    // STEP 1: Parse request and validate fields
+    // ============================================
+    const formData = await request.formData();
+    const imageFile = formData.get("image") as File;
+    const productId = formData.get("productId") as string;
+    const shopDomain = formData.get("shopDomain") as string;
+    const variantId = formData.get("variantId") as string | null;
+    const widgetType = (formData.get("widgetType") as string) || "unknown";
+
+    if (!imageFile || !productId || !shopDomain) {
+      return json({ 
+        error: "Missing required fields: image, productId, and shopDomain" 
+      }, { 
+        status: 400,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+        }
+      });
+    }
+
+    // Log request details
+    const isHeicHeif = imageFile?.name?.toLowerCase().match(/\.(heic|heif)$/) || 
+                       ['image/heic', 'image/heif'].includes(imageFile?.type?.toLowerCase());
+    console.log('Storefront API called with:', { 
+      productId, 
+      shopDomain, 
+      variantId, 
+      widgetType,
+      imageSize: imageFile?.size,
+      imageType: imageFile?.type,
+      isHeicHeif
+    });
+
+    // ============================================
+    // STEP 2: VALIDATE SHOP EXISTS (Security)
+    // Must verify shop before rate limiting to prevent
+    // attackers from using fake domains to bypass limits
+    // ============================================
+    const verifiedShop = await findShopByDomain(shopDomain);
+    
+    if (!verifiedShop) {
+      console.log(`[Security] Unknown shop domain rejected: ${shopDomain}`);
+      return json({ 
+        error: "Incorrect shop domain. Please check your shop domain widget configuration." 
+      }, { 
+        status: 403,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+        }
+      });
+    }
+
+    // Use the VERIFIED shop domain for all subsequent operations
+    // This prevents attackers from spoofing shop domains
+    const verifiedShopDomain = verifiedShop.shop_domain;
+    console.log(`[Security] Shop verified: ${shopDomain} → ${verifiedShopDomain}`);
+
+    // ============================================
+    // STEP 3: RATE LIMITING (using verified shop)
     // ============================================
     const clientIP = getClientIP(request);
     
@@ -74,49 +132,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       });
     }
 
-    const formData = await request.formData();
-    const imageFile = formData.get("image") as File;
-    const productId = formData.get("productId") as string;
-    const shopDomain = formData.get("shopDomain") as string;
-    const variantId = formData.get("variantId") as string | null;
-    const widgetType = (formData.get("widgetType") as string) || "unknown";
-    
-    // Debug: log received widgetType
-    console.log('Transform API received widgetType:', widgetType);
-
-    // Log HEIC/HEIF specifically for debugging
-    const isHeicHeif = imageFile?.name?.toLowerCase().match(/\.(heic|heif)$/) || 
-                       ['image/heic', 'image/heif'].includes(imageFile?.type?.toLowerCase());
-    console.log('Storefront API called with:', { 
-      productId, 
-      shopDomain, 
-      variantId, 
-      imageSize: imageFile?.size,
-      imageType: imageFile?.type,
-      imageName: imageFile?.name,
-      isHeicHeif
-    });
-
-    if (!imageFile || !productId || !shopDomain) {
-      return json({ 
-        error: "Missing required fields: image, productId, and shopDomain" 
-      }, { 
-        status: 400,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-        }
-      });
-    }
-
-    // Check per-shop rate limit (500 requests per hour)
+    // Check per-shop rate limit using VERIFIED domain (500 requests per hour)
     const shopLimit = checkRateLimit(
-      `transform:shop:${shopDomain}:hour`,
+      `transform:shop:${verifiedShopDomain}:hour`,
       RATE_LIMITS.TRANSFORM_PER_SHOP_HOUR.limit,
       RATE_LIMITS.TRANSFORM_PER_SHOP_HOUR.windowMs
     );
     
     if (!shopLimit.allowed) {
-      console.log(`[RateLimit] Shop ${shopDomain} exceeded hourly limit`);
+      console.log(`[RateLimit] Shop ${verifiedShopDomain} exceeded hourly limit`);
       return json({ 
         error: "This store has reached its hourly limit. Please try again later." 
       }, { 
@@ -128,10 +152,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       });
     }
 
+    // ============================================
+    // STEP 4: Get product configuration
+    // ============================================
     // Get product or variant configuration from Supabase
     // If variantId provided, tries variant first, then falls back to product
     const productConfig = await getProductOrVariantConfiguration(
-      shopDomain, 
+      verifiedShopDomain, 
       productId,
       variantId || undefined
     );
@@ -223,12 +250,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     // Track analytics event (don't wait for it to complete)
-    trackTransformationEvent(shopDomain, productId, 'transformation', widgetType).catch(error => {
+    trackTransformationEvent(verifiedShopDomain, productId, 'transformation', widgetType).catch(error => {
       console.error('Failed to track analytics event:', error);
     });
 
     // Log successful transformation for analytics
-    console.log(`Successful transformation for product ${productId} on shop ${shopDomain}`);
+    console.log(`Successful transformation for product ${productId} on shop ${verifiedShopDomain}`);
 
     return json({
       success: true,
