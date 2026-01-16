@@ -1,4 +1,4 @@
-import { GoogleGenAI, Modality } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import sharp from "sharp";
 import heicConvert from "heic-convert";
 

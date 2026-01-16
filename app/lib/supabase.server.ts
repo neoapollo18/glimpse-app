@@ -13,40 +13,6 @@ export const supabase = createClient(
   process.env.SUPABASE_API_KEY
 );
 
-// Helper function to auto-register alternate domain (fire-and-forget)
-async function autoRegisterAlternateDomain(shopId: string, alternateDomain: string) {
-  try {
-    // Use raw SQL to append to array only if not already present
-    const { error } = await supabase.rpc('add_alternate_domain', {
-      p_shop_id: shopId,
-      p_domain: alternateDomain
-    });
-    
-    if (error) {
-      // Fallback: try direct update if RPC doesn't exist yet
-      const { data: currentShop } = await supabase
-        .from('shops')
-        .select('alternate_domains')
-        .eq('id', shopId)
-        .single();
-      
-      const currentDomains = currentShop?.alternate_domains || [];
-      if (!currentDomains.includes(alternateDomain)) {
-        await supabase
-          .from('shops')
-          .update({ alternate_domains: [...currentDomains, alternateDomain] })
-          .eq('id', shopId);
-        console.log('✅ Auto-registered alternate domain:', alternateDomain);
-      }
-    } else {
-      console.log('✅ Auto-registered alternate domain via RPC:', alternateDomain);
-    }
-  } catch (err) {
-    // Non-critical, log but don't throw
-    console.error('Failed to auto-register alternate domain:', err);
-  }
-}
-
 // Helper function to find shop - SECURE VERSION
 // Only uses exact match and explicit alternate_domains whitelist
 // No fuzzy matching or guessing to prevent impersonation attacks

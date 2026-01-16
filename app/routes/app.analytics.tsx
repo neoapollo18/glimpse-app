@@ -3,7 +3,6 @@ import { json } from "@remix-run/node";
 import { useLoaderData } from "@remix-run/react";
 import {
   Page,
-  Layout,
   Text,
   Card,
   BlockStack,
@@ -14,7 +13,6 @@ import {
   Divider,
   Button,
   Collapsible,
-  Icon,
   Thumbnail,
   Badge,
 } from "@shopify/polaris";

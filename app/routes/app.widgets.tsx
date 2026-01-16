@@ -127,8 +127,6 @@ export default function Widgets() {
                 {/* Widget Preview Image */}
                 <Box
                   background="bg-surface-secondary"
-                  borderRadiusStartStart="300"
-                  borderRadiusStartEnd="300"
                 >
                   {widget.image ? (
                     <div

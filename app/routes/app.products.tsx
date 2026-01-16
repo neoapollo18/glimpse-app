@@ -17,7 +17,6 @@ import {
   Thumbnail,
   Banner,
   DropZone,
-  Spinner,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -26,7 +25,6 @@ import {
   saveProductConfiguration, 
   updateProductConfiguration, 
   deleteProductConfiguration,
-  getProductVariants,
   saveVariantConfiguration
 } from "../lib/supabase.server";
 
@@ -233,7 +231,8 @@ export default function Products() {
   const [transformError, setTransformError] = useState<string | null>(null);
 
   // Variant configuration state (Phase 3)
-  const [showVariants, setShowVariants] = useState(false);
+  // Note: showVariants state reserved for future UI expansion
+  const [, setShowVariants] = useState(false);
   const [configuredVariants, setConfiguredVariants] = useState<any[]>([]);
   const [selectedVariantForConfig, setSelectedVariantForConfig] = useState<any | null>(null);
   const [variantPrompt, setVariantPrompt] = useState("");
@@ -488,14 +487,14 @@ export default function Products() {
           </Text>
         </InlineStack>
       </div>,
-      <div style={{ paddingLeft: '4px'}}>
+      <div key={`${product.id}-prompt`} style={{ paddingLeft: '4px'}}>
         <Text as="span" variant="bodySm">
           {product.transformation_prompt.length > 75
             ? `${product.transformation_prompt.substring(0, 75)}...` 
             : product.transformation_prompt}
         </Text>
       </div>,
-      <InlineStack gap="200" wrap={false}>
+      <InlineStack key={`${product.id}-actions`} gap="200" wrap={false}>
         <Button size="slim" onClick={() => handleTest(product)}>
           Test
         </Button>
@@ -539,6 +538,7 @@ export default function Products() {
         </InlineStack>
       </div>,
       <Button
+        key={`${product.id}-action`}
         variant={configured ? "plain" : "primary"}
         onClick={() => handleConfigure(product)}
         size="slim"

@@ -12,7 +12,6 @@ import {
   Box,
   Icon,
   Divider,
-  Banner,
 } from "@shopify/polaris";
 import {
   LanguageTranslateIcon,
@@ -33,7 +32,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const formData = await request.formData();
   const actionType = formData.get("action");
 
@@ -140,9 +139,7 @@ export default function Settings() {
                                 textAlign="start"
                                 onClick={item.onClick}
                               >
-                                <Text as="span" variant="bodyMd" fontWeight="semibold">
-                                  {item.title}
-                                </Text>
+                                {item.title}
                               </Button>
                               <Text as="p" variant="bodySm" tone="subdued">
                                 {item.description}
