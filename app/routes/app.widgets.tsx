@@ -89,37 +89,20 @@ export default function Widgets() {
         {/* Header */}
         <BlockStack gap="200">
           <Text as="h1" variant="headingXl">Widgets</Text>
-          <Text as="p" variant="bodyLg" tone="subdued">
-            Choose how Gleame appears on your storefront. Each widget is designed for different use cases.
-          </Text>
         </BlockStack>
 
-        {/* Video Tutorial Banner */}
+        {/* Intro Card */}
         <Card>
           <InlineStack gap="400" align="center" blockAlign="center">
-            <Box
-              background="bg-surface-secondary"
-              padding="300"
-              borderRadius="200"
-            >
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-                <rect width="24" height="24" rx="6" fill="#FF0000"/>
-                <path d="M10 8.5L16 12L10 15.5V8.5Z" fill="white"/>
-              </svg>
-            </Box>
-            <BlockStack gap="100">
-              <Text as="span" variant="bodyMd" fontWeight="semibold">
-                Need help choosing?
+            <BlockStack gap="150">
+              <Text as="span" variant="headingMd" fontWeight="semibold">
+                Add Gleame to your store
               </Text>
-              <Text as="span" variant="bodySm" tone="subdued">
-                Watch our quick guide on selecting the right widget for your store
+
+              <Text as="span" variant="bodyLg"  tone="subdued">
+              Below are the available Gleame widgets, each designed for different placements across product pages, landing pages, and promotional sections.  Click See demo on any widget to watch a short setup tutorial. Widgets can be updated, moved, or removed at any time.
               </Text>
             </BlockStack>
-            <div style={{ marginLeft: "auto" }}>
-              <Button url="https://www.youtube.com/watch?v=example" external>
-                Watch Video
-              </Button>
-            </div>
           </InlineStack>
         </Card>
 
