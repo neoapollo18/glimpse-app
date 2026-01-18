@@ -20,6 +20,7 @@ interface Widget {
   description: string;
   recommended?: boolean;
   image?: string;
+  demoUrl?: string;
 }
 
 const widgets: Widget[] = [
@@ -28,30 +29,35 @@ const widgets: Widget[] = [
     name: "Gleame Horizontal",
     description: "Side-by-side before/after layout that fits naturally within your product page.",
     image: "/widget-previews/horizontal.png",
+    demoUrl: "https://www.loom.com/share/b61131d2bbc149e3bffafeadad73b376", // TODO: Replace with actual demo URL
   },
   {
     id: "integrated",
     name: "Gleame Embedded",
     description: "Vertical layout with stacked before/after images. Clean and focused design.",
     image: "/widget-previews/embedded.png",
+    demoUrl: "https://www.loom.com/share/a4d9417da05e4e969f1a9738c90170dd", // TODO: Replace with actual demo URL
   },
   {
     id: "button",
     name: "Gleame Button",
     description: "A simple button that opens the transformation experience in a modal.",
     image: "/widget-previews/button.png",
+    demoUrl: "https://www.loom.com/share/d2043db0206643ee9c471409549491a0", // TODO: Replace with actual demo URL
   },
   {
     id: "banner",
     name: "Gleame Banner",
     description: "Eye-catching promotional banner to drive discovery on any page.",
     image: "/widget-previews/banner-preview.png",
+    demoUrl: "https://www.loom.com/share/8f64b108299744c98f7a9c28ac7210d5", // TODO: Replace with actual demo URL
   },
   {
     id: "og",
     name: "Gleame Legacy",
     description: "The original Gleame widget design with full transformation functionality.",
     image: "/widget-previews/legacy.png",
+    demoUrl: "https://www.loom.com/share/3ed7ae1272ec45bea8014a30e2ff26df", // TODO: Replace with actual demo URL
   },
 ];
 
@@ -69,12 +75,10 @@ export default function Widgets() {
     );
   };
 
-  const handleDemo = (widgetId: string) => {
-    // Open demo page for the widget
-    window.open(
-      `https://gleame.io/demo/${widgetId}`,
-      "_blank"
-    );
+  const handleDemo = (widget: Widget) => {
+    // Open demo page/video for the widget
+    const url = widget.demoUrl || `https://gleame.io/demo/${widget.id}`;
+    window.open(url, "_blank");
   };
 
   return (
@@ -191,7 +195,7 @@ export default function Widgets() {
                       </Button>
                       <Button
                         variant="plain"
-                        onClick={() => handleDemo(widget.id)}
+                        onClick={() => handleDemo(widget)}
                       >
                         See Demo
                       </Button>
