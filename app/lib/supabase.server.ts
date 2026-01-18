@@ -370,10 +370,10 @@ export async function getAnalytics(shopDomain: string, daysBack: number = 7) {
     const dateThreshold = new Date();
     dateThreshold.setDate(dateThreshold.getDate() - daysBack);
 
-    // Get total transformations (selfie uploads) in the last N days
-    const { data: transformationEvents, error: transformationError } = await supabase
+    // Get total transformations count (selfie uploads) in the last N days (use count to avoid 1000 row limit)
+    const { count: transformationCount, error: transformationError } = await supabase
       .from('analytics_events')
-      .select('id')
+      .select('*', { count: 'exact', head: true })
       .eq('shop_id', shop.id)
       .eq('event_type', 'transformation')
       .gte('created_at', dateThreshold.toISOString());
@@ -383,10 +383,10 @@ export async function getAnalytics(shopDomain: string, daysBack: number = 7) {
       return null;
     }
 
-    // Get widget views in the last N days
-    const { data: widgetViewEvents, error: viewError } = await supabase
+    // Get widget views count in the last N days (use count to avoid 1000 row limit)
+    const { count: widgetViewCount, error: viewError } = await supabase
       .from('analytics_events')
-      .select('id')
+      .select('*', { count: 'exact', head: true })
       .eq('shop_id', shop.id)
       .eq('event_type', 'widget_view')
       .gte('created_at', dateThreshold.toISOString());
@@ -396,10 +396,10 @@ export async function getAnalytics(shopDomain: string, daysBack: number = 7) {
       // Don't fail entirely, just set to 0
     }
 
-    // Get add-to-cart events in the last N days
-    const { data: atcEvents, error: atcError } = await supabase
+    // Get add-to-cart events count in the last N days (use count to avoid 1000 row limit)
+    const { count: atcCount, error: atcError } = await supabase
       .from('analytics_events')
-      .select('id')
+      .select('*', { count: 'exact', head: true })
       .eq('shop_id', shop.id)
       .eq('event_type', 'add_to_cart')
       .gte('created_at', dateThreshold.toISOString());
@@ -480,9 +480,9 @@ export async function getAnalytics(shopDomain: string, daysBack: number = 7) {
         }
       });
 
-    const totalUploads = transformationEvents?.length || 0;
-    const totalViews = widgetViewEvents?.length || 0;
-    const totalATC = atcEvents?.length || 0;
+    const totalUploads = transformationCount || 0;
+    const totalViews = widgetViewCount || 0;
+    const totalATC = atcCount || 0;
     
     // Calculate upload to ATC rate
     const uploadToATCRate = totalUploads > 0 ? (totalATC / totalUploads) * 100 : 0;
