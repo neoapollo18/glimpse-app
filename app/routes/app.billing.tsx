@@ -146,6 +146,7 @@ export default function BillingPage() {
 
   const currentPlanName = (subscription as Subscription | null)?.plan?.name || "Free";
   const isActive = (subscription as Subscription | null)?.active === true;
+  const isFree = !subscription || currentPlanName === "Free";
   const typedSubscription = subscription as Subscription | null;
   const typedPlans = plans as Plan[];
 
@@ -176,10 +177,12 @@ export default function BillingPage() {
                 
                 <InlineStack gap="300" align="start" blockAlign="center">
                   <Text as="p" variant="headingLg">{currentPlanName}</Text>
-                  {isActive ? (
+                  {isFree ? (
+                    <Badge tone="info">Free tier</Badge>
+                  ) : isActive ? (
                     <Badge tone="success">Active</Badge>
                   ) : (
-                    <Badge>Inactive</Badge>
+                    <Badge tone="warning">Inactive</Badge>
                   )}
                 </InlineStack>
 
