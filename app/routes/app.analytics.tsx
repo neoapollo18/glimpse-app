@@ -280,9 +280,9 @@ export default function Analytics() {
                                 horizontal: "Gleame Horizontal", 
                                 button: "Gleame Button",
                                 legacy: "Gleame Legacy",
-                                unknown: "Uncategorized Widget"
+                                unknown: "Gleame Legacy"
                               };
-                              const displayName = widgetNames[widgetType] || widgetType;
+                              const displayName = widgetNames[widgetType] || "Gleame Legacy";
                               const widgetSharePercent = product.transformations > 0 
                                 ? ((count / product.transformations) * 100).toFixed(0)
                                 : "0";
