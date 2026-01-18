@@ -877,4 +877,358 @@ export async function deleteShopData(shopDomain: string): Promise<{
       error: error instanceof Error ? error.message : 'Unknown error',
     };
   }
-} 
+}
+
+// ============================================
+// FUNNEL SYSTEM FUNCTIONS
+// ============================================
+
+/**
+ * Get all categories (11 beauty categories)
+ * Used by the funnel UI to display category options
+ */
+export async function getCategories() {
+  console.log('📂 Fetching all categories');
+  
+  try {
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*')
+      .order('sort_order');
+    
+    if (error) {
+      console.error('Error fetching categories:', error);
+      return [];
+    }
+    
+    console.log(`Found ${data?.length || 0} categories`);
+    return data || [];
+  } catch (error) {
+    console.error('Error in getCategories:', error);
+    return [];
+  }
+}
+
+/**
+ * Get a single category by ID (includes base_prompt)
+ * @param categoryId - UUID of the category
+ */
+export async function getCategory(categoryId: string) {
+  console.log('📂 Fetching category:', categoryId);
+  
+  try {
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*')
+      .eq('id', categoryId)
+      .single();
+    
+    if (error) {
+      console.error('Error fetching category:', error);
+      return null;
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Error in getCategory:', error);
+    return null;
+  }
+}
+
+/**
+ * Get all parameters for a category (including locked guardrails)
+ * @param categoryId - UUID of the category
+ */
+export async function getCategoryParameters(categoryId: string) {
+  console.log('📋 Fetching parameters for category:', categoryId);
+  
+  try {
+    const { data, error } = await supabase
+      .from('category_parameters')
+      .select('*')
+      .eq('category_id', categoryId)
+      .order('sort_order');
+    
+    if (error) {
+      console.error('Error fetching category parameters:', error);
+      return [];
+    }
+    
+    console.log(`Found ${data?.length || 0} parameters`);
+    return data || [];
+  } catch (error) {
+    console.error('Error in getCategoryParameters:', error);
+    return [];
+  }
+}
+
+/**
+ * Get all levels for a parameter
+ * @param parameterId - UUID of the parameter
+ */
+export async function getParameterLevels(parameterId: string) {
+  console.log('📊 Fetching levels for parameter:', parameterId);
+  
+  try {
+    const { data, error } = await supabase
+      .from('parameter_levels')
+      .select('*')
+      .eq('parameter_id', parameterId)
+      .order('level');
+    
+    if (error) {
+      console.error('Error fetching parameter levels:', error);
+      return [];
+    }
+    
+    return data || [];
+  } catch (error) {
+    console.error('Error in getParameterLevels:', error);
+    return [];
+  }
+}
+
+/**
+ * Get a specific level for a parameter
+ * @param parameterId - UUID of the parameter
+ * @param level - Level number (1, 2, 3, or 4)
+ */
+export async function getParameterLevel(parameterId: string, level: number) {
+  console.log('📊 Fetching level', level, 'for parameter:', parameterId);
+  
+  try {
+    const { data, error } = await supabase
+      .from('parameter_levels')
+      .select('*')
+      .eq('parameter_id', parameterId)
+      .eq('level', level)
+      .single();
+    
+    if (error) {
+      console.error('Error fetching parameter level:', error);
+      return null;
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Error in getParameterLevel:', error);
+    return null;
+  }
+}
+
+/**
+ * Get category with all parameters and their levels in one call
+ * Used by the funnel UI to load everything needed for configuration
+ * @param categoryId - UUID of the category
+ */
+export async function getCategoryWithFullData(categoryId: string) {
+  console.log('📦 Fetching full category data:', categoryId);
+  
+  try {
+    // Get category
+    const category = await getCategory(categoryId);
+    if (!category) {
+      console.error('Category not found');
+      return null;
+    }
+    
+    // Get all parameters for this category
+    const parameters = await getCategoryParameters(categoryId);
+    
+    // Get levels for each parameter
+    const parametersWithLevels = await Promise.all(
+      parameters.map(async (param) => {
+        const levels = await getParameterLevels(param.id);
+        return {
+          ...param,
+          levels
+        };
+      })
+    );
+    
+    return {
+      ...category,
+      parameters: parametersWithLevels
+    };
+  } catch (error) {
+    console.error('Error in getCategoryWithFullData:', error);
+    return null;
+  }
+}
+
+/**
+ * Save funnel configuration for a product
+ * Updates the product with category, funnel responses, and generated prompt
+ * @param productId - Internal product ID (UUID)
+ * @param categoryId - Category UUID
+ * @param funnelResponses - Object mapping parameter_id to level number
+ * @param generatedPrompt - The full concatenated prompt
+ */
+export async function saveFunnelConfiguration(
+  productId: string,
+  categoryId: string,
+  funnelResponses: Record<string, number>,
+  generatedPrompt: string
+) {
+  console.log('💾 Saving funnel configuration for product:', productId);
+  
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .update({
+        category_id: categoryId,
+        funnel_responses: funnelResponses,
+        transformation_prompt: generatedPrompt,
+        is_funnel_generated: true
+      })
+      .eq('id', productId)
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('Error saving funnel configuration:', error);
+      throw new Error(`Failed to save funnel configuration: ${error.message}`);
+    }
+    
+    console.log('✅ Funnel configuration saved successfully');
+    return data;
+  } catch (error) {
+    console.error('Error in saveFunnelConfiguration:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get configured products with category info (for products table display)
+ * Joins with categories table to get category name
+ * @param shopDomain - Shop domain
+ */
+export async function getConfiguredProductsWithCategory(shopDomain: string) {
+  const shop = await findShopByDomain(shopDomain);
+  
+  if (!shop) return [];
+  
+  try {
+    const { data: products, error } = await supabase
+      .from('products')
+      .select(`
+        *,
+        categories (
+          id,
+          name,
+          slug
+        )
+      `)
+      .eq('shop_id', shop.id);
+    
+    if (error) {
+      console.error('Error fetching configured products with category:', error);
+      return [];
+    }
+    
+    return products || [];
+  } catch (error) {
+    console.error('Error in getConfiguredProductsWithCategory:', error);
+    return [];
+  }
+}
+
+/**
+ * Get all shops with their products (for Gleame Admin)
+ * Includes category info and transformation counts
+ */
+export async function getAllShopsWithProducts() {
+  console.log('🏪 Fetching all shops with products (admin view)');
+  
+  try {
+    // Get all shops
+    const { data: shops, error: shopsError } = await supabase
+      .from('shops')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (shopsError) {
+      console.error('Error fetching shops:', shopsError);
+      return [];
+    }
+    
+    // Get products with categories for each shop
+    const shopsWithProducts = await Promise.all(
+      (shops || []).map(async (shop) => {
+        const { data: products } = await supabase
+          .from('products')
+          .select(`
+            *,
+            categories (
+              id,
+              name,
+              slug
+            )
+          `)
+          .eq('shop_id', shop.id);
+        
+        // Get transformation counts per product
+        const productsWithStats = await Promise.all(
+          (products || []).map(async (product) => {
+            const { count } = await supabase
+              .from('analytics_events')
+              .select('id', { count: 'exact', head: true })
+              .eq('product_id', product.id)
+              .eq('event_type', 'transformation');
+            
+            return {
+              ...product,
+              transformation_count: count || 0
+            };
+          })
+        );
+        
+        return {
+          ...shop,
+          products: productsWithStats
+        };
+      })
+    );
+    
+    console.log(`Found ${shopsWithProducts.length} shops`);
+    return shopsWithProducts;
+  } catch (error) {
+    console.error('Error in getAllShopsWithProducts:', error);
+    return [];
+  }
+}
+
+/**
+ * Update transformation prompt directly (for Gleame Admin)
+ * Allows founders to edit prompts directly
+ * @param productId - Internal product ID (UUID)
+ * @param transformationPrompt - New prompt text
+ */
+export async function updateProductPromptDirect(
+  productId: string,
+  transformationPrompt: string
+) {
+  console.log('✏️ Direct prompt update for product:', productId);
+  
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .update({
+        transformation_prompt: transformationPrompt
+      })
+      .eq('id', productId)
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('Error updating prompt:', error);
+      throw new Error(`Failed to update prompt: ${error.message}`);
+    }
+    
+    console.log('✅ Prompt updated successfully');
+    return data;
+  } catch (error) {
+    console.error('Error in updateProductPromptDirect:', error);
+    throw error;
+  }
+}

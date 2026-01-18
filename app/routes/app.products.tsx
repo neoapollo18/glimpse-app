@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { useLoaderData, useFetcher, useSubmit } from "@remix-run/react";
 import {
@@ -17,16 +17,24 @@ import {
   Thumbnail,
   Banner,
   DropZone,
+  Select,
+  Spinner,
+  RadioButton,
+  Divider,
+  Pagination,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { 
-  getConfiguredProducts, 
+  getConfiguredProductsWithCategory,
+  getCategories,
   saveProductConfiguration, 
   updateProductConfiguration, 
   deleteProductConfiguration,
-  saveVariantConfiguration
+  saveVariantConfiguration,
+  saveFunnelConfiguration
 } from "../lib/supabase.server";
+import { generatePromptFromFunnel, validateFunnelResponses } from "../lib/prompt-generator.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
@@ -76,14 +84,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { data } = await response.json();
   const shopifyProducts = data.products.edges.map(({ node }: { node: any }) => node);
 
-  // Fetch configured products from Supabase
+  // Fetch configured products from Supabase (with category data joined)
   console.log('🔍 DEBUG: Fetching products for shop:', session.shop);
   const configuredProducts = session.shop 
-    ? await getConfiguredProducts(session.shop)
+    ? await getConfiguredProductsWithCategory(session.shop)
     : [];
   console.log('🔍 DEBUG: Found', configuredProducts.length, 'configured products');
 
-  return { shopifyProducts, configuredProducts, shop: session.shop };
+  // Fetch all categories for the funnel UI dropdown
+  const categories = await getCategories();
+  console.log('🔍 DEBUG: Found', categories.length, 'categories');
+
+  return { shopifyProducts, configuredProducts, categories, shop: session.shop };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -171,6 +183,117 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
   }
 
+  // NEW: Funnel-based configuration (prompt hidden from user!)
+  if (action === "configure-funnel") {
+    try {
+      const shopifyProductId = formData.get("shopifyProductId") as string;
+      const productTitle = formData.get("productTitle") as string;
+      const categoryId = formData.get("categoryId") as string;
+      const funnelResponsesJson = formData.get("funnelResponses") as string;
+      const funnelResponses = JSON.parse(funnelResponsesJson);
+      const isNewProduct = formData.get("isNewProduct") === "true";
+      const configuredProductId = formData.get("configuredProductId") as string | null;
+      const shadeConfigsJson = formData.get("shadeConfigs") as string | null;
+
+      // Validate all required params are answered
+      const validation = await validateFunnelResponses(categoryId, funnelResponses);
+      if (!validation.isValid) {
+        return { 
+          success: false, 
+          message: `Please answer all questions: ${validation.missingParameters.join(", ")}` 
+        };
+      }
+
+      // Generate prompt SERVER-SIDE (user never sees this!)
+      const generatedPrompt = await generatePromptFromFunnel(categoryId, funnelResponses);
+      console.log('🔧 Generated prompt length:', generatedPrompt.length, '(hidden from user)');
+
+      let productId: string;
+
+      if (isNewProduct) {
+        // Create product first, then save funnel config
+        const newProduct = await saveProductConfiguration(
+          session.shop, 
+          shopifyProductId, 
+          productTitle, 
+          generatedPrompt
+        );
+        await saveFunnelConfiguration(
+          newProduct.id, 
+          categoryId, 
+          funnelResponses, 
+          generatedPrompt
+        );
+        productId = newProduct.id;
+      } else if (configuredProductId) {
+        // Update existing product with funnel config
+        await saveFunnelConfiguration(
+          configuredProductId, 
+          categoryId, 
+          funnelResponses, 
+          generatedPrompt
+        );
+        productId = configuredProductId;
+      } else {
+        return { success: false, message: "Missing product ID" };
+      }
+
+      // Save shade configurations (variant-specific prompts)
+      if (shadeConfigsJson && productId) {
+        const shadeConfigs = JSON.parse(shadeConfigsJson) as Record<string, { title: string; responses: Record<string, string | number> }>;
+        
+        // Get category data to resolve level labels
+        const { getCategoryWithFullData } = await import("../lib/supabase.server");
+        const categoryData = await getCategoryWithFullData(categoryId);
+        
+        for (const [variantId, config] of Object.entries(shadeConfigs)) {
+          // Build shade prompt snippet from responses
+          let shadeSnippet = "\n\n--- SHADE/VARIANT SPECIFIC ---\n";
+          
+          for (const [paramName, value] of Object.entries(config.responses)) {
+            // Find the parameter
+            const param = categoryData?.parameters?.find((p: any) => p.name === paramName);
+            if (!param) continue;
+            
+            if (param.input_type === 'text' || param.input_type === 'textarea') {
+              // Text input - use value directly
+              if (value && String(value).trim()) {
+                shadeSnippet += `${param.display_name}: ${value}\n`;
+              }
+            } else {
+              // Radio input - find the level label and prompt text
+              const level = param.levels?.find((l: any) => l.level === value);
+              if (level) {
+                shadeSnippet += `${param.display_name}: ${level.label}\n`;
+                if (level.prompt_text) {
+                  shadeSnippet += `${level.prompt_text}\n`;
+                }
+              }
+            }
+          }
+          
+          // Combine base prompt + shade snippet
+          const variantPrompt = generatedPrompt + shadeSnippet;
+          
+          // Save variant configuration
+          await saveVariantConfiguration(
+            productId,
+            variantId,
+            config.title,
+            variantPrompt
+          );
+          
+          console.log(`✅ Saved shade config for variant: ${config.title}`);
+        }
+      }
+
+      return { success: true, message: "Product configured successfully!" };
+    } catch (error) {
+      console.error("Error saving funnel configuration:", error);
+      return { success: false, message: "Failed to save configuration. Please try again." };
+    }
+  }
+
   return { success: false, message: "Unknown action" };
 };
 
@@ -209,10 +332,54 @@ interface ConfiguredProduct {
   product_name: string;
   transformation_prompt: string;
   created_at: string;
+  // Funnel system fields
+  category_id: string | null;
+  funnel_responses: Record<string, number> | null;
+  is_funnel_generated: boolean;
+  categories: { id: string; name: string; slug: string } | null;
+}
+
+// Category from loader
+interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  base_prompt: string;
+  sort_order: number;
+}
+
+// Full category data with parameters and levels (from API)
+interface CategoryWithParams {
+  id: string;
+  name: string;
+  base_prompt: string;
+  parameters: Array<{
+    id: string;
+    name: string;
+    display_name: string;
+    question_text: string | null;
+    is_locked: boolean;
+    is_variant_specific?: boolean;
+    input_type?: 'radio' | 'text' | 'textarea';
+    max_levels: number;
+    levels: Array<{
+      level: number;
+      label: string;
+      prompt_text: string;
+    }>;
+  }>;
+}
+
+// Classification suggestion from API
+interface ClassificationSuggestion {
+  categoryId: string;
+  categoryName: string;
+  confidence: 'high' | 'medium' | 'low';
 }
 
 export default function Products() {
-  const { shopifyProducts, configuredProducts } = useLoaderData<typeof loader>();
+  const { shopifyProducts, configuredProducts, categories } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const submit = useSubmit();
   const [selectedProduct, setSelectedProduct] = useState<ShopifyProduct | null>(null);
@@ -238,6 +405,28 @@ export default function Products() {
   const [variantPrompt, setVariantPrompt] = useState("");
   const [variantModalActive, setVariantModalActive] = useState(false);
 
+  // Pagination state
+  const ITEMS_PER_PAGE = 25;
+  const [configuredPage, setConfiguredPage] = useState(1);
+  const [allProductsPage, setAllProductsPage] = useState(1);
+
+  // Funnel configuration state
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [funnelResponses, setFunnelResponses] = useState<Record<string, number | string>>({});
+  const [categoryData, setCategoryData] = useState<CategoryWithParams | null>(null);
+  const [isClassifying, setIsClassifying] = useState(false);
+  const [isLoadingCategory, setIsLoadingCategory] = useState(false);
+  const [classificationSuggestion, setClassificationSuggestion] = useState<ClassificationSuggestion | null>(null);
+  const [classificationAttempted, setClassificationAttempted] = useState(false);
+  
+  // Variant color profiles state - maps variantId -> { shade_name, hue_family, undertone, etc. }
+  const [variantColorProfiles, setVariantColorProfiles] = useState<Record<string, Record<string, string | number>>>({});
+  const [expandedShadeVariants, setExpandedShadeVariants] = useState<Set<string>>(new Set());
+
+  // Mode detection: funnel mode for new products OR editing funnel products
+  // Legacy mode: editing a product that was configured with the old manual prompt system
+  const isLegacyMode = isEditMode && selectedConfiguredProduct && !selectedConfiguredProduct.is_funnel_generated;
+
   // Load configured variants when editing a product
   useEffect(() => {
     async function loadVariants() {
@@ -257,6 +446,75 @@ export default function Products() {
     loadVariants();
   }, [selectedConfiguredProduct, modalActive]);
 
+  // Helper to load category data with parameters and levels
+  const loadCategoryData = useCallback(async (categoryId: string) => {
+    setIsLoadingCategory(true);
+    try {
+      const response = await fetch(`/api/get-category-data?categoryId=${categoryId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setCategoryData(data.category);
+      }
+    } catch (error) {
+      console.error('Error loading category data:', error);
+    } finally {
+      setIsLoadingCategory(false);
+    }
+  }, []);
+
+  // Auto-classify when configuring a NEW product
+  useEffect(() => {
+    async function classifyNewProduct() {
+      if (modalActive && selectedProduct && !isEditMode) {
+        console.log('🏷️ Starting classification for:', selectedProduct.title);
+        setIsClassifying(true);
+        setClassificationSuggestion(null);
+        setClassificationAttempted(false);
+        
+        try {
+          const formData = new FormData();
+          formData.append("productName", selectedProduct.title);
+          formData.append("productType", selectedProduct.productType || "");
+          
+          const response = await fetch("/api/classify-product", {
+            method: "POST",
+            body: formData,
+          });
+          
+          const result = await response.json();
+          console.log('🏷️ Classification result:', result);
+          
+          if (result.success && result.suggestion) {
+            setClassificationSuggestion(result.suggestion);
+            setSelectedCategory(result.suggestion.categoryId);
+            // Immediately load category data for the suggested category
+            loadCategoryData(result.suggestion.categoryId);
+          } else {
+            console.log('🏷️ No suggestion returned:', result.error || 'Low confidence or failed');
+          }
+        } catch (error) {
+          console.error("Classification error:", error);
+        } finally {
+          setIsClassifying(false);
+          setClassificationAttempted(true);
+        }
+      }
+    }
+    
+    classifyNewProduct();
+  }, [modalActive, selectedProduct, isEditMode, loadCategoryData]);
+
+  // Load funnel responses when editing a funnel product
+  useEffect(() => {
+    if (modalActive && isEditMode && selectedConfiguredProduct?.is_funnel_generated) {
+      setSelectedCategory(selectedConfiguredProduct.category_id);
+      setFunnelResponses(selectedConfiguredProduct.funnel_responses || {});
+      if (selectedConfiguredProduct.category_id) {
+        loadCategoryData(selectedConfiguredProduct.category_id);
+      }
+    }
+  }, [modalActive, isEditMode, selectedConfiguredProduct, loadCategoryData]);
+
   const isConfigured = (shopifyId: string) => {
     return configuredProducts.some((cp) => cp.shopify_id === shopifyId);
   };
@@ -265,6 +523,16 @@ export default function Products() {
     setSelectedProduct(product);
     setSelectedConfiguredProduct(null);
     setIsEditMode(false);
+    setTransformationPrompt("");
+    // Reset funnel state for new product
+    setSelectedCategory(null);
+    setFunnelResponses({});
+    setCategoryData(null);
+    setClassificationSuggestion(null);
+    setClassificationAttempted(false);
+    // Reset variant color profiles
+    setVariantColorProfiles({});
+    setExpandedShadeVariants(new Set());
     setModalActive(true);
   };
 
@@ -278,30 +546,91 @@ export default function Products() {
     setTransformationPrompt(configuredProduct.transformation_prompt);
     setShowVariants(false); // Reset variant view
     setConfiguredVariants([]); // Will load when user expands variants
+    
+    // Reset funnel state - will be loaded by useEffect if it's a funnel product
+    setSelectedCategory(null);
+    setFunnelResponses({});
+    setCategoryData(null);
+    setClassificationSuggestion(null);
+    // Reset variant color profiles
+    setVariantColorProfiles({});
+    setExpandedShadeVariants(new Set());
+    
     setModalActive(true);
   };
 
-  const handleSave = () => {
-    if (!selectedProduct && !selectedConfiguredProduct) return;
-
-    const formData = new FormData();
-    if (isEditMode && selectedConfiguredProduct) {
-      formData.append("action", "update");
-      formData.append("configuredProductId", selectedConfiguredProduct.id);
-      formData.append("transformationPrompt", transformationPrompt);
-    } else if (selectedProduct) {
-      formData.append("action", "configure");
-      formData.append("shopifyProductId", selectedProduct.id);
-      formData.append("productTitle", selectedProduct.title);
-      formData.append("transformationPrompt", transformationPrompt);
-    }
-
-    submit(formData, { method: "POST" });
+  const handleCloseModal = () => {
     setModalActive(false);
     setSelectedProduct(null);
     setSelectedConfiguredProduct(null);
     setIsEditMode(false);
     setTransformationPrompt("");
+    // Reset funnel state
+    setSelectedCategory(null);
+    setFunnelResponses({});
+    setCategoryData(null);
+    setClassificationSuggestion(null);
+    setClassificationAttempted(false);
+    // Reset variant color profiles
+    setVariantColorProfiles({});
+    setExpandedShadeVariants(new Set());
+  };
+  
+  // Check if category has variant-specific parameters
+  const hasVariantParams = categoryData?.parameters?.some(p => p.is_variant_specific && !p.is_locked) || false;
+  const variantParams = categoryData?.parameters?.filter(p => p.is_variant_specific && !p.is_locked) || [];
+
+  const handleSave = () => {
+    if (!selectedProduct && !selectedConfiguredProduct) return;
+
+    const formData = new FormData();
+    
+    // LEGACY MODE: Use existing update behavior
+    if (isLegacyMode && selectedConfiguredProduct) {
+      formData.append("action", "update");
+      formData.append("configuredProductId", selectedConfiguredProduct.id);
+      formData.append("transformationPrompt", transformationPrompt);
+    }
+    // FUNNEL MODE: Use new configure-funnel action
+    else if (selectedCategory && Object.keys(funnelResponses).length > 0) {
+      formData.append("action", "configure-funnel");
+      formData.append("categoryId", selectedCategory);
+      formData.append("funnelResponses", JSON.stringify(funnelResponses));
+      
+      // Include shade configurations if any exist
+      if (Object.keys(variantColorProfiles).length > 0 && selectedProduct) {
+        // Build variant configs with titles
+        const variantConfigs: Record<string, { title: string; responses: Record<string, string | number> }> = {};
+        selectedProduct.variants.edges.forEach(({ node: variant }) => {
+          if (variantColorProfiles[variant.id] && Object.keys(variantColorProfiles[variant.id]).length > 0) {
+            variantConfigs[variant.id] = {
+              title: variant.title,
+              responses: variantColorProfiles[variant.id]
+            };
+          }
+        });
+        if (Object.keys(variantConfigs).length > 0) {
+          formData.append("shadeConfigs", JSON.stringify(variantConfigs));
+        }
+      }
+      
+      if (isEditMode && selectedConfiguredProduct) {
+        // Editing existing funnel product
+        formData.append("configuredProductId", selectedConfiguredProduct.id);
+        formData.append("isNewProduct", "false");
+      } else if (selectedProduct) {
+        // New product
+        formData.append("shopifyProductId", selectedProduct.id);
+        formData.append("productTitle", selectedProduct.title);
+        formData.append("isNewProduct", "true");
+      }
+    } else {
+      // No valid configuration
+      return;
+    }
+
+    submit(formData, { method: "POST" });
+    handleCloseModal();
   };
 
   const handleDelete = () => {
@@ -460,6 +789,18 @@ export default function Products() {
     }
   };
 
+  // Helper to format funnel responses as a readable summary (NO PROMPT VISIBLE!)
+  // Shows parameter labels instead of the generated prompt text
+  const formatFunnelSummary = (
+    product: ConfiguredProduct
+  ): string => {
+    if (!product.funnel_responses || !product.categories) return "";
+    
+    // We don't have full category data here, so just show the number of settings
+    const responseCount = Object.keys(product.funnel_responses).length;
+    return `${responseCount} setting${responseCount !== 1 ? 's' : ''} configured`;
+  };
+
   // Configured Products Table - sorted alphabetically with product images
   const sortedConfiguredProducts = [...configuredProducts].sort((a, b) => 
     a.product_name.localeCompare(b.product_name)
@@ -470,6 +811,31 @@ export default function Products() {
     const shopifyProduct = shopifyProducts.find((sp: ShopifyProduct) => sp.id === product.shopify_id);
     const imageUrl = shopifyProduct?.images?.edges?.[0]?.node?.url || "";
     
+    // Configuration display: funnel products show category badge, legacy shows truncated prompt
+    const configurationDisplay = product.is_funnel_generated && product.categories ? (
+      // FUNNEL PRODUCT: Show category badge + summary (NO PROMPT!)
+      <div key={`${product.id}-config`} style={{ paddingLeft: '4px'}}>
+        <InlineStack gap="200" blockAlign="center" wrap={false}>
+          <Badge tone="info">{product.categories.name}</Badge>
+          <Text as="span" variant="bodySm" tone="subdued">
+            {formatFunnelSummary(product)}
+          </Text>
+        </InlineStack>
+      </div>
+    ) : (
+      // LEGACY PRODUCT: Show "Legacy" badge + truncated prompt (they wrote it)
+      <div key={`${product.id}-config`} style={{ paddingLeft: '4px'}}>
+        <InlineStack gap="200" blockAlign="center" wrap={false}>
+          <Badge>Legacy</Badge>
+          <Text as="span" variant="bodySm">
+            {product.transformation_prompt.length > 60
+              ? `${product.transformation_prompt.substring(0, 60)}...` 
+              : product.transformation_prompt}
+          </Text>
+        </InlineStack>
+      </div>
+    );
+
     return [
       <div style={{ width: '280px', minWidth: '280px' }} key={product.id}>
         <InlineStack gap="300" wrap={false} blockAlign="center">
@@ -487,13 +853,7 @@ export default function Products() {
           </Text>
         </InlineStack>
       </div>,
-      <div key={`${product.id}-prompt`} style={{ paddingLeft: '4px'}}>
-        <Text as="span" variant="bodySm">
-          {product.transformation_prompt.length > 75
-            ? `${product.transformation_prompt.substring(0, 75)}...` 
-            : product.transformation_prompt}
-        </Text>
-      </div>,
+      configurationDisplay,
       <InlineStack key={`${product.id}-actions`} gap="200" wrap={false}>
         <Button size="slim" onClick={() => handleTest(product)}>
           Test
@@ -585,11 +945,27 @@ export default function Products() {
                 </BlockStack>
 
                 {configuredProducts.length > 0 ? (
-                  <DataTable
-                    columnContentTypes={["text", "text", "text"]}
-                    headings={["Product", "Transformation Prompt", "Actions"]}
-                    rows={configuredProductsRows}
-                  />
+                  <BlockStack gap="300">
+                    <DataTable
+                      columnContentTypes={["text", "text", "text"]}
+                      headings={["Product", "Configuration", "Actions"]}
+                      rows={configuredProductsRows.slice(
+                        (configuredPage - 1) * ITEMS_PER_PAGE,
+                        configuredPage * ITEMS_PER_PAGE
+                      )}
+                    />
+                    {configuredProductsRows.length > ITEMS_PER_PAGE && (
+                      <InlineStack align="end">
+                        <Pagination
+                          hasPrevious={configuredPage > 1}
+                          hasNext={configuredPage * ITEMS_PER_PAGE < configuredProductsRows.length}
+                          onPrevious={() => setConfiguredPage(configuredPage - 1)}
+                          onNext={() => setConfiguredPage(configuredPage + 1)}
+                          label={`${configuredPage} of ${Math.ceil(configuredProductsRows.length / ITEMS_PER_PAGE)}`}
+                        />
+                      </InlineStack>
+                    )}
+                  </BlockStack>
                 ) : (
                   <Card>
                     <BlockStack gap="200">
@@ -618,11 +994,27 @@ export default function Products() {
                   </Text>
                 </BlockStack>
 
-                <DataTable
-                  columnContentTypes={["text", "text"]}
-                  headings={["Product", "Action"]}
-                  rows={allProductsRows}
-                />
+                <BlockStack gap="300">
+                  <DataTable
+                    columnContentTypes={["text", "text"]}
+                    headings={["Product", "Action"]}
+                    rows={allProductsRows.slice(
+                      (allProductsPage - 1) * ITEMS_PER_PAGE,
+                      allProductsPage * ITEMS_PER_PAGE
+                    )}
+                  />
+                  {allProductsRows.length > ITEMS_PER_PAGE && (
+                    <InlineStack align="end">
+                      <Pagination
+                        hasPrevious={allProductsPage > 1}
+                        hasNext={allProductsPage * ITEMS_PER_PAGE < allProductsRows.length}
+                        onPrevious={() => setAllProductsPage(allProductsPage - 1)}
+                        onNext={() => setAllProductsPage(allProductsPage + 1)}
+                        label={`${allProductsPage} of ${Math.ceil(allProductsRows.length / ITEMS_PER_PAGE)}`}
+                      />
+                    </InlineStack>
+                  )}
+                </BlockStack>
               </BlockStack>
             </Card>
           </Layout.Section>
@@ -634,16 +1026,16 @@ export default function Products() {
                   <Text as="h3" variant="headingMd">How it Works</Text>
                   <BlockStack gap="200">
                     <Text as="p" variant="bodyMd">
-                      1. Select products to enable for AI transformations
+                      1. Click "Configure" on a product
                     </Text>
                     <Text as="p" variant="bodyMd">
-                      2. Write a transformation prompt describing the effect
+                      2. Select the product category
                     </Text>
                     <Text as="p" variant="bodyMd">
-                      3. Test the transformation with sample images
+                      3. Answer a few questions about the effect
                     </Text>
                     <Text as="p" variant="bodyMd">
-                      4. Add the widget to your product pages
+                      4. Test the transformation with sample images
                     </Text>
                   </BlockStack>
                 </BlockStack>
@@ -651,13 +1043,13 @@ export default function Products() {
 
               <Card>
                 <BlockStack gap="300">
-                  <Text as="h3" variant="headingMd">Best Practices</Text>
+                  <Text as="h3" variant="headingMd">Tips</Text>
                   <BlockStack gap="200">
                     <Text as="p" variant="bodyMd">
-                      • Use specific, simple prompts
+                      • Our AI auto-suggests the best category
                     </Text>
                     <Text as="p" variant="bodyMd">
-                      • Match the prompt to your product
+                      • Adjust intensity levels for each effect
                     </Text>
                     <Text as="p" variant="bodyMd">
                       • Test transformations before going live
@@ -673,7 +1065,7 @@ export default function Products() {
       {/* Configuration Modal */}
       <Modal
         open={modalActive}
-        onClose={() => setModalActive(false)}
+        onClose={handleCloseModal}
         title={isEditMode ? "Edit AI Transformation" : "Configure AI Transformation"}
       >
         <Modal.Section>
@@ -709,91 +1101,366 @@ export default function Products() {
                   </BlockStack>
                 )}
 
-                <TextField
-                  label="Product-Level Transformation Prompt (Default)"
-                  value={transformationPrompt}
-                  onChange={setTransformationPrompt}
-                  multiline={4}
-                  helpText="This prompt is used when no variant-specific prompt is configured"
-                  placeholder="e.g., Darken and thicken the person's eyelashes..."
-                  autoComplete="off"
-                />
-
-                {/* Variant Configuration Section (Phase 3) */}
-                {isEditMode && selectedProduct && selectedProduct.variants.edges.length > 1 && (
+                {/* ============================================ */}
+                {/* LEGACY MODE: Show TextField (existing behavior) */}
+                {/* ============================================ */}
+                {isLegacyMode && (
                   <BlockStack gap="400">
-                    <div style={{ borderTop: '1px solid #e1e3e5', paddingTop: '20px' }}>
-                      <BlockStack gap="300">
-                        <Text as="h4" variant="headingMd">
-                          Variant-Specific Prompts (Optional)
-                        </Text>
-                        <Text as="p" variant="bodyMd" tone="subdued">
-                          Configure different prompts for each variant. Falls back to product-level prompt if not configured.
-                        </Text>
-                        
-                        {selectedProduct.variants.edges.map(({ node: variant }) => {
-                          const variantConfig = configuredVariants.find(v => v.shopify_variant_id === variant.id);
-                          const isConfigured = !!variantConfig;
+                    {/* Product-Level Transformation Prompt */}
+                    <BlockStack gap="200">
+                      <Text as="h4" variant="headingMd">Product-Level Transformation Prompt (Default)</Text>
+                      <TextField
+                        label=""
+                        labelHidden
+                        value={transformationPrompt}
+                        onChange={setTransformationPrompt}
+                        multiline={4}
+                        placeholder="e.g., Darken and thicken the person's eyelashes..."
+                        autoComplete="off"
+                      />
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        This prompt is used when no variant-specific prompt is configured
+                      </Text>
+                    </BlockStack>
+                    
+                    {/* Variant-Specific Prompts - only show if product has REAL variants (not just "Default Title") */}
+                    {selectedProduct && (
+                      selectedProduct.variants.edges.length > 1 || 
+                      (selectedProduct.variants.edges.length === 1 && selectedProduct.variants.edges[0].node.title !== "Default Title")
+                    ) && (
+                      <div style={{ borderTop: '1px solid #e1e3e5', marginTop: '8px', paddingTop: '16px' }}>
+                        <BlockStack gap="300">
+                          <BlockStack gap="100">
+                            <Text as="h4" variant="headingMd">Variant-Specific Prompts (Optional)</Text>
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              Configure different prompts for each variant. Falls back to product-level prompt if not configured.
+                            </Text>
+                          </BlockStack>
                           
-                          return (
-                            <Card key={variant.id}>
-                              <BlockStack gap="200">
-                                <InlineStack align="space-between">
-                                  <BlockStack gap="100">
-                                    <Text as="p" variant="bodyMd" fontWeight="semibold">
-                                      {variant.title}
-                                    </Text>
-                                    <Text as="p" variant="bodySm" tone="subdued">
-                                      ${variant.price} • {variant.availableForSale ? 'Available' : 'Not available'}
-                                    </Text>
-                                  </BlockStack>
-                                  <Badge tone={isConfigured ? "success" : "info"}>
-                                    {isConfigured ? "Configured" : "Using default"}
-                                  </Badge>
-                                </InlineStack>
-                                
-                                {isConfigured && (
+                          <BlockStack gap="300">
+                            {selectedProduct.variants.edges.map(({ node: variant }) => {
+                              const existingConfig = configuredVariants.find(v => v.shopify_variant_id === variant.id);
+                              return (
+                                <Card key={variant.id}>
                                   <BlockStack gap="200">
-                                    <Text as="p" variant="bodySm">
-                                      <strong>Prompt:</strong> {variantConfig.transformation_prompt.substring(0, 100)}
-                                      {variantConfig.transformation_prompt.length > 100 && '...'}
-                                    </Text>
+                                    <InlineStack align="space-between" blockAlign="start">
+                                      <BlockStack gap="100">
+                                        <Text as="h5" variant="headingSm">{variant.title}</Text>
+                                        {variant.price && parseFloat(variant.price) > 0 && (
+                                          <Text as="p" variant="bodySm" tone="subdued">
+                                            ${variant.price} • {variant.availableForSale !== false ? 'Available' : 'Unavailable'}
+                                          </Text>
+                                        )}
+                                      </BlockStack>
+                                      {existingConfig && (
+                                        <Badge tone="success">Configured</Badge>
+                                      )}
+                                    </InlineStack>
+                                    
+                                    {existingConfig && (
+                                      <Text as="p" variant="bodySm">
+                                        <Text as="span" fontWeight="semibold">Prompt: </Text>
+                                        {existingConfig.transformation_prompt.length > 80 
+                                          ? existingConfig.transformation_prompt.substring(0, 80) + '...'
+                                          : existingConfig.transformation_prompt}
+                                      </Text>
+                                    )}
+                                    
                                     <InlineStack gap="200">
-                                      <Button
-                                        size="slim"
+                                      <Button 
+                                        size="slim" 
                                         onClick={() => handleConfigureVariant(variant)}
                                       >
-                                        Edit
+                                        {existingConfig ? "Edit" : "Configure"}
                                       </Button>
-                                      <Button
-                                        size="slim"
-                                        variant="plain"
-                                        tone="critical"
-                                        onClick={() => handleDeleteVariant(variantConfig.id)}
-                                      >
-                                        Delete
-                                      </Button>
+                                      {existingConfig && (
+                                        <Button 
+                                          size="slim" 
+                                          tone="critical"
+                                          variant="plain"
+                                          onClick={() => handleDeleteVariant(existingConfig.id)}
+                                        >
+                                          Delete
+                                        </Button>
+                                      )}
                                     </InlineStack>
                                   </BlockStack>
-                                )}
-                                
-                                {!isConfigured && (
-                                  <Button
-                                    size="slim"
-                                    onClick={() => handleConfigureVariant(variant)}
-                                  >
-                                    Configure Variant
-                                  </Button>
-                                )}
-                              </BlockStack>
-                            </Card>
-                          );
-                        })}
-                      </BlockStack>
-                    </div>
+                                </Card>
+                              );
+                            })}
+                          </BlockStack>
+                        </BlockStack>
+                      </div>
+                    )}
                   </BlockStack>
                 )}
-              </BlockStack>
+
+                {/* ============================================ */}
+                {/* FUNNEL MODE: Category + Questions UI */}
+                {/* For new products OR editing funnel products */}
+                {/* ============================================ */}
+                {!isLegacyMode && (
+                  <BlockStack gap="400">
+                    {/* Step 1: Category Selection */}
+                    <BlockStack gap="200">
+                      <Text as="h4" variant="headingMd">Product Category</Text>
+                      
+                      {isClassifying && (
+                        <InlineStack gap="200" blockAlign="center">
+                          <Spinner size="small" />
+                          <Text as="span" variant="bodySm">Analyzing product...</Text>
+                        </InlineStack>
+                      )}
+                      
+                      {classificationSuggestion && !isClassifying && (
+                        <Banner tone="success">
+                          <Text as="p" variant="bodySm">
+                            Suggested: <strong>{classificationSuggestion.categoryName}</strong> ({classificationSuggestion.confidence} confidence)
+                          </Text>
+                        </Banner>
+                      )}
+                      
+                      {!isClassifying && classificationAttempted && !classificationSuggestion && !isEditMode && (
+                        <Banner tone="info">
+                          <Text as="p" variant="bodySm">
+                            Could not auto-detect category. Please select one below.
+                          </Text>
+                        </Banner>
+                      )}
+                      
+                      <Select
+                        label="Category"
+                        labelHidden
+                        options={[
+                          { label: "Select a category...", value: "" },
+                          ...(categories as Category[]).map((c: Category) => ({ label: c.name, value: c.id }))
+                        ]}
+                        value={selectedCategory || ""}
+                        onChange={(value) => {
+                          setSelectedCategory(value || null);
+                          setFunnelResponses({});
+                          setCategoryData(null);
+                          if (value) {
+                            loadCategoryData(value);
+                          }
+                        }}
+                      />
+                    </BlockStack>
+
+                    {/* Step 2: Funnel Questions */}
+                    {selectedCategory && (
+                      <BlockStack gap="400">
+                        <Text as="h4" variant="headingMd">Configure Transformation</Text>
+                        
+                        {isLoadingCategory ? (
+                          <InlineStack gap="200" blockAlign="center">
+                            <Spinner size="small" />
+                            <Text as="span" variant="bodySm">Loading questions...</Text>
+                          </InlineStack>
+                        ) : categoryData ? (
+                          <BlockStack gap="400">
+                            {/* Product-level parameters (non-variant-specific) */}
+                            {categoryData.parameters
+                              .filter(param => !param.is_locked && !param.is_variant_specific)
+                              .map(param => (
+                                <BlockStack key={param.id} gap="200">
+                                  <Text as="p" variant="bodyMd" fontWeight="semibold">
+                                    {param.question_text || param.display_name}
+                                  </Text>
+                                  {param.input_type === 'text' ? (
+                                    <TextField
+                                      label=""
+                                      labelHidden
+                                      value={String(funnelResponses[param.id] || '')}
+                                      onChange={(value) => setFunnelResponses(prev => ({
+                                        ...prev,
+                                        [param.id]: value
+                                      }))}
+                                      placeholder={`Enter ${param.display_name.toLowerCase()}...`}
+                                      autoComplete="off"
+                                    />
+                                  ) : (
+                                    <InlineStack gap="400" wrap>
+                                      {param.levels.map(level => (
+                                        <div key={level.level} style={{ minWidth: '120px' }}>
+                                          <RadioButton
+                                            label={level.label}
+                                            checked={funnelResponses[param.id] === level.level}
+                                            id={`${param.id}-${level.level}`}
+                                            name={param.id}
+                                            onChange={() => setFunnelResponses(prev => ({
+                                              ...prev,
+                                              [param.id]: level.level
+                                            }))}
+                                          />
+                                        </div>
+                                      ))}
+                                    </InlineStack>
+                                  )}
+                                </BlockStack>
+                              ))}
+                            
+                            {/* Variant-specific parameters (Shade Configuration) */}
+                            {/* Only show if product has REAL variants (not just "Default Title") */}
+                            {hasVariantParams && selectedProduct && (
+                              selectedProduct.variants.edges.length > 1 || 
+                              (selectedProduct.variants.edges.length === 1 && selectedProduct.variants.edges[0].node.title !== "Default Title")
+                            ) && (
+                              <div style={{ borderTop: '1px solid #e1e3e5', marginTop: '16px', paddingTop: '16px' }}>
+                                <BlockStack gap="300">
+                                  <BlockStack gap="100">
+                                    <Text as="h4" variant="headingMd">Shade/Variant Configuration (Optional)</Text>
+                                    <Text as="p" variant="bodySm" tone="subdued">
+                                      Configure color details for each shade/variant. Falls back to product-level settings if not configured.
+                                    </Text>
+                                  </BlockStack>
+                                  
+                                  <BlockStack gap="300">
+                                    {selectedProduct.variants.edges.map(({ node: variant }) => {
+                                      const existingShadeConfig = configuredVariants.find(v => v.shopify_variant_id === variant.id);
+                                      const currentInput = variantColorProfiles[variant.id];
+                                      const hasCurrentInput = currentInput && Object.keys(currentInput).length > 0;
+                                      const isExpanded = expandedShadeVariants.has(variant.id);
+                                      
+                                      // Build summary of shade config
+                                      const configSummary = hasCurrentInput 
+                                        ? Object.entries(currentInput)
+                                            .filter(([_, value]) => value !== '' && value !== undefined)
+                                            .map(([key, value]) => {
+                                              const param = variantParams.find(p => p.name === key);
+                                              if (!param) return null;
+                                              if (param.input_type === 'text') {
+                                                return `${param.display_name}: ${value}`;
+                                              } else {
+                                                const level = param.levels?.find((l: any) => l.level === value);
+                                                return level ? `${param.display_name}: ${level.label}` : null;
+                                              }
+                                            })
+                                            .filter(Boolean)
+                                            .slice(0, 3)
+                                            .join(', ')
+                                        : null;
+                                      
+                                      return (
+                                        <Card key={variant.id}>
+                                          <BlockStack gap="200">
+                                            {/* Variant Header */}
+                                            <InlineStack align="space-between" blockAlign="start">
+                                              <BlockStack gap="100">
+                                                <Text as="h5" variant="headingSm">{variant.title}</Text>
+                                              </BlockStack>
+                                              {(existingShadeConfig || hasCurrentInput) && (
+                                                <Badge tone="success">{existingShadeConfig ? "Configured" : "Modified"}</Badge>
+                                              )}
+                                            </InlineStack>
+                                            
+                                            
+                                            {/* Expanded Edit Form */}
+                                            {isExpanded && (
+                                              <BlockStack gap="300">
+                                                <Divider />
+                                                {variantParams.map(param => (
+                                                  <BlockStack key={param.id} gap="200">
+                                                    <Text as="p" variant="bodySm" fontWeight="semibold">
+                                                      {param.question_text || param.display_name}
+                                                    </Text>
+                                                    {param.input_type === 'text' ? (
+                                                      <TextField
+                                                        label=""
+                                                        labelHidden
+                                                        value={String(variantColorProfiles[variant.id]?.[param.name] || '')}
+                                                        onChange={(value) => setVariantColorProfiles(prev => ({
+                                                          ...prev,
+                                                          [variant.id]: {
+                                                            ...prev[variant.id],
+                                                            [param.name]: value
+                                                          }
+                                                        }))}
+                                                        placeholder={`Enter ${param.display_name.toLowerCase()}...`}
+                                                        autoComplete="off"
+                                                      />
+                                                    ) : (
+                                                      <InlineStack gap="300" wrap>
+                                                        {param.levels.map(level => (
+                                                          <div key={level.level} style={{ minWidth: '100px' }}>
+                                                            <RadioButton
+                                                              label={level.label}
+                                                              checked={variantColorProfiles[variant.id]?.[param.name] === level.level}
+                                                              id={`${variant.id}-${param.id}-${level.level}`}
+                                                              name={`${variant.id}-${param.name}`}
+                                                              onChange={() => setVariantColorProfiles(prev => ({
+                                                                ...prev,
+                                                                [variant.id]: {
+                                                                  ...prev[variant.id],
+                                                                  [param.name]: level.level
+                                                                }
+                                                              }))}
+                                                            />
+                                                          </div>
+                                                        ))}
+                                                      </InlineStack>
+                                                    )}
+                                                  </BlockStack>
+                                                ))}
+                                              </BlockStack>
+                                            )}
+                                            
+                                            {/* Action Buttons */}
+                                            <InlineStack gap="200">
+                                              <Button 
+                                                size="slim" 
+                                                onClick={() => {
+                                                  setExpandedShadeVariants(prev => {
+                                                    const next = new Set(prev);
+                                                    if (next.has(variant.id)) {
+                                                      next.delete(variant.id);
+                                                    } else {
+                                                      next.add(variant.id);
+                                                    }
+                                                    return next;
+                                                  });
+                                                }}
+                                              >
+                                                {isExpanded ? "Done" : (existingShadeConfig || hasCurrentInput) ? "Edit" : "Configure"}
+                                              </Button>
+                                              {(existingShadeConfig || hasCurrentInput) && (
+                                                <Button 
+                                                  size="slim" 
+                                                  tone="critical"
+                                                  variant="plain"
+                                                  onClick={() => {
+                                                    // Clear local state
+                                                    setVariantColorProfiles(prev => {
+                                                      const next = { ...prev };
+                                                      delete next[variant.id];
+                                                      return next;
+                                                    });
+                                                    // Delete from DB if exists
+                                                    if (existingShadeConfig) {
+                                                      handleDeleteVariant(existingShadeConfig.id);
+                                                    }
+                                                  }}
+                                                >
+                                                  Delete
+                                                </Button>
+                                              )}
+                                            </InlineStack>
+                                          </BlockStack>
+                                        </Card>
+                                      );
+                                    })}
+                                  </BlockStack>
+                                </BlockStack>
+                              </div>
+                            )}
+                          </BlockStack>
+                        ) : null}
+                      </BlockStack>
+                    )}
+                  </BlockStack>
+                )}
+
+                              </BlockStack>
             </FormLayout>
           )}
         </Modal.Section>
@@ -815,7 +1482,7 @@ export default function Products() {
             </div>
             <InlineStack gap="200">
               <Button
-                onClick={() => setModalActive(false)}
+                onClick={handleCloseModal}
                 loading={fetcher.state === "submitting"}
               >
                 Cancel
@@ -824,6 +1491,7 @@ export default function Products() {
                 variant="primary"
                 onClick={handleSave}
                 loading={fetcher.state === "submitting"}
+                disabled={!isLegacyMode && (!selectedCategory || Object.keys(funnelResponses).length === 0)}
               >
                 {isEditMode ? "Update Configuration" : "Save Configuration"}
               </Button>
@@ -859,9 +1527,21 @@ export default function Products() {
             <Text as="h3" variant="headingMd">
               {selectedTestProduct?.product_name}
             </Text>
-            <Text as="p" variant="bodyMd" tone="subdued">
-              {selectedTestProduct?.transformation_prompt}
-            </Text>
+            
+            {/* HIDE PROMPT for funnel products - show category badge instead */}
+            {selectedTestProduct?.is_funnel_generated ? (
+              <InlineStack gap="200" blockAlign="center">
+                <Badge tone="info">{selectedTestProduct.categories?.name || "Configured"}</Badge>
+                <Text as="span" variant="bodySm" tone="subdued">
+                  AI transformation ready
+                </Text>
+              </InlineStack>
+            ) : (
+              /* Legacy products: show prompt (they wrote it themselves) */
+              <Text as="p" variant="bodyMd" tone="subdued">
+                {selectedTestProduct?.transformation_prompt}
+              </Text>
+            )}
 
             {!uploadedImageUrl ? (
               <DropZone

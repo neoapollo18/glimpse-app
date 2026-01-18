@@ -2,16 +2,16 @@
 
 client_id = "334205d75ffe74323ba7067e44337b94"
 name = "glimpse-app-custom"
-handle = "glimpse-app-custom"
-application_url = "https://glimpse-app-charles.onrender.com"
+application_url = "https://glimpse-app-custom.onrender.com"
 embedded = true
-
-[build]
-automatically_update_urls_on_dev = false
-include_config_on_deploy = true
+handle = "glimpse-app-custom"
 
 [webhooks]
 api_version = "2025-07"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks"
+  compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
 
   [[webhooks.subscriptions]]
   topics = [ "app/scopes_update" ]
@@ -21,19 +21,15 @@ api_version = "2025-07"
   topics = [ "app/uninstalled" ]
   uri = "/webhooks/app/uninstalled"
 
-  [[webhooks.subscriptions]]
-  compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
-  uri = "https://glimpse-app-charles.onrender.com/webhooks"
-
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 scopes = "write_products"
 
 [auth]
 redirect_urls = [
-  "https://glimpse-app-charles.onrender.com/auth/callback",
-  "https://glimpse-app-charles.onrender.com/auth/shopify/callback",
-  "https://glimpse-app-charles.onrender.com/api/auth/callback",
+  "https://glimpse-app-custom.onrender.com/auth/callback",
+  "https://glimpse-app-custom.onrender.com/auth/shopify/callback",
+  "https://glimpse-app-custom.onrender.com/api/auth/callback"
 ]
 
 [pos]
