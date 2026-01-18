@@ -274,7 +274,8 @@ export default function Analytics() {
                       >
                         <Box paddingBlockStart="400" paddingInlineStart="1200">
                           <BlockStack gap="200">
-                            {Object.entries(product.widgets || {}).map(([widgetType, count]) => {
+                            {(() => {
+                              // Merge widget types that map to the same display name
                               const widgetNames: Record<string, string> = {
                                 embedded: "Gleame Embedded",
                                 horizontal: "Gleame Horizontal", 
@@ -282,29 +283,38 @@ export default function Analytics() {
                                 legacy: "Gleame Legacy",
                                 unknown: "Gleame Legacy"
                               };
-                              const displayName = widgetNames[widgetType] || "Gleame Legacy";
-                              const widgetSharePercent = product.transformations > 0 
-                                ? ((count / product.transformations) * 100).toFixed(0)
-                                : "0";
                               
-                              return (
-                                <Box 
-                                  key={widgetType}
-                                  padding="300" 
-                                  background="bg-surface-secondary" 
-                                  borderRadius="200"
-                                >
-                                  <InlineGrid columns={{ xs: "1fr 1fr 1fr", md: "2fr 1fr 1fr 1fr" }} gap="400" alignItems="center">
-                                    <Text as="span" variant="bodySm">{displayName}</Text>
-                                    <Text as="span" variant="bodySm">{count}</Text>
-                                    <Text as="span" variant="bodySm">—</Text>
-                                    <Box>
-                                      <Text as="span" variant="bodySm">{widgetSharePercent}%</Text>
-                                    </Box>
-                                  </InlineGrid>
-                                </Box>
-                              );
-                            })}
+                              // Combine counts by display name
+                              const mergedWidgets: Record<string, number> = {};
+                              Object.entries(product.widgets || {}).forEach(([widgetType, count]) => {
+                                const displayName = widgetNames[widgetType] || "Gleame Legacy";
+                                mergedWidgets[displayName] = (mergedWidgets[displayName] || 0) + count;
+                              });
+                              
+                              return Object.entries(mergedWidgets).map(([displayName, count]) => {
+                                const widgetSharePercent = product.transformations > 0 
+                                  ? ((count / product.transformations) * 100).toFixed(0)
+                                  : "0";
+                                
+                                return (
+                                  <Box 
+                                    key={displayName}
+                                    padding="300" 
+                                    background="bg-surface-secondary" 
+                                    borderRadius="200"
+                                  >
+                                    <InlineGrid columns={{ xs: "1fr 1fr 1fr", md: "2fr 1fr 1fr 1fr" }} gap="400" alignItems="center">
+                                      <Text as="span" variant="bodySm">{displayName}</Text>
+                                      <Text as="span" variant="bodySm">{count}</Text>
+                                      <Text as="span" variant="bodySm">—</Text>
+                                      <Box>
+                                        <Text as="span" variant="bodySm">{widgetSharePercent}%</Text>
+                                      </Box>
+                                    </InlineGrid>
+                                  </Box>
+                                );
+                              });
+                            })()}
                             {(!product.widgets || Object.keys(product.widgets).length === 0) && (
                               <Box 
                                 padding="300" 
