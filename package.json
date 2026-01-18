@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@google/genai": "^1.15.0",
+    "@heymantle/client": "^1.1.70",
     "@intercom/messenger-js-sdk": "^0.0.18",
     "@prisma/client": "^6.2.1",
     "@remix-run/dev": "^2.16.1",
