@@ -25,12 +25,18 @@ import { SearchIcon } from "@shopify/polaris-icons";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import enTranslations from "@shopify/polaris/locales/en.json";
 import { supabase } from "../lib/supabase.server";
+import { authenticate } from "../shopify.server";
 
 // ============================================
 // GLEAME FOUNDERS ADMIN PAGE
 // ============================================
-// Secret URL for founders to manage all shops
-// NOT accessible to merchants
+// Only accessible from specific Shopify stores
+// Add your store domains to ALLOWED_SHOPS
+
+const ALLOWED_SHOPS = [
+  "testingaaronandevansaas.myshopify.com", // Add your store domains here
+  "hx5hqt-na.myshopify.com",
+];
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
@@ -66,6 +72,19 @@ interface Shop {
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   console.log("🔐 Founders admin page accessed");
+
+  // Require Shopify admin authentication
+  const { session } = await authenticate.admin(request);
+  
+  // Check if shop is in allowlist
+  if (!ALLOWED_SHOPS.includes(session.shop)) {
+    console.log(`❌ Access denied for shop: ${session.shop}`);
+    throw new Response("Forbidden - Your store is not authorized to access this page", { 
+      status: 403 
+    });
+  }
+  
+  console.log(`✅ Access granted for shop: ${session.shop}`);
 
   try {
     // Fetch ALL shops
