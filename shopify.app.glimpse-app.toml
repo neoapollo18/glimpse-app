@@ -1,8 +1,8 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "9cbb5891370933c3c50d2062a4a31962"
-name = "gleame-app"
-handle = "gleame-app"
+name = "Gleame"
+handle = "Gleame"
 application_url = "https://glimpse-app-charles.onrender.com"
 embedded = true
 
