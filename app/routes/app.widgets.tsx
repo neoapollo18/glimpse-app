@@ -29,35 +29,35 @@ const widgets: Widget[] = [
     name: "Gleame Horizontal",
     description: "Side-by-side before/after layout that fits naturally within your product page.",
     image: "/widget-previews/horizontal.png",
-    demoUrl: "https://www.loom.com/share/b61131d2bbc149e3bffafeadad73b376", // TODO: Replace with actual demo URL
+    demoUrl: "https://www.loom.com/share/b61131d2bbc149e3bffafeadad73b376", 
   },
   {
     id: "integrated",
     name: "Gleame Embedded",
     description: "Vertical layout with stacked before/after images. Clean and focused design.",
     image: "/widget-previews/embedded.png",
-    demoUrl: "https://www.loom.com/share/a4d9417da05e4e969f1a9738c90170dd", // TODO: Replace with actual demo URL
+    demoUrl: "https://www.loom.com/share/a4d9417da05e4e969f1a9738c90170dd", 
   },
   {
     id: "button",
     name: "Gleame Button",
     description: "A simple button that opens the transformation experience in a modal.",
     image: "/widget-previews/button.png",
-    demoUrl: "https://www.loom.com/share/d2043db0206643ee9c471409549491a0", // TODO: Replace with actual demo URL
+    demoUrl: "https://www.loom.com/share/d2043db0206643ee9c471409549491a0", 
   },
   {
     id: "banner",
     name: "Gleame Banner",
     description: "Eye-catching promotional banner to drive discovery on any page.",
     image: "/widget-previews/banner-preview.png",
-    demoUrl: "https://www.loom.com/share/8f64b108299744c98f7a9c28ac7210d5", // TODO: Replace with actual demo URL
+    demoUrl: "https://www.loom.com/share/8f64b108299744c98f7a9c28ac7210d5", 
   },
   {
     id: "og",
     name: "Gleame Legacy",
     description: "The original Gleame widget design with full transformation functionality.",
     image: "/widget-previews/legacy.png",
-    demoUrl: "https://www.loom.com/share/3ed7ae1272ec45bea8014a30e2ff26df", // TODO: Replace with actual demo URL
+    demoUrl: "https://www.loom.com/share/3ed7ae1272ec45bea8014a30e2ff26df", 
   },
 ];
 
@@ -77,7 +77,7 @@ export default function Widgets() {
 
   const handleDemo = (widget: Widget) => {
     // Open demo page/video for the widget
-    const url = widget.demoUrl || `https://gleame.io/demo/${widget.id}`;
+    const url = widget.demoUrl;
     window.open(url, "_blank");
   };
 
@@ -107,7 +107,7 @@ export default function Widgets() {
         </Card>
 
         {/* Widgets Grid */}
-        <InlineGrid columns={{ xs: 1, sm: 2, lg: 3 }} gap="400">
+        <InlineGrid columns={{ xs:1, sm: 2, lg: 3 }} gap="400">
           {widgets.map((widget) => (
             <Card key={widget.id} padding="0">
               <BlockStack gap="0">

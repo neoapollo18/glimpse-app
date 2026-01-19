@@ -136,7 +136,7 @@ export const RATE_LIMITS = {
   },
   // Per shop limit for transform endpoint
   TRANSFORM_PER_SHOP_HOUR: {
-    limit: 500,
+    limit: 1000,
     windowMs: 60 * 60 * 1000, // 1 hour
   },
   // Track event API - lightweight (just DB writes)
