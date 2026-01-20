@@ -85,6 +85,7 @@ export async function subscribeCustomer(
   const result = await client.subscribe({
     planId: planId,
     returnUrl: returnUrl,
+    test: false, // Real billing, not test charges
   });
   
   if ("error" in result) {
