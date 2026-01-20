@@ -1,6 +1,7 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
-import { json, redirect } from "@remix-run/node";
-import { useLoaderData, useSubmit, useNavigation } from "@remix-run/react";
+import { json } from "@remix-run/node";
+import { useLoaderData, useSubmit, useNavigation, useActionData } from "@remix-run/react";
+import { useEffect } from "react";
 import {
   Page,
   Layout,
@@ -76,9 +77,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       
       const subscription = await subscribeCustomer(customerApiToken, planId, returnUrl);
       
-      // Redirect to Shopify's approval URL if present
+      // Return confirmationUrl for client-side redirect
+      // Client will use window.open(url, '_top') to break out of iframe
       if (subscription.confirmationUrl) {
-        return redirect(subscription.confirmationUrl.toString());
+        return json({ confirmationUrl: subscription.confirmationUrl.toString() });
       }
       
       return json({ success: true });
@@ -122,10 +124,19 @@ interface Subscription {
 
 export default function BillingPage() {
   const { customer, customerApiToken, plans, subscription, error } = useLoaderData<typeof loader>();
+  const actionData = useActionData<{ confirmationUrl?: string; success?: boolean; error?: string }>();
   const submit = useSubmit();
   const navigation = useNavigation();
   
   const isLoading = navigation.state === "submitting";
+
+  // Handle redirect to Shopify billing confirmation
+  // Use window.open with '_top' to break out of the embedded iframe
+  useEffect(() => {
+    if (actionData?.confirmationUrl) {
+      window.open(actionData.confirmationUrl, '_top');
+    }
+  }, [actionData?.confirmationUrl]);
 
   const handleSubscribe = (planId: string) => {
     const formData = new FormData();
