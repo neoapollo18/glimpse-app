@@ -175,8 +175,10 @@ export default function BillingPage() {
   const typedSubscription = subscription as Subscription | null;
   const typedPlans = plans as Plan[];
 
-  // Sort plans by price
-  const sortedPlans = [...typedPlans].sort((a, b) => (a.subtotal || a.amount || 0) - (b.subtotal || b.amount || 0));
+  // Sort plans by price and filter out Free plan
+  const sortedPlans = [...typedPlans]
+    .filter((plan) => plan.name.toLowerCase() !== 'free')
+    .sort((a, b) => (a.subtotal || a.amount || 0) - (b.subtotal || b.amount || 0));
 
   // Get visitor range for current plan
   const getVisitorRange = (planName: string): string => {
@@ -383,7 +385,7 @@ export default function BillingPage() {
                           onClick={() => handleSubscribe(plan.id)}
                           disabled={isLoading}
                         >
-                          {plan.trialDays > 0 && !isActive ? "Start free trial" : isActive ? "Switch plan" : "Select plan"}
+                          {isActive ? "Switch plan" : "Try for free"}
                         </Button>
                       )}
                     </Box>
