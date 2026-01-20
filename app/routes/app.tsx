@@ -1,6 +1,6 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "@remix-run/node";
-import { json, redirect } from "@remix-run/node";
-import { Link, Outlet, useLoaderData, useRouteError } from "@remix-run/react";
+import { json } from "@remix-run/node";
+import { Link, Outlet, useLoaderData, useRouteError, useNavigate, useLocation } from "@remix-run/react";
 import { boundary } from "@shopify/shopify-app-remix/server";
 import { AppProvider } from "@shopify/shopify-app-remix/react";
 import { NavMenu } from "@shopify/app-bridge-react";
@@ -19,9 +19,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shopDomain = session.shop;
   const accessToken = session.accessToken || "";
 
-  // Check if we're already on the billing page to avoid redirect loops
+  // Check if we're already on the billing page
   const url = new URL(request.url);
   const isOnBillingPage = url.pathname.includes('/app/billing');
+
+  let needsBilling = false;
 
   // Only check subscription status if NOT on billing page
   if (!isOnBillingPage) {
@@ -39,9 +41,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           const hasActiveSubscription = customer?.subscription?.active === true;
           
           if (!hasActiveSubscription) {
-            // Not grandfathered AND no active subscription → redirect to billing
-            console.log('🚫 Billing gate: Redirecting to billing (no subscription):', shopDomain);
-            return redirect('/app/billing');
+            // Not grandfathered AND no active subscription → need billing
+            console.log('🚫 Billing gate: User needs billing:', shopDomain);
+            needsBilling = true;
           }
         } catch (mantleError) {
           // If Mantle fails, let users through (don't block if billing service is down)
@@ -58,11 +60,22 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     apiKey: process.env.SHOPIFY_API_KEY || "",
     shop: session.shop,
     intercomAppId: process.env.INTERCOM_APP_ID || "",
+    needsBilling,
   });
 };
 
 export default function App() {
-  const { apiKey, shop, intercomAppId } = useLoaderData<typeof loader>();
+  const { apiKey, shop, intercomAppId, needsBilling } = useLoaderData<typeof loader>();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Client-side redirect to billing if needed
+  useEffect(() => {
+    if (needsBilling && !location.pathname.includes('/app/billing')) {
+      console.log('🚫 Client-side redirect to billing');
+      navigate('/app/billing');
+    }
+  }, [needsBilling, location.pathname, navigate]);
 
   // Initialize Intercom on client-side
   useEffect(() => {
