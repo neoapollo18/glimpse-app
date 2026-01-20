@@ -1,7 +1,6 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { useLoaderData, useSubmit, useNavigation, useActionData } from "@remix-run/react";
-import { useEffect } from "react";
 import {
   Page,
   Layout,
@@ -15,8 +14,10 @@ import {
   Divider,
   Banner,
   Spinner,
+  Modal,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
+import { useState, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import { 
   identifyAndGetCustomer, 
@@ -127,14 +128,14 @@ export default function BillingPage() {
   const actionData = useActionData<{ confirmationUrl?: string; success?: boolean; error?: string }>();
   const submit = useSubmit();
   const navigation = useNavigation();
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
   
   const isLoading = navigation.state === "submitting";
 
-  // Handle redirect to Shopify billing confirmation
-  // Use window.open with '_top' to break out of the embedded iframe
+  // Show confirmation modal when we get a confirmation URL
   useEffect(() => {
     if (actionData?.confirmationUrl) {
-      window.open(actionData.confirmationUrl, '_top');
+      setShowConfirmModal(true);
     }
   }, [actionData?.confirmationUrl]);
 
@@ -164,6 +165,30 @@ export default function BillingPage() {
   return (
     <Page>
       <TitleBar title="Billing & Plans" />
+      
+      {/* Billing confirmation modal - user must click to navigate to Shopify billing */}
+      <Modal
+        open={showConfirmModal && !!actionData?.confirmationUrl}
+        onClose={() => setShowConfirmModal(false)}
+        title="Complete Your Subscription"
+        primaryAction={{
+          content: "Continue to Shopify Billing",
+          url: actionData?.confirmationUrl || "",
+          target: "_top",
+        }}
+        secondaryActions={[
+          {
+            content: "Cancel",
+            onAction: () => setShowConfirmModal(false),
+          },
+        ]}
+      >
+        <Modal.Section>
+          <Text as="p">
+            Click the button below to complete your subscription on Shopify's secure billing page.
+          </Text>
+        </Modal.Section>
+      </Modal>
       
       <BlockStack gap="500">
         {error && (
