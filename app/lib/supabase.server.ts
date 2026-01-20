@@ -1232,3 +1232,51 @@ export async function updateProductPromptDirect(
     throw error;
   }
 }
+
+/**
+ * Check if a shop is grandfathered (existing user before billing gate)
+ * A shop is grandfathered if they have:
+ * - Any configured products, OR
+ * - Any analytics events (widget views, transformations)
+ * 
+ * This allows existing users to continue using the app on a free plan
+ * while new users must select a paid plan.
+ */
+export async function isShopGrandfathered(shopDomain: string): Promise<boolean> {
+  console.log('🔍 Checking if shop is grandfathered:', shopDomain);
+  
+  const shop = await findShopByDomain(shopDomain);
+  
+  if (!shop) {
+    // New shop, not grandfathered
+    console.log('❌ Shop not found, not grandfathered');
+    return false;
+  }
+  
+  // Check if shop has any products configured
+  const { data: products, error: productsError } = await supabase
+    .from('products')
+    .select('id')
+    .eq('shop_id', shop.id)
+    .limit(1);
+  
+  if (!productsError && products && products.length > 0) {
+    console.log('✅ Shop is grandfathered (has products)');
+    return true;
+  }
+  
+  // Check if shop has any analytics events
+  const { data: events, error: eventsError } = await supabase
+    .from('analytics_events')
+    .select('id')
+    .eq('shop_id', shop.id)
+    .limit(1);
+  
+  if (!eventsError && events && events.length > 0) {
+    console.log('✅ Shop is grandfathered (has analytics)');
+    return true;
+  }
+  
+  console.log('❌ Shop not grandfathered (no existing data)');
+  return false;
+}
