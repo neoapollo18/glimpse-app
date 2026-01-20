@@ -73,8 +73,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   try {
     if (actionType === "subscribe") {
       // Subscribe to plan
-      const appUrl = process.env.SHOPIFY_APP_URL || `https://${shopDomain}/admin/apps/glimpse-app`;
-      const returnUrl = `${appUrl}/app/billing`;
+      // For embedded apps, return URL must go through Shopify Admin to maintain session
+      // Extract shop handle from domain (e.g., "myshop" from "myshop.myshopify.com")
+      const shopHandle = shopDomain.replace('.myshopify.com', '');
+      // App handle should match your Shopify app's URL slug (usually lowercase)
+      const appHandle = process.env.SHOPIFY_APP_HANDLE || 'gleame';
+      const returnUrl = `https://admin.shopify.com/store/${shopHandle}/apps/${appHandle}/app/billing`;
       
       const subscription = await subscribeCustomer(customerApiToken, planId, returnUrl);
       
