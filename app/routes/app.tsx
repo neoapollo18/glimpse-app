@@ -19,41 +19,35 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shopDomain = session.shop;
   const accessToken = session.accessToken || "";
 
-  // Check if we're already on the billing page
-  const url = new URL(request.url);
-  const isOnBillingPage = url.pathname.includes('/app/billing');
-
   let needsBilling = false;
 
-  // Only check subscription status if NOT on billing page
-  if (!isOnBillingPage) {
-    try {
-      // First check if shop is grandfathered (existing user with data)
-      const grandfathered = await isShopGrandfathered(shopDomain);
-      
-      if (grandfathered) {
-        // Grandfathered users get free access
-        console.log('✅ Shop is grandfathered, allowing access:', shopDomain);
-      } else {
-        // Not grandfathered - check if they have an active subscription
-        try {
-          const { customer } = await identifyAndGetCustomer(shopDomain, accessToken);
-          const hasActiveSubscription = customer?.subscription?.active === true;
-          
-          if (!hasActiveSubscription) {
-            // Not grandfathered AND no active subscription → need billing
-            console.log('🚫 Billing gate: User needs billing:', shopDomain);
-            needsBilling = true;
-          }
-        } catch (mantleError) {
-          // If Mantle fails, let users through (don't block if billing service is down)
-          console.error('Mantle error (allowing access):', mantleError);
+  // Always check subscription status
+  try {
+    // First check if shop is grandfathered (existing user with data)
+    const grandfathered = await isShopGrandfathered(shopDomain);
+    
+    if (grandfathered) {
+      // Grandfathered users get free access
+      console.log('✅ Shop is grandfathered, allowing access:', shopDomain);
+    } else {
+      // Not grandfathered - check if they have an active subscription
+      try {
+        const { customer } = await identifyAndGetCustomer(shopDomain, accessToken);
+        const hasActiveSubscription = customer?.subscription?.active === true;
+        
+        if (!hasActiveSubscription) {
+          // Not grandfathered AND no active subscription → need billing
+          console.log('🚫 Billing gate: User needs billing:', shopDomain);
+          needsBilling = true;
         }
+      } catch (mantleError) {
+        // If Mantle fails, let users through (don't block if billing service is down)
+        console.error('Mantle error (allowing access):', mantleError);
       }
-    } catch (error) {
-      // If grandfathered check fails, let users through
-      console.error('Grandfathered check error (allowing access):', error);
     }
+  } catch (error) {
+    // If grandfathered check fails, let users through
+    console.error('Grandfathered check error (allowing access):', error);
   }
 
   return json({ 
@@ -69,11 +63,11 @@ export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Client-side redirect to billing if needed
+  // Client-side redirect to billing if needed (and not already there)
   useEffect(() => {
     if (needsBilling && !location.pathname.includes('/app/billing')) {
       console.log('🚫 Client-side redirect to billing');
-      navigate('/app/billing');
+      navigate('/app/billing', { replace: true });
     }
   }, [needsBilling, location.pathname, navigate]);
 
@@ -94,15 +88,18 @@ export default function App() {
 
   return (
     <AppProvider isEmbeddedApp apiKey={apiKey}>
-      <NavMenu>
-        <Link to="/app" rel="home">
-          Dashboard
-        </Link>
-        <Link to="/app/widgets">Widgets</Link>
-        <Link to="/app/products">Products</Link>
-        <Link to="/app/analytics">Analytics</Link>
-        <Link to="/app/billing">Billing</Link>
-      </NavMenu>
+      {/* Only show navigation menu if user has access (not blocked by billing) */}
+      {!needsBilling && (
+        <NavMenu>
+          <Link to="/app" rel="home">
+            Dashboard
+          </Link>
+          <Link to="/app/widgets">Widgets</Link>
+          <Link to="/app/products">Products</Link>
+          <Link to="/app/analytics">Analytics</Link>
+          <Link to="/app/billing">Billing</Link>
+        </NavMenu>
+      )}
       <Outlet />
     </AppProvider>
   );
