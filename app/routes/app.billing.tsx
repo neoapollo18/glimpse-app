@@ -414,7 +414,7 @@ export default function BillingPage() {
             <Text as="p" variant="bodySm" tone="subdued">
               All plans are billed through Shopify and include a 14-day free trial. 
               Pricing is based on your store's monthly visitor count. 
-              Contact us at support@gleameapp.com if you need help.
+              Contact us at aaron@gleame.ai if you need help.
             </Text>
           </BlockStack>
         </Card>
