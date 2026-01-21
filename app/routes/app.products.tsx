@@ -989,23 +989,9 @@ export default function Products() {
                   </Text>
                 </BlockStack>
                 <div style={{ marginLeft: "auto" }}>
-                  <a 
-                    href="https://www.loom.com/share/17ba1224959f48669415782f132535b3" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    style={{
-                      display: 'inline-block',
-                      padding: '8px 16px',
-                      background: '#303030',
-                      color: 'white',
-                      borderRadius: '8px',
-                      textDecoration: 'none',
-                      fontSize: '14px',
-                      fontWeight: '500',
-                    }}
-                  >
+                  <Button url="https://www.loom.com/share/17ba1224959f48669415782f132535b3" target="_blank">
                     Watch Video
-                  </a>
+                  </Button>
                 </div>
               </InlineStack>
             </div>
