@@ -989,7 +989,7 @@ export default function Products() {
                   </Text>
                 </BlockStack>
                 <div style={{ marginLeft: "auto" }}>
-                  <Button url="https://www.youtube.com/watch?v=example" external>
+                  <Button url="https://www.loom.com/share/17ba1224959f48669415782f132535b3" external>
                     Watch Video
                   </Button>
                 </div>
