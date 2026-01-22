@@ -97,7 +97,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       console.error("Error fetching shops:", shopsError);
       return json({ 
         shops: [], 
-        stats: { totalShops: 0, totalProducts: 0 },
+        stats: { totalShops: 0, totalProducts: 0, totalTransformations: 0 },
         error: shopsError.message 
       });
     }
@@ -141,11 +141,22 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // Calculate totals
     const totalProducts = shopsWithProducts.reduce((acc, s) => acc + s.products.length, 0);
 
+    // Get total transformations across all stores
+    const { count: totalTransformations, error: transformationsError } = await supabase
+      .from("analytics_events")
+      .select("*", { count: "exact", head: true })
+      .eq("event_type", "transformation");
+
+    if (transformationsError) {
+      console.error("Error fetching transformations count:", transformationsError);
+    }
+
     return json({
       shops: shopsWithProducts,
       stats: {
         totalShops: shopsWithProducts.length,
         totalProducts,
+        totalTransformations: totalTransformations || 0,
       },
       error: null,
     });
@@ -153,7 +164,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("Admin loader error:", error);
     return json({ 
       shops: [], 
-      stats: { totalShops: 0, totalProducts: 0 },
+      stats: { totalShops: 0, totalProducts: 0, totalTransformations: 0 },
       error: String(error) 
     });
   }
@@ -336,7 +347,7 @@ export default function FoundersAdmin() {
 
           {/* Platform Stats */}
           <Layout>
-            <Layout.Section variant="oneHalf">
+            <Layout.Section variant="oneThird">
               <Card>
                 <BlockStack gap="200">
                   <Text as="h3" variant="headingSm" tone="subdued">Total Shops</Text>
@@ -344,11 +355,19 @@ export default function FoundersAdmin() {
                 </BlockStack>
               </Card>
             </Layout.Section>
-            <Layout.Section variant="oneHalf">
+            <Layout.Section variant="oneThird">
               <Card>
                 <BlockStack gap="200">
                   <Text as="h3" variant="headingSm" tone="subdued">Total Products</Text>
                   <Text as="p" variant="headingXl">{stats?.totalProducts || 0}</Text>
+                </BlockStack>
+              </Card>
+            </Layout.Section>
+            <Layout.Section variant="oneThird">
+              <Card>
+                <BlockStack gap="200">
+                  <Text as="h3" variant="headingSm" tone="subdued">Total Transformations</Text>
+                  <Text as="p" variant="headingXl">{stats?.totalTransformations?.toLocaleString() || 0}</Text>
                 </BlockStack>
               </Card>
             </Layout.Section>
