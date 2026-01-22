@@ -4,8 +4,9 @@ import { Link, Outlet, useLoaderData, useRouteError, useNavigate, useLocation } 
 import { boundary } from "@shopify/shopify-app-remix/server";
 import { AppProvider } from "@shopify/shopify-app-remix/react";
 import { NavMenu } from "@shopify/app-bridge-react";
+import { Frame, Loading } from "@shopify/polaris";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { authenticate } from "../shopify.server";
 import { identifyAndGetCustomer } from "../lib/mantle.server";
@@ -18,6 +19,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopDomain = session.shop;
   const accessToken = session.accessToken || "";
+
+  // Get current path to know if we're on billing page
+  const url = new URL(request.url);
+  const isOnBillingPage = url.pathname.includes('/app/billing');
 
   let needsBilling = false;
 
@@ -55,21 +60,33 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     shop: session.shop,
     intercomAppId: process.env.INTERCOM_APP_ID || "",
     needsBilling,
+    isOnBillingPage,
   });
 };
 
 export default function App() {
-  const { apiKey, shop, intercomAppId, needsBilling } = useLoaderData<typeof loader>();
+  const { apiKey, shop, intercomAppId, needsBilling, isOnBillingPage } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const location = useLocation();
+  const [isRedirecting, setIsRedirecting] = useState(false);
+
+  // Determine if we should block content and redirect
+  const currentlyOnBilling = location.pathname.includes('/app/billing');
+  const shouldBlockContent = needsBilling && !currentlyOnBilling;
 
   // Client-side redirect to billing if needed (and not already there)
   useEffect(() => {
-    if (needsBilling && !location.pathname.includes('/app/billing')) {
-      console.log('🚫 Client-side redirect to billing');
-      navigate('/app/billing', { replace: true });
+    if (shouldBlockContent) {
+      setIsRedirecting(true);
+      // Small delay to ensure loading state shows
+      const timer = setTimeout(() => {
+        navigate('/app/billing', { replace: true });
+      }, 50);
+      return () => clearTimeout(timer);
+    } else {
+      setIsRedirecting(false);
     }
-  }, [needsBilling, location.pathname, navigate]);
+  }, [shouldBlockContent, navigate]);
 
   // Initialize Intercom on client-side
   useEffect(() => {
@@ -85,6 +102,18 @@ export default function App() {
       });
     }
   }, [intercomAppId, shop]);
+
+  // If user needs billing and is NOT on billing page, show loading instead of content
+  // This prevents the "flash" of other pages before redirect
+  if (shouldBlockContent || isRedirecting) {
+    return (
+      <AppProvider isEmbeddedApp apiKey={apiKey}>
+        <Frame>
+          <Loading />
+        </Frame>
+      </AppProvider>
+    );
+  }
 
   return (
     <AppProvider isEmbeddedApp apiKey={apiKey}>
