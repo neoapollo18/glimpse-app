@@ -194,6 +194,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ success: true });
   }
 
+  if (actionType === "update-variant-prompt") {
+    const variantId = formData.get("variantId") as string;
+    const newPrompt = formData.get("prompt") as string;
+
+    console.log("📝 Updating prompt for variant:", variantId);
+
+    const { error } = await supabase
+      .from("product_variants")
+      .update({ transformation_prompt: newPrompt })
+      .eq("id", variantId);
+
+    if (error) {
+      console.error("Error updating variant prompt:", error);
+      return json({ success: false, error: error.message });
+    }
+
+    console.log("✅ Variant prompt updated successfully");
+    return json({ success: true });
+  }
+
   return json({ success: false, error: "Unknown action" });
 };
 
@@ -212,6 +232,8 @@ export default function FoundersAdmin() {
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
   const [editingProduct, setEditingProduct] = useState<string | null>(null);
   const [editPromptValue, setEditPromptValue] = useState("");
+  const [editingVariant, setEditingVariant] = useState<string | null>(null);
+  const [editVariantPromptValue, setEditVariantPromptValue] = useState("");
   const [testModalOpen, setTestModalOpen] = useState(false);
   const [testProduct, setTestProduct] = useState<Product | null>(null);
   const [testImageUrl, setTestImageUrl] = useState("");
@@ -246,11 +268,33 @@ export default function FoundersAdmin() {
   const startEditPrompt = (product: Product) => {
     setEditingProduct(product.id);
     setEditPromptValue(product.transformation_prompt);
+    setEditingVariant(null); // Cancel any variant editing
   };
 
   const cancelEdit = () => {
     setEditingProduct(null);
     setEditPromptValue("");
+  };
+
+  const startEditVariantPrompt = (variant: VariantConfig) => {
+    setEditingVariant(variant.id);
+    setEditVariantPromptValue(variant.transformation_prompt);
+    setEditingProduct(null); // Cancel any product editing
+  };
+
+  const cancelVariantEdit = () => {
+    setEditingVariant(null);
+    setEditVariantPromptValue("");
+  };
+
+  const saveVariantPrompt = (variantId: string) => {
+    const formData = new FormData();
+    formData.append("action", "update-variant-prompt");
+    formData.append("variantId", variantId);
+    formData.append("prompt", editVariantPromptValue);
+    submit(formData, { method: "POST" });
+    setEditingVariant(null);
+    setEditVariantPromptValue("");
   };
 
   const savePrompt = (productId: string) => {
@@ -530,23 +574,49 @@ export default function FoundersAdmin() {
                                         borderRadius="200"
                                       >
                                         <BlockStack gap="200">
-                                          <InlineStack gap="200" blockAlign="center">
-                                            <Badge>{vc.variant_title}</Badge>
-                                            <Text as="span" variant="bodySm" tone="subdued">
-                                              ID: {vc.variant_id}
-                                            </Text>
+                                          <InlineStack align="space-between" blockAlign="center">
+                                            <InlineStack gap="200" blockAlign="center">
+                                              <Badge>{vc.variant_title}</Badge>
+                                              <Text as="span" variant="bodySm" tone="subdued">
+                                                ID: {vc.variant_id}
+                                              </Text>
+                                            </InlineStack>
+                                            {editingVariant === vc.id ? (
+                                              <InlineStack gap="200">
+                                                <Button size="slim" onClick={cancelVariantEdit}>Cancel</Button>
+                                                <Button size="slim" variant="primary" onClick={() => saveVariantPrompt(vc.id)}>
+                                                  Save
+                                                </Button>
+                                              </InlineStack>
+                                            ) : (
+                                              <Button size="slim" onClick={() => startEditVariantPrompt(vc)}>
+                                                Edit
+                                              </Button>
+                                            )}
                                           </InlineStack>
-                                          <pre style={{ 
-                                            whiteSpace: "pre-wrap", 
-                                            wordBreak: "break-word",
-                                            margin: 0,
-                                            fontFamily: "monospace",
-                                            fontSize: "11px",
-                                            maxHeight: "150px",
-                                            overflow: "auto"
-                                          }}>
-                                            {vc.transformation_prompt}
-                                          </pre>
+                                          
+                                          {editingVariant === vc.id ? (
+                                            <TextField
+                                              label=""
+                                              labelHidden
+                                              value={editVariantPromptValue}
+                                              onChange={setEditVariantPromptValue}
+                                              multiline={8}
+                                              autoComplete="off"
+                                            />
+                                          ) : (
+                                            <pre style={{ 
+                                              whiteSpace: "pre-wrap", 
+                                              wordBreak: "break-word",
+                                              margin: 0,
+                                              fontFamily: "monospace",
+                                              fontSize: "11px",
+                                              maxHeight: "150px",
+                                              overflow: "auto"
+                                            }}>
+                                              {vc.transformation_prompt}
+                                            </pre>
+                                          )}
                                         </BlockStack>
                                       </Box>
                                     ))}
