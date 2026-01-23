@@ -501,7 +501,7 @@ export default function BillingPage() {
               All plans are billed through Shopify and include a 14-day free trial. 
               Pricing is automatically determined based on your store's monthly session count. 
               If your traffic changes, we'll notify you to approve a plan update.
-              Contact us at aaron@gleame.ai if you need help.
+              Contact us through our app or aaron@gleame.ai if you need help.
             </Text>
           </BlockStack>
         </Card>

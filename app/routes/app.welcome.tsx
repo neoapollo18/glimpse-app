@@ -303,7 +303,7 @@ export default function WelcomePage() {
                     <BlockStack gap="200">
                       <Text as="p">
                         Your store's traffic qualifies for our Enterprise plan with custom pricing.
-                        Please contact us to set up your account.
+                        Please contact us through our app or aaron@gleame.ai to set up your account.
                       </Text>
                       <Box>
                         <Button url="mailto:aaron@gleame.ai">
