@@ -24,8 +24,8 @@ import {
   cancelSubscription,
 } from "../lib/mantle.server";
 import { getMonthlySessionsCount } from "../lib/shopify-analytics.server";
+import { SESSION_TIERS } from "../lib/pricing-tiers";
 import { 
-  SESSION_TIERS, 
   getPlanChangeInfo, 
   getMantlePlanForSessions,
   type MantlePlan,

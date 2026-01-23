@@ -19,8 +19,8 @@ import { useState, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import { identifyAndGetCustomer, subscribeCustomer } from "../lib/mantle.server";
 import { getMonthlySessionsCount } from "../lib/shopify-analytics.server";
+import { SESSION_TIERS } from "../lib/pricing-tiers";
 import { 
-  SESSION_TIERS, 
   getMantlePlanForSessions, 
   getPlanNameForSessions,
   type MantlePlan,
