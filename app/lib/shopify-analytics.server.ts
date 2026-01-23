@@ -16,18 +16,23 @@ interface ShopifyQLResponse {
 }
 
 /**
- * Fetches the total number of sessions for the store in the last 30 days.
+ * Fetches the average monthly sessions for the store based on the last 90 days.
+ * 
+ * Pulls total sessions from the last 90 days and divides by 3 to get 
+ * the average 30-day session count. This provides a more stable metric
+ * for billing purposes that isn't affected by short-term fluctuations.
  * 
  * @param admin - The authenticated admin GraphQL client from Shopify
- * @returns The total session count, or null if unable to fetch (permission denied, error, etc.)
+ * @returns The average monthly session count, or null if unable to fetch (permission denied, error, etc.)
  */
 export async function getMonthlySessionsCount(
   admin: { graphql: (query: string) => Promise<Response> }
 ): Promise<number | null> {
   try {
+    // Fetch sessions from the last 90 days
     const query = `
-      query GetMonthlySessions {
-        shopifyqlQuery(query: "FROM sessions SHOW sessions SINCE -30d") {
+      query GetQuarterlySessions {
+        shopifyqlQuery(query: "FROM sessions SHOW sessions SINCE -90d") {
           tableData {
             columns {
               name
@@ -86,8 +91,11 @@ export async function getMonthlySessionsCount(
       }
     }
 
-    console.log(`📊 Monthly sessions count: ${totalSessions}`);
-    return totalSessions;
+    // Calculate average monthly sessions (90 days / 3 = 30 day average)
+    const averageMonthlySessions = Math.round(totalSessions / 3);
+
+    console.log(`📊 Sessions (90d total): ${totalSessions}, Average monthly: ${averageMonthlySessions}`);
+    return averageMonthlySessions;
   } catch (error) {
     console.error('Error fetching monthly sessions:', error);
     return null;
