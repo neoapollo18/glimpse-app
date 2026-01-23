@@ -1,6 +1,6 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { useLoaderData, useSubmit, useNavigation, useActionData } from "@remix-run/react";
+import { useLoaderData, useSubmit, useNavigation, useActionData, useNavigate } from "@remix-run/react";
 import {
   Page,
   Card,
@@ -32,13 +32,24 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const accessToken = session.accessToken || "";
 
   try {
-    // Fetch monthly sessions from Shopify Analytics
-    const sessions = await getMonthlySessionsCount(admin);
-    console.log(`📊 Welcome page - Sessions for ${shopDomain}: ${sessions}`);
-
     // Identify customer and get their details with plans
     const { customer, apiToken } = await identifyAndGetCustomer(shopDomain, accessToken);
     const plans = (customer.plans || []) as MantlePlan[];
+    const subscription = customer.subscription || null;
+    
+    // Check if user already has an active subscription - redirect to billing
+    const hasActiveSubscription = subscription?.active === true;
+    
+    // Check for grace period (cancelled but still in billing period)
+    let isInGracePeriod = false;
+    if (!hasActiveSubscription && subscription?.currentPeriodEnd) {
+      const periodEnd = new Date(subscription.currentPeriodEnd);
+      isInGracePeriod = periodEnd > new Date();
+    }
+    
+    // Fetch monthly sessions from Shopify Analytics
+    const sessions = await getMonthlySessionsCount(admin);
+    console.log(`📊 Welcome page - Sessions for ${shopDomain}: ${sessions}`);
 
     // Match sessions to the appropriate plan
     // Default to 0 sessions (Starter plan) if we couldn't fetch
@@ -58,6 +69,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       matchedPlanName,
       matchedPlanPrice: matchedPlan?.subtotal ?? matchedPlan?.amount ?? null,
       customerApiToken: apiToken,
+      hasActiveSubscription,
+      isInGracePeriod,
+      currentPlanName: subscription?.plan?.name || null,
       error: null,
     });
   } catch (error) {
@@ -70,6 +84,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       matchedPlanName: "Starter",
       matchedPlanPrice: 30,
       customerApiToken: null,
+      hasActiveSubscription: false,
+      isInGracePeriod: false,
+      currentPlanName: null,
       error: error instanceof Error ? error.message : "Failed to load. Please try again.",
     });
   }
@@ -115,18 +132,37 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 export default function WelcomePage() {
   const { 
     matchedPlanId, 
+    matchedPlanName,
     customerApiToken, 
+    hasActiveSubscription,
+    isInGracePeriod,
+    currentPlanName,
     error 
   } = useLoaderData<typeof loader>();
+  
+  // Check if this is an Enterprise case (no plan but we have token)
+  const isEnterprise = !matchedPlanId && customerApiToken && matchedPlanName === 'Enterprise';
+  
+  // Check if user is re-subscribing (either has active subscription or in grace period)
+  const isResubscribing = isInGracePeriod;
+  const shouldRedirectToBilling = hasActiveSubscription && !isInGracePeriod;
   
   const actionData = useActionData<{ confirmationUrl?: string; success?: boolean; error?: string }>();
   const submit = useSubmit();
   const navigation = useNavigation();
+  const navigate = useNavigate();
   
   const [pricingOpen, setPricingOpen] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   
   const isLoading = navigation.state === "submitting";
+
+  // Redirect to billing if user already has an active subscription
+  useEffect(() => {
+    if (shouldRedirectToBilling) {
+      navigate('/app/billing', { replace: true });
+    }
+  }, [shouldRedirectToBilling, navigate]);
 
   // Show confirmation modal when we get a confirmation URL
   useEffect(() => {
@@ -152,7 +188,7 @@ export default function WelcomePage() {
       <Modal
         open={showConfirmModal && !!actionData?.confirmationUrl}
         onClose={() => setShowConfirmModal(false)}
-        title="Complete Your Subscription"
+        title={isResubscribing ? "Re-activate Your Subscription" : "Complete Your Subscription"}
         primaryAction={{
           content: "Continue to Shopify Billing",
           url: actionData?.confirmationUrl || "",
@@ -168,11 +204,13 @@ export default function WelcomePage() {
         <Modal.Section>
           <BlockStack gap="300">
             <Text as="p">
-              You'll be redirected to Shopify's secure billing page to complete your subscription.
+              You'll be redirected to Shopify's secure billing page to {isResubscribing ? "re-activate" : "complete"} your subscription.
             </Text>
-            <Text as="p" variant="bodySm" tone="subdued">
-              Your subscription includes a 14-day free trial. You won't be charged until the trial ends.
-            </Text>
+            {!isResubscribing && (
+              <Text as="p" variant="bodySm" tone="subdued">
+                Your subscription includes a 14-day free trial. You won't be charged until the trial ends.
+              </Text>
+            )}
           </BlockStack>
         </Modal.Section>
       </Modal>
@@ -183,19 +221,33 @@ export default function WelcomePage() {
           <div style={{ maxWidth: '600px', width: '100%' }}>
             <Card>
               <BlockStack gap="500">
-                {/* Heading */}
+                {/* Heading - different for re-subscribers */}
                 <Text as="h1" variant="headingXl">
-                  Ready to transform your store? Let's get started!
+                  {isResubscribing 
+                    ? "Welcome back! Ready to continue?" 
+                    : "Ready to transform your store? Let's get started!"}
                 </Text>
 
-                {/* Trial info */}
-                <Text as="p" variant="bodyLg">
-                  Your subscription starts with a <Text as="span" fontWeight="bold">14-day free trial</Text> :)
-                </Text>
+                {/* Trial info - different for re-subscribers */}
+                {isResubscribing ? (
+                  <Banner tone="info">
+                    <Text as="p">
+                      You previously had the <strong>{currentPlanName}</strong> plan. 
+                      Click below to re-activate your subscription based on your current traffic.
+                    </Text>
+                  </Banner>
+                ) : (
+                  <Text as="p" variant="bodyLg">
+                    Your subscription starts with a <Text as="span" fontWeight="bold">14-day free trial</Text> :)
+                  </Text>
+                )}
 
                 {/* Pricing explanation */}
                 <Text as="p" variant="bodyMd" tone="subdued">
-                  After the 14-day free trial, pricing plans start from $30/month (0-5k sessions) and increase incrementally based on your store's monthly session count (up to $999/month for stores that do 300k sessions/month).
+                  {isResubscribing 
+                    ? "Your plan will be automatically selected based on your store's current monthly session count."
+                    : "After the 14-day free trial, pricing plans start from $30/month (0-5k sessions) and increase incrementally based on your store's monthly session count (up to $999/month for stores that do 300k sessions/month)."
+                  }
                 </Text>
 
                 {/* Expandable pricing table */}
@@ -234,7 +286,31 @@ export default function WelcomePage() {
                 {/* Error banner */}
                 {(error || actionData?.error) && (
                   <Banner tone="critical">
-                    <Text as="p">{error || actionData?.error}</Text>
+                    <BlockStack gap="200">
+                      <Text as="p">{error || actionData?.error}</Text>
+                      <Box>
+                        <Button onClick={() => window.location.reload()}>
+                          Try again
+                        </Button>
+                      </Box>
+                    </BlockStack>
+                  </Banner>
+                )}
+
+                {/* Enterprise tier message */}
+                {isEnterprise && (
+                  <Banner tone="info">
+                    <BlockStack gap="200">
+                      <Text as="p">
+                        Your store's traffic qualifies for our Enterprise plan with custom pricing.
+                        Please contact us to set up your account.
+                      </Text>
+                      <Box>
+                        <Button url="mailto:aaron@gleame.ai">
+                          Contact sales
+                        </Button>
+                      </Box>
+                    </BlockStack>
                   </Banner>
                 )}
 
@@ -245,10 +321,10 @@ export default function WelcomePage() {
                     size="large"
                     fullWidth
                     onClick={handleContinue}
-                    disabled={isLoading || !matchedPlanId}
+                    disabled={isLoading || !matchedPlanId || shouldRedirectToBilling}
                     loading={isLoading}
                   >
-                    Continue to Gleame
+                    {isResubscribing ? "Re-subscribe to Gleame" : "Continue to Gleame"}
                   </Button>
                 </Box>
 
@@ -256,12 +332,17 @@ export default function WelcomePage() {
                 <Box paddingBlockStart="200">
                   <BlockStack gap="200" inlineAlign="center">
                     <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-                      Join thousands of stores using AI-powered product visualization
+                      {isResubscribing 
+                        ? "Pick up right where you left off"
+                        : "Join thousands of stores using AI-powered product visualization"
+                      }
                     </Text>
                     <InlineStack gap="400" align="center">
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        14-day free trial
-                      </Text>
+                      {!isResubscribing && (
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          14-day free trial
+                        </Text>
+                      )}
                       <Text as="p" variant="bodySm" tone="subdued">
                         Cancel anytime
                       </Text>
@@ -272,8 +353,8 @@ export default function WelcomePage() {
             </Card>
           </div>
 
-          {/* Loading indicator if no plan matched */}
-          {!matchedPlanId && !error && (
+          {/* Loading indicator if still loading (no token yet) */}
+          {!customerApiToken && !error && (
             <InlineStack align="center" gap="200">
               <Spinner size="small" />
               <Text as="p" tone="subdued">Loading your plan...</Text>

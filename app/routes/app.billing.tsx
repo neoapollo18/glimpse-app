@@ -45,6 +45,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const subscription = customer.subscription || null;
     const currentPlanName = subscription?.plan?.name || null;
 
+    // Check for grace period (cancelled but still within billing period)
+    let isInGracePeriod = false;
+    let gracePeriodEndsAt: string | null = null;
+    if (!subscription?.active && subscription?.currentPeriodEnd) {
+      const periodEnd = new Date(subscription.currentPeriodEnd);
+      isInGracePeriod = periodEnd > new Date();
+      if (isInGracePeriod) {
+        gracePeriodEndsAt = subscription.currentPeriodEnd;
+      }
+    }
+
     // Fetch current sessions for traffic change detection
     let sessions: number | null = null;
     let planChangeInfo: ReturnType<typeof getPlanChangeInfo> = null;
@@ -77,6 +88,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       sessions,
       planChangeInfo,
       suggestedPlanId,
+      isInGracePeriod,
+      gracePeriodEndsAt,
       error: null,
     });
   } catch (error) {
@@ -90,6 +103,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       sessions: null,
       planChangeInfo: null,
       suggestedPlanId: null,
+      isInGracePeriod: false,
+      gracePeriodEndsAt: null,
       error: error instanceof Error ? error.message : "Failed to load billing information. Please try again.",
     });
   }
@@ -110,6 +125,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   try {
     if (actionType === "subscribe") {
+      if (!planId) {
+        return json({ error: "No plan specified" }, { status: 400 });
+      }
+      
       // Subscribe to plan
       // For embedded apps, return URL must go through Shopify Admin to maintain session
       // Extract shop handle from domain (e.g., "myshop" from "myshop.myshopify.com")
@@ -162,14 +181,18 @@ export default function BillingPage() {
     sessions,
     planChangeInfo,
     suggestedPlanId,
+    isInGracePeriod,
+    gracePeriodEndsAt,
     error 
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<{ confirmationUrl?: string; success?: boolean; error?: string }>();
   const submit = useSubmit();
   const navigation = useNavigation();
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showCancelSuccess, setShowCancelSuccess] = useState(false);
   
   const isLoading = navigation.state === "submitting";
+  const actionIntent = navigation.formData?.get("action") as string | null;
 
   // Show confirmation modal when we get a confirmation URL
   useEffect(() => {
@@ -177,9 +200,28 @@ export default function BillingPage() {
       setShowConfirmModal(true);
     }
   }, [actionData?.confirmationUrl]);
+  
+  // Show success message after cancel and reload to get fresh state
+  useEffect(() => {
+    if (actionData?.success && !actionData?.confirmationUrl) {
+      setShowCancelSuccess(true);
+      // Reload after a moment to show fresh subscription state
+      const timer = setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [actionData?.success, actionData?.confirmationUrl]);
 
   const handlePlanChange = () => {
-    if (!suggestedPlanId || !customerApiToken) return;
+    if (!suggestedPlanId || !customerApiToken || isLoading) return;
+    
+    // Confirm before plan change
+    const confirmMsg = planChangeInfo?.isUpgrade 
+      ? `This will upgrade your plan to ${planChangeInfo.suggestedPlan.name} at $${planChangeInfo.suggestedPlan.price}/month. Continue?`
+      : `This will update your plan to ${planChangeInfo?.suggestedPlan.name} at $${planChangeInfo?.suggestedPlan.price}/month. Continue?`;
+    
+    if (!confirm(confirmMsg)) return;
     
     const formData = new FormData();
     formData.append("action", "subscribe");
@@ -189,7 +231,10 @@ export default function BillingPage() {
   };
 
   const handleCancel = () => {
-    if (confirm("Are you sure you want to cancel your subscription?")) {
+    // Prevent double-clicks
+    if (isLoading || showCancelSuccess) return;
+    
+    if (confirm("Are you sure you want to cancel your subscription? You'll retain access until the end of your current billing period.")) {
       const formData = new FormData();
       formData.append("action", "cancel");
       formData.append("customerApiToken", customerApiToken || "");
@@ -200,6 +245,9 @@ export default function BillingPage() {
   const currentPlanName = (subscription as Subscription | null)?.plan?.name || "No Plan";
   const isActive = (subscription as Subscription | null)?.active === true;
   const typedSubscription = subscription as Subscription | null;
+  
+  // Show plan details if active OR in grace period (still have access)
+  const showPlanDetails = isActive || isInGracePeriod;
 
   return (
     <Page>
@@ -251,13 +299,48 @@ export default function BillingPage() {
           <Banner tone="info">
             <InlineStack align="center" gap="200">
               <Spinner size="small" />
-              <Text as="p">Processing your request...</Text>
+              <Text as="p">
+                {actionIntent === "cancel" ? "Cancelling your subscription..." : "Processing your request..."}
+              </Text>
             </InlineStack>
           </Banner>
         )}
 
-        {/* Traffic change notification */}
-        {planChangeInfo && suggestedPlanId && (
+        {/* Cancel success message */}
+        {showCancelSuccess && (
+          <Banner tone="success" title="Subscription cancelled">
+            <Text as="p">
+              Your subscription has been cancelled. The page will refresh momentarily.
+            </Text>
+          </Banner>
+        )}
+
+        {/* Grace period notification */}
+        {isInGracePeriod && gracePeriodEndsAt && (
+          <Banner tone="warning" title="Subscription cancelled">
+            <BlockStack gap="300">
+              <Text as="p">
+                Your subscription has been cancelled. You still have access until{' '}
+                <strong>
+                  {new Date(gracePeriodEndsAt).toLocaleDateString('en-US', {
+                    month: 'long',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}
+                </strong>
+                .
+              </Text>
+              <Box>
+                <Button url="/app/welcome">
+                  Re-subscribe now
+                </Button>
+              </Box>
+            </BlockStack>
+          </Banner>
+        )}
+
+        {/* Traffic change notification - only show if NOT in grace period */}
+        {!isInGracePeriod && planChangeInfo && suggestedPlanId && (
           <Banner 
             tone={planChangeInfo.isUpgrade ? "warning" : "info"}
             title="Your traffic has changed"
@@ -287,15 +370,33 @@ export default function BillingPage() {
               <BlockStack gap="400">
                 <Text as="h2" variant="headingLg">Your Plan</Text>
                 
-                {isActive && typedSubscription ? (
+                {showPlanDetails && typedSubscription ? (
                   <BlockStack gap="300">
-                    <Text as="p" variant="headingMd" fontWeight="bold">
-                      {currentPlanName}
-                    </Text>
+                    <InlineStack gap="200" blockAlign="center">
+                      <Text as="p" variant="headingMd" fontWeight="bold">
+                        {currentPlanName}
+                      </Text>
+                      {isInGracePeriod && (
+                        <Badge tone="warning">Cancelled</Badge>
+                      )}
+                      {isActive && typedSubscription.trialExpiresAt && new Date(typedSubscription.trialExpiresAt) > new Date() && (
+                        <Badge tone="success">Trial</Badge>
+                      )}
+                    </InlineStack>
                     <Text as="p" variant="headingLg">
                       ${typedSubscription.plan?.subtotal || typedSubscription.plan?.amount || 0}/month
                     </Text>
-                    {typedSubscription.currentPeriodEnd && (
+                    
+                    {/* Show different info based on state */}
+                    {isInGracePeriod && gracePeriodEndsAt ? (
+                      <Text as="p" variant="bodyMd" tone="caution">
+                        Access ends: {new Date(gracePeriodEndsAt).toLocaleDateString('en-US', { 
+                          month: 'short', 
+                          day: 'numeric', 
+                          year: 'numeric' 
+                        })}
+                      </Text>
+                    ) : typedSubscription.currentPeriodEnd ? (
                       <Text as="p" variant="bodyMd">
                         Next Billing Date: {new Date(typedSubscription.currentPeriodEnd).toLocaleDateString('en-US', { 
                           month: 'short', 
@@ -303,9 +404,10 @@ export default function BillingPage() {
                           year: 'numeric' 
                         })}
                       </Text>
-                    )}
+                    ) : null}
                     
-                    {typedSubscription.trialExpiresAt && (
+                    {/* Show trial info only if active and in trial */}
+                    {isActive && typedSubscription.trialExpiresAt && new Date(typedSubscription.trialExpiresAt) > new Date() && (
                       <Text as="p" variant="bodyMd" tone="success">
                         Trial ends: {new Date(typedSubscription.trialExpiresAt).toLocaleDateString('en-US', { 
                           month: 'short', 
@@ -315,9 +417,20 @@ export default function BillingPage() {
                       </Text>
                     )}
 
-                    {typedSubscription.plan && typedSubscription.plan.subtotal > 0 && (
+                    {/* Only show cancel button if active (not in grace period) */}
+                    {/* Show cancel for any paid plan (subtotal > 0) OR during trial (trialExpiresAt exists) */}
+                    {isActive && typedSubscription.plan && (
+                      typedSubscription.plan.subtotal > 0 || 
+                      typedSubscription.plan.amount > 0 || 
+                      typedSubscription.trialExpiresAt
+                    ) && (
                       <Box paddingBlockStart="200">
-                        <Button variant="plain" tone="critical" onClick={handleCancel} disabled={isLoading}>
+                        <Button 
+                          variant="plain" 
+                          tone="critical" 
+                          onClick={handleCancel} 
+                          disabled={isLoading || showCancelSuccess}
+                        >
                           Cancel subscription
                         </Button>
                       </Box>
@@ -347,7 +460,8 @@ export default function BillingPage() {
                 
                 <BlockStack gap="300">
                   {SESSION_TIERS.map((tier) => {
-                    const isCurrent = currentPlanName === tier.name;
+                    // Case-insensitive comparison to match plan-matcher logic
+                    const isCurrent = currentPlanName.toLowerCase() === tier.name.toLowerCase();
                     
                     return (
                       <InlineStack key={tier.name} align="space-between" blockAlign="center">

@@ -35,13 +35,24 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       // Grandfathered users get free access
       console.log('✅ Shop is grandfathered, allowing access:', shopDomain);
     } else {
-      // Not grandfathered - check if they have an active subscription
+      // Not grandfathered - check if they have an active subscription or are in grace period
       try {
         const { customer } = await identifyAndGetCustomer(shopDomain, accessToken);
-        const hasActiveSubscription = customer?.subscription?.active === true;
+        const subscription = customer?.subscription;
+        const hasActiveSubscription = subscription?.active === true;
         
-        if (!hasActiveSubscription) {
-          // Not grandfathered AND no active subscription → need billing
+        // Check for grace period: subscription was cancelled but still within billing period
+        let isInGracePeriod = false;
+        if (!hasActiveSubscription && subscription?.currentPeriodEnd) {
+          const periodEnd = new Date(subscription.currentPeriodEnd);
+          isInGracePeriod = periodEnd > new Date();
+          if (isInGracePeriod) {
+            console.log('⏳ Shop in grace period until:', periodEnd.toISOString(), shopDomain);
+          }
+        }
+        
+        if (!hasActiveSubscription && !isInGracePeriod) {
+          // Not grandfathered AND no active subscription AND not in grace period → need billing
           console.log('🚫 Billing gate: User needs billing:', shopDomain);
           needsBilling = true;
         }
