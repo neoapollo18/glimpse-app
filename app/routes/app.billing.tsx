@@ -11,7 +11,6 @@ import {
   Button,
   Badge,
   Box,
-  Divider,
   Banner,
   Spinner,
   Modal,
@@ -24,9 +23,16 @@ import {
   subscribeCustomer,
   cancelSubscription,
 } from "../lib/mantle.server";
+import { getMonthlySessionsCount } from "../lib/shopify-analytics.server";
+import { 
+  SESSION_TIERS, 
+  getPlanChangeInfo, 
+  getMantlePlanForSessions,
+  type MantlePlan,
+} from "../lib/plan-matcher.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shopDomain = session.shop;
   const accessToken = session.accessToken || "";
 
@@ -35,13 +41,42 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const { customer, apiToken } = await identifyAndGetCustomer(shopDomain, accessToken);
     
     const customerApiToken = apiToken;
+    const plans = (customer.plans || []) as MantlePlan[];
+    const subscription = customer.subscription || null;
+    const currentPlanName = subscription?.plan?.name || null;
+
+    // Fetch current sessions for traffic change detection
+    let sessions: number | null = null;
+    let planChangeInfo: ReturnType<typeof getPlanChangeInfo> = null;
+    let suggestedPlanId: string | null = null;
+
+    try {
+      sessions = await getMonthlySessionsCount(admin);
+      
+      // Check if traffic has changed and plan needs updating
+      if (sessions !== null && currentPlanName) {
+        planChangeInfo = getPlanChangeInfo(currentPlanName, sessions);
+        
+        // Find the suggested Mantle plan ID if there's a change
+        if (planChangeInfo) {
+          const suggestedMantlePlan = getMantlePlanForSessions(plans, sessions);
+          suggestedPlanId = suggestedMantlePlan?.id || null;
+        }
+      }
+    } catch (sessionsError) {
+      // Sessions fetch failed - that's OK, just don't show change notification
+      console.error("Error fetching sessions for billing page:", sessionsError);
+    }
     
     return json({
       shopDomain,
       customer,
       customerApiToken,
-      plans: customer.plans || [],
-      subscription: customer.subscription || null,
+      plans,
+      subscription,
+      sessions,
+      planChangeInfo,
+      suggestedPlanId,
       error: null,
     });
   } catch (error) {
@@ -52,6 +87,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       customerApiToken: null,
       plans: [],
       subscription: null,
+      sessions: null,
+      planChangeInfo: null,
+      suggestedPlanId: null,
       error: error instanceof Error ? error.message : "Failed to load billing information. Please try again.",
     });
   }
@@ -105,40 +143,27 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 };
 
-interface Plan {
-  id: string;
-  name: string;
-  amount: number;
-  subtotal: number;
-  total: number;
-  currencyCode: string;
-  interval: string;
-  trialDays: number;
-  description?: string;
-  features?: Record<string, { name: string; value: string | number | boolean }>;
-  featuresOrder?: string[];
-}
-
 interface Subscription {
   id: string;
   active: boolean;
-  plan: Plan;
+  plan: {
+    name: string;
+    amount: number;
+    subtotal: number;
+  };
   trialExpiresAt?: string;
   currentPeriodEnd?: string;
 }
 
-// Visitor-based pricing tiers (matching your Shopify app store pricing)
-const PRICING_TIERS: { name: string; visitors: string; price: string }[] = [
-  { name: 'Starter', visitors: '0-5k visitors', price: '$30' },
-  { name: 'Launch', visitors: '5k-25k visitors', price: '$149' },
-  { name: 'Growth', visitors: '25k-75k visitors', price: '$299' },
-  { name: 'Scale', visitors: '75k-150k visitors', price: '$499' },
-  { name: 'Premium', visitors: '150k-300k visitors', price: '$999' },
-  { name: 'Enterprise', visitors: '300k+ visitors', price: 'Custom' },
-];
-
 export default function BillingPage() {
-  const { customer, customerApiToken, plans, subscription, error } = useLoaderData<typeof loader>();
+  const { 
+    customerApiToken, 
+    subscription, 
+    sessions,
+    planChangeInfo,
+    suggestedPlanId,
+    error 
+  } = useLoaderData<typeof loader>();
   const actionData = useActionData<{ confirmationUrl?: string; success?: boolean; error?: string }>();
   const submit = useSubmit();
   const navigation = useNavigation();
@@ -153,11 +178,13 @@ export default function BillingPage() {
     }
   }, [actionData?.confirmationUrl]);
 
-  const handleSubscribe = (planId: string) => {
+  const handlePlanChange = () => {
+    if (!suggestedPlanId || !customerApiToken) return;
+    
     const formData = new FormData();
     formData.append("action", "subscribe");
-    formData.append("planId", planId);
-    formData.append("customerApiToken", customerApiToken || "");
+    formData.append("planId", suggestedPlanId);
+    formData.append("customerApiToken", customerApiToken);
     submit(formData, { method: "POST" });
   };
 
@@ -173,18 +200,6 @@ export default function BillingPage() {
   const currentPlanName = (subscription as Subscription | null)?.plan?.name || "No Plan";
   const isActive = (subscription as Subscription | null)?.active === true;
   const typedSubscription = subscription as Subscription | null;
-  const typedPlans = plans as Plan[];
-
-  // Sort plans by price and filter out Free plan
-  const sortedPlans = [...typedPlans]
-    .filter((plan) => plan.name.toLowerCase() !== 'free')
-    .sort((a, b) => (a.subtotal || a.amount || 0) - (b.subtotal || b.amount || 0));
-
-  // Get visitor range for current plan
-  const getVisitorRange = (planName: string): string => {
-    const tier = PRICING_TIERS.find(t => t.name === planName);
-    return tier?.visitors || '';
-  };
 
   return (
     <Page>
@@ -241,7 +256,31 @@ export default function BillingPage() {
           </Banner>
         )}
 
-        {/* Your Plan + Pricing Tiers - Aftersell style layout */}
+        {/* Traffic change notification */}
+        {planChangeInfo && suggestedPlanId && (
+          <Banner 
+            tone={planChangeInfo.isUpgrade ? "warning" : "info"}
+            title="Your traffic has changed"
+          >
+            <BlockStack gap="300">
+              <Text as="p">
+                Based on your current traffic ({sessions?.toLocaleString()} sessions/month), 
+                your plan should be updated to <strong>{planChangeInfo.suggestedPlan.name}</strong> (
+                {planChangeInfo.suggestedPlan.price !== null 
+                  ? `$${planChangeInfo.suggestedPlan.price}/month` 
+                  : 'Custom pricing'
+                }).
+              </Text>
+              <Box>
+                <Button onClick={handlePlanChange} disabled={isLoading}>
+                  {planChangeInfo.isUpgrade ? "Upgrade plan" : "Update plan"}
+                </Button>
+              </Box>
+            </BlockStack>
+          </Banner>
+        )}
+
+        {/* Your Plan + Pricing Tiers - Read-only layout */}
         <Layout>
           <Layout.Section variant="oneHalf">
             <Card>
@@ -290,7 +329,7 @@ export default function BillingPage() {
                       No active plan
                     </Text>
                     <Text as="p" variant="bodySm" tone="subdued">
-                      Select a plan below to get started with Gleame.
+                      Your plan will be assigned automatically based on your store's traffic.
                     </Text>
                   </BlockStack>
                 )}
@@ -303,19 +342,24 @@ export default function BillingPage() {
               <BlockStack gap="400">
                 <Text as="h2" variant="headingLg">Pricing Tiers</Text>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  Pricing is based on your store's monthly visitor count. Choose the tier that matches your traffic.
+                  Pricing is automatically determined based on your store's monthly session count.
                 </Text>
                 
                 <BlockStack gap="300">
-                  {PRICING_TIERS.map((tier) => {
+                  {SESSION_TIERS.map((tier) => {
                     const isCurrent = currentPlanName === tier.name;
                     
                     return (
                       <InlineStack key={tier.name} align="space-between" blockAlign="center">
                         <Text as="p" variant="bodyMd" fontWeight={isCurrent ? "bold" : "regular"}>
-                          {tier.name}: {tier.visitors}/month → {tier.price}
+                          {tier.name}: {tier.visitors}/month
                         </Text>
-                        {isCurrent && <Badge>Current</Badge>}
+                        <InlineStack gap="200" blockAlign="center">
+                          <Text as="p" variant="bodyMd" fontWeight={isCurrent ? "bold" : "regular"}>
+                            {tier.price !== null ? `$${tier.price}` : 'Custom'}
+                          </Text>
+                          {isCurrent && <Badge>Current</Badge>}
+                        </InlineStack>
                       </InlineStack>
                     );
                   })}
@@ -325,95 +369,14 @@ export default function BillingPage() {
           </Layout.Section>
         </Layout>
 
-        <Divider />
-
-        {/* Plan Selection Cards */}
-        <Text as="h2" variant="headingLg">
-          {isActive ? "Switch Plans" : "Select a Plan to Get Started"}
-        </Text>
-        
-        <Layout>
-          {sortedPlans.map((plan: Plan) => {
-            const isCurrent = currentPlanName === plan.name;
-            const priceAmount = plan.subtotal || plan.amount || 0;
-            const visitorRange = getVisitorRange(plan.name);
-            
-            return (
-              <Layout.Section key={plan.id} variant="oneThird">
-                <Card>
-                  <BlockStack gap="400">
-                    <BlockStack gap="200">
-                      <InlineStack align="space-between" blockAlign="center">
-                        <Text as="h3" variant="headingMd">{plan.name}</Text>
-                        {isCurrent && <Badge tone="info">Current</Badge>}
-                      </InlineStack>
-                      
-                      {visitorRange && (
-                        <Text as="p" variant="bodySm" tone="subdued">
-                          {visitorRange}
-                        </Text>
-                      )}
-                    </BlockStack>
-                    
-                    <BlockStack gap="100">
-                      <InlineStack gap="100" blockAlign="end">
-                        <Text as="p" variant="heading2xl">
-                          ${priceAmount}
-                        </Text>
-                        <Text as="p" variant="bodyMd" tone="subdued">
-                          /month
-                        </Text>
-                      </InlineStack>
-                      
-                      {plan.trialDays > 0 && !isActive && (
-                        <Text as="p" variant="bodySm" tone="success">
-                          {plan.trialDays}-day free trial
-                        </Text>
-                      )}
-                    </BlockStack>
-
-                    <Box>
-                      {isCurrent ? (
-                        <Button disabled fullWidth size="large">
-                          Current plan
-                        </Button>
-                      ) : (
-                        <Button 
-                          variant="primary"
-                          fullWidth
-                          size="large"
-                          onClick={() => handleSubscribe(plan.id)}
-                          disabled={isLoading}
-                        >
-                          {isActive ? "Switch plan" : "Try for free"}
-                        </Button>
-                      )}
-                    </Box>
-                  </BlockStack>
-                </Card>
-              </Layout.Section>
-            );
-          })}
-        </Layout>
-
-        {typedPlans.length === 0 && !error && (
-          <Card>
-            <BlockStack gap="300" inlineAlign="center">
-              <Text as="p" variant="bodyLg" tone="subdued">
-                Loading available plans...
-              </Text>
-              <Spinner size="small" />
-            </BlockStack>
-          </Card>
-        )}
-
         {/* Help Section */}
         <Card>
           <BlockStack gap="300">
             <Text as="h3" variant="headingMd">Questions about billing?</Text>
             <Text as="p" variant="bodySm" tone="subdued">
               All plans are billed through Shopify and include a 14-day free trial. 
-              Pricing is based on your store's monthly visitor count. 
+              Pricing is automatically determined based on your store's monthly session count. 
+              If your traffic changes, we'll notify you to approve a plan update.
               Contact us at aaron@gleame.ai if you need help.
             </Text>
           </BlockStack>

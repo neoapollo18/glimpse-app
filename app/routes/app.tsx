@@ -20,9 +20,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shopDomain = session.shop;
   const accessToken = session.accessToken || "";
 
-  // Get current path to know if we're on billing page
+  // Get current path to know if we're on billing or welcome page
   const url = new URL(request.url);
-  const isOnBillingPage = url.pathname.includes('/app/billing');
+  const isOnBillingPage = url.pathname.includes('/app/billing') || url.pathname.includes('/app/welcome');
 
   let needsBilling = false;
 
@@ -71,16 +71,16 @@ export default function App() {
   const [isRedirecting, setIsRedirecting] = useState(false);
 
   // Determine if we should block content and redirect
-  const currentlyOnBilling = location.pathname.includes('/app/billing');
-  const shouldBlockContent = needsBilling && !currentlyOnBilling;
+  const currentlyOnBillingOrWelcome = location.pathname.includes('/app/billing') || location.pathname.includes('/app/welcome');
+  const shouldBlockContent = needsBilling && !currentlyOnBillingOrWelcome;
 
-  // Client-side redirect to billing if needed (and not already there)
+  // Client-side redirect to welcome page if needed (and not already there)
   useEffect(() => {
     if (shouldBlockContent) {
       setIsRedirecting(true);
       // Small delay to ensure loading state shows
       const timer = setTimeout(() => {
-        navigate('/app/billing', { replace: true });
+        navigate('/app/welcome', { replace: true });
       }, 50);
       return () => clearTimeout(timer);
     } else {
