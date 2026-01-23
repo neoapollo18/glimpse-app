@@ -246,7 +246,7 @@ export default function WelcomePage() {
                 <Text as="p" variant="bodyMd" tone="subdued">
                   {isResubscribing 
                     ? "Your plan will be automatically selected based on your store's current monthly session count."
-                    : "After the 14-day free trial, pricing plans start from $30/month (0-5k sessions) and increase incrementally based on your store's monthly session count (up to $999/month for stores that do 300k sessions/month)."
+                    : "After the 14-day free trial, pricing plans start from $30/month (0-5k sessions) and increase incrementally based on your store's monthly session count (up to $1,499/month for stores with 500k sessions/month)."
                   }
                 </Text>
 

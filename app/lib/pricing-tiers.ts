@@ -20,8 +20,8 @@ export interface SessionTier {
 export const SESSION_TIERS: SessionTier[] = [
   { name: 'Starter', min: 0, max: 5000, price: 30, visitors: '0-5k sessions' },
   { name: 'Launch', min: 5001, max: 25000, price: 149, visitors: '5k-25k sessions' },
-  { name: 'Growth', min: 25001, max: 75000, price: 299, visitors: '25k-75k sessions' },
-  { name: 'Scale', min: 75001, max: 150000, price: 499, visitors: '75k-150k sessions' },
-  { name: 'Premium', min: 150001, max: 300000, price: 999, visitors: '150k-300k sessions' },
-  { name: 'Enterprise', min: 300001, max: Infinity, price: null, visitors: '300k+ sessions' },
+  { name: 'Growth', min: 25001, max: 75000, price: 399, visitors: '25k-75k sessions' },
+  { name: 'Scale', min: 75001, max: 200000, price: 799, visitors: '75k-200k sessions' },
+  { name: 'Premium', min: 200001, max: 500000, price: 1499, visitors: '200k-500k sessions' },
+  { name: 'Enterprise', min: 500001, max: Infinity, price: null, visitors: '500k+ sessions' },
 ];
