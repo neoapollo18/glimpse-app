@@ -230,21 +230,31 @@ export default function BillingPage() {
     submit(formData, { method: "POST" });
   };
 
+  const currentPlanName = (subscription as Subscription | null)?.plan?.name || "No Plan";
+  const isActive = (subscription as Subscription | null)?.active === true;
+  const typedSubscription = subscription as Subscription | null;
+  
+  // Check if user is currently in trial
+  const isInTrial = isActive && 
+    typedSubscription?.trialExpiresAt && 
+    new Date(typedSubscription.trialExpiresAt) > new Date();
+
   const handleCancel = () => {
     // Prevent double-clicks
     if (isLoading || showCancelSuccess) return;
     
-    if (confirm("Are you sure you want to cancel your subscription? You'll retain access until the end of your current billing period.")) {
+    // Different warning for trial vs paid users
+    const confirmMessage = isInTrial
+      ? "You're currently in your free trial. Canceling now will end your access immediately. Are you sure you want to cancel?"
+      : "Are you sure you want to cancel your subscription? You'll retain access until the end of your current billing period.";
+    
+    if (confirm(confirmMessage)) {
       const formData = new FormData();
       formData.append("action", "cancel");
       formData.append("customerApiToken", customerApiToken || "");
       submit(formData, { method: "POST" });
     }
   };
-
-  const currentPlanName = (subscription as Subscription | null)?.plan?.name || "No Plan";
-  const isActive = (subscription as Subscription | null)?.active === true;
-  const typedSubscription = subscription as Subscription | null;
   
   // Show plan details if active OR in grace period (still have access)
   const showPlanDetails = isActive || isInGracePeriod;
@@ -379,7 +389,7 @@ export default function BillingPage() {
                       {isInGracePeriod && (
                         <Badge tone="warning">Cancelled</Badge>
                       )}
-                      {isActive && typedSubscription.trialExpiresAt && new Date(typedSubscription.trialExpiresAt) > new Date() && (
+                      {isInTrial && (
                         <Badge tone="success">Trial</Badge>
                       )}
                     </InlineStack>
@@ -406,8 +416,8 @@ export default function BillingPage() {
                       </Text>
                     ) : null}
                     
-                    {/* Show trial info only if active and in trial */}
-                    {isActive && typedSubscription.trialExpiresAt && new Date(typedSubscription.trialExpiresAt) > new Date() && (
+                    {/* Show trial info only if in trial */}
+                    {isInTrial && typedSubscription.trialExpiresAt && (
                       <Text as="p" variant="bodyMd" tone="success">
                         Trial ends: {new Date(typedSubscription.trialExpiresAt).toLocaleDateString('en-US', { 
                           month: 'short', 
@@ -418,11 +428,11 @@ export default function BillingPage() {
                     )}
 
                     {/* Only show cancel button if active (not in grace period) */}
-                    {/* Show cancel for any paid plan (subtotal > 0) OR during trial (trialExpiresAt exists) */}
+                    {/* Show cancel for any paid plan (subtotal > 0) OR during trial */}
                     {isActive && typedSubscription.plan && (
                       typedSubscription.plan.subtotal > 0 || 
                       typedSubscription.plan.amount > 0 || 
-                      typedSubscription.trialExpiresAt
+                      isInTrial
                     ) && (
                       <Box paddingBlockStart="200">
                         <Button 
