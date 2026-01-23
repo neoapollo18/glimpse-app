@@ -71,7 +71,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const activeProducts = analytics?.productBreakdown?.length || 0;
   const productStats = (analytics?.productBreakdown || []) as ProductStat[];
 
-  // All steps complete = has products AND has transformations
+  // All steps complete = has products configured AND widget has been used
   const allStepsComplete = configuredProductsCount > 0 && activeProducts > 0;
 
   return json<LoaderData>({
@@ -125,14 +125,6 @@ export default function Dashboard() {
   // Setup steps
   const setupSteps = [
     {
-      id: "enable",
-      title: "Enable Gleame for your store",
-      description: "Review your settings and customize the experience",
-      completed: true,
-      action: () => navigate("/app/settings"),
-      actionLabel: "Go to Settings",
-    },
-    {
       id: "configure",
       title: "Set up your first product",
       description: "Add AI transformation prompts to your products",
@@ -145,8 +137,16 @@ export default function Dashboard() {
       title: "Add a widget to your theme",
       description: "Place a Gleame block on your product pages",
       completed: activeProducts > 0,
-      action: () => navigate("/app/products"),
-      actionLabel: "View Products",
+      action: () => window.open(`https://${shopDomain}/admin/themes/current/editor?context=apps`, '_blank'),
+      actionLabel: "Open Theme Editor",
+    },
+    {
+      id: "style",
+      title: "Configure your widget style",
+      description: "Customize colors, text, and layout for your widgets",
+      completed: activeProducts > 0,
+      action: () => navigate("/app/widgets"),
+      actionLabel: "Customize Widget",
     },
   ];
 
