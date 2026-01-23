@@ -189,7 +189,7 @@ Merchants add widgets to their theme via Shopify's Theme Editor:
 
 ## Support
 
-- Email: aaron@gleame.ai
+- Email: charles@gleame.ai
 - Website: [gleame.ai](https://gleame.ai)
 
 ## License
