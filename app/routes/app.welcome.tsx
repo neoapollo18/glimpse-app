@@ -109,10 +109,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   try {
-    // Build return URL for after billing approval
+    // Build return URL for after billing approval - go to dashboard
     const shopHandle = shopDomain.replace('.myshopify.com', '');
     const appHandle = process.env.SHOPIFY_APP_HANDLE || 'gleame';
-    const returnUrl = `https://admin.shopify.com/store/${shopHandle}/apps/${appHandle}/app/billing`;
+    const returnUrl = `https://admin.shopify.com/store/${shopHandle}/apps/${appHandle}/app`;
 
     const subscription = await subscribeCustomer(customerApiToken, planId, returnUrl);
 
