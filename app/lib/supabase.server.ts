@@ -410,29 +410,52 @@ export async function getAnalytics(shopDomain: string, daysBack: number = 7) {
     }
 
     // Get per-product analytics in the last N days (including widget_type)
-    const { data: productEvents, error: productError } = await supabase
-      .from('analytics_events')
-      .select(`
-        product_id,
-        widget_type,
-        event_type,
-        products (
-          id,
-          product_name,
-          shopify_id
-        )
-      `)
-      .eq('shop_id', shop.id)
-      .in('event_type', ['transformation', 'widget_view', 'add_to_cart'])
-      .gte('created_at', dateThreshold.toISOString());
+    // Use pagination to get ALL events, not just first 1000
+    let allProductEvents: any[] = [];
+    let page = 0;
+    const pageSize = 1000;
+    let hasMore = true;
+    
+    while (hasMore) {
+      const { data: productEvents, error: productError } = await supabase
+        .from('analytics_events')
+        .select(`
+          product_id,
+          widget_type,
+          event_type,
+          products (
+            id,
+            product_name,
+            shopify_id
+          )
+        `)
+        .eq('shop_id', shop.id)
+        .in('event_type', ['transformation', 'widget_view', 'add_to_cart'])
+        .gte('created_at', dateThreshold.toISOString())
+        .range(page * pageSize, (page + 1) * pageSize - 1);
 
-    if (productError) {
-      console.error('Error fetching product analytics:', productError);
-      return null;
+      if (productError) {
+        console.error('Error fetching product analytics:', productError);
+        return null;
+      }
+      
+      if (productEvents && productEvents.length > 0) {
+        allProductEvents = allProductEvents.concat(productEvents);
+        hasMore = productEvents.length === pageSize;
+        page++;
+      } else {
+        hasMore = false;
+      }
+      
+      // Safety limit: max 10 pages (10,000 events)
+      if (page >= 10) {
+        console.log('Analytics pagination limit reached (10,000 events)');
+        hasMore = false;
+      }
     }
 
     // Group by product and widget_type (only count transformations for the main number)
-    const productStats = productEvents
+    const productStats = allProductEvents
       .filter((e: any) => e.event_type === 'transformation')
       .reduce((acc: any, event: any) => {
         const productId = event.product_id;
@@ -461,7 +484,7 @@ export async function getAnalytics(shopDomain: string, daysBack: number = 7) {
       }, {});
 
     // Add view counts per product
-    productEvents
+    allProductEvents
       .filter((e: any) => e.event_type === 'widget_view')
       .forEach((event: any) => {
         const productId = event.product_id;
@@ -471,7 +494,7 @@ export async function getAnalytics(shopDomain: string, daysBack: number = 7) {
       });
 
     // Add ATC counts per product
-    productEvents
+    allProductEvents
       .filter((e: any) => e.event_type === 'add_to_cart')
       .forEach((event: any) => {
         const productId = event.product_id;
@@ -1279,4 +1302,120 @@ export async function isShopGrandfathered(shopDomain: string): Promise<boolean> 
   
   console.log('❌ Shop not grandfathered (no existing data)');
   return false;
+}
+
+/**
+ * Subscription Status Types
+ */
+export type SubscriptionStatus = 'active' | 'trial' | 'grace_period' | 'cancelled' | 'grandfathered' | 'none';
+
+/**
+ * Update a shop's subscription status in Supabase
+ * Called when billing status changes (subscribe, cancel, etc.)
+ */
+export async function updateShopSubscriptionStatus(
+  shopDomain: string,
+  status: SubscriptionStatus,
+  expiresAt?: Date | null
+): Promise<void> {
+  const { error } = await supabase
+    .from('shops')
+    .update({
+      subscription_status: status,
+      subscription_expires_at: expiresAt?.toISOString() || null,
+    })
+    .eq('shop_domain', shopDomain);
+  
+  if (error) {
+    console.error('Error updating subscription status:', error);
+  } else {
+    console.log(`📝 Updated subscription status for ${shopDomain}: ${status}`);
+  }
+}
+
+/**
+ * Check if a shop has valid access (for transform API)
+ * Returns true if shop can use transformations
+ */
+export async function shopHasValidAccess(shopDomain: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('shops')
+    .select('subscription_status, subscription_expires_at')
+    .eq('shop_domain', shopDomain)
+    .single();
+  
+  if (error || !data) {
+    // Shop not found - no access
+    return false;
+  }
+  
+  const { subscription_status, subscription_expires_at } = data;
+  
+  // Grandfathered users always have access
+  if (subscription_status === 'grandfathered') {
+    return true;
+  }
+  
+  // Active or trial subscriptions have access
+  if (subscription_status === 'active' || subscription_status === 'trial') {
+    return true;
+  }
+  
+  // Grace period - check if still within the grace window
+  if (subscription_status === 'grace_period' && subscription_expires_at) {
+    const expiresAt = new Date(subscription_expires_at);
+    if (expiresAt > new Date()) {
+      return true;
+    }
+  }
+  
+  // No access for 'cancelled', 'none', or expired grace period
+  return false;
+}
+
+/**
+ * Mark a shop as grandfathered (has permanent free access)
+ */
+export async function markShopAsGrandfathered(shopDomain: string): Promise<void> {
+  await updateShopSubscriptionStatus(shopDomain, 'grandfathered', null);
+}
+
+/**
+ * Pending Plan Change Interface
+ */
+export interface PendingPlanChange {
+  currentPlan: string;
+  suggestedPlan: string;
+  suggestedPlanId: string | null;
+  suggestedPrice: number | null;
+  sessions: number;
+  isUpgrade: boolean;
+  detectedAt: string;
+}
+
+/**
+ * Get pending plan change notification for a shop (set by cron job)
+ */
+export async function getPendingPlanChange(shopDomain: string): Promise<PendingPlanChange | null> {
+  const { data, error } = await supabase
+    .from('shops')
+    .select('pending_plan_change')
+    .eq('shop_domain', shopDomain)
+    .single();
+  
+  if (error || !data?.pending_plan_change) {
+    return null;
+  }
+  
+  return data.pending_plan_change as PendingPlanChange;
+}
+
+/**
+ * Clear pending plan change notification (after user acknowledges or updates plan)
+ */
+export async function clearPendingPlanChange(shopDomain: string): Promise<void> {
+  await supabase
+    .from('shops')
+    .update({ pending_plan_change: null })
+    .eq('shop_domain', shopDomain);
 }

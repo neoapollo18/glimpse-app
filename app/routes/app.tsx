@@ -10,7 +10,7 @@ import { useEffect, useState } from "react";
 
 import { authenticate } from "../shopify.server";
 import { identifyAndGetCustomer } from "../lib/mantle.server";
-import { isShopGrandfathered } from "../lib/supabase.server";
+import { isShopGrandfathered, markShopAsGrandfathered } from "../lib/supabase.server";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
@@ -34,6 +34,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     if (grandfathered) {
       // Grandfathered users get free access
       console.log('✅ Shop is grandfathered, allowing access:', shopDomain);
+      // Ensure subscription_status is marked as grandfathered for transform API
+      await markShopAsGrandfathered(shopDomain);
     } else {
       // Not grandfathered - check if they have an active subscription or are in grace period
       try {

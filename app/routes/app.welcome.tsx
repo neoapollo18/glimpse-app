@@ -18,6 +18,7 @@ import { ChevronDownIcon, ChevronUpIcon } from "@shopify/polaris-icons";
 import { useState, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import { identifyAndGetCustomer, subscribeCustomer } from "../lib/mantle.server";
+import { updateShopSubscriptionStatus } from "../lib/supabase.server";
 import { getMonthlySessionsCount } from "../lib/shopify-analytics.server";
 import { SESSION_TIERS } from "../lib/pricing-tiers";
 import { 
@@ -115,6 +116,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const returnUrl = `https://admin.shopify.com/store/${shopHandle}/apps/${appHandle}/app`;
 
     const subscription = await subscribeCustomer(customerApiToken, planId, returnUrl);
+
+    // Pre-set subscription status to 'trial' since all new subscriptions start with trial
+    // This will be confirmed/updated when they return to billing page
+    await updateShopSubscriptionStatus(shopDomain, 'trial', null);
 
     if (subscription.confirmationUrl) {
       return json({ confirmationUrl: subscription.confirmationUrl.toString() });

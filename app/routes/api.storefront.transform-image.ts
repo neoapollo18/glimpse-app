@@ -1,7 +1,7 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { transformImage, GEMINI_MODEL_PRO, GEMINI_MODEL_FLASH } from "../lib/ai.server";
-import { getProductOrVariantConfiguration, trackTransformationEvent, productHasVariantConfigs, findShopByDomain } from "../lib/supabase.server";
+import { getProductOrVariantConfiguration, trackTransformationEvent, productHasVariantConfigs, findShopByDomain, shopHasValidAccess } from "../lib/supabase.server";
 import { checkRateLimit, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -88,7 +88,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     console.log(`[Security] Shop verified: ${shopDomain} → ${verifiedShopDomain}`);
 
     // ============================================
-    // STEP 3: RATE LIMITING (using verified shop)
+    // STEP 3: SUBSCRIPTION CHECK
+    // Verify shop has valid access (active subscription, trial, grace period, or grandfathered)
+    // ============================================
+    const hasAccess = await shopHasValidAccess(verifiedShopDomain);
+    
+    if (!hasAccess) {
+      console.log(`[Billing] Shop ${verifiedShopDomain} does not have valid subscription`);
+      return json({ 
+        error: "This store's subscription is inactive. Please contact the store administrator." 
+      }, { 
+        status: 403,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+        }
+      });
+    }
+
+    // ============================================
+    // STEP 4: RATE LIMITING
     // ============================================
     const clientIP = getClientIP(request);
     
@@ -153,7 +171,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     // ============================================
-    // STEP 4: Get product configuration
+    // STEP 5: Get product configuration
     // ============================================
     // Get product or variant configuration from Supabase
     // If variantId provided, tries variant first, then falls back to product

@@ -30,6 +30,7 @@ import {
   getMantlePlanForSessions,
   type MantlePlan,
 } from "../lib/plan-matcher.server";
+import { getPendingPlanChange, clearPendingPlanChange, updateShopSubscriptionStatus } from "../lib/supabase.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
@@ -56,6 +57,28 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       }
     }
 
+    // Sync subscription status to Supabase for transform API access control
+    try {
+      if (subscription?.active) {
+        // Check if in trial
+        const isInTrial = subscription.trialExpiresAt && new Date(subscription.trialExpiresAt) > new Date();
+        await updateShopSubscriptionStatus(
+          shopDomain, 
+          isInTrial ? 'trial' : 'active',
+          subscription.currentPeriodEnd ? new Date(subscription.currentPeriodEnd) : null
+        );
+      } else if (isInGracePeriod && gracePeriodEndsAt) {
+        await updateShopSubscriptionStatus(shopDomain, 'grace_period', new Date(gracePeriodEndsAt));
+      } else if (subscription) {
+        // Has subscription record but not active and not in grace period = cancelled
+        await updateShopSubscriptionStatus(shopDomain, 'cancelled', null);
+      }
+      // Note: 'none' and 'grandfathered' are set elsewhere
+    } catch (syncError) {
+      console.error("Error syncing subscription status:", syncError);
+      // Don't fail the page load for this
+    }
+
     // Fetch current sessions for traffic change detection
     let sessions: number | null = null;
     let planChangeInfo: ReturnType<typeof getPlanChangeInfo> = null;
@@ -77,6 +100,29 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     } catch (sessionsError) {
       // Sessions fetch failed - that's OK, just don't show change notification
       console.error("Error fetching sessions for billing page:", sessionsError);
+    }
+
+    // If no live planChangeInfo, check for stored notification from cron job
+    if (!planChangeInfo && currentPlanName) {
+      try {
+        const storedChange = await getPendingPlanChange(shopDomain);
+        if (storedChange && storedChange.suggestedPlan.toLowerCase() !== currentPlanName.toLowerCase()) {
+          // Use stored notification
+          sessions = storedChange.sessions;
+          suggestedPlanId = storedChange.suggestedPlanId;
+          planChangeInfo = {
+            currentPlan: storedChange.currentPlan,
+            suggestedPlan: {
+              name: storedChange.suggestedPlan,
+              price: storedChange.suggestedPrice,
+              min: 0, max: 0, visitors: '', // Not needed for display
+            },
+            isUpgrade: storedChange.isUpgrade,
+          };
+        }
+      } catch (storedError) {
+        console.error("Error checking stored plan change:", storedError);
+      }
     }
     
     return json({
@@ -139,6 +185,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       
       const subscription = await subscribeCustomer(customerApiToken, planId, returnUrl);
       
+      // Clear any stored plan change notification since user is taking action
+      await clearPendingPlanChange(shopDomain);
+      
       // Return confirmationUrl for client-side redirect
       // Client will use window.open(url, '_top') to break out of iframe
       if (subscription.confirmationUrl) {
@@ -150,6 +199,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     if (actionType === "cancel") {
       await cancelSubscription(customerApiToken);
+      
+      // Update subscription status - will be synced to exact expiry on page reload
+      // For now, mark as grace_period (the loader will update with correct expiry)
+      await updateShopSubscriptionStatus(shopDomain, 'grace_period', null);
+      
       return json({ success: true });
     }
 
