@@ -14,7 +14,6 @@ import {
   Collapsible,
   Modal,
   Icon,
-  Divider,
 } from "@shopify/polaris";
 import { ChevronDownIcon, ChevronUpIcon, StarFilledIcon, CheckIcon } from "@shopify/polaris-icons";
 import { useState, useEffect } from "react";
@@ -257,7 +256,7 @@ export default function WelcomePage() {
                   }
                 </Text>
 
-                {/* Expandable pricing table */}
+                {/* Expandable pricing table - AfterSell style */}
                 <Box>
                   <Button
                     variant="plain"
@@ -274,29 +273,45 @@ export default function WelcomePage() {
                     transition={{ duration: '200ms', timingFunction: 'ease-in-out' }}
                   >
                     <Box paddingBlockStart="400">
-                      <BlockStack gap="300">
-                        {/* Table header */}
-                        <InlineStack align="space-between">
-                          <Text as="p" variant="bodyMd" fontWeight="semibold">
-                            Monthly Sessions
-                          </Text>
-                          <Text as="p" variant="bodyMd" fontWeight="semibold">
-                            Monthly Price
-                          </Text>
-                        </InlineStack>
-                        <Divider />
-                        {/* Table rows */}
-                        {SESSION_TIERS.map((tier) => (
-                          <InlineStack key={tier.name} align="space-between">
-                            <Text as="p" variant="bodyMd">
-                              {tier.visitors}
+                      {/* Table container */}
+                      <div style={{ display: 'table', width: '100%', borderCollapse: 'collapse' }}>
+                        {/* Table header row */}
+                        <div style={{ display: 'table-row' }}>
+                          <div style={{ display: 'table-cell', padding: '12px 16px', borderBottom: '1px solid #e1e3e5', width: '50%' }}>
+                            <Text as="p" variant="bodyMd" fontWeight="semibold">
+                              Monthly Sessions
                             </Text>
-                            <Text as="p" variant="bodyMd">
-                              {tier.price !== null ? `$${tier.price}/month` : 'Custom'}
+                          </div>
+                          <div style={{ display: 'table-cell', padding: '12px 16px', borderBottom: '1px solid #e1e3e5', width: '50%' }}>
+                            <Text as="p" variant="bodyMd" fontWeight="semibold">
+                              Monthly Price
                             </Text>
-                          </InlineStack>
+                          </div>
+                        </div>
+                        {/* Table data rows */}
+                        {SESSION_TIERS.map((tier, index) => (
+                          <div key={tier.name} style={{ display: 'table-row' }}>
+                            <div style={{ 
+                              display: 'table-cell', 
+                              padding: '12px 16px', 
+                              borderBottom: index < SESSION_TIERS.length - 1 ? '1px solid #f1f2f3' : 'none' 
+                            }}>
+                              <Text as="p" variant="bodyMd">
+                                {tier.visitors}
+                              </Text>
+                            </div>
+                            <div style={{ 
+                              display: 'table-cell', 
+                              padding: '12px 16px', 
+                              borderBottom: index < SESSION_TIERS.length - 1 ? '1px solid #f1f2f3' : 'none' 
+                            }}>
+                              <Text as="p" variant="bodyMd">
+                                {tier.price !== null ? `$${tier.price}/month` : 'Custom'}
+                              </Text>
+                            </div>
+                          </div>
                         ))}
-                      </BlockStack>
+                      </div>
                     </Box>
                   </Collapsible>
                 </Box>
