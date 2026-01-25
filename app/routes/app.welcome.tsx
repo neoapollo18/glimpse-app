@@ -228,7 +228,7 @@ export default function WelcomePage() {
             <Card>
               <BlockStack gap="500">
                 {/* Heading - different for re-subscribers */}
-                <Text as="h1" variant="headingXl">
+                <Text as="h1" variant="headingLg">
                   {isResubscribing 
                     ? "Welcome back! Ready to continue?" 
                     : "Ready to transform your store? Let's get started!"}
@@ -392,7 +392,7 @@ export default function WelcomePage() {
                       <InlineStack gap="100" blockAlign="center">
                         <Icon source={CheckIcon} tone="success" />
                         <Text as="p" variant="bodySm" tone="subdued">
-                          Increase ROI
+                          Increased ROI for dozens of beauty stores
                         </Text>
                       </InlineStack>
                     </InlineStack>
