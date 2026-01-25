@@ -1,8 +1,8 @@
 /**
- * Cron Job: Check Sessions for Plan Changes
+ * Cron Job: Send Session Usage to Mantle for Flex Billing
  * 
  * This endpoint should be called by an external cron service (e.g., cron-job.org, Render cron)
- * every 2 weeks to check if any store's traffic has changed and needs a plan update.
+ * to send session counts to Mantle. Mantle's flex billing handles automatic tier upgrades.
  * 
  * Security: Protected by CRON_SECRET environment variable
  */
@@ -10,9 +10,7 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import prisma from "../db.server";
-import { supabase } from "../lib/supabase.server";
-import { identifyAndGetCustomer } from "../lib/mantle.server";
-import { getPlanChangeInfo, getMantlePlanForSessions, type MantlePlan } from "../lib/plan-matcher.server";
+import { identifyAndGetCustomer, sendUsageEvent } from "../lib/mantle.server";
 
 // Shopify Admin API helper for direct calls (without authenticate middleware)
 async function fetchSessionsDirectly(shop: string, accessToken: string): Promise<number | null> {
@@ -91,13 +89,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  console.log('🕐 Starting bi-weekly session check...');
+  console.log('🕐 Starting session usage sync to Mantle...');
 
   const results = {
     checked: 0,
-    needsUpdate: 0,
+    sent: 0,
+    skipped: 0,
     errors: 0,
-    notifications: [] as string[],
   };
 
   try {
@@ -121,20 +119,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       results.checked++;
 
       try {
-        // Get current subscription from Mantle
-        const { customer } = await identifyAndGetCustomer(shop, accessToken);
+        // Get current subscription and API token from Mantle
+        const { customer, apiToken } = await identifyAndGetCustomer(shop, accessToken);
         const subscription = customer.subscription;
         
         // Skip if no active subscription
         if (!subscription?.active) {
           console.log(`⏭️ ${shop}: No active subscription, skipping`);
+          results.skipped++;
           continue;
         }
 
-        const currentPlanName = subscription.plan?.name;
-        if (!currentPlanName) continue;
-
-        // Fetch current sessions
+        // Fetch current sessions from Shopify
         const sessionCount = await fetchSessionsDirectly(shop, accessToken);
         if (sessionCount === null) {
           console.error(`❌ ${shop}: Failed to fetch sessions`);
@@ -142,36 +138,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           continue;
         }
 
-        // Check if plan needs to change
-        const planChangeInfo = getPlanChangeInfo(currentPlanName, sessionCount);
+        // Send usage event to Mantle - flex billing handles tier changes automatically
+        await sendUsageEvent(apiToken, 'monthly_sessions', { 
+          sessions: sessionCount 
+        });
         
-        if (planChangeInfo) {
-          results.needsUpdate++;
-          const notification = `${shop}: ${currentPlanName} → ${planChangeInfo.suggestedPlan.name} (${sessionCount.toLocaleString()} sessions/mo)`;
-          results.notifications.push(notification);
-          console.log(`⚠️ ${notification}`);
-
-          // Store notification in Supabase for when user logs in
-          const plans = (customer.plans || []) as MantlePlan[];
-          const suggestedPlan = getMantlePlanForSessions(plans, sessionCount);
-          
-          await supabase
-            .from('shops')
-            .update({
-              pending_plan_change: {
-                currentPlan: currentPlanName,
-                suggestedPlan: planChangeInfo.suggestedPlan.name,
-                suggestedPlanId: suggestedPlan?.id || null,
-                suggestedPrice: planChangeInfo.suggestedPlan.price,
-                sessions: sessionCount,
-                isUpgrade: planChangeInfo.isUpgrade,
-                detectedAt: new Date().toISOString(),
-              },
-            })
-            .eq('shop_domain', shop);
-        } else {
-          console.log(`✅ ${shop}: Plan matches traffic (${currentPlanName}, ${sessionCount.toLocaleString()} sessions)`);
-        }
+        results.sent++;
+        console.log(`📤 ${shop}: Sent ${sessionCount.toLocaleString()} sessions to Mantle`);
 
       } catch (error) {
         console.error(`❌ Error processing ${shop}:`, error);
@@ -179,7 +152,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       }
     }
 
-    console.log(`🏁 Session check complete: ${results.checked} checked, ${results.needsUpdate} need updates, ${results.errors} errors`);
+    console.log(`🏁 Usage sync complete: ${results.checked} checked, ${results.sent} sent, ${results.skipped} skipped, ${results.errors} errors`);
 
     return json({
       success: true,

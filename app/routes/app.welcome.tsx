@@ -251,7 +251,7 @@ export default function WelcomePage() {
                 <Text as="p" variant="bodyMd" tone="subdued">
                   {isResubscribing 
                     ? "Your plan will be automatically selected based on your store's current monthly session count."
-                    : "After the 14-day free trial, pricing plans start from $30/month (0-5k sessions) and increase incrementally based on your store's monthly session count (up to $1,499/month for stores with 500k sessions/month)."
+                    : "After the 14-day free trial, pricing starts from $30/month (0-5k sessions) and adjusts automatically based on your store's traffic (up to $1,499/month for 500k+ sessions). No manual upgrades needed - your plan grows with you."
                   }
                 </Text>
 
@@ -339,7 +339,7 @@ export default function WelcomePage() {
                     <Text as="p" variant="bodySm" tone="subdued" alignment="center">
                       {isResubscribing 
                         ? "Pick up right where you left off"
-                        : "Join thousands of stores using AI-powered product visualization"
+                        : "Join stores using AI-powered product visualization to boost conversions"
                       }
                     </Text>
                     <InlineStack gap="400" align="center">

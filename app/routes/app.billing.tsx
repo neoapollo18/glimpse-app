@@ -23,17 +23,11 @@ import {
   subscribeCustomer,
   cancelSubscription,
 } from "../lib/mantle.server";
-import { getMonthlySessionsCount } from "../lib/shopify-analytics.server";
 import { SESSION_TIERS } from "../lib/pricing-tiers";
-import { 
-  getPlanChangeInfo, 
-  getMantlePlanForSessions,
-  type MantlePlan,
-} from "../lib/plan-matcher.server";
-import { getPendingPlanChange, clearPendingPlanChange, updateShopSubscriptionStatus } from "../lib/supabase.server";
+import { updateShopSubscriptionStatus } from "../lib/supabase.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session, admin } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const shopDomain = session.shop;
   const accessToken = session.accessToken || "";
 
@@ -42,9 +36,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const { customer, apiToken } = await identifyAndGetCustomer(shopDomain, accessToken);
     
     const customerApiToken = apiToken;
-    const plans = (customer.plans || []) as MantlePlan[];
     const subscription = customer.subscription || null;
-    const currentPlanName = subscription?.plan?.name || null;
 
     // Check for grace period (cancelled but still within billing period)
     let isInGracePeriod = false;
@@ -78,62 +70,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       console.error("Error syncing subscription status:", syncError);
       // Don't fail the page load for this
     }
-
-    // Fetch current sessions for traffic change detection
-    let sessions: number | null = null;
-    let planChangeInfo: ReturnType<typeof getPlanChangeInfo> = null;
-    let suggestedPlanId: string | null = null;
-
-    try {
-      sessions = await getMonthlySessionsCount(admin);
-      
-      // Check if traffic has changed and plan needs updating
-      if (sessions !== null && currentPlanName) {
-        planChangeInfo = getPlanChangeInfo(currentPlanName, sessions);
-        
-        // Find the suggested Mantle plan ID if there's a change
-        if (planChangeInfo) {
-          const suggestedMantlePlan = getMantlePlanForSessions(plans, sessions);
-          suggestedPlanId = suggestedMantlePlan?.id || null;
-        }
-      }
-    } catch (sessionsError) {
-      // Sessions fetch failed - that's OK, just don't show change notification
-      console.error("Error fetching sessions for billing page:", sessionsError);
-    }
-
-    // If no live planChangeInfo, check for stored notification from cron job
-    if (!planChangeInfo && currentPlanName) {
-      try {
-        const storedChange = await getPendingPlanChange(shopDomain);
-        if (storedChange && storedChange.suggestedPlan.toLowerCase() !== currentPlanName.toLowerCase()) {
-          // Use stored notification
-          sessions = storedChange.sessions;
-          suggestedPlanId = storedChange.suggestedPlanId;
-          planChangeInfo = {
-            currentPlan: storedChange.currentPlan,
-            suggestedPlan: {
-              name: storedChange.suggestedPlan,
-              price: storedChange.suggestedPrice,
-              min: 0, max: 0, visitors: '', // Not needed for display
-            },
-            isUpgrade: storedChange.isUpgrade,
-          };
-        }
-      } catch (storedError) {
-        console.error("Error checking stored plan change:", storedError);
-      }
-    }
     
     return json({
       shopDomain,
       customer,
       customerApiToken,
-      plans,
       subscription,
-      sessions,
-      planChangeInfo,
-      suggestedPlanId,
       isInGracePeriod,
       gracePeriodEndsAt,
       error: null,
@@ -144,11 +86,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       shopDomain,
       customer: null,
       customerApiToken: null,
-      plans: [],
       subscription: null,
-      sessions: null,
-      planChangeInfo: null,
-      suggestedPlanId: null,
       isInGracePeriod: false,
       gracePeriodEndsAt: null,
       error: error instanceof Error ? error.message : "Failed to load billing information. Please try again.",
@@ -184,9 +122,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       const returnUrl = `https://admin.shopify.com/store/${shopHandle}/apps/${appHandle}/app/billing`;
       
       const subscription = await subscribeCustomer(customerApiToken, planId, returnUrl);
-      
-      // Clear any stored plan change notification since user is taking action
-      await clearPendingPlanChange(shopDomain);
       
       // Return confirmationUrl for client-side redirect
       // Client will use window.open(url, '_top') to break out of iframe
@@ -232,9 +167,6 @@ export default function BillingPage() {
   const { 
     customerApiToken, 
     subscription, 
-    sessions,
-    planChangeInfo,
-    suggestedPlanId,
     isInGracePeriod,
     gracePeriodEndsAt,
     error 
@@ -266,23 +198,6 @@ export default function BillingPage() {
       return () => clearTimeout(timer);
     }
   }, [actionData?.success, actionData?.confirmationUrl]);
-
-  const handlePlanChange = () => {
-    if (!suggestedPlanId || !customerApiToken || isLoading) return;
-    
-    // Confirm before plan change
-    const confirmMsg = planChangeInfo?.isUpgrade 
-      ? `This will upgrade your plan to ${planChangeInfo.suggestedPlan.name} at $${planChangeInfo.suggestedPlan.price}/month. Continue?`
-      : `This will update your plan to ${planChangeInfo?.suggestedPlan.name} at $${planChangeInfo?.suggestedPlan.price}/month. Continue?`;
-    
-    if (!confirm(confirmMsg)) return;
-    
-    const formData = new FormData();
-    formData.append("action", "subscribe");
-    formData.append("planId", suggestedPlanId);
-    formData.append("customerApiToken", customerApiToken);
-    submit(formData, { method: "POST" });
-  };
 
   const currentPlanName = (subscription as Subscription | null)?.plan?.name || "No Plan";
   const isActive = (subscription as Subscription | null)?.active === true;
@@ -397,30 +312,6 @@ export default function BillingPage() {
               <Box>
                 <Button url="/app/welcome">
                   Re-subscribe now
-                </Button>
-              </Box>
-            </BlockStack>
-          </Banner>
-        )}
-
-        {/* Traffic change notification - only show if NOT in grace period */}
-        {!isInGracePeriod && planChangeInfo && suggestedPlanId && (
-          <Banner 
-            tone={planChangeInfo.isUpgrade ? "warning" : "info"}
-            title="Your traffic has changed"
-          >
-            <BlockStack gap="300">
-              <Text as="p">
-                Based on your current traffic ({sessions?.toLocaleString()} sessions/month), 
-                your plan should be updated to <strong>{planChangeInfo.suggestedPlan.name}</strong> (
-                {planChangeInfo.suggestedPlan.price !== null 
-                  ? `$${planChangeInfo.suggestedPlan.price}/month` 
-                  : 'Custom pricing'
-                }).
-              </Text>
-              <Box>
-                <Button onClick={handlePlanChange} disabled={isLoading}>
-                  {planChangeInfo.isUpgrade ? "Upgrade plan" : "Update plan"}
                 </Button>
               </Box>
             </BlockStack>
@@ -553,8 +444,8 @@ export default function BillingPage() {
             <Text as="h3" variant="headingMd">Questions about billing?</Text>
             <Text as="p" variant="bodySm" tone="subdued">
               All plans are billed through Shopify and include a 14-day free trial. 
-              Pricing is automatically determined based on your store's monthly session count. 
-              If your traffic changes, we'll notify you to approve a plan update.
+              Pricing adjusts automatically based on your store's monthly session count - 
+              no manual upgrades needed. Your plan grows with your store.
               Contact us through our app or aaron@gleame.ai if you need help.
             </Text>
           </BlockStack>
