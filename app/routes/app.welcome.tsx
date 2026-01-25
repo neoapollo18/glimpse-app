@@ -13,8 +13,10 @@ import {
   Spinner,
   Collapsible,
   Modal,
+  Icon,
+  Divider,
 } from "@shopify/polaris";
-import { ChevronDownIcon, ChevronUpIcon } from "@shopify/polaris-icons";
+import { ChevronDownIcon, ChevronUpIcon, StarFilledIcon, CheckIcon } from "@shopify/polaris-icons";
 import { useState, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import { identifyAndGetCustomer, subscribeCustomer } from "../lib/mantle.server";
@@ -220,10 +222,10 @@ export default function WelcomePage() {
         </Modal.Section>
       </Modal>
 
-      <Box paddingBlockStart="1000" paddingBlockEnd="1000">
+      <Box paddingBlockStart="800" paddingBlockEnd="800">
         <BlockStack gap="600" inlineAlign="center">
-          {/* Main welcome card */}
-          <div style={{ maxWidth: '600px', width: '100%' }}>
+          {/* Main welcome card - wider like AfterSell */}
+          <div style={{ maxWidth: '800px', width: '100%' }}>
             <Card>
               <BlockStack gap="500">
                 {/* Heading - different for re-subscribers */}
@@ -272,14 +274,25 @@ export default function WelcomePage() {
                     transition={{ duration: '200ms', timingFunction: 'ease-in-out' }}
                   >
                     <Box paddingBlockStart="400">
-                      <BlockStack gap="200">
+                      <BlockStack gap="300">
+                        {/* Table header */}
+                        <InlineStack align="space-between">
+                          <Text as="p" variant="bodyMd" fontWeight="semibold">
+                            Monthly Sessions
+                          </Text>
+                          <Text as="p" variant="bodyMd" fontWeight="semibold">
+                            Monthly Price
+                          </Text>
+                        </InlineStack>
+                        <Divider />
+                        {/* Table rows */}
                         {SESSION_TIERS.map((tier) => (
                           <InlineStack key={tier.name} align="space-between">
                             <Text as="p" variant="bodyMd">
-                              {tier.name}: {tier.visitors}/month
+                              {tier.visitors}
                             </Text>
-                            <Text as="p" variant="bodyMd" fontWeight="semibold">
-                              {tier.price !== null ? `$${tier.price}` : 'Custom'}
+                            <Text as="p" variant="bodyMd">
+                              {tier.price !== null ? `$${tier.price}/month` : 'Custom'}
                             </Text>
                           </InlineStack>
                         ))}
@@ -321,36 +334,52 @@ export default function WelcomePage() {
 
                 {/* CTA Button */}
                 <Box paddingBlockStart="200">
-                  <Button
-                    variant="primary"
-                    size="large"
-                    fullWidth
-                    onClick={handleContinue}
-                    disabled={isLoading || !matchedPlanId || shouldRedirectToBilling}
-                    loading={isLoading}
-                  >
-                    {isResubscribing ? "Re-subscribe to Gleame" : "Continue to Gleame"}
-                  </Button>
+                  <InlineStack align="center">
+                    <Button
+                      variant="primary"
+                      size="large"
+                      onClick={handleContinue}
+                      disabled={isLoading || !matchedPlanId || shouldRedirectToBilling}
+                      loading={isLoading}
+                    >
+                      {isResubscribing ? "Re-subscribe to Gleame" : "Continue to Gleame"}
+                    </Button>
+                  </InlineStack>
                 </Box>
 
-                {/* Social proof / trust indicators */}
-                <Box paddingBlockStart="200">
-                  <BlockStack gap="200" inlineAlign="center">
+                {/* Social proof / trust indicators - AfterSell style */}
+                <Box paddingBlockStart="300">
+                  <BlockStack gap="300" inlineAlign="center">
                     <Text as="p" variant="bodySm" tone="subdued" alignment="center">
                       {isResubscribing 
                         ? "Pick up right where you left off"
-                        : "Join stores using AI-powered product visualization to boost conversions"
+                        : "Gleame helps stores boost conversions with AI-powered product visualization"
                       }
                     </Text>
-                    <InlineStack gap="400" align="center">
-                      {!isResubscribing && (
+                    
+                    {/* Star rating and trust indicators */}
+                    <InlineStack gap="400" align="center" blockAlign="center">
+                      {/* 5 Star Rating */}
+                      <InlineStack gap="100" blockAlign="center">
+                        <InlineStack gap="050">
+                          <Icon source={StarFilledIcon} tone="warning" />
+                          <Icon source={StarFilledIcon} tone="warning" />
+                          <Icon source={StarFilledIcon} tone="warning" />
+                          <Icon source={StarFilledIcon} tone="warning" />
+                          <Icon source={StarFilledIcon} tone="warning" />
+                        </InlineStack>
                         <Text as="p" variant="bodySm" tone="subdued">
-                          14-day free trial
+                          (5.0)
                         </Text>
-                      )}
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Cancel anytime
-                      </Text>
+                      </InlineStack>
+                      
+                      {/* Trust indicator with checkmark */}
+                      <InlineStack gap="100" blockAlign="center">
+                        <Icon source={CheckIcon} tone="success" />
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          Increase ROI
+                        </Text>
+                      </InlineStack>
                     </InlineStack>
                   </BlockStack>
                 </Box>
