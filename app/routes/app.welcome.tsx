@@ -224,7 +224,7 @@ export default function WelcomePage() {
       <Box paddingBlockStart="800" paddingBlockEnd="800">
         <BlockStack gap="600" inlineAlign="center">
           {/* Main welcome card - wider like AfterSell */}
-          <div style={{ maxWidth: '800px', width: '100%' }}>
+          <div style={{ maxWidth: '1000px', width: '100%' }}>
             <Card>
               <BlockStack gap="500">
                 {/* Heading - different for re-subscribers */}
