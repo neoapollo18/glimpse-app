@@ -111,6 +111,29 @@ export async function cancelSubscription(customerApiToken: string) {
 }
 
 /**
+ * Send a usage event to Mantle for flex billing
+ * This is used to report session counts for automatic tier upgrades
+ */
+export async function sendUsageEvent(
+  customerApiToken: string,
+  eventName: string,
+  properties: Record<string, number | string>
+) {
+  const client = getCustomerClient(customerApiToken);
+  
+  const result = await client.sendUsageEvent({
+    eventName,
+    properties,
+  });
+  
+  if (result && "error" in result) {
+    throw new Error(result.error);
+  }
+  
+  return result;
+}
+
+/**
  * Check if a customer has an active paid subscription
  */
 export function hasActiveSubscription(customer: { subscription?: { active: boolean } }): boolean {
