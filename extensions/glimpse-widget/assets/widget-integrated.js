@@ -10,7 +10,6 @@ console.log('Gleame Integrated Widget v1.0 loaded');
   let currentShopDomain = null;
   let currentVariantId = null;
   let loadingTextInterval = null;
-  let currentImageWasFlipped = false;
   
   const loadingMessages = ['Analyzing image...', 'Creating your transformation...', 'Working our magic...', 'Almost there...'];
   const SHOPIFY_APP_URL = 'https://glimpse-app-charles.onrender.com';
@@ -28,7 +27,7 @@ console.log('Gleame Integrated Widget v1.0 loaded');
     
     const shopifyScripts = document.querySelectorAll('script[src*="myshopify.com"]');
     for (let script of shopifyScripts) {
-      const match = script.src.match(/\/\/([^\/]+\.myshopify\.com)/);
+      const match = script.src.match(/\/\/([^/]+\.myshopify\.com)/);
       if (match) return match[1];
     }
     
@@ -39,7 +38,7 @@ console.log('Gleame Integrated Widget v1.0 loaded');
     
     const allLinks = document.querySelectorAll('link[href*="myshopify.com"], a[href*="myshopify.com"]');
     for (let link of allLinks) {
-      const match = link.href.match(/\/\/([^\/]+\.myshopify\.com)/);
+      const match = link.href.match(/\/\/([^/]+\.myshopify\.com)/);
       if (match) return match[1];
     }
     
@@ -335,7 +334,6 @@ console.log('Gleame Integrated Widget v1.0 loaded');
       try {
         let imageDataUrl = e.target.result;
         let fileToSend = file;
-        currentImageWasFlipped = false;
         
         const isHeic = isHeicOrHeif(file);
         const isMobile = isMobileDevice();
@@ -345,7 +343,6 @@ console.log('Gleame Integrated Widget v1.0 loaded');
         if (isMobile && isRecent && !isHeic) {
           imageDataUrl = await flipImageHorizontally(imageDataUrl);
           fileToSend = dataUrlToFile(imageDataUrl, file.name || 'selfie.jpg');
-          currentImageWasFlipped = true;
         }
         
         const beforeImg = document.getElementById('beforeImage');

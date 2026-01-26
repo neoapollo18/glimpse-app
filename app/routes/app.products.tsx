@@ -1393,25 +1393,6 @@ export default function Products() {
                                       const hasCurrentInput = currentInput && Object.keys(currentInput).length > 0;
                                       const isExpanded = expandedShadeVariants.has(variant.id);
                                       
-                                      // Build summary of shade config
-                                      const configSummary = hasCurrentInput 
-                                        ? Object.entries(currentInput)
-                                            .filter(([_, value]) => value !== '' && value !== undefined)
-                                            .map(([key, value]) => {
-                                              const param = variantParams.find(p => p.name === key);
-                                              if (!param) return null;
-                                              if (param.input_type === 'text') {
-                                                return `${param.display_name}: ${value}`;
-                                              } else {
-                                                const level = param.levels?.find((l: any) => l.level === value);
-                                                return level ? `${param.display_name}: ${level.label}` : null;
-                                              }
-                                            })
-                                            .filter(Boolean)
-                                            .slice(0, 3)
-                                            .join(', ')
-                                        : null;
-                                      
                                       return (
                                         <Card key={variant.id}>
                                           <BlockStack gap="200">

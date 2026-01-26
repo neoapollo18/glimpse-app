@@ -78,7 +78,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export default function App() {
-  const { apiKey, shop, intercomAppId, needsBilling, isOnBillingPage } = useLoaderData<typeof loader>();
+  const { apiKey, shop, intercomAppId, needsBilling } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const location = useLocation();
   const [isRedirecting, setIsRedirecting] = useState(false);

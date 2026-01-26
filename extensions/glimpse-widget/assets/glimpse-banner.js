@@ -33,7 +33,7 @@ console.log('Gleame Banner Widget v2.0 loaded');
     // Check Shopify scripts
     const shopifyScripts = document.querySelectorAll('script[src*="myshopify.com"]');
     for (let script of shopifyScripts) {
-      const match = script.src.match(/\/\/([^\/]+\.myshopify\.com)/);
+      const match = script.src.match(/\/\/([^/]+\.myshopify\.com)/);
       if (match) return match[1];
     }
     
@@ -47,7 +47,7 @@ console.log('Gleame Banner Widget v2.0 loaded');
     // Check links
     const allLinks = document.querySelectorAll('link[href*="myshopify.com"], a[href*="myshopify.com"]');
     for (let link of allLinks) {
-      const match = link.href.match(/\/\/([^\/]+\.myshopify\.com)/);
+      const match = link.href.match(/\/\/([^/]+\.myshopify\.com)/);
       if (match) return match[1];
     }
     

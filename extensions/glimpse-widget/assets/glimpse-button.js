@@ -26,7 +26,7 @@ console.log('Gleame Button Widget v2.0 loaded');
     
     const shopifyScripts = document.querySelectorAll('script[src*="myshopify.com"]');
     for (let script of shopifyScripts) {
-      const match = script.src.match(/\/\/([^\/]+\.myshopify\.com)/);
+      const match = script.src.match(/\/\/([^/]+\.myshopify\.com)/);
       if (match) return match[1];
     }
     

@@ -612,7 +612,7 @@
     }
     
     // Method 4: Check URL and try to extract from page
-    const urlMatch = window.location.pathname.match(/\/products\/([^\/\?]+)/);
+    const urlMatch = window.location.pathname.match(/\/products\/([^/?]+)/);
     if (urlMatch && form) {
       // Get first variant ID from form as fallback
       const variantInput = form.querySelector('input[name="id"], select[name="id"]');
@@ -637,7 +637,7 @@
     // Method 2: Extract from Shopify scripts (second most reliable)
     const scripts = document.querySelectorAll('script[src*="myshopify.com"]');
     for (let script of scripts) {
-      const match = script.src.match(/\/\/([^\/]+\.myshopify\.com)/);
+      const match = script.src.match(/\/\/([^/]+\.myshopify\.com)/);
       if (match) {
         console.log('✅ Found shop domain from script:', match[1]);
         return match[1];
