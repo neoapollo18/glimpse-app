@@ -217,7 +217,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   return json({ success: false, error: "Unknown action" });
 };
 
-const ADMIN_PASSWORD = "gleaming";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 
 export default function FoundersAdmin() {
   const { shops, stats, error } = useLoaderData<typeof loader>();
