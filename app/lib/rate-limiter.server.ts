@@ -4,6 +4,7 @@
  * Features:
  * - Per-key rate limiting (IP, shop, etc.)
  * - Sliding window algorithm
+ * - Jitter to prevent thundering herd on retry
  * - Automatic cleanup of expired entries
  * - No external dependencies
  */
@@ -22,6 +23,16 @@ interface RateLimitResult {
 
 // In-memory store for rate limit entries
 const store = new Map<string, RateLimitEntry>();
+
+/**
+ * Add random jitter to a value (±25% by default)
+ * Prevents thundering herd when multiple clients retry simultaneously
+ */
+function addJitter(value: number, jitterPercent: number = 0.25): number {
+  const jitterRange = value * jitterPercent;
+  const jitter = (Math.random() * 2 - 1) * jitterRange; // Random between -jitterRange and +jitterRange
+  return Math.max(1, Math.round(value + jitter));
+}
 
 /**
  * Check if a request is within rate limits
@@ -53,7 +64,9 @@ export function checkRateLimit(
 
   // Within window - check if limit exceeded
   if (entry.count >= limit) {
-    const retryAfterSeconds = Math.ceil((entry.resetAt - now) / 1000);
+    const baseRetrySeconds = Math.ceil((entry.resetAt - now) / 1000);
+    // Add jitter to prevent all rate-limited clients from retrying at the exact same time
+    const retryAfterSeconds = addJitter(baseRetrySeconds);
     return {
       allowed: false,
       remaining: 0,

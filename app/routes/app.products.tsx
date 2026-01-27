@@ -191,10 +191,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       const productTitle = formData.get("productTitle") as string;
       const categoryId = formData.get("categoryId") as string;
       const funnelResponsesJson = formData.get("funnelResponses") as string;
-      const funnelResponses = JSON.parse(funnelResponsesJson);
       const isNewProduct = formData.get("isNewProduct") === "true";
       const configuredProductId = formData.get("configuredProductId") as string | null;
       const shadeConfigsJson = formData.get("shadeConfigs") as string | null;
+
+      // Parse JSON with validation
+      let funnelResponses;
+      try {
+        funnelResponses = JSON.parse(funnelResponsesJson);
+      } catch {
+        return { success: false, message: "Invalid funnel responses format" };
+      }
 
       // Validate all required params are answered
       const validation = await validateFunnelResponses(categoryId, funnelResponses);
@@ -241,7 +248,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
       // Save shade configurations (variant-specific prompts)
       if (shadeConfigsJson && productId) {
-        const shadeConfigs = JSON.parse(shadeConfigsJson) as Record<string, { title: string; responses: Record<string, string | number> }>;
+        let shadeConfigs: Record<string, { title: string; responses: Record<string, any> }>;
+        try {
+          shadeConfigs = JSON.parse(shadeConfigsJson);
+        } catch {
+          return { success: false, message: "Invalid shade configuration format" };
+        }
         
         // Get category data to resolve level labels
         const { getCategoryWithFullData } = await import("../lib/supabase.server");

@@ -118,7 +118,7 @@ async function callGeminiWithRetry(prompt: any[], model: string = GEMINI_MODEL_F
     try {
       if (attempt > 0) {
         console.log(`Retry attempt ${attempt}/${maxRetries}...`);
-        await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Exponential backoff
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt - 1))); // Exponential backoff: 1s, 2s, 4s
       }
       
       const response = await client.models.generateContent({

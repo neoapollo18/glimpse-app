@@ -60,8 +60,6 @@ export async function identifyAndGetCustomer(shopDomain: string, accessToken: st
   const customerClient = getCustomerClient(apiToken);
   const customerResult = await customerClient.getCustomer();
   
-  console.log("Mantle getCustomer result type:", typeof customerResult);
-  
   if ("error" in customerResult) {
     throw new Error(customerResult.error);
   }
