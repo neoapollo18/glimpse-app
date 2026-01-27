@@ -17,7 +17,7 @@
   assign button_font_size = block.settings.button_font_size | default: 14
   assign button_font_weight = block.settings.button_font_weight | default: '500'
   assign show_camera_icon = block.settings.show_camera_icon
-  assign button_width = block.settings.button_width | default: 'auto'
+  assign button_width = block.settings.button_width | default: '100%'
   
   # Colors
   assign solid_button_color = block.settings.solid_button_color | default: '#1f2937'
@@ -211,7 +211,7 @@
       "type": "select",
       "id": "button_width",
       "label": "Button Width",
-      "default": "auto",
+      "default": "100%",
       "options": [
         { "value": "auto", "label": "Auto (fit content)" },
         { "value": "100%", "label": "Full Width" },
