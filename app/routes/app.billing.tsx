@@ -135,9 +135,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (actionType === "cancel") {
       await cancelSubscription(customerApiToken);
       
-      // Update subscription status - will be synced to exact expiry on page reload
-      // For now, mark as grace_period (the loader will update with correct expiry)
-      await updateShopSubscriptionStatus(shopDomain, 'grace_period', null);
+      // Update subscription status with correct grace period expiry
+      const currentPeriodEnd = formData.get("currentPeriodEnd") as string | null;
+      const gracePeriodExpiry = currentPeriodEnd ? new Date(currentPeriodEnd) : null;
+      await updateShopSubscriptionStatus(shopDomain, 'grace_period', gracePeriodExpiry);
       
       return json({ success: true });
     }
@@ -208,6 +209,14 @@ export default function BillingPage() {
     typedSubscription?.trialExpiresAt && 
     new Date(typedSubscription.trialExpiresAt) > new Date();
 
+  // Determine if cancel button should be shown
+  // Show for: active subscription with price > 0, OR during trial
+  const showCancelButton = isActive && typedSubscription?.plan && (
+    (typedSubscription.plan.subtotal > 0) || 
+    (typedSubscription.plan.amount > 0) || 
+    isInTrial
+  );
+
   const handleCancel = () => {
     // Prevent double-clicks
     if (isLoading || showCancelSuccess) return;
@@ -221,6 +230,10 @@ export default function BillingPage() {
       const formData = new FormData();
       formData.append("action", "cancel");
       formData.append("customerApiToken", customerApiToken || "");
+      // Include currentPeriodEnd so action can set correct grace period expiry
+      if (typedSubscription?.currentPeriodEnd) {
+        formData.append("currentPeriodEnd", typedSubscription.currentPeriodEnd);
+      }
       submit(formData, { method: "POST" });
     }
   };
@@ -373,12 +386,7 @@ export default function BillingPage() {
                     )}
 
                     {/* Only show cancel button if active (not in grace period) */}
-                    {/* Show cancel for any paid plan (subtotal > 0) OR during trial */}
-                    {isActive && typedSubscription.plan && (
-                      typedSubscription.plan.subtotal > 0 || 
-                      typedSubscription.plan.amount > 0 || 
-                      isInTrial
-                    ) && (
+                    {showCancelButton && (
                       <Box paddingBlockStart="200">
                         <Button 
                           variant="plain" 

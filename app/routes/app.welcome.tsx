@@ -330,6 +330,22 @@ export default function WelcomePage() {
                   </Banner>
                 )}
 
+                {/* Plan not found message (rare edge case) */}
+                {!matchedPlanId && !isEnterprise && customerApiToken && (
+                  <Banner tone="warning">
+                    <BlockStack gap="200">
+                      <Text as="p">
+                        We couldn't find a matching plan for your store. Please contact support for assistance.
+                      </Text>
+                      <Box>
+                        <Button url="mailto:aaron@gleame.ai">
+                          Contact support
+                        </Button>
+                      </Box>
+                    </BlockStack>
+                  </Banner>
+                )}
+
                 {/* Enterprise tier message */}
                 {isEnterprise && (
                   <Banner tone="info">
@@ -354,7 +370,7 @@ export default function WelcomePage() {
                       variant="primary"
                       size="large"
                       onClick={handleContinue}
-                      disabled={isLoading || !matchedPlanId || shouldRedirectToBilling}
+                      disabled={isLoading || !matchedPlanId || !customerApiToken || shouldRedirectToBilling}
                       loading={isLoading}
                     >
                       {isResubscribing ? "Re-subscribe to Gleame" : "Continue to Gleame"}
