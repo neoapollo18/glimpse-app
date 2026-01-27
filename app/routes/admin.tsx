@@ -236,6 +236,7 @@ export default function FoundersAdmin() {
   const [editVariantPromptValue, setEditVariantPromptValue] = useState("");
   const [testModalOpen, setTestModalOpen] = useState(false);
   const [testProduct, setTestProduct] = useState<Product | null>(null);
+  const [testShopDomain, setTestShopDomain] = useState<string | null>(null);
   const [testImageUrl, setTestImageUrl] = useState("");
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testLoading, setTestLoading] = useState(false);
@@ -307,33 +308,46 @@ export default function FoundersAdmin() {
     setEditPromptValue("");
   };
 
-  const openTestModal = (product: Product) => {
+  const openTestModal = (product: Product, shopDomain: string) => {
     setTestProduct(product);
+    setTestShopDomain(shopDomain);
     setTestImageUrl("");
     setTestResult(null);
     setTestModalOpen(true);
   };
 
   const runTest = async () => {
-    if (!testProduct || !testImageUrl) return;
+    if (!testProduct || !testImageUrl || !testShopDomain) return;
 
     setTestLoading(true);
     setTestResult(null);
 
     try {
-      // Use the storefront API endpoint which doesn't require Shopify auth
+      // Fetch the image from URL and convert to File
+      const imageResponse = await fetch(testImageUrl);
+      if (!imageResponse.ok) {
+        throw new Error("Failed to fetch image from URL");
+      }
+      const imageBlob = await imageResponse.blob();
+      const imageFile = new File([imageBlob], "test-image.jpg", { 
+        type: imageBlob.type || "image/jpeg" 
+      });
+
+      // Create FormData with proper fields for storefront API
+      const formData = new FormData();
+      formData.append("image", imageFile);
+      formData.append("productId", testProduct.shopify_id);
+      formData.append("shopDomain", testShopDomain);
+
       const response = await fetch("/api/storefront/transform-image", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          imageUrl: testImageUrl,
-          prompt: testProduct.transformation_prompt,
-        }),
+        body: formData,
       });
 
       const data = await response.json();
-      if (data.transformedImageUrl) {
-        setTestResult(data.transformedImageUrl);
+      if (data.success && data.generatedImage) {
+        // Convert base64 to data URL for display
+        setTestResult(`data:image/jpeg;base64,${data.generatedImage}`);
       } else {
         setTestResult("Error: " + (data.error || "Unknown error"));
       }
@@ -501,7 +515,7 @@ export default function FoundersAdmin() {
                                   <Button size="slim" onClick={() => toggleProduct(product.id)}>
                                     {expandedProduct === product.id ? "Hide" : "View Prompt"}
                                   </Button>
-                                  <Button size="slim" variant="primary" onClick={() => openTestModal(product)}>
+                                  <Button size="slim" variant="primary" onClick={() => openTestModal(product, shop.shop_domain)}>
                                     Test
                                   </Button>
                                 </InlineStack>
