@@ -8,7 +8,7 @@
   assign manual_shop_domain = block.settings.manual_shop_domain
   
   # Button styling
-  assign button_style = block.settings.button_style | default: 'solid'
+  assign button_style = block.settings.button_style | default: 'outlined'
   assign button_text = block.settings.button_text | default: 'TRY IT ON'
   assign button_text_case = block.settings.button_text_case | default: 'uppercase'
   assign button_border_radius = block.settings.button_border_radius | default: 50
@@ -183,7 +183,7 @@
       "type": "select",
       "id": "button_style",
       "label": "Button Style",
-      "default": "solid",
+      "default": "outlined",
       "options": [
         { "value": "solid", "label": "Solid Filled" },
         { "value": "outlined", "label": "Outlined" }
