@@ -1,38 +1,72 @@
-// Gleame Widget JavaScript v2.0 - HEIC Support
-// Shared by both horizontal and vertical layouts
-console.log('Gleame Widget v2.0 loaded');
+// Gleame Widget JavaScript v3.0 - Multi-instance support
+// Shared by legacy widget layout
+console.log('Gleame Legacy Widget v3.0 loaded');
 
 (function() {
   window.widgetFunctions = window.widgetFunctions || {};
   
-  let currentProductId = null;
-  let currentShopDomain = null;
-  let currentVariantId = null;
-  let loadingTextInterval = null;
+  // Instance state storage - keyed by block.id
+  const instances = new Map();
   
   const loadingMessages = ['Analyzing image...', 'Creating your transformation...', 'Working our magic...', 'Almost there...'];
   const SHOPIFY_APP_URL = 'https://glimpse-app-charles.onrender.com';
   const WIDGET_TYPE = 'legacy';
-  let viewTracked = false;
+  
+  // Get or create instance state
+  function getInstance(instanceId) {
+    if (!instances.has(instanceId)) {
+      instances.set(instanceId, {
+        productId: null,
+        shopDomain: null,
+        variantId: null,
+        loadingTextInterval: null,
+        viewTracked: false,
+        widget: null
+      });
+    }
+    return instances.get(instanceId);
+  }
+  
+  // Find widget element by instanceId
+  function getWidgetElement(instanceId) {
+    // Try to find by block-id first
+    let widget = document.querySelector(`.glimpse-ai-widget[data-block-id="${instanceId}"]`);
+    if (widget) return widget;
+    
+    // Fallback: try first legacy widget
+    widget = document.querySelector('.glimpse-ai-widget');
+    return widget;
+  }
+  
+  // Get element by ID with instance suffix, with fallback to legacy ID
+  function getElement(instanceId, baseId) {
+    // Try instance-specific ID first
+    let el = document.getElementById(`${baseId}-${instanceId}`);
+    if (el) return el;
+    
+    // Fallback to legacy ID (backwards compatibility)
+    el = document.getElementById(baseId);
+    return el;
+  }
 
   // Track widget events (views, etc.)
-  function trackEvent(eventType) {
-    if (!currentShopDomain || !currentProductId) return;
+  function trackEvent(instanceId, eventType) {
+    const instance = getInstance(instanceId);
+    if (!instance.shopDomain || !instance.productId) return;
     
     fetch(`${SHOPIFY_APP_URL}/api/storefront/track-event`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        shopDomain: currentShopDomain,
-        productId: currentProductId,
+        shopDomain: instance.shopDomain,
+        productId: instance.productId,
         eventType: eventType,
         widgetType: WIDGET_TYPE
       })
     }).catch(() => {});
   }
 
-  function getShopDomain() {
-    const widget = document.querySelector('.glimpse-ai-widget');
+  function getShopDomain(widget) {
     const manualDomain = widget?.getAttribute('data-manual-shop-domain');
     if (manualDomain) return manualDomain;
     
@@ -116,101 +150,217 @@ console.log('Gleame Widget v2.0 loaded');
     return null;
   }
   
-  window.widgetFunctions.initWidget = function() {
-    const widget = document.querySelector('.glimpse-ai-widget');
-    if (!widget) return;
+  // Initialize a single widget instance
+  function initWidgetInstance(widget) {
+    let instanceId = widget.getAttribute('data-block-id');
     
-    currentProductId = widget.getAttribute('data-product-id');
-    currentShopDomain = getShopDomain();
-    currentVariantId = getCurrentVariantId();
-    window.widgetFunctions.showState('upload');
-    
-    // Track widget view once
-    if (!viewTracked && currentShopDomain && currentProductId) {
-      viewTracked = true;
-      trackEvent('widget_view');
+    // Generate an instanceId if missing (backwards compatibility)
+    if (!instanceId) {
+      instanceId = 'legacy-' + Math.random().toString(36).substr(2, 9);
+      widget.setAttribute('data-block-id', instanceId);
+      console.log('Gleame Legacy: Generated block-id for widget:', instanceId);
     }
+    
+    const instance = getInstance(instanceId);
+    instance.widget = widget;
+    instance.productId = widget.getAttribute('data-product-id');
+    instance.shopDomain = getShopDomain(widget);
+    instance.variantId = getCurrentVariantId();
+    
+    // Log initialization for debugging
+    console.log('Gleame Legacy: initWidgetInstance', instanceId, {
+      productId: instance.productId,
+      shopDomain: instance.shopDomain,
+      hasWidget: !!instance.widget
+    });
+    
+    // Set up file input listener for this instance
+    const imageUpload = getElement(instanceId, 'imageUpload');
+    if (imageUpload && !imageUpload.dataset.listenerAttached) {
+      imageUpload.dataset.listenerAttached = 'true';
+      imageUpload.addEventListener('change', function(event) {
+        const files = event.target.files;
+        if (files?.length > 0) processSelectedFile(instanceId, files[0]);
+      });
+    }
+    
+    // Set up drag and drop for this instance
+    const placeholderContainer = widget.querySelector('.placeholder-image-container');
+    if (placeholderContainer && !placeholderContainer.dataset.listenerAttached) {
+      placeholderContainer.dataset.listenerAttached = 'true';
+      
+      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        placeholderContainer.addEventListener(eventName, e => { e.preventDefault(); e.stopPropagation(); }, false);
+      });
+      
+      ['dragenter', 'dragover'].forEach(eventName => {
+        placeholderContainer.addEventListener(eventName, () => {
+          placeholderContainer.style.opacity = '0.8';
+          placeholderContainer.style.transform = 'scale(1.02)';
+        }, false);
+      });
+      
+      ['dragleave', 'drop'].forEach(eventName => {
+        placeholderContainer.addEventListener(eventName, () => {
+          placeholderContainer.style.opacity = '1';
+          placeholderContainer.style.transform = 'scale(1)';
+        }, false);
+      });
+      
+      placeholderContainer.addEventListener('drop', e => {
+        const files = Array.from(e.dataTransfer.files);
+        if (files.length > 0) processSelectedFile(instanceId, files[0]);
+      }, false);
+    }
+    
+    showState(instanceId, 'upload');
+    
+    // Track widget view (only once per instance)
+    if (!instance.viewTracked && instance.shopDomain && instance.productId) {
+      instance.viewTracked = true;
+      trackEvent(instanceId, 'widget_view');
+    }
+  }
+  
+  // Initialize widget - now initializes all legacy widgets
+  window.widgetFunctions.initWidget = function() {
+    const widgets = document.querySelectorAll('.glimpse-ai-widget');
+    widgets.forEach(widget => initWidgetInstance(widget));
   };
   
-  window.widgetFunctions.triggerFileInput = function() {
-    const fileInput = document.getElementById('imageUpload');
+  // Trigger file input - now accepts instanceId
+  window.widgetFunctions.triggerFileInput = function(instanceId) {
+    // If no instanceId, try to find the first widget's instanceId
+    if (!instanceId) {
+      let widget = document.querySelector('.glimpse-ai-widget');
+      if (!widget) widget = document.querySelector('.glimpse-integrated-widget');
+      instanceId = widget?.getAttribute('data-block-id');
+    }
+    if (!instanceId) {
+      console.warn('Gleame Legacy: triggerFileInput called but no widget found');
+      return;
+    }
+    
+    const fileInput = getElement(instanceId, 'imageUpload');
     if (fileInput) fileInput.click();
   };
   
   function setupVariantChangeListeners() {
     const variantSelect = document.querySelector('select[name="id"]');
     if (variantSelect) {
-      variantSelect.addEventListener('change', e => { currentVariantId = e.target.value; });
+      variantSelect.addEventListener('change', e => {
+        instances.forEach((instance, id) => { instance.variantId = e.target.value; });
+      });
     }
     
     const variantRadios = document.querySelectorAll('input[name="id"][type="radio"]');
     variantRadios.forEach(radio => {
-      radio.addEventListener('change', e => { if (e.target.checked) currentVariantId = e.target.value; });
+      radio.addEventListener('change', e => {
+        if (e.target.checked) {
+          instances.forEach((instance, id) => { instance.variantId = e.target.value; });
+        }
+      });
     });
     
     const allIdInputs = document.querySelectorAll('input[name="id"]');
     allIdInputs.forEach(input => {
-      input.addEventListener('change', e => { currentVariantId = e.target.value; });
+      input.addEventListener('change', e => {
+        instances.forEach((instance, id) => { instance.variantId = e.target.value; });
+      });
     });
     
     document.addEventListener('variant:change', event => {
-      if (event.detail?.variant?.id) currentVariantId = event.detail.variant.id.toString();
+      if (event.detail?.variant?.id) {
+        const variantId = event.detail.variant.id.toString();
+        instances.forEach((instance, id) => { instance.variantId = variantId; });
+      }
     });
     
     const productForm = document.querySelector('form[action*="/cart/add"]');
     if (productForm) {
       const observer = new MutationObserver(() => {
         const newVariantId = getCurrentVariantId();
-        if (newVariantId && newVariantId !== currentVariantId) currentVariantId = newVariantId;
+        if (newVariantId) {
+          instances.forEach((instance, id) => {
+            if (newVariantId !== instance.variantId) instance.variantId = newVariantId;
+          });
+        }
       });
       observer.observe(productForm, { attributes: true, childList: true, subtree: true });
     }
   }
   
-  window.widgetFunctions.resetTransformation = function() {
-    const imageUpload = document.getElementById('imageUpload');
-    const beforeImage = document.getElementById('beforeImage');
-    const afterImage = document.getElementById('afterImage');
+  // Reset transformation - now accepts instanceId
+  window.widgetFunctions.resetTransformation = function(instanceId) {
+    // If no instanceId, try to find the first widget's instanceId
+    if (!instanceId) {
+      let widget = document.querySelector('.glimpse-ai-widget');
+      if (!widget) widget = document.querySelector('.glimpse-integrated-widget');
+      instanceId = widget?.getAttribute('data-block-id');
+    }
+    if (!instanceId) {
+      console.warn('Gleame Legacy: resetTransformation called but no widget found');
+      return;
+    }
+    
+    const imageUpload = getElement(instanceId, 'imageUpload');
+    const beforeImage = getElement(instanceId, 'beforeImage');
+    const afterImage = getElement(instanceId, 'afterImage');
     
     if (imageUpload) imageUpload.value = '';
     if (beforeImage) { beforeImage.onload = null; beforeImage.onerror = null; beforeImage.src = ''; }
     if (afterImage) { afterImage.onload = null; afterImage.onerror = null; afterImage.src = ''; }
     
-    window.widgetFunctions.showState('upload');
+    showState(instanceId, 'upload');
   };
   
-  window.widgetFunctions.showState = function(state) {
+  // Show state - now accepts instanceId
+  function showState(instanceId, state) {
     ['upload', 'processing', 'results', 'error'].forEach(s => {
-      const el = document.getElementById(`${s}State`);
+      const el = getElement(instanceId, `${s}State`);
       if (el) el.style.display = s === state ? 'block' : 'none';
     });
     
-    if (state === 'processing') startLoadingTextAnimation();
-    else stopLoadingTextAnimation();
+    if (state === 'processing') startLoadingTextAnimation(instanceId);
+    else stopLoadingTextAnimation(instanceId);
+  }
+  
+  // Expose showState for legacy compatibility
+  window.widgetFunctions.showState = function(state, instanceId) {
+    // If only state passed, try to find first widget
+    if (!instanceId) {
+      let widget = document.querySelector('.glimpse-ai-widget');
+      if (!widget) widget = document.querySelector('.glimpse-integrated-widget');
+      instanceId = widget?.getAttribute('data-block-id');
+    }
+    if (instanceId) showState(instanceId, state);
   };
   
-  function startLoadingTextAnimation() {
-    const loadingTextEl = document.querySelector('.loading-text');
+  function startLoadingTextAnimation(instanceId) {
+    const instance = getInstance(instanceId);
+    const widget = getWidgetElement(instanceId);
+    const loadingTextEl = widget?.querySelector('.loading-text');
     if (!loadingTextEl) return;
     
     let currentIndex = 0;
     loadingTextEl.textContent = loadingMessages[currentIndex];
     
-    loadingTextInterval = setInterval(() => {
+    instance.loadingTextInterval = setInterval(() => {
       currentIndex++;
       if (currentIndex < loadingMessages.length) {
         loadingTextEl.textContent = loadingMessages[currentIndex];
       } else {
-        clearInterval(loadingTextInterval);
-        loadingTextInterval = null;
+        clearInterval(instance.loadingTextInterval);
+        instance.loadingTextInterval = null;
       }
     }, 3000);
   }
   
-  function stopLoadingTextAnimation() {
-    if (loadingTextInterval) {
-      clearInterval(loadingTextInterval);
-      loadingTextInterval = null;
+  function stopLoadingTextAnimation(instanceId) {
+    const instance = getInstance(instanceId);
+    if (instance.loadingTextInterval) {
+      clearInterval(instance.loadingTextInterval);
+      instance.loadingTextInterval = null;
     }
   }
   
@@ -277,30 +427,42 @@ console.log('Gleame Widget v2.0 loaded');
     return false;
   }
   
-  window.widgetFunctions.showError = function(message) {
-    const errorMessage = document.getElementById('errorMessage');
+  // Show error - now accepts instanceId
+  function showError(instanceId, message) {
+    const errorMessage = getElement(instanceId, 'errorMessage');
     if (errorMessage) errorMessage.textContent = message;
-    window.widgetFunctions.showState('error');
+    showState(instanceId, 'error');
+  }
+  
+  // Expose showError for legacy compatibility
+  window.widgetFunctions.showError = function(message, instanceId) {
+    // If only message passed, try to find first widget
+    if (!instanceId) {
+      let widget = document.querySelector('.glimpse-ai-widget');
+      if (!widget) widget = document.querySelector('.glimpse-integrated-widget');
+      instanceId = widget?.getAttribute('data-block-id');
+    }
+    if (instanceId) showError(instanceId, message);
   };
   
-  function processSelectedFile(file) {
+  function processSelectedFile(instanceId, file) {
     if (!file) return;
     
-    window.widgetFunctions.showState('upload');
+    showState(instanceId, 'upload');
     
     if (!isValidImageFile(file)) {
-      window.widgetFunctions.showError('Please upload an image file (JPG, PNG, HEIC, etc.).');
+      showError(instanceId, 'Please upload an image file (JPG, PNG, HEIC, etc.).');
       return;
     }
     
     const maxSize = 5 * 1024 * 1024;
     if (file.size > maxSize) {
-      window.widgetFunctions.showError('Image too large. Please upload an image smaller than 5MB.');
+      showError(instanceId, 'Image too large. Please upload an image smaller than 5MB.');
       return;
     }
     
     if (file.size === 0) {
-      window.widgetFunctions.showError('The selected file appears to be empty. Please try another image.');
+      showError(instanceId, 'The selected file appears to be empty. Please try another image.');
       return;
     }
     
@@ -320,7 +482,7 @@ console.log('Gleame Widget v2.0 loaded');
           fileToSend = dataUrlToFile(imageDataUrl, file.name || 'selfie.jpg');
         }
         
-        const beforeImg = document.getElementById('beforeImage');
+        const beforeImg = getElement(instanceId, 'beforeImage');
         if (beforeImg) {
           beforeImg.onload = null;
           beforeImg.onerror = null;
@@ -329,59 +491,78 @@ console.log('Gleame Widget v2.0 loaded');
           
           // For HEIC files, browser can't display - just start transform immediately
           if (isHeic) {
-            transformImage(file);
+            transformImage(instanceId, file);
           } else {
             beforeImg.onload = function() {
               beforeImg.onload = null;
               beforeImg.onerror = null;
               if (!transformationStarted) {
                 transformationStarted = true;
-                transformImage(fileToSend);
+                transformImage(instanceId, fileToSend);
               }
             };
             
             beforeImg.onerror = function() {
               beforeImg.onload = null;
               beforeImg.onerror = null;
-              window.widgetFunctions.showError('Error displaying image preview. Please try again.');
+              showError(instanceId, 'Error displaying image preview. Please try again.');
             };
             
             beforeImg.src = imageDataUrl;
           }
         } else {
-          transformImage(isHeic ? file : fileToSend);
+          transformImage(instanceId, isHeic ? file : fileToSend);
         }
       } catch (error) {
-        window.widgetFunctions.showError('Error loading image preview. Please try again.');
+        showError(instanceId, 'Error loading image preview. Please try again.');
       }
     };
     
-    reader.onerror = () => window.widgetFunctions.showError('Error reading the image file. Please try again.');
-    reader.onabort = () => window.widgetFunctions.showError('File reading was interrupted. Please try again.');
+    reader.onerror = () => showError(instanceId, 'Error reading the image file. Please try again.');
+    reader.onabort = () => showError(instanceId, 'File reading was interrupted. Please try again.');
     
     try {
       reader.readAsDataURL(file);
     } catch (error) {
-      window.widgetFunctions.showError('Error reading the image file. Please try again.');
+      showError(instanceId, 'Error reading the image file. Please try again.');
     }
   }
   
-  async function transformImage(file) {
-    window.widgetFunctions.showState('processing');
+  async function transformImage(instanceId, file) {
+    const instance = getInstance(instanceId);
+    const widget = getWidgetElement(instanceId);
+    showState(instanceId, 'processing');
     
     try {
       const freshVariantId = getCurrentVariantId();
-      if (freshVariantId && freshVariantId !== currentVariantId) currentVariantId = freshVariantId;
+      if (freshVariantId && freshVariantId !== instance.variantId) instance.variantId = freshVariantId;
       
-      if (!currentShopDomain) throw new Error('Could not determine shop domain. Please refresh the page and try again.');
+      // Try to get productId and shopDomain from widget if not in instance (late initialization)
+      if (!instance.productId && widget) {
+        instance.productId = widget.getAttribute('data-product-id');
+        console.log('Gleame Legacy: Late-loaded productId:', instance.productId);
+      }
+      if (!instance.shopDomain && widget) {
+        instance.shopDomain = getShopDomain(widget);
+        console.log('Gleame Legacy: Late-loaded shopDomain:', instance.shopDomain);
+      }
+      
+      // Validate required fields
+      if (!instance.productId) throw new Error('Product not found. Please refresh the page and try again.');
+      if (!instance.shopDomain) throw new Error('Could not determine shop domain. Please refresh the page and try again.');
       if (!SHOPIFY_APP_URL) throw new Error('App URL not configured.');
       
       const formData = new FormData();
       formData.append('image', file);
-      formData.append('productId', currentProductId);
-      formData.append('shopDomain', currentShopDomain);
+      formData.append('productId', instance.productId);
+      formData.append('shopDomain', instance.shopDomain);
       formData.append('widgetType', 'legacy');
-      if (currentVariantId) formData.append('variantId', currentVariantId);
+      if (instance.variantId) formData.append('variantId', instance.variantId);
+      console.log('Gleame Legacy: Sending transform for instance', instanceId, {
+        productId: instance.productId,
+        shopDomain: instance.shopDomain,
+        variantId: instance.variantId
+      });
       
       const apiUrl = SHOPIFY_APP_URL + '/api/storefront/transform-image';
       
@@ -404,13 +585,13 @@ console.log('Gleame Widget v2.0 loaded');
       if (!result.success) throw new Error(result.error || 'Transformation failed');
       if (!result.generatedImage) throw new Error('No transformed image received');
       
-      const afterImg = document.getElementById('afterImage');
-      const beforeImg = document.getElementById('beforeImage');
+      const afterImg = getElement(instanceId, 'afterImage');
+      const beforeImg = getElement(instanceId, 'beforeImage');
       
       // Always set before image from server's processed input (handles HEIC conversion)
       console.log('processedInputImage received:', !!result.processedInputImage);
       if (beforeImg && result.processedInputImage) {
-        console.log('Setting before image from server');
+        console.log('Setting before image from server for instance', instanceId);
         beforeImg.src = `data:image/jpeg;base64,${result.processedInputImage}`;
       }
       
@@ -423,52 +604,20 @@ console.log('Gleame Widget v2.0 loaded');
         };
         afterImg.src = `data:image/jpeg;base64,${result.generatedImage}`;
       }
-      window.widgetFunctions.showState('results');
+      showState(instanceId, 'results');
       
     } catch (error) {
-      window.widgetFunctions.showError(error.message || 'Something went wrong. Please try again.');
+      showError(instanceId, error.message || 'Something went wrong. Please try again.');
     }
   }
   
   document.addEventListener('DOMContentLoaded', function() {
-    window.widgetFunctions.initWidget();
+    // Initialize all legacy widgets
+    const widgets = document.querySelectorAll('.glimpse-ai-widget');
+    widgets.forEach(widget => initWidgetInstance(widget));
+    
     setupVariantChangeListeners();
     
-    const imageUpload = document.getElementById('imageUpload');
-    const beforeImage = document.getElementById('beforeImage');
-    const afterImage = document.getElementById('afterImage');
-    const placeholderContainer = document.querySelector('.placeholder-image-container');
-    
-    if (!imageUpload || !beforeImage || !afterImage) return;
-    
-    imageUpload.addEventListener('change', function(event) {
-      const files = event.target.files;
-      if (files?.length > 0) processSelectedFile(files[0]);
-    });
-    
-    if (placeholderContainer) {
-      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-        placeholderContainer.addEventListener(eventName, e => { e.preventDefault(); e.stopPropagation(); }, false);
-      });
-      
-      ['dragenter', 'dragover'].forEach(eventName => {
-        placeholderContainer.addEventListener(eventName, () => {
-          placeholderContainer.style.opacity = '0.8';
-          placeholderContainer.style.transform = 'scale(1.02)';
-        }, false);
-      });
-      
-      ['dragleave', 'drop'].forEach(eventName => {
-        placeholderContainer.addEventListener(eventName, () => {
-          placeholderContainer.style.opacity = '1';
-          placeholderContainer.style.transform = 'scale(1)';
-        }, false);
-      });
-      
-      placeholderContainer.addEventListener('drop', e => {
-        const files = Array.from(e.dataTransfer.files);
-        if (files.length > 0) processSelectedFile(files[0]);
-      }, false);
-    }
+    console.log('Gleame Legacy: Initialized', instances.size, 'widget instance(s)');
   });
 })();

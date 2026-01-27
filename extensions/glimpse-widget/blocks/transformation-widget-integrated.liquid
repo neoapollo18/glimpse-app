@@ -75,7 +75,8 @@
 
 <!-- Gleame AI Transformation Widget - Integrated Design -->
 <div class="glimpse-integrated-widget{% unless enable_container %} no-container{% endunless %}" 
-     data-product-id="{{ product_id }}"{% if manual_shop_domain != blank %}
+     data-product-id="{{ product_id }}"
+     data-block-id="{{ block.id }}"{% if manual_shop_domain != blank %}
      data-manual-shop-domain="{{ manual_shop_domain }}"{% endif %}
      style="--solid-button-color: {{ solid_button_color }};
             --background-color: {{ background_color }}; 
@@ -112,9 +113,9 @@
   <div class="integrated-content">
     
     <!-- Initial/Upload State -->
-    <div class="upload-state" id="uploadState">
+    <div class="upload-state" id="uploadState-{{ block.id }}">
       {% if show_placeholder %}
-        <div class="integrated-placeholder" onclick="window.widgetFunctions.triggerFileInput()">
+        <div class="integrated-placeholder" onclick="window.widgetFunctions.triggerFileInput('{{ block.id }}')">
           {% if block.settings.placeholder_image %}
             <!-- Single combined before/after image -->
             <img src="{{ block.settings.placeholder_image | image_url: width: 600 }}" 
@@ -162,13 +163,13 @@
       {% endif %}
       
       <input type="file" 
-             id="imageUpload" 
+             id="imageUpload-{{ block.id }}" 
              accept="image/*,.heic,.heif" 
              style="display: none;">
       
       <button class="integrated-upload-button button-style-{{ button_style }}" 
               type="button" 
-              onclick="window.widgetFunctions.triggerFileInput()">
+              onclick="window.widgetFunctions.triggerFileInput('{{ block.id }}')">
         {% if show_camera_icon %}
           <svg class="camera-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
@@ -180,28 +181,28 @@
     </div>
     
     <!-- Processing State -->
-    <div class="processing-state" id="processingState" style="display: none;">
+    <div class="processing-state" id="processingState-{{ block.id }}" style="display: none;">
       <div class="integrated-loading">
         <p class="loading-text"><span class="loading-spinner"></span><span class="loading-text-content">Analyzing image...</span></p>
       </div>
     </div>
     
     <!-- Results State -->
-    <div class="results-state" id="resultsState" style="display: none;">
+    <div class="results-state" id="resultsState-{{ block.id }}" style="display: none;">
       <div class="integrated-results">
         <div class="integrated-comparison">
           <div class="comparison-side">
-            <img id="beforeImage" alt="Before" class="comparison-img" width="300" height="300">
+            <img id="beforeImage-{{ block.id }}" alt="Before" class="comparison-img" width="300" height="300">
           </div>
           <div class="comparison-side">
-            <img id="afterImage" alt="After" class="comparison-img" width="300" height="300">
+            <img id="afterImage-{{ block.id }}" alt="After" class="comparison-img" width="300" height="300">
           </div>
         </div>
       </div>
       
       <button class="integrated-upload-button button-style-{{ button_style }}" 
               type="button" 
-              onclick="window.widgetFunctions.resetTransformation()">
+              onclick="window.widgetFunctions.resetTransformation('{{ block.id }}')">
         <svg class="retry-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
           <path d="M21 3v5h-5"/>
@@ -213,17 +214,17 @@
     </div>
     
     <!-- Error State -->
-    <div class="error-state" id="errorState" style="display: none;">
+    <div class="error-state" id="errorState-{{ block.id }}" style="display: none;">
       <div class="integrated-error">
         <svg class="error-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="10"/>
           <path d="M12 8v4"/>
           <path d="M12 16h.01"/>
         </svg>
-        <p class="error-message" id="errorMessage"></p>
+        <p class="error-message" id="errorMessage-{{ block.id }}"></p>
         <button class="integrated-upload-button button-style-{{ button_style }}" 
                 type="button" 
-                onclick="window.widgetFunctions.resetTransformation()">
+                onclick="window.widgetFunctions.resetTransformation('{{ block.id }}')">
           <span class="button-text">{{ 'transformation.try_again' | t: default: 'Try Again' }}</span>
         </button>
       </div>

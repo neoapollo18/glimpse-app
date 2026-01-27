@@ -1,50 +1,70 @@
-/* Gleame Banner Widget JavaScript v2.0 - Modal UI */
-console.log('Gleame Banner Widget v2.0 loaded');
+/* Gleame Banner Widget JavaScript v3.0 - Multi-instance support */
+console.log('Gleame Banner Widget v3.0 loaded');
 
 (function() {
   'use strict';
 
-  // State
-  let widget = null;
-  let currentProductId = null;
-  let currentShopDomain = null;
-  let currentVariantId = null;
-  let originalButtonText = '';
+  // Instance state storage - keyed by block.id
+  const instances = new Map();
   
   const SHOPIFY_APP_URL = 'https://glimpse-app-charles.onrender.com';
+  const WIDGET_TYPE = 'banner';
   const loadingMessages = ['Processing...', 'Analyzing...', 'Creating magic...', 'Almost there...'];
-  let loadingMessageIndex = 0;
-  let loadingInterval = null;
 
   // Initialize namespace
   window.bannerWidgetFunctions = window.bannerWidgetFunctions || {};
 
-  // Get shop domain (comprehensive detection like integrated widget)
-  function getShopDomain() {
-    // Check for manual override
-    if (widget) {
-      const manualDomain = widget.getAttribute('data-manual-shop-domain');
-      if (manualDomain) return manualDomain;
+  // Get or create instance state
+  function getInstance(instanceId) {
+    if (!instances.has(instanceId)) {
+      instances.set(instanceId, {
+        productId: null,
+        shopDomain: null,
+        variantId: null,
+        originalButtonText: '',
+        loadingInterval: null,
+        loadingMessageIndex: 0,
+        widget: null
+      });
     }
+    return instances.get(instanceId);
+  }
+
+  // Find widget element by instanceId
+  function getWidgetElement(instanceId) {
+    let widget = document.querySelector(`.glimpse-banner-widget[data-block-id="${instanceId}"]`);
+    if (widget) return widget;
+    widget = document.querySelector('.glimpse-banner-widget');
+    return widget;
+  }
+
+  // Get element by ID with instance suffix, with fallback to legacy ID
+  function getElement(instanceId, baseId) {
+    let el = document.getElementById(`${baseId}-${instanceId}`);
+    if (el) return el;
+    el = document.getElementById(baseId);
+    return el;
+  }
+
+  // Get shop domain
+  function getShopDomain(widget) {
+    const manualDomain = widget?.getAttribute('data-manual-shop-domain');
+    if (manualDomain) return manualDomain;
     
     const hostname = window.location.hostname;
     if (hostname.includes('.myshopify.com')) return hostname;
     
-    // Check Shopify scripts
     const shopifyScripts = document.querySelectorAll('script[src*="myshopify.com"]');
     for (let script of shopifyScripts) {
       const match = script.src.match(/\/\/([^/]+\.myshopify\.com)/);
       if (match) return match[1];
     }
     
-    // Try Shopify global
     if (window.Shopify?.shop) return window.Shopify.shop;
     
-    // Check meta tag
     const shopMeta = document.querySelector('meta[name="shopify-shop-domain"]');
     if (shopMeta) return shopMeta.content;
     
-    // Check links
     const allLinks = document.querySelectorAll('link[href*="myshopify.com"], a[href*="myshopify.com"]');
     for (let link of allLinks) {
       const match = link.href.match(/\/\/([^/]+\.myshopify\.com)/);
@@ -54,7 +74,7 @@ console.log('Gleame Banner Widget v2.0 loaded');
     return hostname;
   }
 
-  // Get current variant ID (comprehensive detection like integrated widget)
+  // Get current variant ID
   function getCurrentVariantId() {
     const variantSelect = document.querySelector('select[name="id"]');
     if (variantSelect?.value) return variantSelect.value;
@@ -77,60 +97,60 @@ console.log('Gleame Banner Widget v2.0 loaded');
     return null;
   }
 
-  // Get button elements
-  function getButton() {
-    return widget?.querySelector('#bannerMainButton');
+  // Get button elements for an instance
+  function getButton(instanceId) {
+    return getElement(instanceId, 'bannerMainButton');
   }
   
-  function getButtonText() {
-    const btn = getButton();
+  function getButtonText(instanceId) {
+    const btn = getButton(instanceId);
     return btn?.querySelector('.button-text');
   }
   
-  function getSpinner() {
-    const btn = getButton();
+  function getSpinner(instanceId) {
+    const btn = getButton(instanceId);
     return btn?.querySelector('.banner-spinner-inline');
   }
 
   // Set button loading state
-  function setButtonLoading(isLoading) {
-    const btn = getButton();
-    const btnText = getButtonText();
-    const spinner = getSpinner();
+  function setButtonLoading(instanceId, isLoading) {
+    const instance = getInstance(instanceId);
+    const btn = getButton(instanceId);
+    const btnText = getButtonText(instanceId);
+    const spinner = getSpinner(instanceId);
     
     if (!btn || !btnText || !spinner) return;
     
     if (isLoading) {
-      originalButtonText = btnText.textContent;
+      instance.originalButtonText = btnText.textContent;
       btn.classList.add('is-loading');
       spinner.style.display = 'inline-block';
       btnText.textContent = loadingMessages[0];
       
-      // Cycle through loading messages
-      loadingMessageIndex = 0;
-      loadingInterval = setInterval(() => {
-        loadingMessageIndex = (loadingMessageIndex + 1) % loadingMessages.length;
-        btnText.textContent = loadingMessages[loadingMessageIndex];
+      instance.loadingMessageIndex = 0;
+      instance.loadingInterval = setInterval(() => {
+        instance.loadingMessageIndex = (instance.loadingMessageIndex + 1) % loadingMessages.length;
+        btnText.textContent = loadingMessages[instance.loadingMessageIndex];
       }, 2000);
     } else {
       btn.classList.remove('is-loading');
       spinner.style.display = 'none';
-      btnText.textContent = originalButtonText;
+      btnText.textContent = instance.originalButtonText;
       
-      if (loadingInterval) {
-        clearInterval(loadingInterval);
-        loadingInterval = null;
+      if (instance.loadingInterval) {
+        clearInterval(instance.loadingInterval);
+        instance.loadingInterval = null;
       }
     }
   }
 
   // Show results modal
-  function showResultsModal(beforeUrl, afterUrl) {
-    const modal = document.getElementById('bannerResultsModal');
+  function showResultsModal(instanceId, beforeUrl, afterUrl) {
+    const modal = getElement(instanceId, 'bannerResultsModal');
     if (!modal) return;
     
-    const beforeImg = modal.querySelector('.result-before');
-    const afterImg = modal.querySelector('.result-after');
+    const beforeImg = getElement(instanceId, 'bannerBeforeImage');
+    const afterImg = getElement(instanceId, 'bannerAfterImage');
     
     if (beforeImg) beforeImg.src = beforeUrl;
     if (afterImg) afterImg.src = afterUrl;
@@ -140,9 +160,9 @@ console.log('Gleame Banner Widget v2.0 loaded');
   }
 
   // Show error modal
-  function showErrorModal(message) {
-    const modal = document.getElementById('bannerErrorModal');
-    const errorText = document.getElementById('bannerErrorMessage');
+  function showErrorModal(instanceId, message) {
+    const modal = getElement(instanceId, 'bannerErrorModal');
+    const errorText = getElement(instanceId, 'bannerErrorMessage');
     
     if (!modal) return;
     
@@ -152,9 +172,15 @@ console.log('Gleame Banner Widget v2.0 loaded');
   }
 
   // Close modal
-  window.bannerWidgetFunctions.closeModal = function() {
-    const resultsModal = document.getElementById('bannerResultsModal');
-    const errorModal = document.getElementById('bannerErrorModal');
+  window.bannerWidgetFunctions.closeModal = function(instanceId) {
+    if (!instanceId) {
+      const widget = document.querySelector('.glimpse-banner-widget');
+      instanceId = widget?.getAttribute('data-block-id');
+    }
+    if (!instanceId) return;
+    
+    const resultsModal = getElement(instanceId, 'bannerResultsModal');
+    const errorModal = getElement(instanceId, 'bannerErrorModal');
     
     if (resultsModal) resultsModal.style.display = 'none';
     if (errorModal) errorModal.style.display = 'none';
@@ -163,24 +189,29 @@ console.log('Gleame Banner Widget v2.0 loaded');
   };
 
   // Try again - close modal and open file picker
-  window.bannerWidgetFunctions.tryAgain = function() {
-    window.bannerWidgetFunctions.closeModal();
-    window.bannerWidgetFunctions.triggerFileInput();
+  window.bannerWidgetFunctions.tryAgain = function(instanceId) {
+    window.bannerWidgetFunctions.closeModal(instanceId);
+    window.bannerWidgetFunctions.triggerFileInput(instanceId);
   };
 
   // Trigger file input
-  window.bannerWidgetFunctions.triggerFileInput = function() {
-    if (!widget) return;
-    const btn = getButton();
-    if (btn?.classList.contains('is-loading')) return; // Don't allow if loading
+  window.bannerWidgetFunctions.triggerFileInput = function(instanceId) {
+    if (!instanceId) {
+      const widget = document.querySelector('.glimpse-banner-widget');
+      instanceId = widget?.getAttribute('data-block-id');
+    }
+    if (!instanceId) return;
     
-    const fileInput = widget.querySelector('.banner-file-input');
+    const btn = getButton(instanceId);
+    if (btn?.classList.contains('is-loading')) return;
+    
+    const fileInput = getElement(instanceId, 'bannerFileInput');
     if (fileInput) fileInput.click();
   };
 
-  // Reset banner (legacy - now just closes modal)
-  window.bannerWidgetFunctions.resetBanner = function() {
-    window.bannerWidgetFunctions.closeModal();
+  // Reset banner
+  window.bannerWidgetFunctions.resetBanner = function(instanceId) {
+    window.bannerWidgetFunctions.closeModal(instanceId);
   };
 
   // Mobile detection
@@ -189,12 +220,10 @@ console.log('Gleame Banner Widget v2.0 loaded');
            (navigator.maxTouchPoints && navigator.maxTouchPoints > 2);
   }
 
-  // Check if photo was recently taken (within 2 minutes)
   function isRecentlyTakenPhoto(file) {
     return file.lastModified > (Date.now() - 120000);
   }
 
-  // Flip image horizontally (for mobile front camera selfies)
   function flipImageHorizontally(dataUrl) {
     return new Promise(resolve => {
       const img = new Image();
@@ -217,7 +246,6 @@ console.log('Gleame Banner Widget v2.0 loaded');
     });
   }
 
-  // Convert data URL to File
   function dataUrlToFile(dataUrl, fileName) {
     const arr = dataUrl.split(',');
     const mime = arr[0].match(/:(.*?);/)[1];
@@ -228,7 +256,6 @@ console.log('Gleame Banner Widget v2.0 loaded');
     return new File([u8arr], fileName, { type: mime });
   }
 
-  // Check if HEIC/HEIF file
   function isHeicOrHeif(file) {
     const heicMimeTypes = ['image/heic', 'image/heif', 'image/heic-sequence', 'image/heif-sequence'];
     if (heicMimeTypes.includes(file.type?.toLowerCase())) return true;
@@ -236,7 +263,6 @@ console.log('Gleame Banner Widget v2.0 loaded');
     return ext === 'heic' || ext === 'heif';
   }
 
-  // Check if valid image file
   function isValidImageFile(file) {
     if (file.type?.startsWith('image/')) return true;
     if (isHeicOrHeif(file)) return true;
@@ -245,23 +271,27 @@ console.log('Gleame Banner Widget v2.0 loaded');
   }
 
   // Handle file select
-  window.bannerWidgetFunctions.handleFileSelect = async function(event) {
+  window.bannerWidgetFunctions.handleFileSelect = async function(event, instanceId) {
+    if (!instanceId) {
+      const widget = document.querySelector('.glimpse-banner-widget');
+      instanceId = widget?.getAttribute('data-block-id');
+    }
+    if (!instanceId) return;
+    
     const file = event.target.files[0];
     if (!file) return;
 
-    // Validate file type
     if (!isValidImageFile(file)) {
-      showErrorModal('Please upload an image file (JPG, PNG, HEIC, etc.).');
+      showErrorModal(instanceId, 'Please upload an image file (JPG, PNG, HEIC, etc.).');
       return;
     }
 
-    // Check file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
-      showErrorModal('Image too large. Please upload an image smaller than 5MB.');
+      showErrorModal(instanceId, 'Image too large. Please upload an image smaller than 5MB.');
       return;
     }
 
-    setButtonLoading(true);
+    setButtonLoading(instanceId, true);
 
     try {
       let processedFile = file;
@@ -269,14 +299,12 @@ console.log('Gleame Banner Widget v2.0 loaded');
       const isMobile = isMobileDevice();
       const isRecent = isRecentlyTakenPhoto(file);
 
-      // For HEIC files, send directly to server (browser can't process them)
       if (isHeic) {
-        await uploadAndTransform(file);
+        await uploadAndTransform(instanceId, file);
         event.target.value = '';
         return;
       }
 
-      // Handle mobile selfie flip (for non-HEIC recent photos)
       if (isMobile && isRecent) {
         const reader = new FileReader();
         const dataUrl = await new Promise((resolve, reject) => {
@@ -289,18 +317,14 @@ console.log('Gleame Banner Widget v2.0 loaded');
         processedFile = dataUrlToFile(flippedDataUrl, file.name || 'selfie.jpg');
       }
 
-      // Compress image (only for non-HEIC)
       const compressedFile = await compressImage(processedFile);
-      
-      // Upload and transform
-      await uploadAndTransform(compressedFile);
+      await uploadAndTransform(instanceId, compressedFile);
     } catch (error) {
       console.error('Error processing image:', error);
-      setButtonLoading(false);
-      showErrorModal(error.message || 'Failed to process image');
+      setButtonLoading(instanceId, false);
+      showErrorModal(instanceId, error.message || 'Failed to process image');
     }
 
-    // Reset file input
     event.target.value = '';
   };
 
@@ -348,28 +372,46 @@ console.log('Gleame Banner Widget v2.0 loaded');
   }
 
   // Upload and transform
-  async function uploadAndTransform(file) {
-    // Refresh variant ID before sending
-    const freshVariantId = getCurrentVariantId();
-    if (freshVariantId && freshVariantId !== currentVariantId) {
-      currentVariantId = freshVariantId;
+  async function uploadAndTransform(instanceId, file) {
+    const instance = getInstance(instanceId);
+    const widget = getWidgetElement(instanceId);
+    
+    // Late load if needed
+    if (!instance.productId && widget) {
+      instance.productId = widget.getAttribute('data-product-id');
+    }
+    if (!instance.shopDomain && widget) {
+      instance.shopDomain = getShopDomain(widget);
     }
     
-    if (!currentShopDomain) {
+    const freshVariantId = getCurrentVariantId();
+    if (freshVariantId && freshVariantId !== instance.variantId) {
+      instance.variantId = freshVariantId;
+    }
+    
+    if (!instance.productId) {
+      throw new Error('Product not found. Please refresh and try again.');
+    }
+    if (!instance.shopDomain) {
       throw new Error('Could not determine shop domain. Please refresh and try again.');
     }
     
     const formData = new FormData();
     formData.append('image', file);
-    formData.append('productId', currentProductId);
-    formData.append('shopDomain', currentShopDomain);
-    if (currentVariantId) {
-      formData.append('variantId', currentVariantId);
+    formData.append('productId', instance.productId);
+    formData.append('shopDomain', instance.shopDomain);
+    formData.append('widgetType', WIDGET_TYPE);
+    if (instance.variantId) {
+      formData.append('variantId', instance.variantId);
     }
 
-    const apiUrl = SHOPIFY_APP_URL + '/api/storefront/transform-image';
+    console.log('Gleame Banner: Sending transform for instance', instanceId, {
+      productId: instance.productId,
+      shopDomain: instance.shopDomain,
+      variantId: instance.variantId
+    });
 
-    const response = await fetch(apiUrl, {
+    const response = await fetch(SHOPIFY_APP_URL + '/api/storefront/transform-image', {
       method: 'POST',
       body: formData,
       headers: { 'X-Requested-With': 'XMLHttpRequest' }
@@ -396,72 +438,86 @@ console.log('Gleame Banner Widget v2.0 loaded');
       throw new Error('No transformed image received');
     }
 
-    // Use processedInputImage from server for before (handles HEIC), generatedImage for after
     const beforeUrl = result.processedInputImage 
       ? `data:image/jpeg;base64,${result.processedInputImage}`
       : URL.createObjectURL(file);
     const afterUrl = `data:image/jpeg;base64,${result.generatedImage}`;
     
-    // Reset button and show modal
-    setButtonLoading(false);
-    showResultsModal(beforeUrl, afterUrl);
+    setButtonLoading(instanceId, false);
+    showResultsModal(instanceId, beforeUrl, afterUrl);
   }
 
-  // Initialize
-  function init() {
-    widget = document.querySelector('.glimpse-banner-widget');
-    if (!widget) {
-      console.log('Gleame Banner: No widget found on page');
-      return;
-    }
-
-    currentProductId = widget.getAttribute('data-product-id');
-    currentShopDomain = getShopDomain();
-    currentVariantId = getCurrentVariantId();
+  // Initialize a single widget instance
+  function initWidgetInstance(widget) {
+    let instanceId = widget.getAttribute('data-block-id');
     
-    // Store original button text
-    const btnText = getButtonText();
+    if (!instanceId) {
+      instanceId = 'banner-' + Math.random().toString(36).substr(2, 9);
+      widget.setAttribute('data-block-id', instanceId);
+      console.log('Gleame Banner: Generated block-id for widget:', instanceId);
+    }
+    
+    const instance = getInstance(instanceId);
+    instance.widget = widget;
+    instance.productId = widget.getAttribute('data-product-id');
+    instance.shopDomain = getShopDomain(widget);
+    instance.variantId = getCurrentVariantId();
+    
+    const btnText = getButtonText(instanceId);
     if (btnText) {
-      originalButtonText = btnText.textContent;
+      instance.originalButtonText = btnText.textContent;
+    }
+    
+    // Set up file input listener
+    const fileInput = getElement(instanceId, 'bannerFileInput');
+    if (fileInput && !fileInput.dataset.listenerAttached) {
+      fileInput.dataset.listenerAttached = 'true';
+      // Listener is set via onchange in HTML
     }
     
     // Move modals to body for proper full-screen overlay
-    // Copy CSS variables from widget to modals so they inherit the configuration
-    const resultsModal = widget.querySelector('#bannerResultsModal');
-    const errorModal = widget.querySelector('#bannerErrorModal');
+    const resultsModal = getElement(instanceId, 'bannerResultsModal');
+    const errorModal = getElement(instanceId, 'bannerErrorModal');
     const widgetStyles = widget.getAttribute('style') || '';
     
-    if (resultsModal) {
-      resultsModal.setAttribute('style', resultsModal.getAttribute('style') + ';' + widgetStyles);
+    if (resultsModal && resultsModal.parentElement !== document.body) {
+      resultsModal.setAttribute('style', (resultsModal.getAttribute('style') || '') + ';' + widgetStyles);
       document.body.appendChild(resultsModal);
     }
-    if (errorModal) {
-      errorModal.setAttribute('style', errorModal.getAttribute('style') + ';' + widgetStyles);
+    if (errorModal && errorModal.parentElement !== document.body) {
+      errorModal.setAttribute('style', (errorModal.getAttribute('style') || '') + ';' + widgetStyles);
       document.body.appendChild(errorModal);
     }
     
+    console.log('Gleame Banner: Initialized instance', instanceId, {
+      productId: instance.productId,
+      shopDomain: instance.shopDomain
+    });
+  }
+
+  // Initialize all widgets
+  function init() {
+    const widgets = document.querySelectorAll('.glimpse-banner-widget');
+    widgets.forEach(widget => initWidgetInstance(widget));
+    
     // Close modal on clicking overlay background
-    const overlays = document.querySelectorAll('.banner-modal-overlay');
-    overlays.forEach(overlay => {
-      overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) {
-          window.bannerWidgetFunctions.closeModal();
-        }
-      });
+    document.addEventListener('click', (e) => {
+      if (e.target.classList.contains('banner-modal-overlay')) {
+        const instanceId = e.target.id.replace('bannerResultsModal-', '').replace('bannerErrorModal-', '');
+        window.bannerWidgetFunctions.closeModal(instanceId);
+      }
     });
     
     // Close modal on Escape key
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        window.bannerWidgetFunctions.closeModal();
+        instances.forEach((instance, id) => {
+          window.bannerWidgetFunctions.closeModal(id);
+        });
       }
     });
     
-    console.log('Gleame Banner initialized:', {
-      productId: currentProductId,
-      shopDomain: currentShopDomain,
-      variantId: currentVariantId
-    });
+    console.log('Gleame Banner: Initialized', instances.size, 'widget instance(s)');
   }
 
   // Run on DOM ready

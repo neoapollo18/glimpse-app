@@ -44,7 +44,8 @@
 
 <!-- Gleame AI Transformation Widget -->
 <div class="glimpse-ai-widget{% if block.settings.layout_orientation == 'horizontal' %} layout-horizontal{% endif %}" 
-     data-product-id="{{ product_id }}"{% if manual_shop_domain != blank %}
+     data-product-id="{{ product_id }}"
+     data-block-id="{{ block.id }}"{% if manual_shop_domain != blank %}
      data-manual-shop-domain="{{ manual_shop_domain }}"{% endif %}
      style="--primary-color-1: {{ primary_color_1 }}; 
             --primary-color-2: {{ primary_color_2 }};
@@ -101,8 +102,8 @@
     <div class="widget-content">
     
     <!-- Initial/Upload State -->
-    <div class="upload-state" id="uploadState">
-      <div class="placeholder-image-container" onclick="window.widgetFunctions.triggerFileInput()">
+    <div class="upload-state" id="uploadState-{{ block.id }}">
+      <div class="placeholder-image-container" onclick="window.widgetFunctions.triggerFileInput('{{ block.id }}')">
         {% if block.settings.placeholder_image %}
           <img src="{{ block.settings.placeholder_image | image_url: width: 400 }}" 
                alt="Transformation preview" 
@@ -124,19 +125,19 @@
       </div>
       
       <input type="file" 
-             id="imageUpload" 
+             id="imageUpload-{{ block.id }}" 
              accept="image/*,.heic,.heif" 
              style="display: none;">
       
       <button class="upload-button" 
               type="button" 
-              onclick="window.widgetFunctions.triggerFileInput()">
+              onclick="window.widgetFunctions.triggerFileInput('{{ block.id }}')">
         {{ block.settings.button_text | default: "Take A Photo" }}
       </button>
     </div>
     
     <!-- Processing State -->
-    <div class="processing-state" id="processingState" style="display: none;">
+    <div class="processing-state" id="processingState-{{ block.id }}" style="display: none;">
       <div class="loading-container">
         <div class="loading-spinner"></div>
         <p class="loading-text">Analyzing image...</p>
@@ -144,16 +145,16 @@
     </div>
     
     <!-- Results State -->
-    <div class="results-state" id="resultsState" style="display: none;">
+    <div class="results-state" id="resultsState-{{ block.id }}" style="display: none;">
       <div class="before-after-grid">
         <div class="image-comparison">
           <div class="comparison-item">
             <div class="image-label">{{ 'transformation.me' | t: default: 'Me' }}</div>
-            <img id="beforeImage" alt="Before transformation" class="comparison-image" width="150" height="150">
+            <img id="beforeImage-{{ block.id }}" alt="Before transformation" class="comparison-image" width="150" height="150">
           </div>
           <div class="comparison-item">
             <div class="image-label">{{ 'transformation.future_me' | t: default: 'Future Me' }}</div>
-            <img id="afterImage" alt="After transformation" class="comparison-image" width="150" height="150">
+            <img id="afterImage-{{ block.id }}" alt="After transformation" class="comparison-image" width="150" height="150">
           </div>
         </div>
       </div>
@@ -161,7 +162,7 @@
       <div class="results-actions">
         <button class="retry-button" 
                 type="button" 
-                onclick="window.widgetFunctions.resetTransformation()">
+                onclick="window.widgetFunctions.resetTransformation('{{ block.id }}')">
           <svg class="retry-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
             <path d="M21 3v5h-5"/>
@@ -174,7 +175,7 @@
     </div>
     
     <!-- Error State -->
-    <div class="error-state" id="errorState" style="display: none;">
+    <div class="error-state" id="errorState-{{ block.id }}" style="display: none;">
       <div class="error-container">
         <svg class="error-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 9v4"/>
@@ -182,10 +183,10 @@
           <path d="M3 7v12a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1z"/>
           <path d="M21 7 12 2 3 7"/>
         </svg>
-        <p class="error-message" id="errorMessage"></p>
+        <p class="error-message" id="errorMessage-{{ block.id }}"></p>
         <button class="retry-button" 
                 type="button" 
-                onclick="window.widgetFunctions.resetTransformation()">
+                onclick="window.widgetFunctions.resetTransformation('{{ block.id }}')">
           <svg class="retry-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
             <path d="M21 3v5h-5"/>

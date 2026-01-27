@@ -1,23 +1,50 @@
-// Gleame Button Widget JavaScript v2.0
-console.log('Gleame Button Widget v2.0 loaded');
+// Gleame Button Widget JavaScript v3.0 - Multi-instance support
+console.log('Gleame Button Widget v3.0 loaded');
 
 (function() {
   window.glimpseButton = window.glimpseButton || {};
   
-  let currentProductId = null;
-  let currentShopDomain = null;
-  let currentVariantId = null;
-  let originalButtonText = '';
+  // Instance state storage - keyed by block.id
+  const instances = new Map();
   
   const SHOPIFY_APP_URL = 'https://glimpse-app-charles.onrender.com';
   const WIDGET_TYPE = 'button';
   const loadingMessages = ['Processing...', 'Analyzing...', 'Creating magic...', 'Almost there...'];
-  let viewTracked = false;
-  let loadingMessageIndex = 0;
-  let loadingInterval = null;
   
-  function getShopDomain() {
-    const widget = document.querySelector('.glimpse-button-widget');
+  // Get or create instance state
+  function getInstance(instanceId) {
+    if (!instances.has(instanceId)) {
+      instances.set(instanceId, {
+        productId: null,
+        shopDomain: null,
+        variantId: null,
+        originalButtonText: '',
+        loadingInterval: null,
+        loadingMessageIndex: 0,
+        viewTracked: false,
+        widget: null
+      });
+    }
+    return instances.get(instanceId);
+  }
+
+  // Find widget element by instanceId
+  function getWidgetElement(instanceId) {
+    let widget = document.querySelector(`.glimpse-button-widget[data-block-id="${instanceId}"]`);
+    if (widget) return widget;
+    widget = document.querySelector('.glimpse-button-widget');
+    return widget;
+  }
+
+  // Get element by ID with instance suffix, with fallback to legacy ID
+  function getElement(instanceId, baseId) {
+    let el = document.getElementById(`${baseId}-${instanceId}`);
+    if (el) return el;
+    el = document.getElementById(baseId);
+    return el;
+  }
+  
+  function getShopDomain(widget) {
     const manualDomain = widget?.getAttribute('data-manual-shop-domain');
     if (manualDomain) return manualDomain;
     
@@ -60,83 +87,58 @@ console.log('Gleame Button Widget v2.0 loaded');
     return null;
   }
   
-  // Track analytics event (widget view, add to cart, etc.)
-  function trackEvent(eventType) {
-    if (!currentShopDomain || !currentProductId) return;
+  // Track analytics event
+  function trackEvent(instanceId, eventType) {
+    const instance = getInstance(instanceId);
+    if (!instance.shopDomain || !instance.productId) return;
     
     fetch(SHOPIFY_APP_URL + '/api/storefront/track-event', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        shopDomain: currentShopDomain,
-        productId: currentProductId,
+        shopDomain: instance.shopDomain,
+        productId: instance.productId,
         eventType: eventType,
         widgetType: WIDGET_TYPE
       })
-    }).catch(() => {}); // Silent fail
-  }
-
-  function init() {
-    const widget = document.querySelector('.glimpse-button-widget');
-    if (!widget) return;
-    
-    currentProductId = widget.getAttribute('data-product-id');
-    currentShopDomain = getShopDomain();
-    currentVariantId = getCurrentVariantId();
-    originalButtonText = widget.getAttribute('data-button-text') || 'TRY IT ON';
-    
-    // Track widget view (only once per page load)
-    if (!viewTracked) {
-      viewTracked = true;
-      trackEvent('widget_view');
-    }
-    
-    // Move modals to body for proper full-screen overlay
-    // Copy CSS variables from widget to modals so they inherit the configuration
-    const resultsModal = widget.querySelector('#resultsModal');
-    const errorModal = widget.querySelector('#errorModal');
-    const widgetStyles = widget.getAttribute('style') || '';
-    
-    if (resultsModal) {
-      resultsModal.setAttribute('style', (resultsModal.getAttribute('style') || '') + ';' + widgetStyles);
-      document.body.appendChild(resultsModal);
-    }
-    if (errorModal) {
-      errorModal.setAttribute('style', (errorModal.getAttribute('style') || '') + ';' + widgetStyles);
-      document.body.appendChild(errorModal);
-    }
-    
-    setupVariantListeners();
-    
-    console.log('Gleame Button initialized:', {
-      productId: currentProductId,
-      shopDomain: currentShopDomain,
-      variantId: currentVariantId
-    });
+    }).catch(() => {});
   }
   
   function setupVariantListeners() {
     const variantSelect = document.querySelector('select[name="id"]');
     if (variantSelect) {
-      variantSelect.addEventListener('change', e => { currentVariantId = e.target.value; });
+      variantSelect.addEventListener('change', e => {
+        instances.forEach((instance, id) => { instance.variantId = e.target.value; });
+      });
     }
     
     document.addEventListener('variant:change', event => {
-      if (event.detail?.variant?.id) currentVariantId = event.detail.variant.id.toString();
+      if (event.detail?.variant?.id) {
+        const variantId = event.detail.variant.id.toString();
+        instances.forEach((instance, id) => { instance.variantId = variantId; });
+      }
     });
   }
   
   // Trigger file upload
-  window.glimpseButton.triggerUpload = function() {
-    const widget = document.querySelector('.glimpse-button-widget');
-    const fileInput = widget?.querySelector('#imageUpload');
+  window.glimpseButton.triggerUpload = function(instanceId) {
+    if (!instanceId) {
+      const widget = document.querySelector('.glimpse-button-widget');
+      instanceId = widget?.getAttribute('data-block-id');
+    }
+    if (!instanceId) {
+      console.warn('Gleame Button: triggerUpload called but no widget found');
+      return;
+    }
+    
+    const fileInput = getElement(instanceId, 'imageUpload');
     if (fileInput) fileInput.click();
   };
   
   // Set button to loading state
-  function setButtonLoading(isLoading) {
-    const widget = document.querySelector('.glimpse-button-widget');
-    const button = widget?.querySelector('#mainButton');
+  function setButtonLoading(instanceId, isLoading) {
+    const instance = getInstance(instanceId);
+    const button = getElement(instanceId, 'mainButton');
     const btnText = button?.querySelector('.btn-text');
     const spinner = button?.querySelector('.btn-spinner');
     
@@ -144,103 +146,115 @@ console.log('Gleame Button Widget v2.0 loaded');
     
     if (isLoading) {
       button.classList.add('is-loading');
-      spinner.style.display = 'block';
-      loadingMessageIndex = 0;
+      if (spinner) spinner.style.display = 'block';
+      instance.loadingMessageIndex = 0;
       btnText.textContent = loadingMessages[0];
       
-      // Cycle through loading messages
-      loadingInterval = setInterval(() => {
-        loadingMessageIndex++;
-        if (loadingMessageIndex < loadingMessages.length) {
-          btnText.textContent = loadingMessages[loadingMessageIndex];
+      instance.loadingInterval = setInterval(() => {
+        instance.loadingMessageIndex++;
+        if (instance.loadingMessageIndex < loadingMessages.length) {
+          btnText.textContent = loadingMessages[instance.loadingMessageIndex];
         }
       }, 2500);
     } else {
       button.classList.remove('is-loading');
-      spinner.style.display = 'none';
-      btnText.textContent = originalButtonText;
+      if (spinner) spinner.style.display = 'none';
+      btnText.textContent = instance.originalButtonText;
       
-      if (loadingInterval) {
-        clearInterval(loadingInterval);
-        loadingInterval = null;
+      if (instance.loadingInterval) {
+        clearInterval(instance.loadingInterval);
+        instance.loadingInterval = null;
       }
     }
   }
   
   // Show results modal
-  function showResults(beforeUrl, afterUrl) {
-    const modal = document.getElementById('resultsModal');
-    const beforeImg = document.getElementById('beforeImage');
-    const afterImg = document.getElementById('afterImage');
+  function showResults(instanceId, beforeUrl, afterUrl) {
+    const modal = getElement(instanceId, 'resultsModal');
+    const beforeImg = getElement(instanceId, 'beforeImage');
+    const afterImg = getElement(instanceId, 'afterImage');
     
     if (beforeImg) beforeImg.src = beforeUrl;
     if (afterImg) afterImg.src = afterUrl;
     if (modal) modal.style.display = 'flex';
     
-    // Prevent body scroll
     document.body.style.overflow = 'hidden';
   }
   
   // Close results modal
-  window.glimpseButton.closeResults = function() {
-    const modal = document.getElementById('resultsModal');
+  window.glimpseButton.closeResults = function(instanceId) {
+    if (!instanceId) {
+      const widget = document.querySelector('.glimpse-button-widget');
+      instanceId = widget?.getAttribute('data-block-id');
+    }
+    
+    const modal = getElement(instanceId, 'resultsModal');
     if (modal) modal.style.display = 'none';
     
-    // Restore body scroll
     document.body.style.overflow = '';
   };
   
   // Show error modal
-  function showError(message) {
-    setButtonLoading(false);
+  function showError(instanceId, message) {
+    setButtonLoading(instanceId, false);
     
-    const modal = document.getElementById('errorModal');
-    const errorMessage = document.getElementById('errorMessage');
+    const modal = getElement(instanceId, 'errorModal');
+    const errorMessage = getElement(instanceId, 'errorMessage');
     
     if (errorMessage) errorMessage.textContent = message;
     if (modal) modal.style.display = 'flex';
     
-    // Prevent body scroll
     document.body.style.overflow = 'hidden';
   }
   
   // Close error modal
-  window.glimpseButton.closeError = function() {
-    const modal = document.getElementById('errorModal');
+  window.glimpseButton.closeError = function(instanceId) {
+    if (!instanceId) {
+      const widget = document.querySelector('.glimpse-button-widget');
+      instanceId = widget?.getAttribute('data-block-id');
+    }
+    
+    const modal = getElement(instanceId, 'errorModal');
     if (modal) modal.style.display = 'none';
     
-    // Restore body scroll
     document.body.style.overflow = '';
   };
   
-  // Try again - close modal and reset
-  window.glimpseButton.tryAgain = function() {
-    window.glimpseButton.closeResults();
-    window.glimpseButton.closeError();
+  // Try again
+  window.glimpseButton.tryAgain = function(instanceId) {
+    if (!instanceId) {
+      const widget = document.querySelector('.glimpse-button-widget');
+      instanceId = widget?.getAttribute('data-block-id');
+    }
     
-    const widget = document.querySelector('.glimpse-button-widget');
-    const imageUpload = widget?.querySelector('#imageUpload');
-    const beforeImage = document.getElementById('beforeImage');
-    const afterImage = document.getElementById('afterImage');
+    window.glimpseButton.closeResults(instanceId);
+    window.glimpseButton.closeError(instanceId);
+    
+    const imageUpload = getElement(instanceId, 'imageUpload');
+    const beforeImage = getElement(instanceId, 'beforeImage');
+    const afterImage = getElement(instanceId, 'afterImage');
     
     if (imageUpload) imageUpload.value = '';
     if (beforeImage) { beforeImage.onload = null; beforeImage.onerror = null; beforeImage.src = ''; }
     if (afterImage) { afterImage.onload = null; afterImage.onerror = null; afterImage.src = ''; }
     
-    // Trigger new upload
-    window.glimpseButton.triggerUpload();
+    window.glimpseButton.triggerUpload(instanceId);
   };
   
   // Reset to initial state
-  window.glimpseButton.reset = function() {
-    setButtonLoading(false);
-    window.glimpseButton.closeResults();
-    window.glimpseButton.closeError();
+  window.glimpseButton.reset = function(instanceId) {
+    if (!instanceId) {
+      const widget = document.querySelector('.glimpse-button-widget');
+      instanceId = widget?.getAttribute('data-block-id');
+    }
     
-    const widget = document.querySelector('.glimpse-button-widget');
-    const imageUpload = widget?.querySelector('#imageUpload');
-    const beforeImage = document.getElementById('beforeImage');
-    const afterImage = document.getElementById('afterImage');
+    setButtonLoading(instanceId, false);
+    window.glimpseButton.closeResults(instanceId);
+    window.glimpseButton.closeError(instanceId);
+    
+    const imageUpload = getElement(instanceId, 'imageUpload');
+    const beforeImage = getElement(instanceId, 'beforeImage');
+    const afterImage = getElement(instanceId, 'afterImage');
     
     if (imageUpload) imageUpload.value = '';
     if (beforeImage) { beforeImage.onload = null; beforeImage.onerror = null; beforeImage.src = ''; }
@@ -303,21 +317,20 @@ console.log('Gleame Button Widget v2.0 loaded');
     return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic', 'heif', 'avif'].includes(ext);
   }
   
-  function processFile(file) {
+  function processFile(instanceId, file) {
     if (!file) return;
     
     if (!isValidImageFile(file)) {
-      showError('Please upload an image file (JPG, PNG, HEIC, etc.).');
+      showError(instanceId, 'Please upload an image file (JPG, PNG, HEIC, etc.).');
       return;
     }
     
     if (file.size > 5 * 1024 * 1024) {
-      showError('Image too large. Please upload an image smaller than 5MB.');
+      showError(instanceId, 'Image too large. Please upload an image smaller than 5MB.');
       return;
     }
     
-    // Start loading state on button
-    setButtonLoading(true);
+    setButtonLoading(instanceId, true);
     
     const reader = new FileReader();
     
@@ -335,29 +348,47 @@ console.log('Gleame Button Widget v2.0 loaded');
           fileToSend = dataUrlToFile(imageDataUrl, file.name || 'selfie.jpg');
         }
         
-        transformImage(isHeic ? file : fileToSend);
+        transformImage(instanceId, isHeic ? file : fileToSend);
       } catch (error) {
-        showError('Error loading image. Please try again.');
+        showError(instanceId, 'Error loading image. Please try again.');
       }
     };
     
-    reader.onerror = () => showError('Error reading the image file.');
+    reader.onerror = () => showError(instanceId, 'Error reading the image file.');
     reader.readAsDataURL(file);
   }
   
-  async function transformImage(file) {
+  async function transformImage(instanceId, file) {
+    const instance = getInstance(instanceId);
+    const widget = getWidgetElement(instanceId);
+    
     try {
-      const freshVariantId = getCurrentVariantId();
-      if (freshVariantId) currentVariantId = freshVariantId;
+      // Late load if needed
+      if (!instance.productId && widget) {
+        instance.productId = widget.getAttribute('data-product-id');
+      }
+      if (!instance.shopDomain && widget) {
+        instance.shopDomain = getShopDomain(widget);
+      }
       
-      if (!currentShopDomain) throw new Error('Could not determine shop domain.');
+      const freshVariantId = getCurrentVariantId();
+      if (freshVariantId) instance.variantId = freshVariantId;
+      
+      if (!instance.productId) throw new Error('Product not found. Please refresh and try again.');
+      if (!instance.shopDomain) throw new Error('Could not determine shop domain.');
       
       const formData = new FormData();
       formData.append('image', file);
-      formData.append('productId', currentProductId);
-      formData.append('shopDomain', currentShopDomain);
+      formData.append('productId', instance.productId);
+      formData.append('shopDomain', instance.shopDomain);
       formData.append('widgetType', 'button');
-      if (currentVariantId) formData.append('variantId', currentVariantId);
+      if (instance.variantId) formData.append('variantId', instance.variantId);
+      
+      console.log('Gleame Button: Sending transform for instance', instanceId, {
+        productId: instance.productId,
+        shopDomain: instance.shopDomain,
+        variantId: instance.variantId
+      });
       
       const response = await fetch(SHOPIFY_APP_URL + '/api/storefront/transform-image', {
         method: 'POST',
@@ -371,63 +402,108 @@ console.log('Gleame Button Widget v2.0 loaded');
         throw new Error(result.error || 'Transformation failed');
       }
       
-      // Stop loading state
-      setButtonLoading(false);
+      setButtonLoading(instanceId, false);
       
-      // Build image URLs
       const beforeUrl = result.processedInputImage 
         ? `data:image/jpeg;base64,${result.processedInputImage}`
         : URL.createObjectURL(file);
       const afterUrl = `data:image/jpeg;base64,${result.generatedImage}`;
       
-      // Show results in modal
-      showResults(beforeUrl, afterUrl);
+      showResults(instanceId, beforeUrl, afterUrl);
       
     } catch (error) {
-      showError(error.message || 'Something went wrong. Please try again.');
+      showError(instanceId, error.message || 'Something went wrong. Please try again.');
     }
   }
   
-  // Close modal when clicking outside
+  // Initialize a single widget instance
+  function initWidgetInstance(widget) {
+    let instanceId = widget.getAttribute('data-block-id');
+    
+    if (!instanceId) {
+      instanceId = 'button-' + Math.random().toString(36).substr(2, 9);
+      widget.setAttribute('data-block-id', instanceId);
+      console.log('Gleame Button: Generated block-id for widget:', instanceId);
+    }
+    
+    const instance = getInstance(instanceId);
+    instance.widget = widget;
+    instance.productId = widget.getAttribute('data-product-id');
+    instance.shopDomain = getShopDomain(widget);
+    instance.variantId = getCurrentVariantId();
+    instance.originalButtonText = widget.getAttribute('data-button-text') || 'TRY IT ON';
+    
+    // Track widget view (only once per instance)
+    if (!instance.viewTracked) {
+      instance.viewTracked = true;
+      trackEvent(instanceId, 'widget_view');
+    }
+    
+    // Move modals to body for proper full-screen overlay
+    const resultsModal = getElement(instanceId, 'resultsModal');
+    const errorModal = getElement(instanceId, 'errorModal');
+    const widgetStyles = widget.getAttribute('style') || '';
+    
+    if (resultsModal && resultsModal.parentElement !== document.body) {
+      resultsModal.setAttribute('style', (resultsModal.getAttribute('style') || '') + ';' + widgetStyles);
+      document.body.appendChild(resultsModal);
+    }
+    if (errorModal && errorModal.parentElement !== document.body) {
+      errorModal.setAttribute('style', (errorModal.getAttribute('style') || '') + ';' + widgetStyles);
+      document.body.appendChild(errorModal);
+    }
+    
+    // Set up file input listener
+    const imageUpload = getElement(instanceId, 'imageUpload');
+    if (imageUpload && !imageUpload.dataset.listenerAttached) {
+      imageUpload.dataset.listenerAttached = 'true';
+      imageUpload.addEventListener('change', function(event) {
+        const files = event.target.files;
+        if (files?.length > 0) processFile(instanceId, files[0]);
+      });
+    }
+    
+    console.log('Gleame Button: Initialized instance', instanceId, {
+      productId: instance.productId,
+      shopDomain: instance.shopDomain
+    });
+  }
+  
+  // Handle overlay click to close
   function handleOverlayClick(e) {
     if (e.target.classList.contains('results-modal-overlay')) {
-      window.glimpseButton.closeResults();
+      const instanceId = e.target.id.replace('resultsModal-', '');
+      window.glimpseButton.closeResults(instanceId);
     }
     if (e.target.classList.contains('error-modal-overlay')) {
-      window.glimpseButton.closeError();
+      const instanceId = e.target.id.replace('errorModal-', '');
+      window.glimpseButton.closeError(instanceId);
     }
   }
   
-  // Close modal on escape key
+  // Handle escape key
   function handleEscapeKey(e) {
     if (e.key === 'Escape') {
-      window.glimpseButton.closeResults();
-      window.glimpseButton.closeError();
+      instances.forEach((instance, id) => {
+        window.glimpseButton.closeResults(id);
+        window.glimpseButton.closeError(id);
+      });
     }
   }
   
   document.addEventListener('DOMContentLoaded', function() {
-    const widget = document.querySelector('.glimpse-button-widget');
-    if (!widget) return;
+    // Initialize all button widgets
+    const widgets = document.querySelectorAll('.glimpse-button-widget');
+    widgets.forEach(widget => initWidgetInstance(widget));
     
-    init();
+    setupVariantListeners();
     
-    const imageUpload = widget.querySelector('#imageUpload');
-    if (imageUpload) {
-      imageUpload.addEventListener('change', function(event) {
-        const files = event.target.files;
-        if (files?.length > 0) processFile(files[0]);
-      });
-    }
-    
-    // Add click outside to close (modals are now on body)
-    const resultsModal = document.getElementById('resultsModal');
-    const errorModal = document.getElementById('errorModal');
-    
-    if (resultsModal) resultsModal.addEventListener('click', handleOverlayClick);
-    if (errorModal) errorModal.addEventListener('click', handleOverlayClick);
+    // Add click outside to close
+    document.addEventListener('click', handleOverlayClick);
     
     // Add escape key listener
     document.addEventListener('keydown', handleEscapeKey);
+    
+    console.log('Gleame Button: Initialized', instances.size, 'widget instance(s)');
   });
 })();

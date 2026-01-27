@@ -46,6 +46,7 @@
 <!-- Gleame Banner Widget -->
 <div class="glimpse-banner-widget"
      data-product-id="{{ product_id }}"
+     data-block-id="{{ block.id }}"
      {% if manual_shop_domain != blank %}data-manual-shop-domain="{{ manual_shop_domain }}"{% endif %}
      style="--banner-height: {{ banner_height }}px;
             --banner-border-radius: {{ banner_border_radius }}px;
@@ -87,7 +88,7 @@
     <div class="banner-main-content">
       <h2 class="banner-title">{{ title_text }}</h2>
       <p class="banner-description">{{ description_text }}</p>
-      <button type="button" class="banner-button button-style-{{ button_style }}" id="bannerMainButton" onclick="window.bannerWidgetFunctions.triggerFileInput()">
+      <button type="button" class="banner-button button-style-{{ button_style }}" id="bannerMainButton-{{ block.id }}" onclick="window.bannerWidgetFunctions.triggerFileInput('{{ block.id }}')">
         <span class="banner-spinner-inline" style="display: none;"></span>
         <span class="button-text">{{ button_text }}</span>
       </button>
@@ -99,15 +100,16 @@
   
   <!-- Hidden File Input -->
   <input type="file" 
-         class="banner-file-input" 
+         class="banner-file-input"
+         id="bannerFileInput-{{ block.id }}"
          accept="image/*,.heic,.heif" 
          style="display: none;"
-         onchange="window.bannerWidgetFunctions.handleFileSelect(event)">
+         onchange="window.bannerWidgetFunctions.handleFileSelect(event, '{{ block.id }}')">
   
   <!-- Results Modal Overlay -->
-  <div class="banner-modal-overlay" id="bannerResultsModal" style="display: none;">
+  <div class="banner-modal-overlay" id="bannerResultsModal-{{ block.id }}" style="display: none;">
     <div class="banner-modal" style="--modal-header-font: {{ header_font_family }}; --modal-header-weight: {{ header_font_weight }}; --modal-body-font: {{ body_font_family }}; --modal-body-weight: {{ body_font_weight }};">
-      <button class="banner-modal-close" type="button" onclick="window.bannerWidgetFunctions.closeModal()">
+      <button class="banner-modal-close" type="button" onclick="window.bannerWidgetFunctions.closeModal('{{ block.id }}')">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M18 6L6 18"/>
           <path d="M6 6l12 12"/>
@@ -122,23 +124,23 @@
           <div class="banner-modal-comparison">
             <div class="banner-modal-side">
               <span class="banner-modal-label">BEFORE</span>
-              <img class="banner-modal-img result-before" src="" alt="Before" width="200" height="200">
+              <img class="banner-modal-img result-before" id="bannerBeforeImage-{{ block.id }}" src="" alt="Before" width="200" height="200">
             </div>
             <div class="banner-modal-divider">
               <div class="banner-divider-line"></div>
             </div>
             <div class="banner-modal-side">
               <span class="banner-modal-label">AFTER</span>
-              <img class="banner-modal-img result-after" src="" alt="After" width="200" height="200">
+              <img class="banner-modal-img result-after" id="bannerAfterImage-{{ block.id }}" src="" alt="After" width="200" height="200">
             </div>
           </div>
         </div>
         <p class="banner-modal-disclaimer">Results may vary. Preview is a visual simulation.</p>
         <div class="banner-modal-actions">
-          <button type="button" class="banner-modal-btn banner-modal-btn-secondary" onclick="window.bannerWidgetFunctions.tryAgain()">
+          <button type="button" class="banner-modal-btn banner-modal-btn-secondary" onclick="window.bannerWidgetFunctions.tryAgain('{{ block.id }}')">
             Try a different photo
           </button>
-          <button type="button" class="banner-modal-btn banner-modal-btn-primary" onclick="window.bannerWidgetFunctions.closeModal()">
+          <button type="button" class="banner-modal-btn banner-modal-btn-primary" onclick="window.bannerWidgetFunctions.closeModal('{{ block.id }}')">
             Close
           </button>
         </div>
@@ -147,17 +149,17 @@
   </div>
   
   <!-- Error Modal Overlay -->
-  <div class="banner-modal-overlay banner-error-modal" id="bannerErrorModal" style="display: none;">
+  <div class="banner-modal-overlay banner-error-modal" id="bannerErrorModal-{{ block.id }}" style="display: none;">
     <div class="banner-modal">
-      <button class="banner-modal-close" type="button" onclick="window.bannerWidgetFunctions.closeModal()">
+      <button class="banner-modal-close" type="button" onclick="window.bannerWidgetFunctions.closeModal('{{ block.id }}')">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M18 6L6 18"/>
           <path d="M6 6l12 12"/>
         </svg>
       </button>
       <div class="banner-modal-content">
-        <p class="banner-modal-error" id="bannerErrorMessage"></p>
-        <button type="button" class="banner-button button-style-{{ button_style }}" onclick="window.bannerWidgetFunctions.tryAgain()">
+        <p class="banner-modal-error" id="bannerErrorMessage-{{ block.id }}"></p>
+        <button type="button" class="banner-button button-style-{{ button_style }}" onclick="window.bannerWidgetFunctions.tryAgain('{{ block.id }}')">
           <span class="button-text">Try Again</span>
         </button>
       </div>
