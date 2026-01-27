@@ -186,6 +186,13 @@ console.log('Gleame Banner Widget v3.0 loaded');
     if (errorModal) errorModal.style.display = 'none';
     
     document.body.style.overflow = '';
+
+    // Clean up any object URLs to prevent memory leaks
+    const instance = instances.get(instanceId);
+    if (instance?.beforeUrlToRevoke) {
+      URL.revokeObjectURL(instance.beforeUrlToRevoke);
+      instance.beforeUrlToRevoke = null;
+    }
   };
 
   // Try again - close modal and open file picker
@@ -334,8 +341,14 @@ console.log('Gleame Banner Widget v3.0 loaded');
       const img = new Image();
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
+      let objectUrl = null;
 
       img.onload = () => {
+        // Revoke object URL to prevent memory leak
+        if (objectUrl) {
+          URL.revokeObjectURL(objectUrl);
+        }
+
         let { width, height } = img;
         const maxDimension = 1200;
 
@@ -366,8 +379,16 @@ console.log('Gleame Banner Widget v3.0 loaded');
         );
       };
 
-      img.onerror = () => reject(new Error('Failed to load image'));
-      img.src = URL.createObjectURL(file);
+      img.onerror = () => {
+        // Revoke object URL on error too
+        if (objectUrl) {
+          URL.revokeObjectURL(objectUrl);
+        }
+        reject(new Error('Failed to load image'));
+      };
+
+      objectUrl = URL.createObjectURL(file);
+      img.src = objectUrl;
     });
   }
 
@@ -411,11 +432,26 @@ console.log('Gleame Banner Widget v3.0 loaded');
       variantId: instance.variantId
     });
 
-    const response = await fetch(SHOPIFY_APP_URL + '/api/storefront/transform-image', {
-      method: 'POST',
-      body: formData,
-      headers: { 'X-Requested-With': 'XMLHttpRequest' }
-    });
+    // Create abort controller for timeout (45 seconds)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
+
+    let response;
+    try {
+      response = await fetch(SHOPIFY_APP_URL + '/api/storefront/transform-image', {
+        method: 'POST',
+        body: formData,
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        signal: controller.signal
+      });
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      if (fetchError.name === 'AbortError') {
+        throw new Error('Request timed out. Please try again.');
+      }
+      throw new Error('Network error. Please check your connection and try again.');
+    }
+    clearTimeout(timeoutId);
 
     const responseText = await response.text();
     let result;
@@ -438,9 +474,17 @@ console.log('Gleame Banner Widget v3.0 loaded');
       throw new Error('No transformed image received');
     }
 
-    const beforeUrl = result.processedInputImage 
-      ? `data:image/jpeg;base64,${result.processedInputImage}`
-      : URL.createObjectURL(file);
+    // Use data URL from server if available, otherwise create object URL (and track for cleanup)
+    let beforeUrl;
+    let beforeUrlNeedsRevoke = false;
+    if (result.processedInputImage) {
+      beforeUrl = `data:image/jpeg;base64,${result.processedInputImage}`;
+    } else {
+      beforeUrl = URL.createObjectURL(file);
+      beforeUrlNeedsRevoke = true;
+      // Store for cleanup when modal closes
+      instance.beforeUrlToRevoke = beforeUrl;
+    }
     const afterUrl = `data:image/jpeg;base64,${result.generatedImage}`;
     
     setButtonLoading(instanceId, false);

@@ -244,6 +244,13 @@ console.log('Gleame Button Widget v3.0 loaded');
     if (modal) modal.style.display = 'none';
     
     document.body.style.overflow = '';
+
+    // Clean up any object URLs to prevent memory leaks
+    const instance = instances.get(instanceId);
+    if (instance?.beforeUrlToRevoke) {
+      URL.revokeObjectURL(instance.beforeUrlToRevoke);
+      instance.beforeUrlToRevoke = null;
+    }
   };
   
   // Show error modal
@@ -442,13 +449,33 @@ console.log('Gleame Button Widget v3.0 loaded');
         variantId: instance.variantId
       });
       
-      const response = await fetch(SHOPIFY_APP_URL + '/api/storefront/transform-image', {
-        method: 'POST',
-        body: formData,
-        headers: { 'X-Requested-With': 'XMLHttpRequest' }
-      });
+      // Create abort controller for timeout (45 seconds)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 45000);
+
+      let response;
+      try {
+        response = await fetch(SHOPIFY_APP_URL + '/api/storefront/transform-image', {
+          method: 'POST',
+          body: formData,
+          headers: { 'X-Requested-With': 'XMLHttpRequest' },
+          signal: controller.signal
+        });
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        if (fetchError.name === 'AbortError') {
+          throw new Error('Request timed out. Please try again.');
+        }
+        throw new Error('Network error. Please check your connection and try again.');
+      }
+      clearTimeout(timeoutId);
       
-      const result = await response.json();
+      let result;
+      try {
+        result = await response.json();
+      } catch (parseError) {
+        throw new Error('Invalid server response. Please try again.');
+      }
       
       console.log('Gleame Button: API response', {
         ok: response.ok,
@@ -470,9 +497,15 @@ console.log('Gleame Button Widget v3.0 loaded');
       
       setButtonLoading(instanceId, false);
       
-      const beforeUrl = result.processedInputImage 
-        ? `data:image/jpeg;base64,${result.processedInputImage}`
-        : URL.createObjectURL(file);
+      // Use data URL from server if available, otherwise create object URL (and track for cleanup)
+      let beforeUrl;
+      if (result.processedInputImage) {
+        beforeUrl = `data:image/jpeg;base64,${result.processedInputImage}`;
+      } else {
+        beforeUrl = URL.createObjectURL(file);
+        // Store for cleanup when modal closes
+        instance.beforeUrlToRevoke = beforeUrl;
+      }
       const afterUrl = `data:image/jpeg;base64,${result.generatedImage}`;
       
       console.log('Gleame Button: Showing results with images', {

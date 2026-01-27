@@ -584,11 +584,26 @@ console.log('Gleame Integrated Widget v2.0 loaded');
       
       const apiUrl = SHOPIFY_APP_URL + '/api/storefront/transform-image';
       
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        body: formData,
-        headers: { 'X-Requested-With': 'XMLHttpRequest' }
-      });
+      // Create abort controller for timeout (45 seconds)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 45000);
+
+      let response;
+      try {
+        response = await fetch(apiUrl, {
+          method: 'POST',
+          body: formData,
+          headers: { 'X-Requested-With': 'XMLHttpRequest' },
+          signal: controller.signal
+        });
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        if (fetchError.name === 'AbortError') {
+          throw new Error('Request timed out. Please try again.');
+        }
+        throw new Error('Network error. Please check your connection and try again.');
+      }
+      clearTimeout(timeoutId);
       
       const responseText = await response.text();
       let result;

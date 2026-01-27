@@ -170,6 +170,35 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 };
 
+// Sanitize and validate prompt input
+function sanitizePrompt(prompt: string | null): { valid: boolean; sanitized: string; error?: string } {
+  if (!prompt || typeof prompt !== 'string') {
+    return { valid: false, sanitized: '', error: 'Prompt is required' };
+  }
+  
+  // Trim and limit length (max 10KB to prevent abuse)
+  let sanitized = prompt.trim();
+  const MAX_LENGTH = 10000;
+  
+  if (sanitized.length > MAX_LENGTH) {
+    return { valid: false, sanitized: '', error: `Prompt too long (max ${MAX_LENGTH} characters)` };
+  }
+  
+  // Remove potential script tags and other dangerous HTML (prompts should be plain text)
+  sanitized = sanitized
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/<[^>]*>/g, ''); // Remove any HTML tags
+  
+  return { valid: true, sanitized };
+}
+
+// Validate UUID format
+function isValidUUID(id: string | null): boolean {
+  if (!id) return false;
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(id);
+}
+
 export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const actionType = formData.get("action");
@@ -178,16 +207,27 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const productId = formData.get("productId") as string;
     const newPrompt = formData.get("prompt") as string;
 
+    // Validate productId
+    if (!isValidUUID(productId)) {
+      return json({ success: false, error: "Invalid product ID" });
+    }
+
+    // Sanitize prompt
+    const { valid, sanitized, error } = sanitizePrompt(newPrompt);
+    if (!valid) {
+      return json({ success: false, error });
+    }
+
     console.log("📝 Updating prompt for product:", productId);
 
-    const { error } = await supabase
+    const { error: dbError } = await supabase
       .from("products")
-      .update({ transformation_prompt: newPrompt })
+      .update({ transformation_prompt: sanitized })
       .eq("id", productId);
 
-    if (error) {
-      console.error("Error updating prompt:", error);
-      return json({ success: false, error: error.message });
+    if (dbError) {
+      console.error("Error updating prompt:", dbError);
+      return json({ success: false, error: dbError.message });
     }
 
     console.log("✅ Prompt updated successfully");
@@ -198,16 +238,27 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const variantId = formData.get("variantId") as string;
     const newPrompt = formData.get("prompt") as string;
 
+    // Validate variantId
+    if (!isValidUUID(variantId)) {
+      return json({ success: false, error: "Invalid variant ID" });
+    }
+
+    // Sanitize prompt
+    const { valid, sanitized, error } = sanitizePrompt(newPrompt);
+    if (!valid) {
+      return json({ success: false, error });
+    }
+
     console.log("📝 Updating prompt for variant:", variantId);
 
-    const { error } = await supabase
+    const { error: dbError } = await supabase
       .from("product_variants")
-      .update({ transformation_prompt: newPrompt })
+      .update({ transformation_prompt: sanitized })
       .eq("id", variantId);
 
-    if (error) {
-      console.error("Error updating variant prompt:", error);
-      return json({ success: false, error: error.message });
+    if (dbError) {
+      console.error("Error updating variant prompt:", dbError);
+      return json({ success: false, error: dbError.message });
     }
 
     console.log("✅ Variant prompt updated successfully");
