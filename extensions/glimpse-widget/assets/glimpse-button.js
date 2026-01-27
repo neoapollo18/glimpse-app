@@ -38,9 +38,18 @@ console.log('Gleame Button Widget v3.0 loaded');
 
   // Get element by ID with instance suffix, with fallback to legacy ID
   function getElement(instanceId, baseId) {
-    let el = document.getElementById(`${baseId}-${instanceId}`);
-    if (el) return el;
+    // First try the new format with instance suffix
+    const newId = `${baseId}-${instanceId}`;
+    let el = document.getElementById(newId);
+    if (el) {
+      return el;
+    }
+    
+    // Fallback to legacy ID (no suffix)
     el = document.getElementById(baseId);
+    if (el) {
+      console.log(`Gleame Button: Using legacy ID "${baseId}" (new ID "${newId}" not found)`);
+    }
     return el;
   }
   
@@ -170,13 +179,56 @@ console.log('Gleame Button Widget v3.0 loaded');
   
   // Show results modal
   function showResults(instanceId, beforeUrl, afterUrl) {
-    const modal = getElement(instanceId, 'resultsModal');
-    const beforeImg = getElement(instanceId, 'beforeImage');
-    const afterImg = getElement(instanceId, 'afterImage');
+    console.log('Gleame Button: showResults called for instance', instanceId);
     
-    if (beforeImg) beforeImg.src = beforeUrl;
-    if (afterImg) afterImg.src = afterUrl;
-    if (modal) modal.style.display = 'flex';
+    const modal = getElement(instanceId, 'resultsModal');
+    
+    // Try to find images - first by global ID, then within modal context
+    let beforeImg = getElement(instanceId, 'beforeImage');
+    let afterImg = getElement(instanceId, 'afterImage');
+    
+    // Fallback: search within the modal if not found globally
+    if (!beforeImg && modal) {
+      beforeImg = modal.querySelector(`#beforeImage-${instanceId}`) || modal.querySelector('[id^="beforeImage"]');
+      if (beforeImg) console.log('Gleame Button: Found beforeImg via modal querySelector');
+    }
+    if (!afterImg && modal) {
+      afterImg = modal.querySelector(`#afterImage-${instanceId}`) || modal.querySelector('[id^="afterImage"]');
+      if (afterImg) console.log('Gleame Button: Found afterImg via modal querySelector');
+    }
+    
+    console.log('Gleame Button: Found elements -', {
+      modal: !!modal,
+      modalId: modal?.id,
+      beforeImg: !!beforeImg,
+      afterImg: !!afterImg,
+      beforeImgId: beforeImg?.id,
+      afterImgId: afterImg?.id
+    });
+    
+    if (beforeImg) {
+      beforeImg.onerror = () => console.error('Gleame Button: Before image failed to load');
+      beforeImg.onload = () => console.log('Gleame Button: Before image loaded successfully');
+      beforeImg.src = beforeUrl;
+      console.log('Gleame Button: Set beforeImg src, length:', beforeUrl?.length, 'starts with:', beforeUrl?.substring(0, 50));
+    } else {
+      console.error('Gleame Button: beforeImage element not found for instance', instanceId);
+    }
+    
+    if (afterImg) {
+      afterImg.onerror = () => console.error('Gleame Button: After image failed to load');
+      afterImg.onload = () => console.log('Gleame Button: After image loaded successfully');
+      afterImg.src = afterUrl;
+      console.log('Gleame Button: Set afterImg src, length:', afterUrl?.length, 'starts with:', afterUrl?.substring(0, 50));
+    } else {
+      console.error('Gleame Button: afterImage element not found for instance', instanceId);
+    }
+    
+    if (modal) {
+      modal.style.display = 'flex';
+    } else {
+      console.error('Gleame Button: resultsModal element not found for instance', instanceId);
+    }
     
     document.body.style.overflow = 'hidden';
   }
@@ -398,8 +450,22 @@ console.log('Gleame Button Widget v3.0 loaded');
       
       const result = await response.json();
       
+      console.log('Gleame Button: API response', {
+        ok: response.ok,
+        status: response.status,
+        success: result.success,
+        hasGeneratedImage: !!result.generatedImage,
+        hasProcessedInput: !!result.processedInputImage,
+        error: result.error
+      });
+      
       if (!response.ok || !result.success) {
         throw new Error(result.error || 'Transformation failed');
+      }
+      
+      // Validate that we have the generated image
+      if (!result.generatedImage) {
+        throw new Error('No image was generated. Please try again.');
       }
       
       setButtonLoading(instanceId, false);
@@ -408,6 +474,11 @@ console.log('Gleame Button Widget v3.0 loaded');
         ? `data:image/jpeg;base64,${result.processedInputImage}`
         : URL.createObjectURL(file);
       const afterUrl = `data:image/jpeg;base64,${result.generatedImage}`;
+      
+      console.log('Gleame Button: Showing results with images', {
+        beforeUrlLength: beforeUrl?.length,
+        afterUrlLength: afterUrl?.length
+      });
       
       showResults(instanceId, beforeUrl, afterUrl);
       
@@ -444,9 +515,26 @@ console.log('Gleame Button Widget v3.0 loaded');
     const errorModal = getElement(instanceId, 'errorModal');
     const widgetStyles = widget.getAttribute('style') || '';
     
+    console.log('Gleame Button: Moving modals for instance', instanceId, {
+      resultsModalFound: !!resultsModal,
+      resultsModalId: resultsModal?.id,
+      errorModalFound: !!errorModal,
+      errorModalId: errorModal?.id
+    });
+    
     if (resultsModal && resultsModal.parentElement !== document.body) {
       resultsModal.setAttribute('style', (resultsModal.getAttribute('style') || '') + ';' + widgetStyles);
       document.body.appendChild(resultsModal);
+      
+      // Verify images are still accessible after move
+      const beforeImg = resultsModal.querySelector(`#beforeImage-${instanceId}`) || resultsModal.querySelector('#beforeImage');
+      const afterImg = resultsModal.querySelector(`#afterImage-${instanceId}`) || resultsModal.querySelector('#afterImage');
+      console.log('Gleame Button: After move - images accessible:', {
+        beforeImg: !!beforeImg,
+        beforeImgId: beforeImg?.id,
+        afterImg: !!afterImg,
+        afterImgId: afterImg?.id
+      });
     }
     if (errorModal && errorModal.parentElement !== document.body) {
       errorModal.setAttribute('style', (errorModal.getAttribute('style') || '') + ';' + widgetStyles);
