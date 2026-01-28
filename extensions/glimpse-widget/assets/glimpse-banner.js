@@ -97,6 +97,24 @@ console.log('Gleame Banner Widget v3.0 loaded');
     return null;
   }
 
+  // Setup listeners to detect variant changes on product page
+  function setupVariantListeners() {
+    const variantSelect = document.querySelector('select[name="id"]');
+    if (variantSelect) {
+      variantSelect.addEventListener('change', e => {
+        instances.forEach((instance, id) => { instance.variantId = e.target.value; });
+      });
+    }
+    
+    // Listen for Shopify's variant change custom event
+    document.addEventListener('variant:change', event => {
+      if (event.detail?.variant?.id) {
+        const variantId = event.detail.variant.id.toString();
+        instances.forEach((instance, id) => { instance.variantId = variantId; });
+      }
+    });
+  }
+
   // Get button elements for an instance
   function getButton(instanceId) {
     return getElement(instanceId, 'bannerMainButton');
@@ -543,6 +561,9 @@ console.log('Gleame Banner Widget v3.0 loaded');
   function init() {
     const widgets = document.querySelectorAll('.glimpse-banner-widget');
     widgets.forEach(widget => initWidgetInstance(widget));
+    
+    // Setup variant change listeners
+    setupVariantListeners();
     
     // Close modal on clicking overlay background
     document.addEventListener('click', (e) => {

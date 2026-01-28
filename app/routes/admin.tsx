@@ -268,15 +268,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   return json({ success: false, error: "Unknown action" });
 };
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
-
 export default function FoundersAdmin() {
   const { shops, stats, error } = useLoaderData<typeof loader>();
   const submit = useSubmit();
-
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [passwordInput, setPasswordInput] = useState("");
-  const [passwordError, setPasswordError] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedShop, setExpandedShop] = useState<string | null>(null);
@@ -291,15 +285,6 @@ export default function FoundersAdmin() {
   const [testImageUrl, setTestImageUrl] = useState("");
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testLoading, setTestLoading] = useState(false);
-
-  const handleLogin = () => {
-    if (passwordInput === ADMIN_PASSWORD) {
-      setIsAuthenticated(true);
-      setPasswordError(false);
-    } else {
-      setPasswordError(true);
-    }
-  };
 
   // Filter shops by search query
   const filteredShops = (shops || []).filter((shop: Shop) =>
@@ -408,41 +393,6 @@ export default function FoundersAdmin() {
       setTestLoading(false);
     }
   };
-
-  // Password gate
-  if (!isAuthenticated) {
-    return (
-      <AppProvider i18n={enTranslations}>
-        <Page>
-          <div style={{ 
-            display: "flex", 
-            justifyContent: "center", 
-            alignItems: "center", 
-            minHeight: "60vh" 
-          }}>
-            <Card>
-              <form onSubmit={(e) => { e.preventDefault(); handleLogin(); }}>
-                <BlockStack gap="400">
-                  <Text as="h2" variant="headingLg">Gleame Admin</Text>
-                  <TextField
-                    label="Password"
-                    type="password"
-                    value={passwordInput}
-                    onChange={setPasswordInput}
-                    autoComplete="off"
-                    error={passwordError ? "Incorrect password" : undefined}
-                  />
-                  <Button variant="primary" submit>
-                    Enter
-                  </Button>
-                </BlockStack>
-              </form>
-            </Card>
-          </div>
-        </Page>
-      </AppProvider>
-    );
-  }
 
   return (
     <AppProvider i18n={enTranslations}>
