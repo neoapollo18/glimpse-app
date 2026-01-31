@@ -249,7 +249,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return json({ success: false, error });
     }
 
-    console.log("📝 Updating prompt for variant:", variantId);
+    console.log("📝 Updating prompt for variant: ", variantId);
 
     const { error: dbError } = await supabase
       .from("product_variants")
