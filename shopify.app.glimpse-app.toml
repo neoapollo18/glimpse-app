@@ -21,12 +21,16 @@ api_version = "2025-07"
   uri = "/webhooks/app/uninstalled"
 
   [[webhooks.subscriptions]]
+  topics = [ "orders/create" ]
+  uri = "/webhooks/orders"
+
+  [[webhooks.subscriptions]]
   compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
   uri = "https://glimpse-app-charles.onrender.com/webhooks"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_products,read_reports"
+scopes = "write_products,read_reports,read_orders"
 
 [auth]
 redirect_urls = [

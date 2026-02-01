@@ -269,7 +269,8 @@ export async function trackTransformationEvent(
   shopDomain: string,
   shopifyProductId: string,
   eventType: string = 'transformation',
-  widgetType: string = 'unknown'
+  widgetType: string = 'unknown',
+  cartToken?: string
 ) {
   try {
     // Get shop with fallback logic
@@ -312,7 +313,8 @@ export async function trackTransformationEvent(
               shop_id: shop.id,
               product_id: altProduct.id,
               event_type: eventType,
-              widget_type: widgetType
+              widget_type: widgetType,
+              cart_token: cartToken || null
             }])
             .select()
             .single();
@@ -338,7 +340,8 @@ export async function trackTransformationEvent(
         shop_id: shop.id,
         product_id: product.id,
         event_type: eventType,
-        widget_type: widgetType
+        widget_type: widgetType,
+        cart_token: cartToken || null
       }])
       .select()
       .single();
@@ -352,6 +355,99 @@ export async function trackTransformationEvent(
     return data;
   } catch (error) {
     console.error('Error in trackTransformationEvent:', error);
+    return null;
+  }
+}
+
+/**
+ * Record an order from the orders/create webhook
+ * Used for conversion attribution tracking
+ */
+export async function recordOrder(
+  shopDomain: string,
+  orderData: {
+    shopifyOrderId: string;
+    cartToken?: string;
+    orderNumber?: string;
+    totalPrice?: number;
+    currency?: string;
+    customerId?: string;
+    createdAt?: string;
+  }
+) {
+  try {
+    const shop = await findShopByDomain(shopDomain);
+    if (!shop) {
+      console.log('Shop not found for order tracking:', shopDomain);
+      return null;
+    }
+
+    const { data, error } = await supabase
+      .from('widget_orders')
+      .upsert([{
+        shop_id: shop.id,
+        shopify_order_id: orderData.shopifyOrderId,
+        cart_token: orderData.cartToken || null,
+        order_number: orderData.orderNumber || null,
+        total_price: orderData.totalPrice || null,
+        currency: orderData.currency || 'USD',
+        customer_id: orderData.customerId || null,
+        shopify_created_at: orderData.createdAt || new Date().toISOString()
+      }], {
+        onConflict: 'shop_id,shopify_order_id'
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error recording order:', error);
+      return null;
+    }
+
+    console.log('Order recorded for conversion tracking:', data?.id);
+    return data;
+  } catch (error) {
+    console.error('Error in recordOrder:', error);
+    return null;
+  }
+}
+
+/**
+ * Get conversion attribution stats for a shop
+ * Shows what % of orders had widget usage before purchase
+ */
+export async function getConversionStats(shopDomain: string, daysBack: number = 30) {
+  try {
+    const shop = await findShopByDomain(shopDomain);
+    if (!shop) {
+      console.log('Shop not found for conversion stats:', shopDomain);
+      return null;
+    }
+
+    // Call the database function
+    const { data, error } = await supabase
+      .rpc('get_conversion_stats', {
+        p_shop_id: shop.id,
+        p_days_back: daysBack
+      });
+
+    if (error) {
+      console.error('Error getting conversion stats:', error);
+      return null;
+    }
+
+    // RPC returns array, get first row
+    const stats = Array.isArray(data) ? data[0] : data;
+    
+    return {
+      totalOrders: Number(stats?.total_orders || 0),
+      ordersWithWidgetUsage: Number(stats?.orders_with_widget_usage || 0),
+      conversionRate: Number(stats?.conversion_rate || 0),
+      totalRevenue: Number(stats?.total_revenue || 0),
+      widgetAttributedRevenue: Number(stats?.widget_attributed_revenue || 0)
+    };
+  } catch (error) {
+    console.error('Error in getConversionStats:', error);
     return null;
   }
 }

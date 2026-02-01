@@ -20,6 +20,7 @@ console.log('Gleame Integrated Widget v2.0 loaded');
         productId: null,
         shopDomain: null,
         variantId: null,
+        cartToken: null,
         loadingTextInterval: null,
         viewTracked: false,
         widget: null
@@ -139,15 +140,22 @@ console.log('Gleame Integrated Widget v2.0 loaded');
     const instance = getInstance(instanceId);
     if (!instance.shopDomain || !instance.productId) return;
     
+    const payload = {
+      shopDomain: instance.shopDomain,
+      productId: instance.productId,
+      eventType: eventType,
+      widgetType: WIDGET_TYPE
+    };
+    
+    // Include cart token for conversion tracking if available
+    if (instance.cartToken) {
+      payload.cartToken = instance.cartToken;
+    }
+    
     fetch(SHOPIFY_APP_URL + '/api/storefront/track-event', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        shopDomain: instance.shopDomain,
-        productId: instance.productId,
-        eventType: eventType,
-        widgetType: WIDGET_TYPE
-      })
+      body: JSON.stringify(payload)
     }).catch(() => {}); // Silent fail
   }
 
@@ -167,6 +175,8 @@ console.log('Gleame Integrated Widget v2.0 loaded');
     instance.productId = widget.getAttribute('data-product-id');
     instance.shopDomain = getShopDomain(widget);
     instance.variantId = getCurrentVariantId();
+    const rawCartToken = widget.getAttribute('data-cart-token');
+    instance.cartToken = (rawCartToken && rawCartToken.trim()) ? rawCartToken.trim() : null;
     
     // Log initialization for debugging
     console.log('Gleame: initWidgetInstance', instanceId, {

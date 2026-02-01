@@ -39,7 +39,8 @@
 <div class="glimpse-button-widget" 
      data-product-id="{{ product_id }}"
      data-block-id="{{ block.id }}"
-     data-button-text="{{ button_text }}"{% if manual_shop_domain != blank %}
+     data-button-text="{{ button_text }}"
+     data-cart-token="{{ cart.token }}"{% if manual_shop_domain != blank %}
      data-manual-shop-domain="{{ manual_shop_domain }}"{% endif %}
      style="--solid-button-color: {{ solid_button_color }};
             --button-text-color: {{ button_text_color }};

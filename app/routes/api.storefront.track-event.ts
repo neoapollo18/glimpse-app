@@ -41,7 +41,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   try {
     const body = await request.json();
-    const { shopDomain, productId, eventType, widgetType } = body;
+    const { shopDomain, productId, eventType, widgetType, cartToken } = body;
 
     if (!shopDomain || !productId || !eventType) {
       return json({ error: "Missing required fields" }, { 
@@ -51,7 +51,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     // Only allow specific event types
-    const allowedEvents = ['widget_view', 'add_to_cart'];
+    const allowedEvents = ['widget_view', 'add_to_cart', 'transformation'];
     if (!allowedEvents.includes(eventType)) {
       return json({ error: "Invalid event type" }, { 
         status: 400,
@@ -59,8 +59,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       });
     }
 
-    // Track the event (fire and forget for speed)
-    trackTransformationEvent(shopDomain, productId, eventType, widgetType || 'unknown').catch(err => {
+    // Validate and sanitize cart token (Shopify tokens are alphanumeric, typically 32 chars)
+    let sanitizedCartToken: string | undefined = undefined;
+    if (cartToken && typeof cartToken === 'string') {
+      const trimmed = cartToken.trim();
+      // Only accept alphanumeric tokens up to 64 chars (Shopify tokens are ~32)
+      if (/^[a-zA-Z0-9-_]+$/.test(trimmed) && trimmed.length <= 64) {
+        sanitizedCartToken = trimmed;
+      }
+    }
+
+    // Track the event with cart token for conversion attribution (fire and forget for speed)
+    trackTransformationEvent(
+      shopDomain, 
+      productId, 
+      eventType, 
+      widgetType || 'unknown',
+      sanitizedCartToken
+    ).catch(err => {
       console.error('Failed to track event:', err);
     });
 

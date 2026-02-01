@@ -75,7 +75,8 @@
 <!-- Gleame AI Transformation Widget - Integrated Horizontal Design -->
 <div class="glimpse-integrated-horizontal{% unless enable_container %} no-container{% endunless %}" 
      data-product-id="{{ product_id }}"
-     data-block-id="{{ block.id }}"{% if manual_shop_domain != blank %}
+     data-block-id="{{ block.id }}"
+     data-cart-token="{{ cart.token }}"{% if manual_shop_domain != blank %}
      data-manual-shop-domain="{{ manual_shop_domain }}"{% endif %}
      style="--solid-button-color: {{ solid_button_color }};
             --background-color: {{ background_color }}; 

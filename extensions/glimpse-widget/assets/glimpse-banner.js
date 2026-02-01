@@ -21,9 +21,11 @@ console.log('Gleame Banner Widget v3.0 loaded');
         productId: null,
         shopDomain: null,
         variantId: null,
+        cartToken: null,
         originalButtonText: '',
         loadingInterval: null,
         loadingMessageIndex: 0,
+        viewTracked: false,
         widget: null
       });
     }
@@ -95,6 +97,30 @@ console.log('Gleame Banner Widget v3.0 loaded');
     if (variantParam) return variantParam;
     
     return null;
+  }
+
+  // Track analytics event
+  function trackEvent(instanceId, eventType) {
+    const instance = getInstance(instanceId);
+    if (!instance.shopDomain || !instance.productId) return;
+    
+    const payload = {
+      shopDomain: instance.shopDomain,
+      productId: instance.productId,
+      eventType: eventType,
+      widgetType: WIDGET_TYPE
+    };
+    
+    // Include cart token for conversion tracking if available
+    if (instance.cartToken) {
+      payload.cartToken = instance.cartToken;
+    }
+    
+    fetch(SHOPIFY_APP_URL + '/api/storefront/track-event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(() => {});
   }
 
   // Setup listeners to detect variant changes on product page
@@ -524,6 +550,8 @@ console.log('Gleame Banner Widget v3.0 loaded');
     instance.productId = widget.getAttribute('data-product-id');
     instance.shopDomain = getShopDomain(widget);
     instance.variantId = getCurrentVariantId();
+    const rawCartToken = widget.getAttribute('data-cart-token');
+    instance.cartToken = (rawCartToken && rawCartToken.trim()) ? rawCartToken.trim() : null;
     
     const btnText = getButtonText(instanceId);
     if (btnText) {
@@ -555,6 +583,12 @@ console.log('Gleame Banner Widget v3.0 loaded');
       productId: instance.productId,
       shopDomain: instance.shopDomain
     });
+    
+    // Track widget view (only once per instance)
+    if (!instance.viewTracked && instance.shopDomain && instance.productId) {
+      instance.viewTracked = true;
+      trackEvent(instanceId, 'widget_view');
+    }
   }
 
   // Initialize all widgets

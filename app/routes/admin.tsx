@@ -62,12 +62,21 @@ interface Product {
   variant_configs?: VariantConfig[];
 }
 
+interface ConversionStats {
+  totalOrders: number;
+  ordersWithWidgetUsage: number;
+  conversionRate: number;
+  totalRevenue: number;
+  widgetAttributedRevenue: number;
+}
+
 interface Shop {
   id: string;
   shop_domain: string;
   shopify_id: string;
   shop_name: string | null;
   products: Product[];
+  conversionStats?: ConversionStats | null;
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -134,7 +143,33 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           ),
         }));
 
-        return { ...shop, products: productsWithVariants };
+        // Fetch conversion stats for this shop (last 30 days)
+        let conversionStats = null;
+        try {
+          const { data: statsData, error: statsError } = await supabase
+            .rpc('get_conversion_stats', {
+              p_shop_id: shop.id,
+              p_days_back: 30
+            });
+          
+          if (!statsError && statsData) {
+            const stats = Array.isArray(statsData) ? statsData[0] : statsData;
+            if (stats) {
+              conversionStats = {
+                totalOrders: Number(stats.total_orders || 0),
+                ordersWithWidgetUsage: Number(stats.orders_with_widget_usage || 0),
+                conversionRate: Number(stats.conversion_rate || 0),
+                totalRevenue: Number(stats.total_revenue || 0),
+                widgetAttributedRevenue: Number(stats.widget_attributed_revenue || 0)
+              };
+            }
+          }
+        } catch (e) {
+          // Conversion stats table may not exist yet (migration not run)
+          console.log('Conversion stats not available for', shop.shop_domain);
+        }
+
+        return { ...shop, products: productsWithVariants, conversionStats };
       })
     );
 
@@ -475,6 +510,32 @@ export default function FoundersAdmin() {
                     {expandedShop === shop.id ? "Collapse" : "View Products"}
                   </Button>
                 </InlineStack>
+
+                {/* Conversion Stats - Always visible */}
+                {shop.conversionStats && shop.conversionStats.totalOrders > 0 && (
+                  <Box background="bg-surface-secondary" padding="300" borderRadius="200">
+                    <InlineStack gap="600" wrap={false}>
+                      <BlockStack gap="050">
+                        <Text as="p" variant="bodySm" tone="subdued">Orders (30d)</Text>
+                        <Text as="p" variant="headingSm">{shop.conversionStats.totalOrders}</Text>
+                      </BlockStack>
+                      <BlockStack gap="050">
+                        <Text as="p" variant="bodySm" tone="subdued">Widget-Influenced</Text>
+                        <Text as="p" variant="headingSm">{shop.conversionStats.ordersWithWidgetUsage}</Text>
+                      </BlockStack>
+                      <BlockStack gap="050">
+                        <Text as="p" variant="bodySm" tone="subdued">Conversion Rate</Text>
+                        <Text as="p" variant="headingSm" tone="success">{shop.conversionStats.conversionRate}%</Text>
+                      </BlockStack>
+                      <BlockStack gap="050">
+                        <Text as="p" variant="bodySm" tone="subdued">Attributed Revenue</Text>
+                        <Text as="p" variant="headingSm" tone="success">
+                          ${shop.conversionStats.widgetAttributedRevenue.toLocaleString()}
+                        </Text>
+                      </BlockStack>
+                    </InlineStack>
+                  </Box>
+                )}
 
                 {/* Expanded: Products */}
                 {expandedShop === shop.id && (

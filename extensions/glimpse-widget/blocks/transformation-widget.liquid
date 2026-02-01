@@ -45,7 +45,8 @@
 <!-- Gleame AI Transformation Widget -->
 <div class="glimpse-ai-widget{% if block.settings.layout_orientation == 'horizontal' %} layout-horizontal{% endif %}" 
      data-product-id="{{ product_id }}"
-     data-block-id="{{ block.id }}"{% if manual_shop_domain != blank %}
+     data-block-id="{{ block.id }}"
+     data-cart-token="{{ cart.token }}"{% if manual_shop_domain != blank %}
      data-manual-shop-domain="{{ manual_shop_domain }}"{% endif %}
      style="--primary-color-1: {{ primary_color_1 }}; 
             --primary-color-2: {{ primary_color_2 }};
