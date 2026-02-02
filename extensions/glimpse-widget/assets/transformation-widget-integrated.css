@@ -315,8 +315,8 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  margin-top: 16px;
-  padding-top: 12px;
+  margin-top: 10px;
+  padding-top: 5px;
 }
 
 .integrated-footer .info-icon {
@@ -416,3 +416,20 @@
   position: relative;
 }
 
+/* Powered by Gleame branding */
+.glimpse-integrated-widget .powered-by-gleame {
+  text-align: right;
+  font-size: 10px;
+  color: rgba(107, 114, 128, 0.5);
+  font-family: var(--body-font-family, system-ui, sans-serif);
+  margin-top: 2px;
+  padding-right: 4px;
+}
+
+.glimpse-integrated-widget .powered-by-gleame strong {
+  font-weight: 600;
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
