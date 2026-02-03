@@ -20,7 +20,6 @@ import { useState, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import { 
   identifyAndGetCustomer, 
-  subscribeCustomer,
   cancelSubscription,
 } from "../lib/mantle.server";
 import { SESSION_TIERS } from "../lib/pricing-tiers";
@@ -99,7 +98,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const shopDomain = session.shop;
   
   const formData = await request.formData();
-  const planId = formData.get("planId") as string;
   const actionType = formData.get("action") as string;
   const customerApiToken = formData.get("customerApiToken") as string;
 
@@ -108,30 +106,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   try {
-    if (actionType === "subscribe") {
-      if (!planId) {
-        return json({ error: "No plan specified" }, { status: 400 });
-      }
-      
-      // Subscribe to plan
-      // For embedded apps, return URL must go through Shopify Admin to maintain session
-      // Extract shop handle from domain (e.g., "myshop" from "myshop.myshopify.com")
-      const shopHandle = shopDomain.replace('.myshopify.com', '');
-      // App handle should match your Shopify app's URL slug (usually lowercase)
-      const appHandle = process.env.SHOPIFY_APP_HANDLE || 'gleame';
-      const returnUrl = `https://admin.shopify.com/store/${shopHandle}/apps/${appHandle}/app/billing`;
-      
-      const subscription = await subscribeCustomer(customerApiToken, planId, returnUrl);
-      
-      // Return confirmationUrl for client-side redirect
-      // Client will use window.open(url, '_top') to break out of iframe
-      if (subscription.confirmationUrl) {
-        return json({ confirmationUrl: subscription.confirmationUrl.toString() });
-      }
-      
-      return json({ success: true });
-    }
-
     if (actionType === "cancel") {
       await cancelSubscription(customerApiToken);
       

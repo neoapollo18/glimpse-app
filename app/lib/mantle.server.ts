@@ -83,7 +83,6 @@ export async function subscribeCustomer(
   const result = await client.subscribe({
     planId: planId,
     returnUrl: returnUrl,
-    test: false, // Real billing, not test charges
   });
   
   if ("error" in result) {
@@ -144,3 +143,4 @@ export function hasActiveSubscription(customer: { subscription?: { active: boole
 export function isOnPlan(customer: { subscription?: { plan?: { name: string } } }, planName: string): boolean {
   return customer.subscription?.plan?.name?.toLowerCase() === planName.toLowerCase();
 }
+
