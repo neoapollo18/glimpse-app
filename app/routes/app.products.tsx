@@ -46,7 +46,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   let cursor: string | null = null;
 
   while (hasNextPage) {
-    const response = await admin.graphql(`
+    const response: Response = await admin.graphql(`
       query GetProducts($first: Int!, $after: String) {
         products(first: $first, after: $after) {
           pageInfo {
@@ -92,7 +92,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       }
     });
 
-    const { data } = await response.json();
+    const { data }: { data: any } = await response.json();
     const products = data.products.edges.map(({ node }: { node: any }) => node);
     allProducts.push(...products);
 
