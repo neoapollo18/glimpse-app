@@ -40,50 +40,67 @@ import { generatePromptFromFunnel, validateFunnelResponses } from "../lib/prompt
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
 
-  // Fetch products from Shopify
-  const response = await admin.graphql(`
-    query GetProducts($first: Int!) {
-      products(first: $first) {
-        edges {
-          node {
-            id
-            title
-            handle
-            status
-            vendor
-            productType
-            tags
-            images(first: 1) {
-              edges {
-                node {
-                  id
-                  url
-                  altText
+  // Fetch all products from Shopify using cursor-based pagination
+  const allProducts: any[] = [];
+  let hasNextPage = true;
+  let cursor: string | null = null;
+
+  while (hasNextPage) {
+    const response = await admin.graphql(`
+      query GetProducts($first: Int!, $after: String) {
+        products(first: $first, after: $after) {
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
+          edges {
+            node {
+              id
+              title
+              handle
+              status
+              vendor
+              productType
+              tags
+              images(first: 1) {
+                edges {
+                  node {
+                    id
+                    url
+                    altText
+                  }
                 }
               }
-            }
-            variants(first: 100) {
-              edges {
-                node {
-                  id
-                  title
-                  price
-                  availableForSale
+              variants(first: 100) {
+                edges {
+                  node {
+                    id
+                    title
+                    price
+                    availableForSale
+                  }
                 }
               }
             }
           }
         }
       }
-    }
-  `, {
-    variables: {
-      first: 250
-    }
-  });
+    `, {
+      variables: {
+        first: 250,
+        after: cursor
+      }
+    });
 
-  const { data } = await response.json();
-  const shopifyProducts = data.products.edges.map(({ node }: { node: any }) => node);
+    const { data } = await response.json();
+    const products = data.products.edges.map(({ node }: { node: any }) => node);
+    allProducts.push(...products);
+
+    hasNextPage = data.products.pageInfo.hasNextPage;
+    cursor = data.products.pageInfo.endCursor;
+  }
+
+  const shopifyProducts = allProducts;
 
   // Fetch configured products from Supabase (with category data joined)
   console.log('🔍 DEBUG: Fetching products for shop:', session.shop);
