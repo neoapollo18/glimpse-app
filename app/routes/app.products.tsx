@@ -78,7 +78,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   `, {
     variables: {
-      first: 50
+      first: 1000
     }
   });
 
