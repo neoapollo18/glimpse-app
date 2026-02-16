@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import {
@@ -67,6 +68,22 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export default function Widgets() {
+  // Video banner dismiss state (persists in localStorage)
+  const [showVideoBanner, setShowVideoBanner] = useState(true);
+  
+  // Check localStorage after mount to avoid hydration mismatch
+  useEffect(() => {
+    const dismissed = localStorage.getItem('glimpse-widgets-video-banner-dismissed') === 'true';
+    if (dismissed) {
+      setShowVideoBanner(false);
+    }
+  }, []);
+  
+  const dismissVideoBanner = () => {
+    setShowVideoBanner(false);
+    localStorage.setItem('glimpse-widgets-video-banner-dismissed', 'true');
+  };
+
   const handleCustomize = (widgetId: string) => {
     // Open theme editor with widget selected
     window.open(
@@ -90,6 +107,57 @@ export default function Widgets() {
         <BlockStack gap="200">
           <Text as="h1" variant="headingXl">Widgets</Text>
         </BlockStack>
+
+        {/* Video Tutorial Banner */}
+        {showVideoBanner && (
+          <Card>
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={dismissVideoBanner}
+                style={{
+                  position: 'absolute',
+                  top: '-8px',
+                  right: '-8px',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  color: '#6b7280',
+                }}
+                aria-label="Dismiss"
+              >
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+                </svg>
+              </button>
+              <InlineStack gap="400" align="center" blockAlign="center">
+                <Box
+                  background="bg-surface-secondary"
+                  padding="300"
+                  borderRadius="200"
+                >
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                    <rect width="24" height="24" rx="6" fill="#FF0000"/>
+                    <path d="M10 8.5L16 12L10 15.5V8.5Z" fill="white"/>
+                  </svg>
+                </Box>
+                <BlockStack gap="100">
+                  <Text as="span" variant="bodyMd" fontWeight="semibold">
+                    Want to add more widgets?
+                  </Text>
+                  <Text as="span" variant="bodySm" tone="subdued">
+                    Watch our quick guide on adding and customizing Gleame widgets on your store
+                  </Text>
+                </BlockStack>
+                <div style={{ marginLeft: "auto" }}>
+                  <Button url="https://www.loom.com/share/f9049be91b344462980e623eaf232f81" target="_blank">
+                    Watch Video
+                  </Button>
+                </div>
+              </InlineStack>
+            </div>
+          </Card>
+        )}
 
         {/* Intro Card */}
         <Card>
