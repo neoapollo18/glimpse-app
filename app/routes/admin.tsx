@@ -248,19 +248,35 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       const prismaShops = await prisma.session.findMany({
         where: {
           isOnline: false,
-          accessToken: { not: '' },
         },
         select: {
           shop: true,
           accessToken: true,
         },
-        distinct: ['shop'],
       });
 
-      // Fetch sessions for each shop (in parallel, but limited)
-      const sessionPromises = prismaShops.map(async (ps) => {
-        const sessions = await fetchMonthlySessionsForShop(ps.shop, ps.accessToken);
-        return { shop: ps.shop, sessions };
+      // Deduplicate by shop (keep first/most recent)
+      const shopTokenMap = new Map<string, string>();
+      for (const ps of prismaShops) {
+        if (ps.accessToken && !shopTokenMap.has(ps.shop)) {
+          shopTokenMap.set(ps.shop, ps.accessToken);
+        }
+      }
+
+      console.log(`📊 Found ${shopTokenMap.size} shops with access tokens in Prisma`);
+
+      // Fetch sessions for each shop (in parallel with timeout)
+      const sessionPromises = Array.from(shopTokenMap.entries()).map(async ([shop, token]) => {
+        try {
+          const sessions = await Promise.race([
+            fetchMonthlySessionsForShop(shop, token),
+            new Promise<null>((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000))
+          ]);
+          return { shop, sessions };
+        } catch (err) {
+          console.error(`⚠️ Failed to fetch sessions for ${shop}:`, err);
+          return { shop, sessions: null };
+        }
       });
 
       const sessionResults = await Promise.all(sessionPromises);
@@ -268,7 +284,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         sessionsMap.set(shop, sessions);
       });
 
-      console.log(`📊 Fetched session counts for ${sessionsMap.size} shops`);
+      console.log(`📊 Successfully fetched session counts for ${sessionResults.filter(r => r.sessions !== null).length}/${sessionsMap.size} shops`);
     } catch (prismaError) {
       console.error('Error fetching sessions from Prisma:', prismaError);
     }
@@ -609,8 +625,10 @@ export default function FoundersAdmin() {
                   <BlockStack gap="100">
                     <InlineStack gap="200" blockAlign="center">
                       <Text as="h3" variant="headingMd">{shop.shop_domain}</Text>
-                      {shop.monthlySessions !== null && shop.monthlySessions !== undefined && (
+                      {shop.monthlySessions !== null && shop.monthlySessions !== undefined ? (
                         <Badge tone="info">{`${shop.monthlySessions.toLocaleString()} sessions/mo`}</Badge>
+                      ) : (
+                        <Badge tone="attention">Sessions: N/A</Badge>
                       )}
                     </InlineStack>
                     <Text as="p" variant="bodySm" tone="subdued">
