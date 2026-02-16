@@ -26,6 +26,7 @@ import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import enTranslations from "@shopify/polaris/locales/en.json";
 import { supabase } from "../lib/supabase.server";
 import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
 
 // ============================================
 // GLEAME FOUNDERS ADMIN PAGE
@@ -37,6 +38,73 @@ const ALLOWED_SHOPS = [
   "testingaaronandevansaas.myshopify.com", // Add your store domains here
   "hx5hqt-na.myshopify.com",
 ];
+
+// Fetch monthly sessions directly from Shopify API
+async function fetchMonthlySessionsForShop(shop: string, accessToken: string): Promise<number | null> {
+  try {
+    const query = `
+      query GetQuarterlySessions {
+        shopifyqlQuery(query: "FROM sessions SHOW sessions SINCE -90d") {
+          tableData {
+            columns { name dataType }
+            rows
+          }
+          parseErrors { message }
+        }
+      }
+    `;
+
+    const response = await fetch(`https://${shop}/admin/api/2024-10/graphql.json`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Shopify-Access-Token': accessToken,
+      },
+      body: JSON.stringify({ query }),
+    });
+
+    if (!response.ok) {
+      console.error(`Shopify API error for ${shop}: ${response.status}`);
+      return null;
+    }
+
+    const result = await response.json();
+
+    if (result.errors?.length > 0) {
+      console.error(`GraphQL errors for ${shop}:`, result.errors);
+      return null;
+    }
+
+    const shopifyqlData = result.data?.shopifyqlQuery;
+    if (shopifyqlData?.parseErrors?.length > 0) {
+      console.error(`ShopifyQL parse errors for ${shop}:`, shopifyqlData.parseErrors);
+      return null;
+    }
+
+    const tableData = shopifyqlData?.tableData;
+    if (!tableData?.rows?.length) {
+      return 0;
+    }
+
+    const sessionsColumnIndex = tableData.columns.findIndex(
+      (col: { name: string }) => col.name.toLowerCase() === 'sessions'
+    );
+
+    if (sessionsColumnIndex === -1) return null;
+
+    let totalSessions = 0;
+    for (const row of tableData.rows) {
+      const parsed = parseInt(row[sessionsColumnIndex], 10);
+      if (!isNaN(parsed)) totalSessions += parsed;
+    }
+
+    // Average monthly (90 days / 3)
+    return Math.round(totalSessions / 3);
+  } catch (error) {
+    console.error(`Error fetching sessions for ${shop}:`, error);
+    return null;
+  }
+}
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
@@ -77,6 +145,7 @@ interface Shop {
   shop_name: string | null;
   products: Product[];
   conversionStats?: ConversionStats | null;
+  monthlySessions?: number | null;
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -173,8 +242,45 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       })
     );
 
+    // Fetch access tokens from Prisma and get session counts
+    const sessionsMap = new Map<string, number | null>();
+    try {
+      const prismaShops = await prisma.session.findMany({
+        where: {
+          isOnline: false,
+          accessToken: { not: '' },
+        },
+        select: {
+          shop: true,
+          accessToken: true,
+        },
+        distinct: ['shop'],
+      });
+
+      // Fetch sessions for each shop (in parallel, but limited)
+      const sessionPromises = prismaShops.map(async (ps) => {
+        const sessions = await fetchMonthlySessionsForShop(ps.shop, ps.accessToken);
+        return { shop: ps.shop, sessions };
+      });
+
+      const sessionResults = await Promise.all(sessionPromises);
+      sessionResults.forEach(({ shop, sessions }) => {
+        sessionsMap.set(shop, sessions);
+      });
+
+      console.log(`📊 Fetched session counts for ${sessionsMap.size} shops`);
+    } catch (prismaError) {
+      console.error('Error fetching sessions from Prisma:', prismaError);
+    }
+
+    // Add session counts to shops
+    const shopsWithSessions = shopsWithProducts.map((shop) => ({
+      ...shop,
+      monthlySessions: sessionsMap.get(shop.shop_domain) ?? null,
+    }));
+
     // Calculate totals
-    const totalProducts = shopsWithProducts.reduce((acc, s) => acc + s.products.length, 0);
+    const totalProducts = shopsWithSessions.reduce((acc, s) => acc + s.products.length, 0);
 
     // Get total transformations across all stores
     const { count: totalTransformations, error: transformationsError } = await supabase
@@ -187,9 +293,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
 
     return json({
-      shops: shopsWithProducts,
+      shops: shopsWithSessions,
       stats: {
-        totalShops: shopsWithProducts.length,
+        totalShops: shopsWithSessions.length,
         totalProducts,
         totalTransformations: totalTransformations || 0,
       },
@@ -501,7 +607,12 @@ export default function FoundersAdmin() {
                 {/* Shop Header - Click to expand */}
                 <InlineStack align="space-between" blockAlign="center">
                   <BlockStack gap="100">
-                    <Text as="h3" variant="headingMd">{shop.shop_domain}</Text>
+                    <InlineStack gap="200" blockAlign="center">
+                      <Text as="h3" variant="headingMd">{shop.shop_domain}</Text>
+                      {shop.monthlySessions !== null && shop.monthlySessions !== undefined && (
+                        <Badge tone="info">{`${shop.monthlySessions.toLocaleString()} sessions/mo`}</Badge>
+                      )}
+                    </InlineStack>
                     <Text as="p" variant="bodySm" tone="subdued">
                       {shop.products.length} product{shop.products.length !== 1 ? "s" : ""} configured
                     </Text>
