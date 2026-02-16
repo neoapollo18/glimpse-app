@@ -11,6 +11,7 @@ import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import prisma from "../db.server";
 import { identifyAndGetCustomer, sendUsageEvent } from "../lib/mantle.server";
+import { updateShopMonthlySessions } from "../lib/supabase.server";
 
 // Shopify Admin API helper for direct calls (without authenticate middleware)
 async function fetchSessionsDirectly(shop: string, accessToken: string): Promise<number | null> {
@@ -138,13 +139,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           continue;
         }
 
+        // Save session count to Supabase (for admin dashboard)
+        await updateShopMonthlySessions(shop, sessionCount);
+
         // Send usage event to Mantle - flex billing handles tier changes automatically
         await sendUsageEvent(apiToken, 'monthly_sessions', { 
           sessions: sessionCount 
         });
         
         results.sent++;
-        console.log(`📤 ${shop}: Sent ${sessionCount.toLocaleString()} sessions to Mantle`);
+        console.log(`📤 ${shop}: Sent ${sessionCount.toLocaleString()} sessions to Mantle (saved to Supabase)`);
 
       } catch (error) {
         console.error(`❌ Error processing ${shop}:`, error);

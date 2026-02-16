@@ -1515,3 +1515,42 @@ export async function clearPendingPlanChange(shopDomain: string): Promise<void> 
     .update({ pending_plan_change: null })
     .eq('shop_domain', shopDomain);
 }
+
+/**
+ * Update monthly sessions count for a shop (called by cron job)
+ */
+export async function updateShopMonthlySessions(shopDomain: string, sessionCount: number): Promise<void> {
+  const { error } = await supabase
+    .from('shops')
+    .update({ 
+      monthly_sessions: sessionCount,
+      sessions_updated_at: new Date().toISOString()
+    })
+    .eq('shop_domain', shopDomain);
+  
+  if (error) {
+    console.error(`Error updating sessions for ${shopDomain}:`, error);
+  }
+}
+
+/**
+ * Get all shops with their monthly session counts (for admin page)
+ */
+export async function getAllShopsWithSessions(): Promise<Array<{
+  id: string;
+  shop_domain: string;
+  monthly_sessions: number | null;
+  sessions_updated_at: string | null;
+}>> {
+  const { data, error } = await supabase
+    .from('shops')
+    .select('id, shop_domain, monthly_sessions, sessions_updated_at')
+    .order('shop_domain');
+  
+  if (error) {
+    console.error('Error fetching shops with sessions:', error);
+    return [];
+  }
+  
+  return data || [];
+}
