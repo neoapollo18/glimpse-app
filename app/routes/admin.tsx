@@ -270,7 +270,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         try {
           const sessions = await Promise.race([
             fetchMonthlySessionsForShop(shop, token),
-            new Promise<null>((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000))
+            new Promise<number | null>((resolve) => setTimeout(() => resolve(null), 10000))
           ]);
           return { shop, sessions };
         } catch (err) {
