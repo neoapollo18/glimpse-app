@@ -159,21 +159,6 @@ export default function Widgets() {
           </Card>
         )}
 
-        {/* Intro Card */}
-        <Card>
-          <InlineStack gap="400" align="center" blockAlign="center">
-            <BlockStack gap="150">
-              <Text as="span" variant="headingMd" fontWeight="semibold">
-                Add Gleame to your store
-              </Text>
-
-              <Text as="span" variant="bodyLg"  tone="subdued">
-              Below are the available Gleame widgets, each designed for different placements across product pages, landing pages, and promotional sections.  Click See demo on any widget to watch a short setup tutorial. Widgets can be updated, moved, or removed at any time.
-              </Text>
-            </BlockStack>
-          </InlineStack>
-        </Card>
-
         {/* Widgets Grid */}
         <InlineGrid columns={{ xs:1, sm: 2, lg: 3 }} gap="400">
           {widgets.map((widget) => (
