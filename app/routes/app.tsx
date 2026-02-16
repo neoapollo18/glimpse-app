@@ -7,6 +7,7 @@ import { NavMenu } from "@shopify/app-bridge-react";
 import { Frame, Loading } from "@shopify/polaris";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import { useEffect, useState } from "react";
+import jwt from "jsonwebtoken";
 
 import { authenticate } from "../shopify.server";
 import { identifyAndGetCustomer } from "../lib/mantle.server";
@@ -68,17 +69,29 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error('Grandfathered check error (allowing access):', error);
   }
 
+  // Generate Intercom JWT for Identity Verification
+  const intercomSecretKey = process.env.INTERCOM_SECRET_KEY || "";
+  let intercomUserJwt = "";
+  if (intercomSecretKey && session.shop) {
+    intercomUserJwt = jwt.sign(
+      { user_id: session.shop },
+      intercomSecretKey,
+      { expiresIn: '1h' }
+    );
+  }
+
   return json({ 
     apiKey: process.env.SHOPIFY_API_KEY || "",
     shop: session.shop,
     intercomAppId: process.env.INTERCOM_APP_ID || "",
+    intercomUserJwt,
     needsBilling,
     isOnBillingPage,
   });
 };
 
 export default function App() {
-  const { apiKey, shop, intercomAppId, needsBilling } = useLoaderData<typeof loader>();
+  const { apiKey, shop, intercomAppId, intercomUserJwt, needsBilling } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const location = useLocation();
   const [isRedirecting, setIsRedirecting] = useState(false);
@@ -101,20 +114,18 @@ export default function App() {
     }
   }, [shouldBlockContent, navigate]);
 
-  // Initialize Intercom on client-side
+  // Initialize Intercom on client-side with JWT Identity Verification
   useEffect(() => {
     if (intercomAppId && typeof window !== 'undefined') {
       import('@intercom/messenger-js-sdk').then(({ default: Intercom }) => {
         Intercom({
           app_id: intercomAppId,
-          user_id: shop,           // Use shop domain as unique ID
-          name: shop,              // Shop name
-          email: undefined,        // We don't have merchant email
-          created_at: undefined,   // We don't track this
+          intercom_user_jwt: intercomUserJwt || undefined, // JWT for Identity Verification
+          name: shop,              // Shop name (non-sensitive, outside JWT)
         });
       });
     }
-  }, [intercomAppId, shop]);
+  }, [intercomAppId, intercomUserJwt, shop]);
 
   // If user needs billing and is NOT on billing page, show loading instead of content
   // This prevents the "flash" of other pages before redirect
