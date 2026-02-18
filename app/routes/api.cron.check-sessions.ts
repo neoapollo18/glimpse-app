@@ -94,8 +94,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const results = {
     checked: 0,
-    sent: 0,
-    skipped: 0,
+    cached: 0,  // Sessions saved to Supabase
+    sent: 0,    // Sessions sent to Mantle (billing renewal)
+    skipped: 0, // No active subscription
     errors: 0,
   };
 
@@ -114,6 +115,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     });
 
     console.log(`📊 Found ${sessions.length} shops to check`);
+
+    // Check how close billing period end needs to be to trigger Mantle update
+    // Since cron runs weekly, send to Mantle if billing renews within 7 days
+    const BILLING_RENEWAL_WINDOW_DAYS = 7;
 
     for (const session of sessions) {
       const { shop, accessToken } = session;
@@ -139,16 +144,30 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           continue;
         }
 
-        // Save session count to Supabase (for admin dashboard)
+        // Always save session count to Supabase (for tracking/admin dashboard)
         await updateShopMonthlySessions(shop, sessionCount);
+        console.log(`💾 ${shop}: Saved ${sessionCount.toLocaleString()} sessions to Supabase`);
 
-        // Send usage event to Mantle - flex billing handles tier changes automatically
-        await sendUsageEvent(apiToken, 'monthly_sessions', { 
-          sessions: sessionCount 
-        });
+        // Only send to Mantle if billing period is ending soon
+        const currentPeriodEnd = subscription.currentPeriodEnd 
+          ? new Date(subscription.currentPeriodEnd) 
+          : null;
         
-        results.sent++;
-        console.log(`📤 ${shop}: Sent ${sessionCount.toLocaleString()} sessions to Mantle (saved to Supabase)`);
+        const now = new Date();
+        const shouldSendToMantle = currentPeriodEnd && 
+          (currentPeriodEnd.getTime() - now.getTime()) <= BILLING_RENEWAL_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+
+        if (shouldSendToMantle) {
+          // Send usage event to Mantle - flex billing handles tier changes automatically
+          await sendUsageEvent(apiToken, 'monthly_sessions', { 
+            sessions: sessionCount 
+          });
+          results.sent++;
+          console.log(`📤 ${shop}: Sent ${sessionCount.toLocaleString()} sessions to Mantle (billing renews ${currentPeriodEnd?.toLocaleDateString()})`);
+        } else {
+          results.cached++;
+          console.log(`📊 ${shop}: ${sessionCount.toLocaleString()} sessions cached (billing renews ${currentPeriodEnd?.toLocaleDateString() || 'unknown'})`);
+        }
 
       } catch (error) {
         console.error(`❌ Error processing ${shop}:`, error);
@@ -156,7 +175,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       }
     }
 
-    console.log(`🏁 Usage sync complete: ${results.checked} checked, ${results.sent} sent, ${results.skipped} skipped, ${results.errors} errors`);
+    console.log(`🏁 Usage sync complete: ${results.checked} checked, ${results.cached} cached, ${results.sent} sent to Mantle, ${results.skipped} skipped, ${results.errors} errors`);
 
     return json({
       success: true,

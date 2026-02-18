@@ -24,8 +24,9 @@ import {
 import { SearchIcon } from "@shopify/polaris-icons";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import enTranslations from "@shopify/polaris/locales/en.json";
-import { supabase } from "../lib/supabase.server";
+import { supabase, updateShopMonthlySessions } from "../lib/supabase.server";
 import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
 
 // ============================================
 // GLEAME FOUNDERS ADMIN PAGE
@@ -37,6 +38,58 @@ const ALLOWED_SHOPS = [
   "testingaaronandevansaas.myshopify.com", // Add your store domains here
   "hx5hqt-na.myshopify.com",
 ];
+
+// Fetch monthly sessions directly from Shopify API
+async function fetchMonthlySessionsForShop(shop: string, accessToken: string): Promise<number | null> {
+  try {
+    const query = `
+      query GetQuarterlySessions {
+        shopifyqlQuery(query: "FROM sessions SHOW sessions SINCE -90d") {
+          tableData {
+            columns { name dataType }
+            rows
+          }
+          parseErrors { message }
+        }
+      }
+    `;
+
+    const response = await fetch(`https://${shop}/admin/api/2024-10/graphql.json`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Shopify-Access-Token': accessToken,
+      },
+      body: JSON.stringify({ query }),
+    });
+
+    if (!response.ok) return null;
+
+    const result = await response.json();
+    if (result.errors?.length > 0) return null;
+
+    const shopifyqlData = result.data?.shopifyqlQuery;
+    if (shopifyqlData?.parseErrors?.length > 0) return null;
+
+    const tableData = shopifyqlData?.tableData;
+    if (!tableData?.rows?.length) return 0;
+
+    const sessionsColumnIndex = tableData.columns.findIndex(
+      (col: { name: string }) => col.name.toLowerCase() === 'sessions'
+    );
+    if (sessionsColumnIndex === -1) return null;
+
+    let totalSessions = 0;
+    for (const row of tableData.rows) {
+      const parsed = parseInt(row[sessionsColumnIndex], 10);
+      if (!isNaN(parsed)) totalSessions += parsed;
+    }
+
+    return Math.round(totalSessions / 3); // Average monthly (90 days / 3)
+  } catch {
+    return null;
+  }
+}
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
@@ -78,6 +131,7 @@ interface Shop {
   products: Product[];
   conversionStats?: ConversionStats | null;
   monthlySessions?: number | null;
+  sessions_updated_at?: string | null;
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -170,15 +224,66 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           console.log('Conversion stats not available for', shop.shop_domain);
         }
 
-        // monthly_sessions is already included in shop from the SELECT *
         return { 
           ...shop, 
           products: productsWithVariants, 
           conversionStats,
           monthlySessions: shop.monthly_sessions ?? null,
+          sessions_updated_at: shop.sessions_updated_at ?? null,
         };
       })
     );
+
+    // Fetch fresh sessions ONLY for shops with stale data (not updated in last 7 days)
+    // This prevents overwhelming Shopify API when there are many shops
+    const STALE_THRESHOLD_DAYS = 7;
+    const staleThreshold = new Date(Date.now() - STALE_THRESHOLD_DAYS * 24 * 60 * 60 * 1000);
+    
+    // Find shops that need session updates
+    const staleShops = shopsWithProducts.filter(shop => {
+      if (!shop.sessions_updated_at) return true; // Never updated
+      return new Date(shop.sessions_updated_at) < staleThreshold;
+    });
+
+    if (staleShops.length > 0) {
+      try {
+        const prismaShops = await prisma.session.findMany({
+          where: { isOnline: false },
+          select: { shop: true, accessToken: true },
+        });
+
+        // Deduplicate by shop
+        const shopTokenMap = new Map<string, string>();
+        for (const ps of prismaShops) {
+          if (ps.accessToken && !shopTokenMap.has(ps.shop)) {
+            shopTokenMap.set(ps.shop, ps.accessToken);
+          }
+        }
+
+        // Only fetch for stale shops (limit to 20 per page load to avoid timeouts)
+        const shopsToUpdate = staleShops
+          .filter(s => shopTokenMap.has(s.shop_domain))
+          .slice(0, 20);
+
+        console.log(`📊 Admin: Refreshing sessions for ${shopsToUpdate.length} stale shops (${staleShops.length} total stale)`);
+
+        const sessionUpdates = shopsToUpdate.map(async (shop) => {
+          const token = shopTokenMap.get(shop.shop_domain)!;
+          const sessions = await fetchMonthlySessionsForShop(shop.shop_domain, token);
+          if (sessions !== null) {
+            await updateShopMonthlySessions(shop.shop_domain, sessions);
+            shop.monthlySessions = sessions;
+          }
+          return { shopDomain: shop.shop_domain, sessions };
+        });
+
+        const results = await Promise.all(sessionUpdates);
+        const successCount = results.filter(r => r.sessions !== null).length;
+        console.log(`📊 Admin: Updated sessions for ${successCount}/${results.length} shops`);
+      } catch (sessionError) {
+        console.error('Error fetching sessions:', sessionError);
+      }
+    }
 
     // Calculate totals
     const totalProducts = shopsWithProducts.reduce((acc, s) => acc + s.products.length, 0);

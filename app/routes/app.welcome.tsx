@@ -18,8 +18,8 @@ import {
 import { ChevronDownIcon, ChevronUpIcon, StarFilledIcon, CheckIcon } from "@shopify/polaris-icons";
 import { useState, useEffect } from "react";
 import { authenticate } from "../shopify.server";
-import { identifyAndGetCustomer, subscribeCustomer } from "../lib/mantle.server";
-import { updateShopSubscriptionStatus } from "../lib/supabase.server";
+import { identifyAndGetCustomer, subscribeCustomer, sendUsageEvent } from "../lib/mantle.server";
+import { updateShopSubscriptionStatus, updateShopMonthlySessions } from "../lib/supabase.server";
 import { getMonthlySessionsCount } from "../lib/shopify-analytics.server";
 import { SESSION_TIERS } from "../lib/pricing-tiers";
 import { 
@@ -101,6 +101,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const planId = formData.get("planId") as string;
   const customerApiToken = formData.get("customerApiToken") as string;
+  const sessionsStr = formData.get("sessions") as string;
+  const sessions = sessionsStr ? parseInt(sessionsStr, 10) : 0;
 
   if (!customerApiToken) {
     return json({ error: "Missing customer token" }, { status: 400 });
@@ -122,6 +124,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // This will be confirmed/updated when they return to billing page
     await updateShopSubscriptionStatus(shopDomain, 'trial', null);
 
+    // Send initial usage event to Mantle so they have baseline session count
+    try {
+      await sendUsageEvent(customerApiToken, 'monthly_sessions', { sessions });
+      await updateShopMonthlySessions(shopDomain, sessions);
+      console.log(`📊 Initial usage sent to Mantle for ${shopDomain}: ${sessions} sessions`);
+    } catch (usageError) {
+      console.error('Failed to send initial usage event:', usageError);
+      // Don't fail the subscription for this
+    }
+
     if (subscription.confirmationUrl) {
       return json({ confirmationUrl: subscription.confirmationUrl.toString() });
     }
@@ -139,6 +151,7 @@ export default function WelcomePage() {
   const { 
     matchedPlanId, 
     matchedPlanName,
+    sessions,
     customerApiToken, 
     hasActiveSubscription,
     isInGracePeriod,
@@ -185,6 +198,7 @@ export default function WelcomePage() {
     const formData = new FormData();
     formData.append("planId", matchedPlanId);
     formData.append("customerApiToken", customerApiToken);
+    formData.append("sessions", sessions.toString());
     submit(formData, { method: "POST" });
   };
 
@@ -252,7 +266,7 @@ export default function WelcomePage() {
                 <Text as="p" variant="bodyMd" tone="subdued">
                   {isResubscribing 
                     ? "Your plan will be automatically selected based on your store's current monthly session count."
-                    : "After the 14-day free trial, pricing starts from $30/month (0-5k sessions) and adjusts automatically based on your store's traffic (up to $1,499/month for 500k+ sessions). No manual upgrades needed - your plan grows with you."
+                    : "After the 14-day free trial, stores with under 2.5k sessions stay free. Pricing starts at $30/month (2.5k-5k sessions) and adjusts automatically based on your store's traffic. No manual upgrades needed - your plan grows with you."
                   }
                 </Text>
 

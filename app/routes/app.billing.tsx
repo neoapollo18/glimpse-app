@@ -21,9 +21,11 @@ import { authenticate } from "../shopify.server";
 import { 
   identifyAndGetCustomer, 
   cancelSubscription,
+  sendUsageEvent,
 } from "../lib/mantle.server";
 import { SESSION_TIERS } from "../lib/pricing-tiers";
-import { updateShopSubscriptionStatus } from "../lib/supabase.server";
+import { updateShopSubscriptionStatus, updateShopMonthlySessions } from "../lib/supabase.server";
+import { getMonthlySessionsCount } from "../lib/shopify-analytics.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -426,8 +428,9 @@ export default function BillingPage() {
             <Text as="h3" variant="headingMd">Questions about billing?</Text>
             <Text as="p" variant="bodySm" tone="subdued">
               All plans are billed through Shopify and include a 14-day free trial. 
-              Pricing adjusts automatically based on your store's monthly session count - 
-              no manual upgrades needed. Your plan grows with your store.
+              Stores with under 2.5k sessions stay free! Pricing adjusts automatically 
+              based on your store's monthly session count - no manual upgrades needed. 
+              Your plan grows with your store.
               Contact us through our app or aaron@gleame.ai if you need help.
             </Text>
           </BlockStack>

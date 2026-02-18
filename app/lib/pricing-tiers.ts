@@ -18,7 +18,8 @@ export interface SessionTier {
  * Pricing is based on monthly session count
  */
 export const SESSION_TIERS: SessionTier[] = [
-  { name: 'Starter', min: 0, max: 5000, price: 30, visitors: '0-5k sessions' },
+  { name: 'Free', min: 0, max: 2500, price: 0, visitors: '0-2.5k sessions' },
+  { name: 'Starter', min: 2501, max: 5000, price: 30, visitors: '2.5k-5k sessions' },
   { name: 'Launch', min: 5001, max: 25000, price: 149, visitors: '5k-25k sessions' },
   { name: 'Growth', min: 25001, max: 75000, price: 399, visitors: '25k-75k sessions' },
   { name: 'Scale', min: 75001, max: 200000, price: 799, visitors: '75k-200k sessions' },

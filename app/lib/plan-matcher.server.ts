@@ -13,7 +13,7 @@ export { SESSION_TIERS, type SessionTier } from "./pricing-tiers";
  * Gets the appropriate plan tier based on session count
  * 
  * @param sessions - The monthly session count
- * @returns The matching tier, defaults to Starter if sessions is 0 or negative
+ * @returns The matching tier, defaults to Free if sessions is 0 or negative
  */
 export function getTierForSessions(sessions: number): SessionTier {
   // Default to Starter for invalid or zero sessions
