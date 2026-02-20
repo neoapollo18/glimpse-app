@@ -1334,7 +1334,7 @@ export default function Products() {
                         options={[
                           { label: "Select a category...", value: "" },
                           ...(categories as Category[]).map((c: Category) => ({ label: c.name, value: c.id })),
-                          { label: "Contact Sales", value: "contact-sales" }
+                          { label: "OTHER - Contact Sales", value: "contact-sales" }
                         ]}
                         value={selectedCategory || ""}
                         onChange={(value) => {
