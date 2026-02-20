@@ -1333,10 +1333,18 @@ export default function Products() {
                         labelHidden
                         options={[
                           { label: "Select a category...", value: "" },
-                          ...(categories as Category[]).map((c: Category) => ({ label: c.name, value: c.id }))
+                          ...(categories as Category[]).map((c: Category) => ({ label: c.name, value: c.id })),
+                          { label: "Contact Sales", value: "contact-sales" }
                         ]}
                         value={selectedCategory || ""}
                         onChange={(value) => {
+                          if (value === "contact-sales") {
+                            // Open Intercom chat
+                            if (typeof window !== 'undefined' && (window as any).Intercom) {
+                              (window as any).Intercom('show');
+                            }
+                            return;
+                          }
                           setSelectedCategory(value || null);
                           setFunnelResponses({});
                           setCategoryData(null);
