@@ -208,71 +208,73 @@ export default function Dashboard() {
           </Banner>
         )}
 
-        {/* Stats Cards Row */}
-        <Layout>
-          <Layout.Section variant="oneThird">
-            <Card>
-              <BlockStack gap="200">
-                <InlineStack align="space-between" blockAlign="center">
-                  <Text as="span" variant="bodyMd" tone="subdued">
-                    Products Configured
+        {/* Stats Cards Row - Only show when not in setup guide */}
+        {!shouldShowSetup && (
+          <Layout>
+            <Layout.Section variant="oneThird">
+              <Card>
+                <BlockStack gap="200">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Text as="span" variant="bodyMd" tone="subdued">
+                      Products Configured
+                    </Text>
+                    <Box background="bg-fill-info" padding="100" borderRadius="full">
+                      <Icon source={ProductIcon} tone="info" />
+                    </Box>
+                  </InlineStack>
+                  <Text as="p" variant="headingXl" fontWeight="bold">
+                    {configuredProductsCount}
                   </Text>
-                  <Box background="bg-fill-info" padding="100" borderRadius="full">
-                    <Icon source={ProductIcon} tone="info" />
-                  </Box>
-                </InlineStack>
-                <Text as="p" variant="headingXl" fontWeight="bold">
-                  {configuredProductsCount}
-                </Text>
-                <Button variant="plain" onClick={() => navigate("/app/products")}>
-                  Manage products →
-                </Button>
-              </BlockStack>
-            </Card>
-          </Layout.Section>
+                  <Button variant="plain" onClick={() => navigate("/app/products")}>
+                    Manage products →
+                  </Button>
+                </BlockStack>
+              </Card>
+            </Layout.Section>
 
-          <Layout.Section variant="oneThird">
-            <Card>
-              <BlockStack gap="200">
-                <InlineStack align="space-between" blockAlign="center">
-                  <Text as="span" variant="bodyMd" tone="subdued">
-                    Widgets Active
+            <Layout.Section variant="oneThird">
+              <Card>
+                <BlockStack gap="200">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Text as="span" variant="bodyMd" tone="subdued">
+                      Widgets Active
+                    </Text>
+                    <Box background="bg-fill-success" padding="100" borderRadius="full">
+                      <Icon source={ViewIcon} tone="success" />
+                    </Box>
+                  </InlineStack>
+                  <Text as="p" variant="headingXl" fontWeight="bold">
+                    {activeProducts}
                   </Text>
-                  <Box background="bg-fill-success" padding="100" borderRadius="full">
-                    <Icon source={ViewIcon} tone="success" />
-                  </Box>
-                </InlineStack>
-                <Text as="p" variant="headingXl" fontWeight="bold">
-                  {activeProducts}
-                </Text>
-                <Text as="span" variant="bodySm" tone="subdued">
-                  products with transformations
-                </Text>
-              </BlockStack>
-            </Card>
-          </Layout.Section>
+                  <Text as="span" variant="bodySm" tone="subdued">
+                    products with transformations
+                  </Text>
+                </BlockStack>
+              </Card>
+            </Layout.Section>
 
-          <Layout.Section variant="oneThird">
-            <Card>
-              <BlockStack gap="200">
-                <InlineStack align="space-between" blockAlign="center">
-                  <Text as="span" variant="bodyMd" tone="subdued">
-                    Status
+            <Layout.Section variant="oneThird">
+              <Card>
+                <BlockStack gap="200">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Text as="span" variant="bodyMd" tone="subdued">
+                      Status
+                    </Text>
+                    <Box background="bg-fill-success" padding="100" borderRadius="full">
+                      <Icon source={CheckCircleIcon} tone="success" />
+                    </Box>
+                  </InlineStack>
+                  <Text as="p" variant="headingXl" fontWeight="bold">
+                    Active
                   </Text>
-                  <Box background="bg-fill-success" padding="100" borderRadius="full">
-                    <Icon source={CheckCircleIcon} tone="success" />
-                  </Box>
-                </InlineStack>
-                <Text as="p" variant="headingXl" fontWeight="bold">
-                  Active
-                </Text>
-                <Text as="span" variant="bodySm" tone="subdued">
-                  App connected and running
-                </Text>
-              </BlockStack>
-            </Card>
-          </Layout.Section>
-        </Layout>
+                  <Text as="span" variant="bodySm" tone="subdued">
+                    App connected and running
+                  </Text>
+                </BlockStack>
+              </Card>
+            </Layout.Section>
+          </Layout>
+        )}
 
         {/* SETUP VIEW - Show when setup incomplete or user hasn't continued */}
         {shouldShowSetup && (
