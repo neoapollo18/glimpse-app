@@ -158,8 +158,8 @@ export default function Dashboard() {
       title: "Add a widget to your theme",
       description: "Place a Gleame block on your product pages",
       completed: activeProducts > 0,
-      action: () => window.open(`https://${shopDomain}/admin/themes/current/editor?context=apps`, '_blank'),
-      actionLabel: "Open Theme Editor",
+      action: () => navigate("/app/widgets"),
+      actionLabel: "Add Widget",
     },
     {
       id: "style",
@@ -378,34 +378,6 @@ export default function Dashboard() {
                   )}
                 </BlockStack>
               </Card>
-            </Layout.Section>
-
-            {/* Sidebar for Setup View */}
-            <Layout.Section variant="oneThird">
-              <BlockStack gap="400">
-                <Card>
-                  <BlockStack gap="300">
-                    <Text as="h2" variant="headingMd">Available Widgets</Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Add these blocks in your theme editor:
-                    </Text>
-                    <BlockStack gap="200">
-                      {[
-                        { name: "Gleame Embedded", desc: "Full widget with side-by-side preview" },
-                        { name: "Gleame Horizontal", desc: "Horizontal layout for wider spaces" },
-                        { name: "Gleame Button", desc: "Compact button that opens modal" },
-                      ].map((widget) => (
-                        <Box key={widget.name} background="bg-surface-secondary" padding="300" borderRadius="200">
-                          <BlockStack gap="100">
-                            <Text as="span" variant="bodySm" fontWeight="semibold">{widget.name}</Text>
-                            <Text as="span" variant="bodySm" tone="subdued">{widget.desc}</Text>
-                          </BlockStack>
-                        </Box>
-                      ))}
-                    </BlockStack>
-                  </BlockStack>
-                </Card>
-              </BlockStack>
             </Layout.Section>
           </Layout>
         )}
