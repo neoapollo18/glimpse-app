@@ -370,35 +370,64 @@ export default function WelcomePage() {
             </Card>
           </div>
 
-          {/* Pricing table - compact, below the card */}
-          <div style={{ maxWidth: '500px', width: '100%' }}>
+          {/* Pricing table - full width */}
+          <div style={{ maxWidth: '1000px', width: '100%' }}>
             <Card>
-              <BlockStack gap="300">
+              <BlockStack gap="400">
                 <Text as="h3" variant="headingMd">Pricing</Text>
                 <div style={{ display: 'table', width: '100%', borderCollapse: 'collapse' }}>
-                  {SESSION_TIERS.map((tier, index) => (
-                    <div key={tier.name} style={{ display: 'table-row' }}>
-                      <div style={{ 
-                        display: 'table-cell', 
-                        padding: '8px 0', 
-                        borderBottom: index < SESSION_TIERS.length - 1 ? '1px solid #f1f2f3' : 'none' 
-                      }}>
-                        <Text as="p" variant="bodySm">
-                          {tier.visitors}
-                        </Text>
-                      </div>
-                      <div style={{ 
-                        display: 'table-cell', 
-                        padding: '8px 0', 
-                        textAlign: 'right',
-                        borderBottom: index < SESSION_TIERS.length - 1 ? '1px solid #f1f2f3' : 'none' 
-                      }}>
-                        <Text as="p" variant="bodySm" fontWeight="semibold">
-                          {tier.price !== null ? (tier.price === 0 ? 'Free' : `$${tier.price}/mo`) : 'Custom'}
-                        </Text>
-                      </div>
+                  {/* Header row */}
+                  <div style={{ display: 'table-row', background: '#f6f6f7' }}>
+                    <div style={{ display: 'table-cell', padding: '12px 16px', fontWeight: 600 }}>
+                      <Text as="p" variant="bodySm" fontWeight="semibold">Monthly Store Sessions</Text>
                     </div>
-                  ))}
+                    <div style={{ display: 'table-cell', padding: '12px 16px', fontWeight: 600 }}>
+                      <Text as="p" variant="bodySm" fontWeight="semibold">Price</Text>
+                    </div>
+                    <div style={{ display: 'table-cell', padding: '12px 16px', fontWeight: 600 }}>
+                      <Text as="p" variant="bodySm" fontWeight="semibold">Ideal For</Text>
+                    </div>
+                  </div>
+                  {/* Data rows */}
+                  {SESSION_TIERS.map((tier, index) => {
+                    const idealFor = {
+                      'Free': 'New & small stores',
+                      'Starter': 'Growing stores',
+                      'Launch': 'Established stores',
+                      'Growth': 'High-traffic stores',
+                      'Scale': 'Large operations',
+                      'Premium': 'Enterprise brands',
+                      'Enterprise': 'Custom solutions',
+                    }[tier.name] || '';
+                    
+                    return (
+                      <div key={tier.name} style={{ display: 'table-row' }}>
+                        <div style={{ 
+                          display: 'table-cell', 
+                          padding: '12px 16px', 
+                          borderBottom: index < SESSION_TIERS.length - 1 ? '1px solid #e1e3e5' : 'none' 
+                        }}>
+                          <Text as="p" variant="bodyMd">{tier.visitors}</Text>
+                        </div>
+                        <div style={{ 
+                          display: 'table-cell', 
+                          padding: '12px 16px', 
+                          borderBottom: index < SESSION_TIERS.length - 1 ? '1px solid #e1e3e5' : 'none' 
+                        }}>
+                          <Text as="p" variant="bodyMd" fontWeight="semibold">
+                            {tier.price !== null ? (tier.price === 0 ? 'Free' : `$${tier.price}/mo`) : 'Custom'}
+                          </Text>
+                        </div>
+                        <div style={{ 
+                          display: 'table-cell', 
+                          padding: '12px 16px', 
+                          borderBottom: index < SESSION_TIERS.length - 1 ? '1px solid #e1e3e5' : 'none' 
+                        }}>
+                          <Text as="p" variant="bodyMd" tone="subdued">{idealFor}</Text>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </BlockStack>
             </Card>
