@@ -364,23 +364,6 @@ export default function Dashboard() {
               <BlockStack gap="400">
                 <Card>
                   <BlockStack gap="300">
-                    <Text as="h2" variant="headingMd">Quick Actions</Text>
-                    <BlockStack gap="200">
-                      <Button icon={PlusCircleIcon} onClick={() => navigate("/app/products")} fullWidth textAlign="start">
-                        Add Product
-                      </Button>
-                      <Button icon={ChartVerticalFilledIcon} onClick={() => navigate("/app/analytics")} fullWidth textAlign="start">
-                        View Analytics
-                      </Button>
-                      <Button icon={SettingsIcon} onClick={() => navigate("/app/settings")} fullWidth textAlign="start">
-                        Settings
-                      </Button>
-                    </BlockStack>
-                  </BlockStack>
-                </Card>
-
-                <Card>
-                  <BlockStack gap="300">
                     <Text as="h2" variant="headingMd">Available Widgets</Text>
                     <Text as="p" variant="bodySm" tone="subdued">
                       Add these blocks in your theme editor:
