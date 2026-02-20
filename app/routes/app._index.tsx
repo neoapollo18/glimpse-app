@@ -50,6 +50,7 @@ interface ProductStat {
 
 interface LoaderData {
   shopDomain: string;
+  ownerName: string;
   configuredProducts: ConfiguredProduct[];
   configuredProductsCount: number;
   activeProducts: number;
@@ -58,8 +59,24 @@ interface LoaderData {
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shopDomain = session.shop;
+
+  // Fetch shop owner's name from Shopify
+  let ownerName = "";
+  try {
+    const response = await admin.graphql(`
+      query GetShopOwner {
+        shop {
+          shopOwnerName
+        }
+      }
+    `);
+    const data = await response.json();
+    ownerName = data.data?.shop?.shopOwnerName || "";
+  } catch (error) {
+    console.error("Error fetching shop owner name:", error);
+  }
 
   // Get configured products (full data)
   const configuredProducts = await getConfiguredProducts(shopDomain);
@@ -76,6 +93,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   return json<LoaderData>({
     shopDomain,
+    ownerName,
     configuredProducts,
     configuredProductsCount,
     activeProducts,
@@ -87,6 +105,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 export default function Dashboard() {
   const {
     shopDomain,
+    ownerName,
     configuredProducts,
     configuredProductsCount,
     activeProducts,
@@ -119,8 +138,10 @@ export default function Dashboard() {
     setShowDashboardView(false);
   };
 
-  // Get store name from domain
+  // Get display name - prefer owner's first name, fallback to store name
+  const ownerFirstName = ownerName ? ownerName.split(' ')[0] : '';
   const storeName = shopDomain.replace('.myshopify.com', '').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  const displayName = ownerFirstName || storeName;
 
   // Setup steps
   const setupSteps = [
@@ -176,10 +197,10 @@ export default function Dashboard() {
           <BlockStack gap="100">
             <Text as="h1" variant="headingXl">
               {allStepsComplete && showDashboardView 
-                ? `Welcome back, ${storeName}!` 
+                ? `Welcome back, ${displayName}!` 
                 : allStepsComplete 
-                  ? `You're all set, ${storeName}! 🎉`
-                  : `Welcome to Gleame, ${storeName}! 👋`
+                  ? `You're all set, ${displayName}! 🎉`
+                  : `Welcome to Gleame, ${displayName}! 👋`
               }
             </Text>
             <Text as="p" variant="bodyMd" tone="subdued">
