@@ -11,11 +11,10 @@ import {
   Box,
   Banner,
   Spinner,
-  Collapsible,
   Modal,
   Icon,
 } from "@shopify/polaris";
-import { ChevronDownIcon, ChevronUpIcon, StarFilledIcon, CheckIcon } from "@shopify/polaris-icons";
+import { StarFilledIcon, CheckIcon } from "@shopify/polaris-icons";
 import { useState, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import { identifyAndGetCustomer, subscribeCustomer, sendUsageEvent } from "../lib/mantle.server";
@@ -171,7 +170,6 @@ export default function WelcomePage() {
   const navigation = useNavigation();
   const navigate = useNavigate();
   
-  const [pricingOpen, setPricingOpen] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   
   const isLoading = navigation.state === "submitting";
@@ -269,65 +267,6 @@ export default function WelcomePage() {
                     : "After the 14-day free trial, stores with under 2.5k sessions stay free. Pricing starts at $30/month (2.5k-5k sessions) and adjusts automatically based on your store's traffic. No manual upgrades needed - your plan grows with you."
                   }
                 </Text>
-
-                {/* Expandable pricing table */}
-                <Box>
-                  <Button
-                    variant="plain"
-                    onClick={() => setPricingOpen(!pricingOpen)}
-                    icon={pricingOpen ? ChevronUpIcon : ChevronDownIcon}
-                    textAlign="left"
-                  >
-                    See pricing table
-                  </Button>
-                  
-                  <Collapsible
-                    open={pricingOpen}
-                    id="pricing-table-collapsible"
-                    transition={{ duration: '200ms', timingFunction: 'ease-in-out' }}
-                  >
-                    <Box paddingBlockStart="400">
-                      <div style={{ display: 'table', width: '100%', borderCollapse: 'collapse' }}>
-                        {/* Table header row */}
-                        <div style={{ display: 'table-row' }}>
-                          <div style={{ display: 'table-cell', padding: '12px 16px', borderBottom: '1px solid #e1e3e5', width: '50%' }}>
-                            <Text as="p" variant="bodyMd" fontWeight="semibold">
-                              Monthly Sessions
-                            </Text>
-                          </div>
-                          <div style={{ display: 'table-cell', padding: '12px 16px', borderBottom: '1px solid #e1e3e5', width: '50%' }}>
-                            <Text as="p" variant="bodyMd" fontWeight="semibold">
-                              Monthly Price
-                            </Text>
-                          </div>
-                        </div>
-                        {/* Table data rows */}
-                        {SESSION_TIERS.map((tier, index) => (
-                          <div key={tier.name} style={{ display: 'table-row' }}>
-                            <div style={{ 
-                              display: 'table-cell', 
-                              padding: '12px 16px', 
-                              borderBottom: index < SESSION_TIERS.length - 1 ? '1px solid #f1f2f3' : 'none' 
-                            }}>
-                              <Text as="p" variant="bodyMd">
-                                {tier.visitors}
-                              </Text>
-                            </div>
-                            <div style={{ 
-                              display: 'table-cell', 
-                              padding: '12px 16px', 
-                              borderBottom: index < SESSION_TIERS.length - 1 ? '1px solid #f1f2f3' : 'none' 
-                            }}>
-                              <Text as="p" variant="bodyMd">
-                                {tier.price !== null ? `$${tier.price}/month` : 'Custom'}
-                              </Text>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </Box>
-                  </Collapsible>
-                </Box>
 
                 {/* Error banner */}
                 {(error || actionData?.error) && (
@@ -427,6 +366,40 @@ export default function WelcomePage() {
                     </InlineStack>
                   </BlockStack>
                 </Box>
+              </BlockStack>
+            </Card>
+          </div>
+
+          {/* Pricing table - compact, below the card */}
+          <div style={{ maxWidth: '500px', width: '100%' }}>
+            <Card>
+              <BlockStack gap="300">
+                <Text as="h3" variant="headingMd">Pricing</Text>
+                <div style={{ display: 'table', width: '100%', borderCollapse: 'collapse' }}>
+                  {SESSION_TIERS.map((tier, index) => (
+                    <div key={tier.name} style={{ display: 'table-row' }}>
+                      <div style={{ 
+                        display: 'table-cell', 
+                        padding: '8px 0', 
+                        borderBottom: index < SESSION_TIERS.length - 1 ? '1px solid #f1f2f3' : 'none' 
+                      }}>
+                        <Text as="p" variant="bodySm">
+                          {tier.visitors}
+                        </Text>
+                      </div>
+                      <div style={{ 
+                        display: 'table-cell', 
+                        padding: '8px 0', 
+                        textAlign: 'right',
+                        borderBottom: index < SESSION_TIERS.length - 1 ? '1px solid #f1f2f3' : 'none' 
+                      }}>
+                        <Text as="p" variant="bodySm" fontWeight="semibold">
+                          {tier.price !== null ? (tier.price === 0 ? 'Free' : `$${tier.price}/mo`) : 'Custom'}
+                        </Text>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </BlockStack>
             </Card>
           </div>
