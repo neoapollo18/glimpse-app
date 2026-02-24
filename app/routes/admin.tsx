@@ -106,6 +106,7 @@ interface Product {
   product_name: string;
   product_image_url: string | null;
   transformation_prompt: string;
+  reference_image_url: string | null;
   is_funnel_generated: boolean;
   category_id: string | null;
   funnel_responses: Record<string, number | string> | null;
@@ -432,6 +433,8 @@ export default function FoundersAdmin() {
   const [testImageUrl, setTestImageUrl] = useState("");
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testLoading, setTestLoading] = useState(false);
+  const [uploadingRefFor, setUploadingRefFor] = useState<string | null>(null);
+  const [refImageUrls, setRefImageUrls] = useState<Record<string, string | null>>({});
 
   // Filter shops by search query
   const filteredShops = (shops || []).filter((shop: Shop) =>
@@ -489,6 +492,52 @@ export default function FoundersAdmin() {
     submit(formData, { method: "POST" });
     setEditingProduct(null);
     setEditPromptValue("");
+  };
+
+  const getRefImageUrl = (product: Product) => {
+    if (refImageUrls[product.id] !== undefined) return refImageUrls[product.id];
+    return product.reference_image_url;
+  };
+
+  const handleRefImageUpload = async (productId: string, file: File) => {
+    setUploadingRefFor(productId);
+    try {
+      const formData = new FormData();
+      formData.append("action", "upload");
+      formData.append("productId", productId);
+      formData.append("image", file);
+      
+      const response = await fetch("/api/upload-reference-image", {
+        method: "POST",
+        body: formData,
+      });
+      const result = await response.json();
+      if (result.referenceImageUrl) {
+        setRefImageUrls(prev => ({ ...prev, [productId]: result.referenceImageUrl }));
+      }
+    } catch (error) {
+      console.error("Failed to upload reference image:", error);
+    }
+    setUploadingRefFor(null);
+  };
+
+  const handleRefImageRemove = async (productId: string, currentUrl: string) => {
+    setUploadingRefFor(productId);
+    try {
+      const formData = new FormData();
+      formData.append("action", "remove");
+      formData.append("productId", productId);
+      formData.append("currentUrl", currentUrl);
+      
+      await fetch("/api/upload-reference-image", {
+        method: "POST",
+        body: formData,
+      });
+      setRefImageUrls(prev => ({ ...prev, [productId]: null }));
+    } catch (error) {
+      console.error("Failed to remove reference image:", error);
+    }
+    setUploadingRefFor(null);
   };
 
   const openTestModal = (product: Product, shopDomain: string) => {
@@ -689,6 +738,9 @@ export default function FoundersAdmin() {
                                   {product.variant_configs && product.variant_configs.length > 0 && (
                                     <Badge tone="info">{`${product.variant_configs.length} variant${product.variant_configs.length > 1 ? 's' : ''}`}</Badge>
                                   )}
+                                  {getRefImageUrl(product) && (
+                                    <Badge tone="warning">Ref image</Badge>
+                                  )}
                                 </InlineStack>
                               </BlockStack>
                               <div style={{ marginLeft: "auto" }}>
@@ -817,6 +869,73 @@ export default function FoundersAdmin() {
                                     ))}
                                   </BlockStack>
                                 )}
+
+                                {/* Reference Image */}
+                                <BlockStack gap="200">
+                                  <Divider />
+                                  <Text as="p" variant="bodySm" fontWeight="semibold">
+                                    Reference Image:
+                                  </Text>
+                                  {(() => {
+                                    const refUrl = getRefImageUrl(product);
+                                    const isUploading = uploadingRefFor === product.id;
+                                    
+                                    if (refUrl) {
+                                      return (
+                                        <InlineStack gap="300" blockAlign="center">
+                                          <div style={{ border: '1px solid #e1e3e5', borderRadius: '8px', overflow: 'hidden' }}>
+                                            <img 
+                                              src={refUrl} 
+                                              alt="Reference" 
+                                              style={{ width: '80px', height: '80px', objectFit: 'cover', display: 'block' }} 
+                                            />
+                                          </div>
+                                          <BlockStack gap="100">
+                                            <Badge tone="success">Attached</Badge>
+                                            <Button
+                                              size="slim"
+                                              variant="plain"
+                                              tone="critical"
+                                              onClick={() => handleRefImageRemove(product.id, refUrl)}
+                                              loading={isUploading}
+                                            >
+                                              Remove
+                                            </Button>
+                                          </BlockStack>
+                                        </InlineStack>
+                                      );
+                                    }
+                                    
+                                    return (
+                                      <InlineStack gap="200" blockAlign="center">
+                                        <Text as="p" variant="bodySm" tone="subdued">None</Text>
+                                        {isUploading ? (
+                                          <Spinner size="small" />
+                                        ) : (
+                                          <>
+                                            <input
+                                              id={`ref-upload-${product.id}`}
+                                              type="file"
+                                              accept="image/*"
+                                              style={{ display: 'none' }}
+                                              onChange={(e) => {
+                                                const file = e.target.files?.[0];
+                                                if (file) handleRefImageUpload(product.id, file);
+                                                e.target.value = '';
+                                              }}
+                                            />
+                                            <Button 
+                                              size="slim"
+                                              onClick={() => document.getElementById(`ref-upload-${product.id}`)?.click()}
+                                            >
+                                              Upload
+                                            </Button>
+                                          </>
+                                        )}
+                                      </InlineStack>
+                                    );
+                                  })()}
+                                </BlockStack>
 
                                 {/* Shopify ID */}
                                 <Text as="p" variant="bodySm" tone="subdued">
