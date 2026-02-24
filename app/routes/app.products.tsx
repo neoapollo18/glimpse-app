@@ -362,6 +362,7 @@ interface ConfiguredProduct {
   product_name: string;
   transformation_prompt: string;
   created_at: string;
+  reference_image_url: string | null;
   // Funnel system fields
   category_id: string | null;
   funnel_responses: Record<string, number> | null;
@@ -465,6 +466,10 @@ export default function Products() {
   const [classificationSuggestion, setClassificationSuggestion] = useState<ClassificationSuggestion | null>(null);
   const [classificationAttempted, setClassificationAttempted] = useState(false);
   
+  // Reference image state
+  const [referenceImageUrl, setReferenceImageUrl] = useState<string | null>(null);
+  const [isUploadingReference, setIsUploadingReference] = useState(false);
+
   // Variant color profiles state - maps variantId -> { shade_name, hue_family, undertone, etc. }
   const [variantColorProfiles, setVariantColorProfiles] = useState<Record<string, Record<string, string | number>>>({});
   const [expandedShadeVariants, setExpandedShadeVariants] = useState<Set<string>>(new Set());
@@ -579,6 +584,7 @@ export default function Products() {
     // Reset variant color profiles
     setVariantColorProfiles({});
     setExpandedShadeVariants(new Set());
+    setReferenceImageUrl(null);
     setModalActive(true);
   };
 
@@ -601,6 +607,8 @@ export default function Products() {
     // Reset variant color profiles
     setVariantColorProfiles({});
     setExpandedShadeVariants(new Set());
+    // Load existing reference image
+    setReferenceImageUrl(configuredProduct.reference_image_url || null);
     
     setModalActive(true);
   };
@@ -620,8 +628,59 @@ export default function Products() {
     // Reset variant color profiles
     setVariantColorProfiles({});
     setExpandedShadeVariants(new Set());
+    setReferenceImageUrl(null);
   };
   
+  // Reference image upload/remove handlers
+  const handleReferenceImageUpload = async (file: File) => {
+    const productId = selectedConfiguredProduct?.id;
+    if (!productId) return;
+    
+    setIsUploadingReference(true);
+    try {
+      const formData = new FormData();
+      formData.append("action", "upload");
+      formData.append("productId", productId);
+      formData.append("image", file);
+      
+      const response = await fetch("/api/upload-reference-image", {
+        method: "POST",
+        body: formData,
+      });
+      const result = await response.json();
+      if (result.referenceImageUrl) {
+        setReferenceImageUrl(result.referenceImageUrl);
+      }
+    } catch (error) {
+      console.error("Failed to upload reference image:", error);
+    }
+    setIsUploadingReference(false);
+  };
+
+  const handleRemoveReferenceImage = async () => {
+    const productId = selectedConfiguredProduct?.id;
+    if (!productId) return;
+    
+    setIsUploadingReference(true);
+    try {
+      const formData = new FormData();
+      formData.append("action", "remove");
+      formData.append("productId", productId);
+      if (referenceImageUrl) {
+        formData.append("currentUrl", referenceImageUrl);
+      }
+      
+      await fetch("/api/upload-reference-image", {
+        method: "POST",
+        body: formData,
+      });
+      setReferenceImageUrl(null);
+    } catch (error) {
+      console.error("Failed to remove reference image:", error);
+    }
+    setIsUploadingReference(false);
+  };
+
   // Check if category has variant-specific parameters
   const hasVariantParams = categoryData?.parameters?.some(p => p.is_variant_specific && !p.is_locked) || false;
   const variantParams = categoryData?.parameters?.filter(p => p.is_variant_specific && !p.is_locked) || [];
@@ -1553,6 +1612,62 @@ export default function Products() {
             </FormLayout>
           )}
         </Modal.Section>
+
+        {/* Reference Image Section - only for existing products */}
+        {isEditMode && selectedConfiguredProduct && (
+          <Modal.Section>
+            <BlockStack gap="300">
+              <Text as="h4" variant="headingMd">Reference Image (Optional)</Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Attach a product photo that Gemini will use as a reference during transformations. 
+                Useful for wig try-ons, specific product placement, etc.
+              </Text>
+              
+              {referenceImageUrl ? (
+                <InlineStack gap="400" blockAlign="center">
+                  <div style={{ border: '1px solid #e1e3e5', borderRadius: '8px', overflow: 'hidden' }}>
+                    <img 
+                      src={referenceImageUrl} 
+                      alt="Reference" 
+                      style={{ width: '120px', height: '120px', objectFit: 'cover', display: 'block' }} 
+                    />
+                  </div>
+                  <BlockStack gap="200">
+                    <Badge tone="success">Reference image attached</Badge>
+                    <Button
+                      variant="plain"
+                      tone="critical"
+                      onClick={handleRemoveReferenceImage}
+                      loading={isUploadingReference}
+                    >
+                      Remove
+                    </Button>
+                  </BlockStack>
+                </InlineStack>
+              ) : (
+                <DropZone
+                  accept="image/*"
+                  type="image"
+                  allowMultiple={false}
+                  onDrop={(_dropFiles, acceptedFiles) => {
+                    if (acceptedFiles.length > 0) {
+                      handleReferenceImageUpload(acceptedFiles[0]);
+                    }
+                  }}
+                >
+                  {isUploadingReference ? (
+                    <div style={{ padding: '20px', textAlign: 'center' }}>
+                      <Spinner size="small" />
+                      <Text as="p" variant="bodySm">Uploading...</Text>
+                    </div>
+                  ) : (
+                    <DropZone.FileUpload actionHint="Accepts .jpg, .png, .webp" />
+                  )}
+                </DropZone>
+              )}
+            </BlockStack>
+          </Modal.Section>
+        )}
         
         {/* Custom footer with delete on left, other actions on right */}
         <Modal.Section>

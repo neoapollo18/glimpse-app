@@ -1554,3 +1554,82 @@ export async function getAllShopsWithSessions(): Promise<Array<{
   
   return data || [];
 }
+
+/**
+ * Upload a reference image to Supabase Storage and return its public URL
+ */
+export async function uploadReferenceImage(
+  shopDomain: string,
+  productId: string,
+  fileBuffer: Buffer,
+  fileName: string,
+  contentType: string
+): Promise<string> {
+  const sanitizedShop = shopDomain.replace(/[^a-zA-Z0-9.-]/g, '_');
+  const ext = fileName.split('.').pop() || 'jpg';
+  const storagePath = `${sanitizedShop}/${productId}-${Date.now()}.${ext}`;
+
+  const { data, error } = await supabase.storage
+    .from('reference-images')
+    .upload(storagePath, fileBuffer, {
+      contentType,
+      upsert: true,
+    });
+
+  if (error) {
+    console.error('Error uploading reference image:', error);
+    throw new Error(`Failed to upload reference image: ${error.message}`);
+  }
+
+  const { data: urlData } = supabase.storage
+    .from('reference-images')
+    .getPublicUrl(data.path);
+
+  return urlData.publicUrl;
+}
+
+/**
+ * Save reference image URL to a product
+ */
+export async function saveProductReferenceImage(productId: string, referenceImageUrl: string | null) {
+  const { error } = await supabase
+    .from('products')
+    .update({ reference_image_url: referenceImageUrl })
+    .eq('id', productId);
+
+  if (error) {
+    console.error('Error saving reference image URL:', error);
+    throw new Error(`Failed to save reference image: ${error.message}`);
+  }
+}
+
+/**
+ * Save reference image URL to a product variant
+ */
+export async function saveVariantReferenceImage(variantId: string, referenceImageUrl: string | null) {
+  const { error } = await supabase
+    .from('product_variants')
+    .update({ reference_image_url: referenceImageUrl })
+    .eq('id', variantId);
+
+  if (error) {
+    console.error('Error saving variant reference image URL:', error);
+    throw new Error(`Failed to save variant reference image: ${error.message}`);
+  }
+}
+
+/**
+ * Delete a reference image from Supabase Storage given its URL
+ */
+export async function deleteReferenceImage(imageUrl: string) {
+  try {
+    const url = new URL(imageUrl);
+    const pathMatch = url.pathname.match(/\/storage\/v1\/object\/public\/reference-images\/(.+)/);
+    if (!pathMatch) return;
+
+    const storagePath = decodeURIComponent(pathMatch[1]);
+    await supabase.storage.from('reference-images').remove([storagePath]);
+  } catch (error) {
+    console.error('Error deleting reference image:', error);
+  }
+}

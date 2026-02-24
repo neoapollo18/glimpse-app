@@ -248,12 +248,32 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const modelToUse = hasVariantConfigs ? GEMINI_MODEL_PRO : GEMINI_MODEL_FLASH;
     console.log(`Model selection: hasVariantConfigs=${hasVariantConfigs}, using ${modelToUse}`);
 
+    // Fetch reference image if one is attached to the product config
+    let referenceImage: string | undefined;
+    let referenceImageMimeType: string | undefined;
+    
+    if (productConfig.reference_image_url) {
+      try {
+        const refResponse = await fetch(productConfig.reference_image_url);
+        if (refResponse.ok) {
+          const refBuffer = await refResponse.arrayBuffer();
+          referenceImage = Buffer.from(refBuffer).toString('base64');
+          referenceImageMimeType = refResponse.headers.get('content-type') || 'image/jpeg';
+          console.log(`📎 Reference image loaded (${Math.round(refBuffer.byteLength / 1024)}KB)`);
+        }
+      } catch (refError) {
+        console.error('Failed to fetch reference image, proceeding without it:', refError);
+      }
+    }
+
     // Call Gemini API with the product's transformation prompt and selected model
     const result = await transformImage({
       inputImage: base64Image,
       transformationPrompt: productConfig.transformation_prompt,
       mimeType: imageFile.type,
       model: modelToUse,
+      referenceImage,
+      referenceImageMimeType,
     });
 
     if (!result.success) {

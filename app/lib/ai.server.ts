@@ -15,6 +15,8 @@ interface ImageTransformationRequest {
   transformationPrompt: string;
   mimeType: string;
   model?: string; // Optional: defaults to FLASH model
+  referenceImage?: string; // base64 encoded reference product image
+  referenceImageMimeType?: string;
 }
 
 interface ImageTransformationResponse {
@@ -171,17 +173,31 @@ export async function transformImage(
       compressedMimeType,
     } = await compressImage(request.inputImage, request.mimeType);
     
-    const prompt = [
-      { 
-        text: request.transformationPrompt
-      },
-      {
+    const prompt: any[] = [];
+
+    // Add reference image first if provided (e.g., wig photo, product photo)
+    // Placing it before the prompt gives Gemini context about the product
+    if (request.referenceImage && request.referenceImageMimeType) {
+      prompt.push({
+        text: "Reference product image to apply onto the person:"
+      });
+      prompt.push({
         inlineData: {
-          mimeType: compressedMimeType,
-          data: compressedBase64
+          mimeType: request.referenceImageMimeType,
+          data: request.referenceImage
         }
+      });
+    }
+
+    prompt.push({ 
+      text: request.transformationPrompt
+    });
+    prompt.push({
+      inlineData: {
+        mimeType: compressedMimeType,
+        data: compressedBase64
       }
-    ]
+    });
 
     // Use specified model or default to FLASH
     const modelToUse = request.model || GEMINI_MODEL_FLASH;
