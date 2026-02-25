@@ -565,9 +565,9 @@ console.log('Gleame Integrated Horizontal Widget v2.0 loaded');
       
       const apiUrl = SHOPIFY_APP_URL + '/api/storefront/transform-image';
       
-      // Create abort controller for timeout (45 seconds)
+      // Create abort controller for timeout (90 seconds - OpenAI can be slower)
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 45000);
+      const timeoutId = setTimeout(() => controller.abort(), 90000);
 
       let response;
       try {
