@@ -1,7 +1,7 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { useLoaderData, useSubmit } from "@remix-run/react";
-import { useState } from "react";
+import { useLoaderData, useSubmit, useFetcher } from "@remix-run/react";
+import { useState, useEffect } from "react";
 import {
   AppProvider,
   Page,
@@ -478,8 +478,22 @@ export default function FoundersAdmin() {
   const [testImageUrl, setTestImageUrl] = useState("");
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testLoading, setTestLoading] = useState(false);
-  const [uploadingRefFor, setUploadingRefFor] = useState<string | null>(null);
+  const refFetcher = useFetcher<any>();
   const [refImageUrls, setRefImageUrls] = useState<Record<string, string | null>>({});
+
+  // Track which product the ref fetcher is working on
+  const [refFetcherProductId, setRefFetcherProductId] = useState<string | null>(null);
+  const isUploadingRefFor = refFetcher.state !== "idle" ? refFetcherProductId : null;
+
+  // Update local state when refFetcher completes
+  useEffect(() => {
+    if (refFetcher.data && refFetcher.state === "idle" && refFetcherProductId) {
+      if (refFetcher.data.referenceImageUrl !== undefined) {
+        setRefImageUrls(prev => ({ ...prev, [refFetcherProductId]: refFetcher.data.referenceImageUrl ?? null }));
+      }
+      setRefFetcherProductId(null);
+    }
+  }, [refFetcher.data, refFetcher.state, refFetcherProductId]);
 
   // Filter shops by search query
   const filteredShops = (shops || []).filter((shop: Shop) =>
@@ -544,34 +558,23 @@ export default function FoundersAdmin() {
     return product.reference_image_url;
   };
 
-  const handleRefImageUpload = async (productId: string, shopDomain: string, file: File) => {
-    setUploadingRefFor(productId);
-    try {
-      const formData = new FormData();
-      formData.append("action", "upload-reference-image");
-      formData.append("productId", productId);
-      formData.append("shopDomain", shopDomain);
-      formData.append("image", file);
-      submit(formData, { method: "POST", encType: "multipart/form-data" });
-      // Optimistically show spinner; page will reload with updated data
-    } catch (error) {
-      console.error("Failed to upload reference image:", error);
-      setUploadingRefFor(null);
-    }
+  const handleRefImageUpload = (productId: string, shopDomain: string, file: File) => {
+    setRefFetcherProductId(productId);
+    const formData = new FormData();
+    formData.append("action", "upload-reference-image");
+    formData.append("productId", productId);
+    formData.append("shopDomain", shopDomain);
+    formData.append("image", file);
+    refFetcher.submit(formData, { method: "POST", encType: "multipart/form-data" });
   };
 
-  const handleRefImageRemove = async (productId: string, currentUrl: string) => {
-    setUploadingRefFor(productId);
-    try {
-      const formData = new FormData();
-      formData.append("action", "remove-reference-image");
-      formData.append("productId", productId);
-      formData.append("currentUrl", currentUrl);
-      submit(formData, { method: "POST" });
-    } catch (error) {
-      console.error("Failed to remove reference image:", error);
-      setUploadingRefFor(null);
-    }
+  const handleRefImageRemove = (productId: string, currentUrl: string) => {
+    setRefFetcherProductId(productId);
+    const formData = new FormData();
+    formData.append("action", "remove-reference-image");
+    formData.append("productId", productId);
+    formData.append("currentUrl", currentUrl);
+    refFetcher.submit(formData, { method: "POST" });
   };
 
   const openTestModal = (product: Product, shopDomain: string) => {
@@ -912,7 +915,7 @@ export default function FoundersAdmin() {
                                   </Text>
                                   {(() => {
                                     const refUrl = getRefImageUrl(product);
-                                    const isUploading = uploadingRefFor === product.id;
+                                    const isUploading = isUploadingRefFor === product.id;
                                     
                                     if (refUrl) {
                                       return (

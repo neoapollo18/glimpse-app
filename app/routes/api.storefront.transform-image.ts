@@ -1,6 +1,6 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { transformImage, GEMINI_MODEL_PRO, GEMINI_MODEL_FLASH } from "../lib/ai.server";
+import { transformImage, transformImageWithOpenAI, GEMINI_MODEL_PRO, GEMINI_MODEL_FLASH } from "../lib/ai.server";
 import { getProductOrVariantConfiguration, trackTransformationEvent, productHasVariantConfigs, findShopByDomain, shopHasValidAccess } from "../lib/supabase.server";
 import { checkRateLimit, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
 
@@ -266,15 +266,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     }
 
-    // Call Gemini API with the product's transformation prompt and selected model
-    const result = await transformImage({
-      inputImage: base64Image,
-      transformationPrompt: productConfig.transformation_prompt,
-      mimeType: imageFile.type,
-      model: modelToUse,
-      referenceImage,
-      referenceImageMimeType,
-    });
+    // Route to OpenAI when a reference image is attached (e.g. wigs - Gemini blocks these)
+    // Otherwise use Gemini
+    let result;
+    if (referenceImage) {
+      console.log('🔀 Routing to OpenAI (reference image present)');
+      result = await transformImageWithOpenAI({
+        inputImage: base64Image,
+        transformationPrompt: productConfig.transformation_prompt,
+        mimeType: imageFile.type,
+        referenceImage,
+        referenceImageMimeType,
+      });
+    } else {
+      result = await transformImage({
+        inputImage: base64Image,
+        transformationPrompt: productConfig.transformation_prompt,
+        mimeType: imageFile.type,
+        model: modelToUse,
+      });
+    }
 
     if (!result.success) {
       return json({ 

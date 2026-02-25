@@ -1,9 +1,14 @@
 import { GoogleGenAI } from "@google/genai";
+import OpenAI, { toFile } from "openai";
 import sharp from "sharp";
 import heicConvert from "heic-convert";
 
 const client = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
+});
+
+const openaiClient = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
 // Model constants
@@ -163,7 +168,7 @@ async function callGeminiWithRetry(prompt: any[], model: string = GEMINI_MODEL_F
   throw lastError || new Error('Gemini API failed after retries');
 }
 
-// AI image transformation function
+// Gemini-based transformation (default for most products)
 export async function transformImage(
   request: ImageTransformationRequest
 ): Promise<ImageTransformationResponse> {
@@ -175,8 +180,6 @@ export async function transformImage(
     
     const prompt: any[] = [];
 
-    // Add reference image first if provided (e.g., wig photo, product photo)
-    // Placing it before the prompt gives Gemini context about the product
     if (request.referenceImage && request.referenceImageMimeType) {
       prompt.push({
         text: "Reference product image to apply onto the person:"
@@ -199,20 +202,18 @@ export async function transformImage(
       }
     });
 
-    // Use specified model or default to FLASH
     const modelToUse = request.model || GEMINI_MODEL_FLASH;
     const generatedImageData = await callGeminiWithRetry(prompt, modelToUse);
 
     return {
       success: true,
       generatedImage: generatedImageData,
-      processedInputImage: compressedBase64 // Return converted input for HEIC display
+      processedInputImage: compressedBase64
     };
 
   } catch (error) {
     console.error('Error in transformImage:', error);
     
-    // Handle Gemini API errors
     let userMessage = 'AI transformation failed. Please try again.';
     
     if (error instanceof Error) {
@@ -221,7 +222,6 @@ export async function transformImage(
         stack: error.stack
       });
       
-      // Provide more user-friendly error messages based on common error patterns
       if (error.message?.includes('RATE_LIMIT') || error.message?.includes('429')) {
         userMessage = 'Too many requests. Please wait a moment and try again.';
       } else if (error.message?.includes('INVALID_ARGUMENT') || error.message?.includes('400')) {
@@ -242,6 +242,78 @@ export async function transformImage(
     return {
       success: false,
       error: userMessage
+    };
+  }
+}
+
+// OpenAI GPT Image-based transformation (for products with reference images, e.g. wigs)
+export async function transformImageWithOpenAI(
+  request: ImageTransformationRequest
+): Promise<ImageTransformationResponse> {
+  try {
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY not configured');
+    }
+
+    const {
+      compressedBase64,
+    } = await compressImage(request.inputImage, request.mimeType);
+
+    // Build the image inputs: customer selfie + reference product image
+    const images: any[] = [
+      await toFile(Buffer.from(compressedBase64, 'base64'), 'selfie.jpg', { type: 'image/jpeg' }),
+    ];
+
+    if (request.referenceImage) {
+      images.push(
+        await toFile(Buffer.from(request.referenceImage, 'base64'), 'reference.jpg', { type: 'image/jpeg' }),
+      );
+    }
+
+    console.log(`Using OpenAI gpt-image-1 with ${images.length} image(s)`);
+
+    const result = await openaiClient.images.edit({
+      model: "gpt-image-1",
+      image: images,
+      prompt: request.transformationPrompt,
+      size: "1024x1024",
+      quality: "high",
+    });
+
+    const imageData = result.data?.[0]?.b64_json;
+    if (!imageData) {
+      throw new Error('No image data returned from OpenAI');
+    }
+
+    return {
+      success: true,
+      generatedImage: imageData,
+      processedInputImage: compressedBase64,
+    };
+
+  } catch (error) {
+    console.error('Error in transformImageWithOpenAI:', error);
+
+    let userMessage = 'AI transformation failed. Please try again.';
+
+    if (error instanceof Error) {
+      console.error('OpenAI API Error:', {
+        message: error.message,
+        stack: error.stack,
+      });
+
+      if (error.message?.includes('rate_limit') || error.message?.includes('429')) {
+        userMessage = 'Too many requests. Please wait a moment and try again.';
+      } else if (error.message?.includes('billing') || error.message?.includes('quota')) {
+        userMessage = 'Service quota exceeded. Please try again later.';
+      } else if (error.message?.includes('invalid_api_key') || error.message?.includes('401')) {
+        userMessage = 'Authentication failed. Please check your API configuration.';
+      }
+    }
+
+    return {
+      success: false,
+      error: userMessage,
     };
   }
 }
