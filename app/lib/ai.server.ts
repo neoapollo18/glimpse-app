@@ -256,9 +256,9 @@ function callOpenAIImageEdit(
     }
 
     const form = new NodeFormData();
-    form.append('model', 'gpt-image-1');
+    form.append('model', 'gpt-image-1.5');
     form.append('prompt', prompt);
-    form.append('size', 'auto');
+    form.append('size', '1024x1024');
     form.append('quality', 'medium');
 
     for (const img of images) {
