@@ -1,14 +1,11 @@
 import { GoogleGenAI } from "@google/genai";
-import OpenAI, { toFile } from "openai";
+import https from "https";
+import NodeFormData from "form-data";
 import sharp from "sharp";
 import heicConvert from "heic-convert";
 
 const client = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
-});
-
-const openaiClient = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
 });
 
 // Model constants
@@ -246,39 +243,89 @@ export async function transformImage(
   }
 }
 
+// Direct HTTP call to OpenAI image edit API (bypasses SDK FormData issues in Remix)
+function callOpenAIImageEdit(
+  images: { buffer: Buffer; filename: string }[],
+  prompt: string,
+): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      reject(new Error('OPENAI_API_KEY not configured'));
+      return;
+    }
+
+    const form = new NodeFormData();
+    form.append('model', 'gpt-image-1');
+    form.append('prompt', prompt);
+    form.append('size', '1024x1024');
+    form.append('quality', 'high');
+
+    for (const img of images) {
+      form.append('image[]', img.buffer, {
+        filename: img.filename,
+        contentType: 'image/jpeg',
+      });
+    }
+
+    const req = https.request({
+      hostname: 'api.openai.com',
+      path: '/v1/images/edits',
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        ...form.getHeaders(),
+      },
+    }, (res) => {
+      let data = '';
+      res.on('data', (chunk: string) => data += chunk);
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data);
+          if (res.statusCode && res.statusCode >= 400) {
+            reject(new Error(parsed.error?.message || `OpenAI API error: ${res.statusCode}`));
+          } else {
+            resolve(parsed);
+          }
+        } catch {
+          reject(new Error(`Failed to parse OpenAI response: ${data.substring(0, 200)}`));
+        }
+      });
+    });
+
+    req.on('error', reject);
+    req.setTimeout(120000, () => {
+      req.destroy();
+      reject(new Error('OpenAI API request timed out (120s)'));
+    });
+
+    form.pipe(req);
+  });
+}
+
 // OpenAI GPT Image-based transformation (for products with reference images, e.g. wigs)
 export async function transformImageWithOpenAI(
   request: ImageTransformationRequest
 ): Promise<ImageTransformationResponse> {
   try {
-    if (!process.env.OPENAI_API_KEY) {
-      throw new Error('OPENAI_API_KEY not configured');
-    }
-
     const {
       compressedBase64,
     } = await compressImage(request.inputImage, request.mimeType);
 
-    // Build the image inputs: customer selfie + reference product image
-    const images: any[] = [
-      await toFile(Buffer.from(compressedBase64, 'base64'), 'selfie.jpg', { type: 'image/jpeg' }),
+    const images: { buffer: Buffer; filename: string }[] = [
+      { buffer: Buffer.from(compressedBase64, 'base64'), filename: 'selfie.jpg' },
     ];
 
     if (request.referenceImage) {
-      images.push(
-        await toFile(Buffer.from(request.referenceImage, 'base64'), 'reference.jpg', { type: 'image/jpeg' }),
-      );
+      images.push({
+        buffer: Buffer.from(request.referenceImage, 'base64'),
+        filename: 'reference.jpg',
+      });
     }
 
     console.log(`Using OpenAI gpt-image-1 with ${images.length} image(s)`);
 
-    const result = await openaiClient.images.edit({
-      model: "gpt-image-1",
-      image: images,
-      prompt: request.transformationPrompt,
-      size: "1024x1024",
-      quality: "high",
-    });
+    const result = await callOpenAIImageEdit(images, request.transformationPrompt);
 
     const imageData = result.data?.[0]?.b64_json;
     if (!imageData) {
