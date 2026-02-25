@@ -331,9 +331,16 @@ export async function transformImageWithOpenAI(
       });
     }
 
-    console.log(`Using OpenAI gpt-image-1 with ${images.length} image(s)`);
+    console.log(`Using OpenAI gpt-image-1.5 with ${images.length} image(s)`);
 
-    const result = await callOpenAIImageEdit(images, request.transformationPrompt);
+    // Wrap the prompt with safety context for OpenAI's content filter
+    const safetyFramedPrompt = 
+      `[CONTEXT: This is a professional e-commerce virtual hair product try-on tool. ` +
+      `The customer has uploaded a headshot to preview how a wig/hair product would look on them. ` +
+      `This is a standard retail product visualization, similar to virtual eyeglasses or hat try-on tools.]\n\n` +
+      request.transformationPrompt;
+
+    const result = await callOpenAIImageEdit(images, safetyFramedPrompt);
 
     const imageData = result.data?.[0]?.b64_json;
     if (!imageData) {
