@@ -24,7 +24,7 @@ import {
 import { SearchIcon } from "@shopify/polaris-icons";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import enTranslations from "@shopify/polaris/locales/en.json";
-import { supabase, updateShopMonthlySessions } from "../lib/supabase.server";
+import { supabase, updateShopMonthlySessions, uploadReferenceImage, saveProductReferenceImage, deleteReferenceImage } from "../lib/supabase.server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
@@ -413,6 +413,51 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ success: true });
   }
 
+  if (actionType === "upload-reference-image") {
+    const productId = formData.get("productId") as string;
+    const imageFile = formData.get("image") as File;
+    const shopDomain = formData.get("shopDomain") as string;
+
+    if (!productId || !imageFile || !shopDomain) {
+      return json({ success: false, error: "Missing required fields" });
+    }
+
+    try {
+      const arrayBuffer = await imageFile.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+
+      const publicUrl = await uploadReferenceImage(
+        shopDomain,
+        productId,
+        buffer,
+        imageFile.name,
+        imageFile.type
+      );
+
+      await saveProductReferenceImage(productId, publicUrl);
+      return json({ success: true, referenceImageUrl: publicUrl });
+    } catch (error) {
+      console.error("Error uploading reference image:", error);
+      return json({ success: false, error: "Upload failed" });
+    }
+  }
+
+  if (actionType === "remove-reference-image") {
+    const productId = formData.get("productId") as string;
+    const currentUrl = formData.get("currentUrl") as string;
+
+    try {
+      if (currentUrl) {
+        await deleteReferenceImage(currentUrl);
+      }
+      await saveProductReferenceImage(productId, null);
+      return json({ success: true, referenceImageUrl: null });
+    } catch (error) {
+      console.error("Error removing reference image:", error);
+      return json({ success: false, error: "Remove failed" });
+    }
+  }
+
   return json({ success: false, error: "Unknown action" });
 };
 
@@ -499,45 +544,34 @@ export default function FoundersAdmin() {
     return product.reference_image_url;
   };
 
-  const handleRefImageUpload = async (productId: string, file: File) => {
+  const handleRefImageUpload = async (productId: string, shopDomain: string, file: File) => {
     setUploadingRefFor(productId);
     try {
       const formData = new FormData();
-      formData.append("action", "upload");
+      formData.append("action", "upload-reference-image");
       formData.append("productId", productId);
+      formData.append("shopDomain", shopDomain);
       formData.append("image", file);
-      
-      const response = await fetch("/api/upload-reference-image", {
-        method: "POST",
-        body: formData,
-      });
-      const result = await response.json();
-      if (result.referenceImageUrl) {
-        setRefImageUrls(prev => ({ ...prev, [productId]: result.referenceImageUrl }));
-      }
+      submit(formData, { method: "POST", encType: "multipart/form-data" });
+      // Optimistically show spinner; page will reload with updated data
     } catch (error) {
       console.error("Failed to upload reference image:", error);
+      setUploadingRefFor(null);
     }
-    setUploadingRefFor(null);
   };
 
   const handleRefImageRemove = async (productId: string, currentUrl: string) => {
     setUploadingRefFor(productId);
     try {
       const formData = new FormData();
-      formData.append("action", "remove");
+      formData.append("action", "remove-reference-image");
       formData.append("productId", productId);
       formData.append("currentUrl", currentUrl);
-      
-      await fetch("/api/upload-reference-image", {
-        method: "POST",
-        body: formData,
-      });
-      setRefImageUrls(prev => ({ ...prev, [productId]: null }));
+      submit(formData, { method: "POST" });
     } catch (error) {
       console.error("Failed to remove reference image:", error);
+      setUploadingRefFor(null);
     }
-    setUploadingRefFor(null);
   };
 
   const openTestModal = (product: Product, shopDomain: string) => {
@@ -920,7 +954,7 @@ export default function FoundersAdmin() {
                                               style={{ display: 'none' }}
                                               onChange={(e) => {
                                                 const file = e.target.files?.[0];
-                                                if (file) handleRefImageUpload(product.id, file);
+                                                if (file) handleRefImageUpload(product.id, shop.shop_domain, file);
                                                 e.target.value = '';
                                               }}
                                             />

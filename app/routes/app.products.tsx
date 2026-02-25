@@ -33,7 +33,10 @@ import {
   updateProductConfiguration, 
   deleteProductConfiguration,
   saveVariantConfiguration,
-  saveFunnelConfiguration
+  saveFunnelConfiguration,
+  uploadReferenceImage,
+  saveProductReferenceImage,
+  deleteReferenceImage,
 } from "../lib/supabase.server";
 import { generatePromptFromFunnel, validateFunnelResponses } from "../lib/prompt-generator.server";
 
@@ -198,6 +201,56 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     } catch (error) {
       console.error("Error deleting variant configuration:", error);
       return { success: false, message: "Failed to delete variant configuration. Please try again." };
+    }
+  }
+
+  if (action === "upload-reference-image") {
+    try {
+      const productId = formData.get("productId") as string;
+      const imageFile = formData.get("image") as File;
+
+      if (!productId || !imageFile) {
+        return { success: false, message: "Missing product ID or image file." };
+      }
+
+      if (imageFile.size > 10 * 1024 * 1024) {
+        return { success: false, message: "File too large. Max 10MB." };
+      }
+
+      const arrayBuffer = await imageFile.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+
+      const publicUrl = await uploadReferenceImage(
+        session.shop,
+        productId,
+        buffer,
+        imageFile.name,
+        imageFile.type
+      );
+
+      await saveProductReferenceImage(productId, publicUrl);
+
+      return { success: true, message: "Reference image uploaded!", referenceImageUrl: publicUrl };
+    } catch (error) {
+      console.error("Error uploading reference image:", error);
+      return { success: false, message: "Failed to upload reference image. Please try again." };
+    }
+  }
+
+  if (action === "remove-reference-image") {
+    try {
+      const productId = formData.get("productId") as string;
+      const currentUrl = formData.get("currentUrl") as string;
+
+      if (currentUrl) {
+        await deleteReferenceImage(currentUrl);
+      }
+      await saveProductReferenceImage(productId, null);
+
+      return { success: true, message: "Reference image removed.", referenceImageUrl: null };
+    } catch (error) {
+      console.error("Error removing reference image:", error);
+      return { success: false, message: "Failed to remove reference image." };
     }
   }
 
@@ -468,7 +521,6 @@ export default function Products() {
   
   // Reference image state
   const [referenceImageUrl, setReferenceImageUrl] = useState<string | null>(null);
-  const [isUploadingReference, setIsUploadingReference] = useState(false);
 
   // Variant color profiles state - maps variantId -> { shade_name, hue_family, undertone, etc. }
   const [variantColorProfiles, setVariantColorProfiles] = useState<Record<string, Record<string, string | number>>>({});
@@ -631,54 +683,42 @@ export default function Products() {
     setReferenceImageUrl(null);
   };
   
-  // Reference image upload/remove handlers
-  const handleReferenceImageUpload = async (file: File) => {
+  // Reference image upload/remove via Remix fetcher (uses authenticated session)
+  const refFetcher = useFetcher<typeof action>();
+  const isUploadingRef = refFetcher.state !== "idle";
+
+  // Update local state when refFetcher completes
+  useEffect(() => {
+    if (refFetcher.data && refFetcher.state === "idle") {
+      const data = refFetcher.data as any;
+      if (data.referenceImageUrl !== undefined) {
+        setReferenceImageUrl(data.referenceImageUrl ?? null);
+      }
+    }
+  }, [refFetcher.data, refFetcher.state]);
+
+  const handleReferenceImageUpload = (file: File) => {
     const productId = selectedConfiguredProduct?.id;
     if (!productId) return;
-    
-    setIsUploadingReference(true);
-    try {
-      const formData = new FormData();
-      formData.append("action", "upload");
-      formData.append("productId", productId);
-      formData.append("image", file);
-      
-      const response = await fetch("/api/upload-reference-image", {
-        method: "POST",
-        body: formData,
-      });
-      const result = await response.json();
-      if (result.referenceImageUrl) {
-        setReferenceImageUrl(result.referenceImageUrl);
-      }
-    } catch (error) {
-      console.error("Failed to upload reference image:", error);
-    }
-    setIsUploadingReference(false);
+
+    const formData = new FormData();
+    formData.append("action", "upload-reference-image");
+    formData.append("productId", productId);
+    formData.append("image", file);
+    refFetcher.submit(formData, { method: "POST", encType: "multipart/form-data" });
   };
 
-  const handleRemoveReferenceImage = async () => {
+  const handleRemoveReferenceImage = () => {
     const productId = selectedConfiguredProduct?.id;
     if (!productId) return;
-    
-    setIsUploadingReference(true);
-    try {
-      const formData = new FormData();
-      formData.append("action", "remove");
-      formData.append("productId", productId);
-      if (referenceImageUrl) {
-        formData.append("currentUrl", referenceImageUrl);
-      }
-      
-      await fetch("/api/upload-reference-image", {
-        method: "POST",
-        body: formData,
-      });
-      setReferenceImageUrl(null);
-    } catch (error) {
-      console.error("Failed to remove reference image:", error);
+
+    const formData = new FormData();
+    formData.append("action", "remove-reference-image");
+    formData.append("productId", productId);
+    if (referenceImageUrl) {
+      formData.append("currentUrl", referenceImageUrl);
     }
-    setIsUploadingReference(false);
+    refFetcher.submit(formData, { method: "POST" });
   };
 
   // Check if category has variant-specific parameters
@@ -1638,7 +1678,7 @@ export default function Products() {
                       variant="plain"
                       tone="critical"
                       onClick={handleRemoveReferenceImage}
-                      loading={isUploadingReference}
+                      loading={isUploadingRef}
                     >
                       Remove
                     </Button>
@@ -1655,7 +1695,7 @@ export default function Products() {
                     }
                   }}
                 >
-                  {isUploadingReference ? (
+                  {isUploadingRef ? (
                     <div style={{ padding: '20px', textAlign: 'center' }}>
                       <Spinner size="small" />
                       <Text as="p" variant="bodySm">Uploading...</Text>
