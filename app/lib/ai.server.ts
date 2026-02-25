@@ -258,7 +258,7 @@ function callOpenAIImageEdit(
     const form = new NodeFormData();
     form.append('model', 'gpt-image-1');
     form.append('prompt', prompt);
-    form.append('size', '1024x1024');
+    form.append('size', 'auto');
     form.append('quality', 'medium');
 
     for (const img of images) {
@@ -312,13 +312,21 @@ export async function transformImageWithOpenAI(
       compressedBase64,
     } = await compressImage(request.inputImage, request.mimeType);
 
+    // Also compress the reference image to reduce upload size and processing time
+    let compressedRefBase64 = request.referenceImage;
+    if (request.referenceImage && request.referenceImageMimeType) {
+      const refCompressed = await compressImage(request.referenceImage, request.referenceImageMimeType);
+      compressedRefBase64 = refCompressed.compressedBase64;
+      console.log(`Reference image compressed: ${refCompressed.originalSize} -> ${refCompressed.compressedSize} bytes`);
+    }
+
     const images: { buffer: Buffer; filename: string }[] = [
       { buffer: Buffer.from(compressedBase64, 'base64'), filename: 'selfie.jpg' },
     ];
 
-    if (request.referenceImage) {
+    if (compressedRefBase64) {
       images.push({
-        buffer: Buffer.from(request.referenceImage, 'base64'),
+        buffer: Buffer.from(compressedRefBase64, 'base64'),
         filename: 'reference.jpg',
       });
     }
