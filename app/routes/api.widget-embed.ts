@@ -390,12 +390,22 @@ const WIDGET_JS = `
   console.log('Gleame Embed Widget loaded:', { productId: productId, shopDomain: shopDomain });
   }
 
+  console.log('Gleame Embed: readyState=' + document.readyState + ', element=' + !!document.getElementById('gleame-widget'));
   if (!findAndBoot()) {
+    console.log('Gleame Embed: element not found, setting up retry');
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', function() { findAndBoot(); });
+      document.addEventListener('DOMContentLoaded', function() {
+        console.log('Gleame Embed: DOMContentLoaded fired, element=' + !!document.getElementById('gleame-widget'));
+        findAndBoot();
+      });
     } else {
       var a = 0;
-      var p = setInterval(function() { a++; if (findAndBoot() || a > 50) clearInterval(p); }, 100);
+      var p = setInterval(function() {
+        a++;
+        var found = findAndBoot();
+        if (a <= 3 || found) console.log('Gleame Embed: poll #' + a + ', found=' + found);
+        if (found || a > 50) clearInterval(p);
+      }, 100);
     }
   }
 })();
