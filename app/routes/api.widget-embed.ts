@@ -15,8 +15,9 @@ const WIDGET_JS = `
 (function() {
   'use strict';
 
-  // Prevent double-init
-  if (window.__gleameEmbedLoaded) return;
+  console.log('Gleame Embed: script starting');
+  // Prevent double-init (disabled for debug)
+  // if (window.__gleameEmbedLoaded) return;
   window.__gleameEmbedLoaded = true;
 
   var SHOPIFY_APP_URL = 'https://glimpse-app-charles.onrender.com';
@@ -39,15 +40,14 @@ const WIDGET_JS = `
   var loadingMessages = ['Analyzing image...', 'Creating your transformation...', 'Working our magic...', 'Almost there...'];
 
   // ========== Find container (with DOM-ready retry) ==========
-  function gleameInit() {
+  function findAndBoot() {
     var container = document.getElementById('gleame-widget');
     if (!container) return false;
-    gleameBoot(container);
+    boot(container);
     return true;
   }
 
-  function gleameBoot(container) {
-
+  function boot(container) {
   var productId = container.getAttribute('data-product-id');
   var shopDomain = container.getAttribute('data-shop-domain');
   var title = container.getAttribute('data-title') || 'Try It Virtually';
@@ -388,19 +388,15 @@ const WIDGET_JS = `
   if (!viewTracked) { viewTracked = true; trackEvent('widget_view'); }
 
   console.log('Gleame Embed Widget loaded:', { productId: productId, shopDomain: shopDomain });
-  } // end gleameBoot
+  }
 
-  // Try to init immediately, or wait for DOM ready, or poll
-  if (gleameInit()) return;
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function() { gleameInit(); });
-  } else {
-    // DOM already loaded but element not found - poll briefly (yett.js may delay DOM insertion)
-    var attempts = 0;
-    var poller = setInterval(function() {
-      attempts++;
-      if (gleameInit() || attempts > 50) clearInterval(poller);
-    }, 100);
+  if (!findAndBoot()) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function() { findAndBoot(); });
+    } else {
+      var a = 0;
+      var p = setInterval(function() { a++; if (findAndBoot() || a > 50) clearInterval(p); }, 100);
+    }
   }
 })();
 `;
