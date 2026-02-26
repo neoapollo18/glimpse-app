@@ -451,7 +451,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     status: 200,
     headers: {
       "Content-Type": "application/javascript; charset=utf-8",
-      "Cache-Control": "public, max-age=3600, s-maxage=86400",
+      "Cache-Control": "no-cache, no-store, must-revalidate",
       "Access-Control-Allow-Origin": "*",
     },
   });
