@@ -266,18 +266,30 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     }
 
-    // Route to OpenAI when a reference image is attached (e.g. wigs - Gemini blocks these)
-    // Otherwise use Gemini
+    // When a reference image is present: try Gemini Pro first (fast), fall back to OpenAI (slow but permissive)
     let result;
     if (referenceImage) {
-      console.log('🔀 Routing to OpenAI (reference image present)');
-      result = await transformImageWithOpenAI({
+      console.log('🔀 Reference image present - trying Gemini Pro first');
+      result = await transformImage({
         inputImage: base64Image,
         transformationPrompt: productConfig.transformation_prompt,
         mimeType: imageFile.type,
+        model: GEMINI_MODEL_PRO,
         referenceImage,
         referenceImageMimeType,
       });
+
+      // If Gemini fails (safety filter etc), fall back to OpenAI
+      if (!result.success) {
+        console.log('⚠️ Gemini failed, falling back to OpenAI');
+        result = await transformImageWithOpenAI({
+          inputImage: base64Image,
+          transformationPrompt: productConfig.transformation_prompt,
+          mimeType: imageFile.type,
+          referenceImage,
+          referenceImageMimeType,
+        });
+      }
     } else {
       result = await transformImage({
         inputImage: base64Image,
