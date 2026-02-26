@@ -79,12 +79,15 @@ const WIDGET_JS = `
 
   var loadingMessages = ['Analyzing image...', 'Creating your transformation...', 'Working our magic...', 'Almost there...'];
 
-  // ========== Find container & read config ==========
-  var container = document.getElementById('gleame-widget');
-  if (!container) {
-    console.warn('Gleame Embed: No #gleame-widget element found');
-    return;
+  // ========== Find container (with DOM-ready retry) ==========
+  function gleameInit() {
+    var container = document.getElementById('gleame-widget');
+    if (!container) return false;
+    gleameBoot(container);
+    return true;
   }
+
+  function gleameBoot(container) {
 
   var productId = container.getAttribute('data-product-id');
   var shopDomain = container.getAttribute('data-shop-domain');
@@ -426,6 +429,20 @@ const WIDGET_JS = `
   if (!viewTracked) { viewTracked = true; trackEvent('widget_view'); }
 
   console.log('Gleame Embed Widget loaded:', { productId: productId, shopDomain: shopDomain });
+  } // end gleameBoot
+
+  // Try to init immediately, or wait for DOM ready, or poll
+  if (gleameInit()) return;
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() { gleameInit(); });
+  } else {
+    // DOM already loaded but element not found - poll briefly (yett.js may delay DOM insertion)
+    var attempts = 0;
+    var poller = setInterval(function() {
+      attempts++;
+      if (gleameInit() || attempts > 50) clearInterval(poller);
+    }, 100);
+  }
 })();
 `;
 
