@@ -246,6 +246,7 @@ console.log('Gleame Banner Widget v3.0 loaded');
   };
 
   // Trigger file input
+  // Desktop: opens camera modal. Mobile: native file picker.
   window.bannerWidgetFunctions.triggerFileInput = function(instanceId) {
     if (!instanceId) {
       const widget = document.querySelector('.glimpse-banner-widget');
@@ -257,7 +258,20 @@ console.log('Gleame Banner Widget v3.0 loaded');
     if (btn?.classList.contains('is-loading')) return;
     
     const fileInput = getElement(instanceId, 'bannerFileInput');
-    if (fileInput) fileInput.click();
+    const openFilePicker = function() { if (fileInput) fileInput.click(); };
+
+    if (window.gleameCamera && !isMobileDevice()) {
+      window.gleameCamera.open(
+        function(file) {
+          // Simulate a file select event for the banner handler
+          var fakeEvent = { target: { files: [file] } };
+          window.bannerWidgetFunctions.handleFileSelect(fakeEvent, instanceId);
+        },
+        openFilePicker
+      );
+    } else {
+      openFilePicker();
+    }
   };
 
   // Reset banner

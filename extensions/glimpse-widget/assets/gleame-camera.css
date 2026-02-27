@@ -1,0 +1,246 @@
+/* Gleame Camera Modal - Desktop webcam capture */
+
+.gleame-camera-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: gleameFadeIn 0.2s ease;
+}
+
+@keyframes gleameFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.gleame-camera-modal {
+  background: #fff;
+  border-radius: 16px;
+  width: 420px;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  animation: gleameSlideUp 0.25s ease;
+}
+
+@keyframes gleameSlideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.gleame-camera-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.gleame-camera-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+  font-family: inherit;
+}
+
+.gleame-camera-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  color: #6b7280;
+  line-height: 1;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+
+.gleame-camera-close:hover {
+  background: #f3f4f6;
+  color: #1f2937;
+}
+
+.gleame-camera-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.gleame-camera-viewfinder {
+  width: 100%;
+  aspect-ratio: 1;
+  max-height: 340px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #111;
+  position: relative;
+}
+
+.gleame-camera-viewfinder video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+  display: block;
+}
+
+.gleame-camera-viewfinder canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.gleame-camera-viewfinder img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.gleame-camera-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #fff;
+  font-size: 14px;
+  text-align: center;
+}
+
+.gleame-camera-loading-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: gleameCameraSpin 0.8s linear infinite;
+  margin: 0 auto 8px;
+}
+
+@keyframes gleameCameraSpin {
+  to { transform: rotate(360deg); }
+}
+
+.gleame-camera-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  width: 100%;
+}
+
+.gleame-camera-capture-btn {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 4px solid #1f2937;
+  background: #fff;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.15s;
+  padding: 0;
+}
+
+.gleame-camera-capture-btn:hover {
+  border-color: #8b5cf6;
+  transform: scale(1.05);
+}
+
+.gleame-camera-capture-btn::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  right: 4px;
+  bottom: 4px;
+  background: #1f2937;
+  border-radius: 50%;
+  transition: background 0.15s;
+}
+
+.gleame-camera-capture-btn:hover::after {
+  background: #8b5cf6;
+}
+
+.gleame-camera-use-btn {
+  flex: 1;
+  padding: 12px 20px;
+  border-radius: 10px;
+  border: none;
+  background: #1f2937;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.gleame-camera-use-btn:hover {
+  background: #374151;
+  transform: translateY(-1px);
+}
+
+.gleame-camera-retake-btn {
+  flex: 1;
+  padding: 12px 20px;
+  border-radius: 10px;
+  border: 2px solid #e5e7eb;
+  background: #fff;
+  color: #1f2937;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.gleame-camera-retake-btn:hover {
+  border-color: #d1d5db;
+  background: #f9fafb;
+}
+
+.gleame-camera-upload-link {
+  color: #6b7280;
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: underline;
+  background: none;
+  border: none;
+  padding: 4px 0;
+  font-family: inherit;
+  transition: color 0.15s;
+}
+
+.gleame-camera-upload-link:hover {
+  color: #374151;
+}
+
+.gleame-camera-error {
+  text-align: center;
+  padding: 40px 20px;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.gleame-camera-error svg {
+  margin-bottom: 12px;
+  color: #9ca3af;
+}
+
+.gleame-camera-error p {
+  margin: 0 0 16px;
+  line-height: 1.5;
+}

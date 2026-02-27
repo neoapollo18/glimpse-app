@@ -238,8 +238,8 @@ console.log('Gleame Integrated Horizontal Widget v2.0 loaded');
   };
   
   // Horizontal-specific trigger - now accepts instanceId
+  // Desktop: opens camera modal. Mobile: native file picker.
   window.widgetFunctions.triggerFileInputHorizontal = function(instanceId) {
-    // If no instanceId, try to find the first widget's instanceId
     if (!instanceId) {
       const widget = document.querySelector('.glimpse-integrated-horizontal');
       instanceId = widget?.getAttribute('data-block-id');
@@ -250,7 +250,16 @@ console.log('Gleame Integrated Horizontal Widget v2.0 loaded');
     }
     
     const fileInput = getElement(instanceId, 'imageUpload');
-    if (fileInput) fileInput.click();
+    const openFilePicker = function() { if (fileInput) fileInput.click(); };
+
+    if (window.gleameCamera && !isMobileDevice()) {
+      window.gleameCamera.open(
+        function(file) { processSelectedFile(instanceId, file); },
+        openFilePicker
+      );
+    } else {
+      openFilePicker();
+    }
   };
   
   function setupVariantChangeListeners() {

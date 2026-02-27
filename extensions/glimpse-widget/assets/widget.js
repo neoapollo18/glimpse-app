@@ -239,8 +239,8 @@ console.log('Gleame Legacy Widget v3.0 loaded');
   };
   
   // Trigger file input - now accepts instanceId
+  // Desktop: opens camera modal. Mobile: native file picker.
   window.widgetFunctions.triggerFileInput = function(instanceId) {
-    // If no instanceId, try to find the first widget's instanceId
     if (!instanceId) {
       let widget = document.querySelector('.glimpse-ai-widget');
       if (!widget) widget = document.querySelector('.glimpse-integrated-widget');
@@ -252,7 +252,16 @@ console.log('Gleame Legacy Widget v3.0 loaded');
     }
     
     const fileInput = getElement(instanceId, 'imageUpload');
-    if (fileInput) fileInput.click();
+    const openFilePicker = function() { if (fileInput) fileInput.click(); };
+
+    if (window.gleameCamera && !isMobileDevice()) {
+      window.gleameCamera.open(
+        function(file) { processSelectedFile(instanceId, file); },
+        openFilePicker
+      );
+    } else {
+      openFilePicker();
+    }
   };
   
   function setupVariantChangeListeners() {

@@ -189,7 +189,107 @@ const WIDGET_JS = `
     showState('upload');
   }
 
-  function triggerUpload() { if (fileInput) fileInput.click(); }
+  function triggerUpload() {
+    if (!isMobile() && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      openCameraModal();
+    } else {
+      if (fileInput) fileInput.click();
+    }
+  }
+
+  // ========== Desktop Camera Modal ==========
+  var cameraOverlay = null;
+  var cameraStream = null;
+  var capturedData = null;
+
+  function stopCameraStream() {
+    if (cameraStream) { cameraStream.getTracks().forEach(function(t) { t.stop(); }); cameraStream = null; }
+  }
+
+  function closeCameraModal() {
+    stopCameraStream();
+    if (cameraOverlay && cameraOverlay.parentNode) cameraOverlay.parentNode.removeChild(cameraOverlay);
+    cameraOverlay = null; capturedData = null;
+  }
+
+  function openCameraModal() {
+    capturedData = null;
+    cameraOverlay = document.createElement('div');
+    cameraOverlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);z-index:999999;display:flex;align-items:center;justify-content:center';
+    cameraOverlay.innerHTML =
+      '<div style="background:#fff;border-radius:16px;width:420px;max-width:90vw;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3)">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #e5e7eb">' +
+          '<h3 style="margin:0;font-size:16px;font-weight:600;color:#1f2937">Take a Selfie</h3>' +
+          '<button id="gcClose" style="background:none;border:none;cursor:pointer;padding:4px;color:#6b7280;font-size:20px;line-height:1">&#10005;</button>' +
+        '</div>' +
+        '<div style="padding:20px;display:flex;flex-direction:column;align-items:center;gap:16px">' +
+          '<div id="gcView" style="width:100%;aspect-ratio:1;max-height:340px;border-radius:12px;overflow:hidden;background:#111;position:relative;display:flex;align-items:center;justify-content:center">' +
+            '<div style="color:#fff;font-size:14px;text-align:center">Starting camera...</div>' +
+          '</div>' +
+          '<div id="gcActions">' +
+            '<button id="gcCapture" style="width:64px;height:64px;border-radius:50%;border:4px solid #1f2937;background:#fff;cursor:pointer;position:relative"><span style="display:block;width:calc(100% - 8px);height:calc(100% - 8px);background:#1f2937;border-radius:50%;margin:4px"></span></button>' +
+          '</div>' +
+          '<button id="gcUploadLink" style="color:#6b7280;font-size:13px;cursor:pointer;text-decoration:underline;background:none;border:none;padding:4px 0">or upload a file instead</button>' +
+        '</div>' +
+      '</div>';
+
+    cameraOverlay.addEventListener('click', function(e) { if (e.target === cameraOverlay) closeCameraModal(); });
+    document.body.appendChild(cameraOverlay);
+
+    document.getElementById('gcClose').addEventListener('click', closeCameraModal);
+    document.getElementById('gcCapture').addEventListener('click', gcCapture);
+    document.getElementById('gcUploadLink').addEventListener('click', function() { closeCameraModal(); if (fileInput) fileInput.click(); });
+
+    document.addEventListener('keydown', function esc(e) { if (e.key === 'Escape') { closeCameraModal(); document.removeEventListener('keydown', esc); } });
+
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 720 }, height: { ideal: 720 } }, audio: false })
+      .then(function(s) {
+        cameraStream = s;
+        if (!cameraOverlay) { stopCameraStream(); return; }
+        var v = document.createElement('video');
+        v.setAttribute('autoplay', ''); v.setAttribute('playsinline', ''); v.setAttribute('muted', ''); v.muted = true;
+        v.style.cssText = 'width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:block';
+        v.srcObject = s;
+        var vf = document.getElementById('gcView');
+        if (vf) { vf.innerHTML = ''; vf.appendChild(v); }
+        v.play().catch(function() {});
+      })
+      .catch(function(err) {
+        var vf = document.getElementById('gcView');
+        if (vf) vf.innerHTML = '<div style="color:#9ca3af;font-size:14px;text-align:center;padding:40px">' + (err.name === 'NotAllowedError' ? 'Camera access denied.' : 'Could not start camera.') + '<br>Try uploading a file instead.</div>';
+        document.getElementById('gcActions').innerHTML = '';
+      });
+  }
+
+  function gcCapture() {
+    var vf = document.getElementById('gcView');
+    var video = vf ? vf.querySelector('video') : null;
+    if (!video) return;
+    var c = document.createElement('canvas'); c.width = video.videoWidth; c.height = video.videoHeight;
+    var ctx = c.getContext('2d'); ctx.translate(c.width, 0); ctx.scale(-1, 1); ctx.drawImage(video, 0, 0);
+    capturedData = c.toDataURL('image/jpeg', 0.92);
+    stopCameraStream();
+    var img = document.createElement('img'); img.src = capturedData; img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block';
+    vf.innerHTML = ''; vf.appendChild(img);
+    var actions = document.getElementById('gcActions');
+    if (actions) {
+      actions.innerHTML =
+        '<div style="display:flex;gap:12px;width:100%">' +
+          '<button id="gcRetake" style="flex:1;padding:12px;border-radius:10px;border:2px solid #e5e7eb;background:#fff;color:#1f2937;font-size:15px;font-weight:500;cursor:pointer">Retake</button>' +
+          '<button id="gcUse" style="flex:1;padding:12px;border-radius:10px;border:none;background:#1f2937;color:#fff;font-size:15px;font-weight:500;cursor:pointer">Use Photo</button>' +
+        '</div>';
+      document.getElementById('gcRetake').addEventListener('click', function() { capturedData = null; openCameraModal(); });
+      document.getElementById('gcUse').addEventListener('click', function() {
+        if (!capturedData) return;
+        var arr = capturedData.split(','); var mime = arr[0].match(/:(.*?);/)[1];
+        var bstr = atob(arr[1]); var n = bstr.length; var u8 = new Uint8Array(n);
+        while (n--) u8[n] = bstr.charCodeAt(n);
+        var f = new File([u8], 'webcam-selfie.jpg', { type: mime });
+        closeCameraModal(); processFile(f);
+      });
+    }
+    document.getElementById('gcUploadLink').style.display = 'none';
+  }
 
   // ========== Variant detection ==========
   function getCurrentVariant() {

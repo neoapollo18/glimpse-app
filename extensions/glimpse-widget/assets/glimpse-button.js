@@ -138,6 +138,7 @@ console.log('Gleame Button Widget v3.0 loaded');
   }
   
   // Trigger file upload
+  // Desktop: opens camera modal. Mobile: native file picker.
   window.glimpseButton.triggerUpload = function(instanceId) {
     if (!instanceId) {
       const widget = document.querySelector('.glimpse-button-widget');
@@ -149,7 +150,16 @@ console.log('Gleame Button Widget v3.0 loaded');
     }
     
     const fileInput = getElement(instanceId, 'imageUpload');
-    if (fileInput) fileInput.click();
+    const openFilePicker = function() { if (fileInput) fileInput.click(); };
+
+    if (window.gleameCamera && !isMobileDevice()) {
+      window.gleameCamera.open(
+        function(file) { processFile(instanceId, file); },
+        openFilePicker
+      );
+    } else {
+      openFilePicker();
+    }
   };
   
   // Set button to loading state
