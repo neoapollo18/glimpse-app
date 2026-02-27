@@ -44,25 +44,31 @@
     el.className = 'gleame-camera-overlay';
     el.innerHTML =
       '<div class="gleame-camera-modal">' +
-        '<div class="gleame-camera-header">' +
-          '<h3>Take a Selfie</h3>' +
-          '<button class="gleame-camera-close" id="gleameCameraClose">' + CLOSE_SVG + '</button>' +
-        '</div>' +
-        '<div class="gleame-camera-body">' +
+        '<div class="gleame-camera-viewfinder-wrap">' +
           '<div class="gleame-camera-viewfinder" id="gleameCameraViewfinder">' +
             '<div class="gleame-camera-loading" id="gleameCameraLoading">' +
               '<div class="gleame-camera-loading-spinner"></div>' +
               '<div>Starting camera...</div>' +
             '</div>' +
           '</div>' +
-          '<div class="gleame-camera-actions" id="gleameCameraActions">' +
-            '<button class="gleame-camera-capture-btn" id="gleameCameraCapture" title="Take photo"></button>' +
+        '</div>' +
+        '<div class="gleame-camera-controls">' +
+          '<div class="gleame-camera-header">' +
+            '<h3>Camera</h3>' +
+            '<button class="gleame-camera-close" id="gleameCameraClose">' + CLOSE_SVG + '</button>' +
           '</div>' +
-          '<button class="gleame-camera-upload-link" id="gleameCameraUploadLink">or upload a file instead</button>' +
+          '<div class="gleame-camera-body">' +
+            '<div class="gleame-camera-actions" id="gleameCameraActions">' +
+              '<button class="gleame-camera-capture-btn" id="gleameCameraCapture" title="Take photo"></button>' +
+              '<span class="gleame-camera-capture-label">Capture</span>' +
+            '</div>' +
+          '</div>' +
+          '<div class="gleame-camera-footer">' +
+            '<button class="gleame-camera-upload-link" id="gleameCameraUploadLink">Upload file</button>' +
+          '</div>' +
         '</div>' +
       '</div>';
 
-    // Close on overlay click
     el.addEventListener('click', function(e) {
       if (e.target === el) closeModal();
     });
@@ -73,7 +79,7 @@
   function showCaptureUI() {
     var actions = document.getElementById('gleameCameraActions');
     if (actions) {
-      actions.innerHTML = '<button class="gleame-camera-capture-btn" id="gleameCameraCapture" title="Take photo"></button>';
+      actions.innerHTML = '<button class="gleame-camera-capture-btn" id="gleameCameraCapture" title="Take photo"></button><span class="gleame-camera-capture-label">Capture</span>';
       document.getElementById('gleameCameraCapture').addEventListener('click', capturePhoto);
     }
   }
@@ -82,14 +88,13 @@
     var actions = document.getElementById('gleameCameraActions');
     if (actions) {
       actions.innerHTML =
-        '<button class="gleame-camera-retake-btn" id="gleameCameraRetake">Retake</button>' +
-        '<button class="gleame-camera-use-btn" id="gleameCameraUse">Use Photo →</button>';
+        '<button class="gleame-camera-use-btn" id="gleameCameraUse">Use Photo</button>' +
+        '<button class="gleame-camera-retake-btn" id="gleameCameraRetake">Retake</button>';
       document.getElementById('gleameCameraRetake').addEventListener('click', retakePhoto);
       document.getElementById('gleameCameraUse').addEventListener('click', usePhoto);
     }
-    // Hide upload link during review
-    var uploadLink = document.getElementById('gleameCameraUploadLink');
-    if (uploadLink) uploadLink.style.display = 'none';
+    var footer = document.querySelector('.gleame-camera-footer');
+    if (footer) footer.style.display = 'none';
   }
 
   function showError(message) {
@@ -139,8 +144,8 @@
     capturedDataUrl = null;
     startCamera();
     showCaptureUI();
-    var uploadLink = document.getElementById('gleameCameraUploadLink');
-    if (uploadLink) uploadLink.style.display = '';
+    var footer = document.querySelector('.gleame-camera-footer');
+    if (footer) footer.style.display = '';
   }
 
   function usePhoto() {
