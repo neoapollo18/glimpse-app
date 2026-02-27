@@ -6,6 +6,7 @@
   if (window.gleameCamera) return;
 
   var CLOSE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
+  var UPLOAD_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>';
   var CAMERA_OFF_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m2 2 20 20"/><path d="M7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2"/><path d="M14.5 4h-5L7 7"/><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5H20a2 2 0 0 1 2 2v7.5"/></svg>';
 
   var overlay = null;
@@ -58,13 +59,14 @@
             '<button class="gleame-camera-close" id="gleameCameraClose">' + CLOSE_SVG + '</button>' +
           '</div>' +
           '<div class="gleame-camera-body">' +
+            '<p class="gleame-camera-hint" id="gleameCameraHint">Position your face in the frame</p>' +
             '<div class="gleame-camera-actions" id="gleameCameraActions">' +
               '<button class="gleame-camera-capture-btn" id="gleameCameraCapture" title="Take photo"></button>' +
               '<span class="gleame-camera-capture-label">Capture</span>' +
             '</div>' +
           '</div>' +
-          '<div class="gleame-camera-footer">' +
-            '<button class="gleame-camera-upload-link" id="gleameCameraUploadLink">Upload file</button>' +
+          '<div class="gleame-camera-footer" id="gleameCameraFooter">' +
+            '<button class="gleame-camera-upload-btn" id="gleameCameraUploadLink">' + UPLOAD_SVG + ' Upload file</button>' +
           '</div>' +
         '</div>' +
       '</div>';
@@ -93,7 +95,9 @@
       document.getElementById('gleameCameraRetake').addEventListener('click', retakePhoto);
       document.getElementById('gleameCameraUse').addEventListener('click', usePhoto);
     }
-    var footer = document.querySelector('.gleame-camera-footer');
+    var hint = document.getElementById('gleameCameraHint');
+    if (hint) hint.textContent = 'Looking good?';
+    var footer = document.getElementById('gleameCameraFooter');
     if (footer) footer.style.display = 'none';
   }
 
@@ -117,34 +121,38 @@
     var video = viewfinder ? viewfinder.querySelector('video') : null;
     if (!video) return;
 
+    // Shutter flash
+    var flash = document.createElement('div');
+    flash.className = 'gleame-camera-flash';
+    viewfinder.appendChild(flash);
+
     var canvas = document.createElement('canvas');
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     var ctx = canvas.getContext('2d');
 
-    // Mirror the capture to match the mirrored preview
     ctx.translate(canvas.width, 0);
     ctx.scale(-1, 1);
     ctx.drawImage(video, 0, 0);
 
     capturedDataUrl = canvas.toDataURL('image/jpeg', 0.92);
 
-    // Stop video and show captured image
-    stopStream();
-
-    var img = document.createElement('img');
-    img.src = capturedDataUrl;
-    viewfinder.innerHTML = '';
-    viewfinder.appendChild(img);
-
-    showReviewUI();
+    // Brief delay so flash is visible, then show captured image
+    setTimeout(function() {
+      stopStream();
+      var img = document.createElement('img');
+      img.src = capturedDataUrl;
+      viewfinder.innerHTML = '';
+      viewfinder.appendChild(img);
+      showReviewUI();
+    }, 150);
   }
 
   function retakePhoto() {
     capturedDataUrl = null;
     startCamera();
     showCaptureUI();
-    var footer = document.querySelector('.gleame-camera-footer');
+    var footer = document.getElementById('gleameCameraFooter');
     if (footer) footer.style.display = '';
   }
 
@@ -169,22 +177,29 @@
     var viewfinder = document.getElementById('gleameCameraViewfinder');
     if (!viewfinder) return;
 
+    // Update hint
+    var hint = document.getElementById('gleameCameraHint');
+    if (hint) hint.textContent = 'Allow camera access when prompted';
+
     viewfinder.innerHTML =
       '<div class="gleame-camera-loading">' +
         '<div class="gleame-camera-loading-spinner"></div>' +
         '<div>Starting camera...</div>' +
-      '</div>';
+      '</div>' +
+      '<div class="gleame-camera-permission-hint">Allow camera access when prompted</div>';
 
     navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'user', width: { ideal: 720 }, height: { ideal: 720 } },
       audio: false
     }).then(function(s) {
       stream = s;
-      // Check if modal was closed while waiting for permission
       if (!overlay || !overlay.parentNode) {
         stopStream();
         return;
       }
+
+      // Update hint to positioning guidance
+      if (hint) hint.textContent = 'Position your face in the frame';
 
       var video = document.createElement('video');
       video.setAttribute('autoplay', '');
@@ -199,6 +214,7 @@
       video.play().catch(function() {});
     }).catch(function(err) {
       console.warn('Gleame Camera: getUserMedia failed:', err.message);
+      if (hint) hint.textContent = '';
       if (err.name === 'NotAllowedError') {
         showError('Camera access was denied.<br>Please allow camera access in your browser settings.');
       } else if (err.name === 'NotFoundError') {
