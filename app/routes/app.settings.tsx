@@ -209,7 +209,7 @@ export default function Settings() {
                 <BlockStack gap="300">
                   <Text as="h3" variant="headingMd">Need Help?</Text>
                   <Text as="p" variant="bodySm" tone="subdued">
-                    Check out our documentation or contact support for assistance.
+                    Check out our website or contact Intercom support for assistance.
                   </Text>
                   <Button 
                     variant="plain"
