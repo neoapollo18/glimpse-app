@@ -213,9 +213,9 @@ export default function Settings() {
                   </Text>
                   <Button 
                     variant="plain"
-                    onClick={() => window.open('https://gleame.com/docs', '_blank')}
+                    onClick={() => window.open('https://gleame.ai', '_blank')}
                   >
-                    View Documentation →
+                    View Website →
                   </Button>
                 </BlockStack>
               </Card>
