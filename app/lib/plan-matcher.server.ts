@@ -27,7 +27,7 @@ export function getTierForSessions(sessions: number): SessionTier {
     }
   }
 
-  // If somehow we exceed all tiers, return Enterprise
+  // If somehow we exceed all tiers, return the last tier (Growth)
   return SESSION_TIERS[SESSION_TIERS.length - 1];
 }
 
@@ -45,7 +45,7 @@ export function getPlanNameForSessions(sessions: number): string {
  * Gets the price for a given session count
  * 
  * @param sessions - The monthly session count
- * @returns The monthly price in dollars, or null for Enterprise
+ * @returns The monthly price in dollars
  */
 export function getPriceForSessions(sessions: number): number | null {
   return getTierForSessions(sessions).price;

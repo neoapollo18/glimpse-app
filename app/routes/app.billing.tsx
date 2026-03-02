@@ -428,9 +428,9 @@ export default function BillingPage() {
             <Text as="h3" variant="headingMd">Questions about billing?</Text>
             <Text as="p" variant="bodySm" tone="subdued">
               All plans are billed through Shopify and include a 14-day free trial. 
-              Stores with under 2.5k sessions stay free! Pricing adjusts automatically 
-              based on your store's monthly session count - no manual upgrades needed. 
-              Your plan grows with your store.
+              Stores with under 2.5k sessions stay free! Pricing ranges from $30/month 
+              to $399/month and adjusts automatically based on your store's monthly 
+              session count - no manual upgrades needed. 
               Contact us through our app or aaron@gleame.ai if you need help.
             </Text>
           </BlockStack>

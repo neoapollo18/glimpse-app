@@ -158,8 +158,8 @@ export default function WelcomePage() {
     error 
   } = useLoaderData<typeof loader>();
   
-  // Check if this is an Enterprise case (no plan but we have token)
-  const isEnterprise = !matchedPlanId && customerApiToken && matchedPlanName === 'Enterprise';
+  // Check if no plan was found (rare edge case)
+  const isEnterprise = false;
   
   // Check if user is re-subscribing (either has active subscription or in grace period)
   const isResubscribing = isInGracePeriod;
@@ -264,7 +264,7 @@ export default function WelcomePage() {
                 <Text as="p" variant="bodyMd" tone="subdued">
                   {isResubscribing 
                     ? "Your plan will be automatically selected based on your store's current monthly session count."
-                    : "Stores with under 2.5k sessions stay free. Paid use starts at 2.5k sessions for $30/month (2.5k-5k sessions) and adjusts automatically based on your store's traffic. No manual upgrades needed - your plan grows with you."
+                    : "Stores with under 2.5k sessions stay free. Pricing starts at $30/month (2.5k-5k sessions) and scales up to $399/month (25k+ sessions). Your plan adjusts automatically based on your store's traffic - no manual upgrades needed."
                   }
                 </Text>
 
@@ -292,23 +292,6 @@ export default function WelcomePage() {
                       <Box>
                         <Button url="mailto:aaron@gleame.ai">
                           Contact support
-                        </Button>
-                      </Box>
-                    </BlockStack>
-                  </Banner>
-                )}
-
-                {/* Enterprise tier message */}
-                {isEnterprise && (
-                  <Banner tone="info">
-                    <BlockStack gap="200">
-                      <Text as="p">
-                        Your store's traffic qualifies for our Enterprise plan with custom pricing.
-                        Please contact us through our app or aaron@gleame.ai to set up your account.
-                      </Text>
-                      <Box>
-                        <Button url="mailto:aaron@gleame.ai">
-                          Contact sales
                         </Button>
                       </Box>
                     </BlockStack>
