@@ -57,6 +57,8 @@ const WIDGET_JS = `
   var textColor = container.getAttribute('data-text-color') || '#1f2937';
   var disclaimer = container.getAttribute('data-disclaimer') || 'Results are never guaranteed, just a generated image. Images are never saved.';
   var placeholderImage = container.getAttribute('data-placeholder') || '';
+  var placeholderBefore = container.getAttribute('data-placeholder-before') || '';
+  var placeholderAfter = container.getAttribute('data-placeholder-after') || '';
 
   if (!productId) {
     console.error('Gleame Embed: data-product-id is required');
@@ -101,8 +103,8 @@ const WIDGET_JS = `
         (placeholderImage
           ? '<img src="' + placeholderImage + '" alt="Transformation preview" style="width:100%;height:200px;object-fit:cover;display:block;border-radius:var(--image-border-radius)">'
           : '<div class="ge-default-ph">' +
-              '<div class="ge-ph-side ge-ph-before"><div class="ge-sil"></div></div>' +
-              '<div class="ge-ph-side ge-ph-after"><div class="ge-sil ge-sil-glow"></div></div>' +
+              '<div class="ge-ph-side ge-ph-before">' + (placeholderBefore ? '<img src="' + placeholderBefore + '" alt="Before" style="width:100%;height:100%;object-fit:cover;display:block">' : '<div class="ge-sil"></div>') + '</div>' +
+              '<div class="ge-ph-side ge-ph-after">' + (placeholderAfter ? '<img src="' + placeholderAfter + '" alt="After" style="width:100%;height:100%;object-fit:cover;display:block">' : '<div class="ge-sil ge-sil-glow"></div>') + '</div>' +
             '</div>'
         ) +
       '</div>' +
