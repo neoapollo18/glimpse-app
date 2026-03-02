@@ -480,7 +480,12 @@ export default function Dashboard() {
                     <Text as="p" variant="bodySm" tone="subdued">
                       Check out our website or contact Intercom support for assistance.
                     </Text>
-                    <Button variant="plain">View Website →</Button>
+                    <Button 
+                    variant="plain"
+                    onClick={() => window.open('https://gleame.ai', '_blank')}
+                  >
+                    View Website →
+                  </Button>
                   </BlockStack>
                 </Card>
 
