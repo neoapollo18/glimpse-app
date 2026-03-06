@@ -84,27 +84,9 @@ export default function PlaceholdersPage() {
           <BlockStack gap="300">
             <Text as="h2" variant="headingLg">Widget Placeholder Images</Text>
             <Text as="p" variant="bodyMd" tone="subdued">
-              Use these images as <code>data-placeholder-before</code> and <code>data-placeholder-after</code> in your widget embed code.
+              Download these images to use as <code>data-placeholder-before</code> and <code>data-placeholder-after</code> in your widget embed code.
               They show customers what kind of transformation to expect before they upload a selfie.
             </Text>
-            <Box paddingBlockStart="100">
-              <Text as="p" variant="bodySm" tone="subdued">
-                Copy a URL and paste it directly into your widget div attribute. Example:
-              </Text>
-              <Box paddingBlockStart="200">
-                <div style={{
-                  background: "#f6f6f7",
-                  borderRadius: "8px",
-                  padding: "12px 16px",
-                  fontFamily: "monospace",
-                  fontSize: "12px",
-                  color: "#303030",
-                  wordBreak: "break-all",
-                }}>
-                  {`data-placeholder-before="${APP_URL}/placeholders/acne1.png"`}
-                </div>
-              </Box>
-            </Box>
           </BlockStack>
         </Card>
 
@@ -142,21 +124,16 @@ export default function PlaceholdersPage() {
                         {/* Preview */}
                         <div style={{
                           width: "100%",
-                          aspectRatio: "1",
                           borderRadius: "8px",
                           overflow: "hidden",
                           background: category.color,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
                         }}>
                           <img
                             src={url}
                             alt={img}
                             style={{
                               width: "100%",
-                              height: "100%",
-                              objectFit: "cover",
+                              height: "auto",
                               display: "block",
                             }}
                           />
@@ -167,37 +144,15 @@ export default function PlaceholdersPage() {
                           {img}.png
                         </Text>
 
-                        {/* URL box */}
-                        <div style={{
-                          background: "#f6f6f7",
-                          borderRadius: "6px",
-                          padding: "6px 10px",
-                          fontFamily: "monospace",
-                          fontSize: "11px",
-                          color: "#6d7175",
-                          wordBreak: "break-all",
-                          lineHeight: "1.4",
-                        }}>
-                          {url}
-                        </div>
-
-                        {/* Copy + Download */}
-                        <InlineStack gap="200">
-                          <Button
-                            size="slim"
-                            onClick={() => navigator.clipboard.writeText(url)}
-                          >
-                            Copy URL
-                          </Button>
-                          <Button
-                            size="slim"
-                            variant="plain"
-                            url={url}
-                            target="_blank"
-                          >
-                            Download
-                          </Button>
-                        </InlineStack>
+                        {/* Download */}
+                        <Button
+                          size="slim"
+                          url={url}
+                          target="_blank"
+                          download
+                        >
+                          Download
+                        </Button>
                       </BlockStack>
                     </Box>
                   );
