@@ -150,6 +150,7 @@ export default function App() {
           <Link to="/app/widgets">Widgets</Link>
           <Link to="/app/products">Products</Link>
           <Link to="/app/analytics">Analytics</Link>
+          <Link to="/app/placeholders">Placeholders</Link>
           <Link to="/app/billing">Billing</Link>
         </NavMenu>
       )}
