@@ -41,7 +41,7 @@ const WIDGET_JS = `
 
   // ========== Find container (with DOM-ready retry) ==========
   function findAndBoot() {
-    var container = document.getElementById('gleame-widget') || document.querySelector('[data-shop-domain]') || document.querySelector('div[data-product-id][data-shop-domain]');
+    var container = document.getElementById('gleame-widget');
     if (!container) return false;
     boot(container);
     return true;

@@ -365,11 +365,12 @@ export default function WelcomePage() {
                       <Text as="p" variant="bodySm" fontWeight="semibold">Monthly Store Sessions</Text>
                     </div>
                     <div style={{ display: 'table-cell', padding: '12px 16px', fontWeight: 600 }}>
-                      <Text as="p" variant="bodySm" fontWeight="semibold">Price</Text>
-                    </div>
-                    <div style={{ display: 'table-cell', padding: '12px 16px', fontWeight: 600 }}>
                       <Text as="p" variant="bodySm" fontWeight="semibold">Plan</Text>
                     </div>
+                    <div style={{ display: 'table-cell', padding: '12px 16px', fontWeight: 600 }}>
+                      <Text as="p" variant="bodySm" fontWeight="semibold">Price</Text>
+                    </div>
+                    
                   </div>
                   {/* Data rows */}
                   {SESSION_TIERS.map((tier, index) => (
