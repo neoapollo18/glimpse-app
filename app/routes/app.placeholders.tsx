@@ -83,10 +83,6 @@ export default function PlaceholdersPage() {
         <Card>
           <BlockStack gap="300">
             <Text as="h2" variant="headingLg">Widget Placeholder Images</Text>
-            <Text as="p" variant="bodyMd" tone="subdued">
-              Download these images to use as <code>data-placeholder-before</code> and <code>data-placeholder-after</code> in your widget embed code.
-              They show customers what kind of transformation to expect before they upload a selfie.
-            </Text>
           </BlockStack>
         </Card>
 
