@@ -1438,10 +1438,7 @@ export default function Products() {
                         value={selectedCategory || ""}
                         onChange={(value) => {
                           if (value === "contact-sales") {
-                            // Open Intercom chat
-                            if (typeof window !== 'undefined' && (window as any).Intercom) {
-                              (window as any).Intercom('show');
-                            }
+                            window.open('https://www.gleame.ai/contact', '_blank');
                             return;
                           }
                           setSelectedCategory(value || null);
