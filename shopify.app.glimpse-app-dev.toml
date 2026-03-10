@@ -6,9 +6,6 @@ application_url = "https://into-goal-paying-expiration.trycloudflare.com"
 embedded = true
 handle = "gleame-app-dev"
 
-[build]
-automatically_update_urls_on_dev = true
-
 [webhooks]
 api_version = "2025-07"
 
@@ -25,3 +22,6 @@ redirect_urls = [
 
 [pos]
 embedded = false
+
+[build]
+automatically_update_urls_on_dev = true
