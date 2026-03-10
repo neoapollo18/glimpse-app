@@ -25,6 +25,13 @@ const APP_URL = "https://glimpse-app-charles.onrender.com";
 
 const PLACEHOLDER_CATEGORIES = [
   {
+    name: "Anti-Aging",
+    description: "Before/after placeholders for anti-aging and wrinkle treatment products",
+    images: ["antiaging", "antiaging1", "antiaging2", "antiaging3", "antiaging4"],
+    color: "#fdf4ff",
+    badge: "Skincare",
+  },
+  {
     name: "Acne",
     description: "Before/after placeholders for acne treatment products",
     images: ["acne1", "acne2", "acne3", "acne4", "acne5"],
