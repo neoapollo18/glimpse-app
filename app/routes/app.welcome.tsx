@@ -388,16 +388,16 @@ export default function WelcomePage() {
                         padding: '12px 16px', 
                         borderBottom: index < SESSION_TIERS.length - 1 ? '1px solid #e1e3e5' : 'none' 
                       }}>
-                        <Text as="p" variant="bodyMd" fontWeight="semibold">
-                          {tier.price !== null ? (tier.price === 0 ? 'Free' : `$${tier.price}/mo`) : 'Custom'}
-                        </Text>
+                        <Text as="p" variant="bodyMd">{tier.name}</Text>
                       </div>
                       <div style={{ 
                         display: 'table-cell', 
                         padding: '12px 16px', 
                         borderBottom: index < SESSION_TIERS.length - 1 ? '1px solid #e1e3e5' : 'none' 
                       }}>
-                        <Text as="p" variant="bodyMd">{tier.name}</Text>
+                        <Text as="p" variant="bodyMd" fontWeight="semibold">
+                          {tier.price !== null ? (tier.price === 0 ? 'Free' : `$${tier.price}/mo`) : 'Custom'}
+                        </Text>
                       </div>
                     </div>
                   ))}
