@@ -370,6 +370,7 @@ export default function WelcomePage() {
                     <div style={{ display: 'table-cell', padding: '12px 16px', fontWeight: 600 }}>
                       <Text as="p" variant="bodySm" fontWeight="semibold">Price</Text>
                     </div>
+
                     
                   </div>
                   {/* Data rows */}

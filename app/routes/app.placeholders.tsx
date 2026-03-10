@@ -93,8 +93,6 @@ export default function PlaceholdersPage() {
       <BlockStack gap="600">
 
         
-
-
         {/* Video Tutorial Banner */}
         {showVideoBanner && (
           <Card>
@@ -133,7 +131,7 @@ export default function PlaceholdersPage() {
                   </Text>
                 </BlockStack>
                 <div style={{ marginLeft: "auto" }}>
-                  <Button url="https://www.cnn.com/" target="_blank">
+                  <Button url="https://www.loom.com/share/2da35f7c76d84a7aaf02439116cff6e7" target="_blank">
                     Watch Video
                   </Button>
                 </div>
@@ -164,39 +162,50 @@ export default function PlaceholdersPage() {
                 {category.images.map((img) => {
                   const url = `${APP_URL}/placeholders/${img}.png`;
                   return (
-                    <Box
+                    <div
                       key={img}
-                      borderWidth="025"
-                      borderColor="border"
-                      borderRadius="200"
-                      padding="300"
-                      background="bg-surface-secondary"
+                      style={{
+                        border: "1px solid #e1e3e5",
+                        borderRadius: "8px",
+                        padding: "12px",
+                        background: "#f6f6f7",
+                        display: "flex",
+                        flexDirection: "column",
+                      }}
                     >
-                      <BlockStack gap="300">
-                        {/* Preview */}
-                        <div style={{
-                          width: "100%",
-                          borderRadius: "8px",
-                          overflow: "hidden",
-                          background: category.color,
-                        }}>
-                          <img
-                            src={url}
-                            alt={img}
-                            style={{
-                              width: "100%",
-                              height: "auto",
-                              display: "block",
-                            }}
-                          />
-                        </div>
+                      {/* Preview - fixed height */}
+                      <div style={{
+                        width: "100%",
+                        height: "160px",
+                        borderRadius: "6px",
+                        overflow: "hidden",
+                        background: category.color,
+                        flexShrink: 0,
+                      }}>
+                        <img
+                          src={url}
+                          alt={img}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                            objectPosition: "top",
+                            display: "block",
+                          }}
+                        />
+                      </div>
 
-                        {/* Filename */}
+                      {/* Filename + Download - always at bottom */}
+                      <div style={{
+                        marginTop: "10px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: "8px",
+                      }}>
                         <Text as="p" variant="bodySm" fontWeight="semibold">
                           {img}.png
                         </Text>
-
-                        {/* Download */}
                         <Button
                           size="slim"
                           url={url}
@@ -205,8 +214,8 @@ export default function PlaceholdersPage() {
                         >
                           Download
                         </Button>
-                      </BlockStack>
-                    </Box>
+                      </div>
+                    </div>
                   );
                 })}
               </InlineGrid>
