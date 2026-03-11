@@ -196,7 +196,10 @@ const WIDGET_JS = `
   }
 
   function triggerUpload() {
-    if (!isMobile() && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    if (isMobile()) {
+      // On mobile, call fileInput.click() directly and synchronously within the user gesture
+      if (fileInput) fileInput.click();
+    } else if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       openCameraModal();
     } else {
       if (fileInput) fileInput.click();
@@ -460,13 +463,18 @@ const WIDGET_JS = `
   }
 
   // ========== Event listeners ==========
-  uploadBtn.addEventListener('click', triggerUpload);
+  // Use both click and touchend for iOS compatibility
+  function addTapListener(el, fn) {
+    el.addEventListener('click', fn);
+    el.addEventListener('touchend', function(e) { e.preventDefault(); fn(); });
+  }
+  addTapListener(uploadBtn, triggerUpload);
+  addTapListener(placeholder, triggerUpload);
   retryBtn.addEventListener('click', reset);
   errorRetryBtn.addEventListener('click', reset);
   fileInput.addEventListener('change', function(e) {
     if (e.target.files && e.target.files.length > 0) processFile(e.target.files[0]);
   });
-  placeholder.addEventListener('click', triggerUpload);
 
   // Drag and drop
   ['dragenter','dragover','dragleave','drop'].forEach(function(ev) {
