@@ -244,6 +244,31 @@ export async function updateProductConfiguration(
   }
 }
 
+export async function updateProductAiModel(
+  configuredProductId: string,
+  aiModel: string | null
+) {
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .update({ ai_model: aiModel })
+      .eq('id', configuredProductId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Product ai_model update error:", error);
+      throw new Error(`Failed to update AI model: ${error.message}`);
+    }
+
+    console.log('Product ai_model updated:', configuredProductId, '->', aiModel);
+    return data;
+  } catch (error) {
+    console.error("Error in updateProductAiModel:", error);
+    throw error;
+  }
+}
+
 export async function deleteProductConfiguration(configuredProductId: string) {
   try {
     const { error } = await supabase

@@ -9,8 +9,18 @@ const client = new GoogleGenAI({
 });
 
 // Model constants
-export const GEMINI_MODEL_PRO = "gemini-3-pro-image-preview"; // For products with variant configs (makeup)
-export const GEMINI_MODEL_FLASH = "gemini-2.5-flash-image";   // For products without variant configs (skincare)
+export const GEMINI_MODEL_PRO = "gemini-3-pro-image-preview";           // Variant configs (makeup)
+export const GEMINI_MODEL_FLASH = "gemini-2.5-flash-image";             // Standard (skincare etc)
+export const GEMINI_MODEL_FLASH_31 = "gemini-3.1-flash-image-preview";  // New: higher quality, uses 2K input
+export const MODEL_OPENAI = "gpt-image-1.5";                            // OpenAI gpt-image-1.5
+
+// Max resolution per model (px on longest side)
+// OpenAI not listed here — it uses its own compression path in transformImageWithOpenAI
+const MODEL_MAX_PX: Record<string, number> = {
+  [GEMINI_MODEL_FLASH_31]: 2048,  // 2K for Gemini 3.1
+  [GEMINI_MODEL_PRO]: 720,
+  [GEMINI_MODEL_FLASH]: 720,
+};
 
 interface ImageTransformationRequest {
   inputImage: string; // base64 encoded image
@@ -55,7 +65,7 @@ function isHeicBuffer(buffer: Buffer): boolean {
 }
 
 // Compress image for faster processing and lower costs
-async function compressImage(base64Image: string, mimeType: string): Promise<{
+async function compressImage(base64Image: string, mimeType: string, maxPx: number = 720): Promise<{
   compressedBase64: string;
   compressedMimeType: string;
   originalSize: number;
@@ -76,12 +86,12 @@ async function compressImage(base64Image: string, mimeType: string): Promise<{
       inputBuffer = await convertHeicToJpeg(inputBuffer);
     }
     
-    // Use Sharp to resize image to max 720px on the larger dimension
+    // Use Sharp to resize image to maxPx on the larger dimension
     const compressedBuffer = await sharp(inputBuffer)
       .rotate() // Auto-rotate based on EXIF orientation data
       .resize({
-        width: 720,
-        height: 720,
+        width: maxPx,
+        height: maxPx,
         fit: 'inside', // Maintain aspect ratio
         withoutEnlargement: true // Don't upscale small images
       })
@@ -170,10 +180,13 @@ export async function transformImage(
   request: ImageTransformationRequest
 ): Promise<ImageTransformationResponse> {
   try {
+    const modelToUse = request.model || GEMINI_MODEL_FLASH;
+    const maxPx = MODEL_MAX_PX[modelToUse] ?? 720;
     const {
       compressedBase64,
       compressedMimeType,
-    } = await compressImage(request.inputImage, request.mimeType);
+    } = await compressImage(request.inputImage, request.mimeType, maxPx);
+    console.log(`Image compressed to max ${maxPx}px for model ${modelToUse}`);
     
     const prompt: any[] = [];
 
@@ -199,7 +212,6 @@ export async function transformImage(
       }
     });
 
-    const modelToUse = request.model || GEMINI_MODEL_FLASH;
     const generatedImageData = await callGeminiWithRetry(prompt, modelToUse);
 
     return {

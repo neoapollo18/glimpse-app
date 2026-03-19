@@ -1,6 +1,6 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { transformImage, transformImageWithOpenAI, GEMINI_MODEL_PRO, GEMINI_MODEL_FLASH } from "../lib/ai.server";
+import { transformImage, transformImageWithOpenAI, GEMINI_MODEL_PRO, GEMINI_MODEL_FLASH, GEMINI_MODEL_FLASH_31, MODEL_OPENAI } from "../lib/ai.server";
 import { getProductOrVariantConfiguration, trackTransformationEvent, productHasVariantConfigs, findShopByDomain, shopHasValidAccess } from "../lib/supabase.server";
 import { checkRateLimit, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
 
@@ -242,11 +242,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const arrayBuffer = await imageFile.arrayBuffer();
     const base64Image = Buffer.from(arrayBuffer).toString('base64');
 
-    // Determine which model to use based on whether product has variant configs
-    // Products with variant configs (makeup) use Pro model, others (skincare) use Flash
-    const hasVariantConfigs = await productHasVariantConfigs(productConfig.id);
-    const modelToUse = hasVariantConfigs ? GEMINI_MODEL_PRO : GEMINI_MODEL_FLASH;
-    console.log(`Model selection: hasVariantConfigs=${hasVariantConfigs}, using ${modelToUse}`);
+    // ============================================
+    // MODEL SELECTION
+    // Priority: admin override → auto-detect
+    // ============================================
+    const adminModelOverride = productConfig.ai_model as string | null;
+
+    let modelToUse: string;
+    if (adminModelOverride) {
+      modelToUse = adminModelOverride;
+      console.log(`🎛️ Admin model override: ${modelToUse}`);
+    } else {
+      // Auto: use variant config detection
+      const hasVariantConfigs = await productHasVariantConfigs(productConfig.id);
+      modelToUse = hasVariantConfigs ? GEMINI_MODEL_PRO : GEMINI_MODEL_FLASH;
+      console.log(`Model auto-selection: hasVariantConfigs=${hasVariantConfigs}, using ${modelToUse}`);
+    }
 
     // Fetch reference image if one is attached to the product config
     let referenceImage: string | undefined;
@@ -266,22 +277,38 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     }
 
-    // When a reference image is present: try Gemini Pro first (fast), fall back to OpenAI (slow but permissive)
+    // ============================================
+    // EXECUTE TRANSFORM
+    // ============================================
     let result;
-    if (referenceImage) {
-      console.log('🔀 Reference image present - trying Gemini Pro first');
+
+    // If admin forced OpenAI directly
+    if (modelToUse === MODEL_OPENAI) {
+      console.log('🤖 Using OpenAI gpt-image-1.5');
+      result = await transformImageWithOpenAI({
+        inputImage: base64Image,
+        transformationPrompt: productConfig.transformation_prompt,
+        mimeType: imageFile.type,
+        referenceImage,
+        referenceImageMimeType,
+      });
+    }
+    // All Gemini paths (both admin override and auto-select)
+    else {
+      console.log(`🔀 Using Gemini model: ${modelToUse}${adminModelOverride ? ' (admin override)' : ' (auto)'}`);
       result = await transformImage({
         inputImage: base64Image,
         transformationPrompt: productConfig.transformation_prompt,
         mimeType: imageFile.type,
-        model: GEMINI_MODEL_PRO,
+        model: modelToUse,
         referenceImage,
         referenceImageMimeType,
       });
 
-      // If Gemini fails (safety filter etc), fall back to OpenAI
-      if (!result.success) {
-        console.log('⚠️ Gemini failed, falling back to OpenAI');
+      // If Gemini fails AND a reference image is present, fall back to OpenAI
+      // (OpenAI handles reference images well and has more permissive content filters)
+      if (!result.success && referenceImage) {
+        console.log('⚠️ Gemini failed with reference image, falling back to OpenAI');
         result = await transformImageWithOpenAI({
           inputImage: base64Image,
           transformationPrompt: productConfig.transformation_prompt,
@@ -290,13 +317,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           referenceImageMimeType,
         });
       }
-    } else {
-      result = await transformImage({
-        inputImage: base64Image,
-        transformationPrompt: productConfig.transformation_prompt,
-        mimeType: imageFile.type,
-        model: modelToUse,
-      });
     }
 
     if (!result.success) {

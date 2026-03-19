@@ -8,6 +8,7 @@ import {
   Layout,
   Card,
   TextField,
+  Select,
   Button,
   BlockStack,
   InlineStack,
@@ -24,7 +25,7 @@ import {
 import { SearchIcon } from "@shopify/polaris-icons";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import enTranslations from "@shopify/polaris/locales/en.json";
-import { supabase, updateShopMonthlySessions, uploadReferenceImage, saveProductReferenceImage, deleteReferenceImage } from "../lib/supabase.server";
+import { supabase, updateShopMonthlySessions, uploadReferenceImage, saveProductReferenceImage, deleteReferenceImage, updateProductAiModel } from "../lib/supabase.server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
@@ -107,6 +108,7 @@ interface Product {
   product_image_url: string | null;
   transformation_prompt: string;
   reference_image_url: string | null;
+  ai_model: string | null;
   is_funnel_generated: boolean;
   category_id: string | null;
   funnel_responses: Record<string, number | string> | null;
@@ -347,7 +349,20 @@ function isValidUUID(id: string | null): boolean {
   return uuidRegex.test(id);
 }
 
+const VALID_AI_MODELS = [
+  'gemini-2.5-flash-image',
+  'gemini-3.1-flash-image-preview',
+  'gemini-3-pro-image-preview',
+  'gpt-image-1.5',
+] as const;
+
 export const action = async ({ request }: ActionFunctionArgs) => {
+  // Auth + allowlist check on every action — not just the loader
+  const { session } = await authenticate.admin(request);
+  if (!ALLOWED_SHOPS.includes(session.shop)) {
+    throw new Response("Forbidden", { status: 403 });
+  }
+
   const formData = await request.formData();
   const actionType = formData.get("action");
 
@@ -458,6 +473,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
   }
 
+  if (actionType === "update-ai-model") {
+    const productId = formData.get("productId") as string;
+    const aiModel = formData.get("aiModel") as string;
+
+    if (!isValidUUID(productId)) {
+      return json({ success: false, error: "Invalid product ID" });
+    }
+
+    if (aiModel !== "auto" && !VALID_AI_MODELS.includes(aiModel as typeof VALID_AI_MODELS[number])) {
+      return json({ success: false, error: `Invalid model: ${aiModel}` });
+    }
+
+    const modelValue = aiModel === "auto" ? null : aiModel;
+    await updateProductAiModel(productId, modelValue);
+    console.log(`✅ AI model updated for ${productId}: ${modelValue ?? "auto"}`);
+    return json({ success: true });
+  }
+
   return json({ success: false, error: "Unknown action" });
 };
 
@@ -480,6 +513,7 @@ export default function FoundersAdmin() {
   const [testLoading, setTestLoading] = useState(false);
   const refFetcher = useFetcher<any>();
   const [refImageUrls, setRefImageUrls] = useState<Record<string, string | null>>({});
+  const [aiModelOverrides, setAiModelOverrides] = useState<Record<string, string>>({});
 
   // Track which product the ref fetcher is working on
   const [refFetcherProductId, setRefFetcherProductId] = useState<string | null>(null);
@@ -551,6 +585,20 @@ export default function FoundersAdmin() {
     submit(formData, { method: "POST" });
     setEditingProduct(null);
     setEditPromptValue("");
+  };
+
+  const getAiModel = (product: Product) => {
+    if (aiModelOverrides[product.id] !== undefined) return aiModelOverrides[product.id];
+    return product.ai_model ?? "auto";
+  };
+
+  const saveAiModel = (productId: string, model: string) => {
+    setAiModelOverrides(prev => ({ ...prev, [productId]: model }));
+    const formData = new FormData();
+    formData.append("action", "update-ai-model");
+    formData.append("productId", productId);
+    formData.append("aiModel", model);
+    submit(formData, { method: "POST" });
   };
 
   const getRefImageUrl = (product: Product) => {
@@ -778,6 +826,9 @@ export default function FoundersAdmin() {
                                   {getRefImageUrl(product) && (
                                     <Badge tone="warning">Ref image</Badge>
                                   )}
+                                  {product.ai_model && (
+                                    <Badge tone="attention">{product.ai_model}</Badge>
+                                  )}
                                 </InlineStack>
                               </BlockStack>
                               <div style={{ marginLeft: "auto" }}>
@@ -972,6 +1023,34 @@ export default function FoundersAdmin() {
                                       </InlineStack>
                                     );
                                   })()}
+                                </BlockStack>
+
+                                {/* AI Model Selector */}
+                                <BlockStack gap="200">
+                                  <Divider />
+                                  <InlineStack gap="300" blockAlign="center">
+                                    <Text as="p" variant="bodySm" fontWeight="semibold">
+                                      AI Model:
+                                    </Text>
+                                    <div style={{ minWidth: '260px' }}>
+                                      <Select
+                                        label=""
+                                        labelHidden
+                                        options={[
+                                          { label: "Auto (based on variant configs)", value: "auto" },
+                                          { label: "Gemini 2.5 Flash", value: "gemini-2.5-flash-image" },
+                                          { label: "Gemini 3.1 Flash (2K)", value: "gemini-3.1-flash-image-preview" },
+                                          { label: "Gemini 3 Pro", value: "gemini-3-pro-image-preview" },
+                                          { label: "OpenAI gpt-image-1.5", value: "gpt-image-1.5" },
+                                        ]}
+                                        value={getAiModel(product)}
+                                        onChange={(value) => saveAiModel(product.id, value)}
+                                      />
+                                    </div>
+                                    {getAiModel(product) !== "auto" && (
+                                      <Badge tone="warning">Override</Badge>
+                                    )}
+                                  </InlineStack>
                                 </BlockStack>
 
                                 {/* Shopify ID */}

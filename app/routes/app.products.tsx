@@ -29,8 +29,8 @@ import { authenticate } from "../shopify.server";
 import { 
   getConfiguredProductsWithCategory,
   getCategories,
-  saveProductConfiguration, 
-  updateProductConfiguration, 
+  saveProductConfiguration,
+  updateProductConfiguration,
   deleteProductConfiguration,
   saveVariantConfiguration,
   saveFunnelConfiguration,
