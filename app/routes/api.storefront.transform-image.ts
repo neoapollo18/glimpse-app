@@ -1,7 +1,22 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { transformImage, transformImageWithOpenAI, GEMINI_MODEL_PRO, GEMINI_MODEL_FLASH, GEMINI_MODEL_FLASH_31, MODEL_OPENAI } from "../lib/ai.server";
-import { getProductOrVariantConfiguration, trackTransformationEvent, productHasVariantConfigs, findShopByDomain, shopHasValidAccess } from "../lib/supabase.server";
+import {
+  transformImage,
+  transformImageWithOpenAI,
+  GEMINI_MODEL_PRO,
+  GEMINI_MODEL_FLASH,
+  MODEL_OPENAI,
+  type ReferenceImagePart,
+} from "../lib/ai.server";
+import {
+  getProductConfiguration,
+  getVariantConfiguration,
+  trackTransformationEvent,
+  productHasVariantConfigs,
+  findShopByDomain,
+  shopHasValidAccess,
+  parseReferenceImageUrls,
+} from "../lib/supabase.server";
 import { checkRateLimit, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -171,26 +186,37 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     // ============================================
-    // STEP 5: Get product configuration
+    // STEP 5: Get product (+ optional variant) configuration
     // ============================================
-    // Get product or variant configuration from Supabase
-    // If variantId provided, tries variant first, then falls back to product
-    const productConfig = await getProductOrVariantConfiguration(
-      verifiedShopDomain, 
-      productId,
-      variantId || undefined
-    );
-    
-    if (!productConfig) {
-      return json({ 
-        error: "Product not configured for transformations. Please contact the store administrator." 
-      }, { 
+    const productRow = await getProductConfiguration(verifiedShopDomain, productId);
+
+    if (!productRow) {
+      return json({
+        error: "Product not configured for transformations. Please contact the store administrator.",
+      }, {
         status: 404,
         headers: {
           "Access-Control-Allow-Origin": "*",
-        }
+        },
       });
     }
+
+    let transformationPrompt = productRow.transformation_prompt as string;
+    const variantRow =
+      variantId != null && String(variantId).trim() !== ""
+        ? await getVariantConfiguration(verifiedShopDomain, productId, variantId)
+        : null;
+
+    if (variantRow?.transformation_prompt) {
+      transformationPrompt = variantRow.transformation_prompt as string;
+    }
+
+    // Variant-specific reference images override product-level when the variant has any.
+    const referenceUrls = (() => {
+      const variantUrls = parseReferenceImageUrls(variantRow ?? undefined);
+      if (variantUrls.length > 0) return variantUrls;
+      return parseReferenceImageUrls(productRow);
+    })();
 
     // Validate image file
     const maxSize = 5 * 1024 * 1024; // 5MB for storefront (smaller than admin)
@@ -246,7 +272,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // MODEL SELECTION
     // Priority: admin override → auto-detect
     // ============================================
-    const adminModelOverride = productConfig.ai_model as string | null;
+    const adminModelOverride = productRow.ai_model as string | null;
 
     let modelToUse: string;
     if (adminModelOverride) {
@@ -254,28 +280,30 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       console.log(`🎛️ Admin model override: ${modelToUse}`);
     } else {
       // Auto: use variant config detection
-      const hasVariantConfigs = await productHasVariantConfigs(productConfig.id);
+      const hasVariantConfigs = await productHasVariantConfigs(productRow.id);
       modelToUse = hasVariantConfigs ? GEMINI_MODEL_PRO : GEMINI_MODEL_FLASH;
       console.log(`Model auto-selection: hasVariantConfigs=${hasVariantConfigs}, using ${modelToUse}`);
     }
 
-    // Fetch reference image if one is attached to the product config
-    let referenceImage: string | undefined;
-    let referenceImageMimeType: string | undefined;
-    
-    if (productConfig.reference_image_url) {
+    const referenceImages: ReferenceImagePart[] = [];
+    for (const refUrl of referenceUrls) {
       try {
-        const refResponse = await fetch(productConfig.reference_image_url);
+        const refResponse = await fetch(refUrl);
         if (refResponse.ok) {
           const refBuffer = await refResponse.arrayBuffer();
-          referenceImage = Buffer.from(refBuffer).toString('base64');
-          referenceImageMimeType = refResponse.headers.get('content-type') || 'image/jpeg';
-          console.log(`📎 Reference image loaded (${Math.round(refBuffer.byteLength / 1024)}KB)`);
+          referenceImages.push({
+            data: Buffer.from(refBuffer).toString('base64'),
+            mimeType: refResponse.headers.get('content-type') || 'image/jpeg',
+          });
+          console.log(
+            `📎 Reference image ${referenceImages.length} loaded (${Math.round(refBuffer.byteLength / 1024)}KB)`
+          );
         }
       } catch (refError) {
-        console.error('Failed to fetch reference image, proceeding without it:', refError);
+        console.error('Failed to fetch reference image, skipping URL:', refUrl, refError);
       }
     }
+    const hasReferenceImages = referenceImages.length > 0;
 
     // ============================================
     // EXECUTE TRANSFORM
@@ -287,10 +315,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       console.log('🤖 Using OpenAI gpt-image-1.5');
       result = await transformImageWithOpenAI({
         inputImage: base64Image,
-        transformationPrompt: productConfig.transformation_prompt,
+        transformationPrompt,
         mimeType: imageFile.type,
-        referenceImage,
-        referenceImageMimeType,
+        referenceImages,
       });
     }
     // All Gemini paths (both admin override and auto-select)
@@ -298,23 +325,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       console.log(`🔀 Using Gemini model: ${modelToUse}${adminModelOverride ? ' (admin override)' : ' (auto)'}`);
       result = await transformImage({
         inputImage: base64Image,
-        transformationPrompt: productConfig.transformation_prompt,
+        transformationPrompt,
         mimeType: imageFile.type,
         model: modelToUse,
-        referenceImage,
-        referenceImageMimeType,
+        referenceImages,
       });
 
-      // If Gemini fails AND a reference image is present, fall back to OpenAI
+      // If Gemini fails AND reference images are present, fall back to OpenAI
       // (OpenAI handles reference images well and has more permissive content filters)
-      if (!result.success && referenceImage) {
-        console.log('⚠️ Gemini failed with reference image, falling back to OpenAI');
+      if (!result.success && hasReferenceImages) {
+        console.log('⚠️ Gemini failed with reference image(s), falling back to OpenAI');
         result = await transformImageWithOpenAI({
           inputImage: base64Image,
-          transformationPrompt: productConfig.transformation_prompt,
+          transformationPrompt,
           mimeType: imageFile.type,
-          referenceImage,
-          referenceImageMimeType,
+          referenceImages,
         });
       }
     }

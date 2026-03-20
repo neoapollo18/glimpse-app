@@ -22,13 +22,31 @@ const MODEL_MAX_PX: Record<string, number> = {
   [GEMINI_MODEL_FLASH]: 720,
 };
 
+export interface ReferenceImagePart {
+  data: string; // base64
+  mimeType: string;
+}
+
 interface ImageTransformationRequest {
   inputImage: string; // base64 encoded image
   transformationPrompt: string;
   mimeType: string;
   model?: string; // Optional: defaults to FLASH model
-  referenceImage?: string; // base64 encoded reference product image
+  /** One or more reference product images (preferred). */
+  referenceImages?: ReferenceImagePart[];
+  /** @deprecated use referenceImages */
+  referenceImage?: string;
   referenceImageMimeType?: string;
+}
+
+function resolveReferenceParts(request: ImageTransformationRequest): ReferenceImagePart[] {
+  if (request.referenceImages?.length) {
+    return request.referenceImages;
+  }
+  if (request.referenceImage && request.referenceImageMimeType) {
+    return [{ data: request.referenceImage, mimeType: request.referenceImageMimeType }];
+  }
+  return [];
 }
 
 interface ImageTransformationResponse {
@@ -190,15 +208,18 @@ export async function transformImage(
     
     const prompt: any[] = [];
 
-    if (request.referenceImage && request.referenceImageMimeType) {
-      prompt.push({
-        text: "Reference product image to apply onto the person:"
-      });
+    const refParts = resolveReferenceParts(request);
+    for (let i = 0; i < refParts.length; i++) {
+      const label =
+        refParts.length > 1
+          ? `Reference product image ${i + 1} of ${refParts.length} (use all for accuracy):`
+          : 'Reference product image to apply onto the person:';
+      prompt.push({ text: label });
       prompt.push({
         inlineData: {
-          mimeType: request.referenceImageMimeType,
-          data: request.referenceImage
-        }
+          mimeType: refParts[i].mimeType,
+          data: refParts[i].data,
+        },
       });
     }
 
@@ -324,22 +345,19 @@ export async function transformImageWithOpenAI(
       compressedBase64,
     } = await compressImage(request.inputImage, request.mimeType);
 
-    // Also compress the reference image to reduce upload size and processing time
-    let compressedRefBase64 = request.referenceImage;
-    if (request.referenceImage && request.referenceImageMimeType) {
-      const refCompressed = await compressImage(request.referenceImage, request.referenceImageMimeType);
-      compressedRefBase64 = refCompressed.compressedBase64;
-      console.log(`Reference image compressed: ${refCompressed.originalSize} -> ${refCompressed.compressedSize} bytes`);
-    }
-
     const images: { buffer: Buffer; filename: string }[] = [
       { buffer: Buffer.from(compressedBase64, 'base64'), filename: 'selfie.jpg' },
     ];
 
-    if (compressedRefBase64) {
+    const refParts = resolveReferenceParts(request);
+    for (let i = 0; i < refParts.length; i++) {
+      const refCompressed = await compressImage(refParts[i].data, refParts[i].mimeType);
+      console.log(
+        `Reference image ${i + 1} compressed: ${refCompressed.originalSize} -> ${refCompressed.compressedSize} bytes`
+      );
       images.push({
-        buffer: Buffer.from(compressedRefBase64, 'base64'),
-        filename: 'reference.jpg',
+        buffer: Buffer.from(refCompressed.compressedBase64, 'base64'),
+        filename: refParts.length > 1 ? `reference${i + 1}.jpg` : 'reference.jpg',
       });
     }
 

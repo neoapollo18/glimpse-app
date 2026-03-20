@@ -1613,34 +1613,162 @@ export async function uploadReferenceImage(
   return urlData.publicUrl;
 }
 
+/** Max reference images stored per product / variant (enforced in app + DB usage) */
+export const MAX_REFERENCE_IMAGES = 5;
+
+function coerceReferenceUrlArray(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((u): u is string => typeof u === 'string' && u.trim().length > 0)
+    .map((s) => s.trim());
+}
+
 /**
- * Save reference image URL to a product
+ * Normalize reference URLs from a DB row (JSON array and/or legacy single column).
  */
-export async function saveProductReferenceImage(productId: string, referenceImageUrl: string | null) {
+export function parseReferenceImageUrls(
+  row:
+    | {
+        reference_image_url?: string | null;
+        reference_image_urls?: unknown;
+      }
+    | null
+    | undefined
+): string[] {
+  if (!row) return [];
+  const fromJson = coerceReferenceUrlArray(row.reference_image_urls);
+  if (fromJson.length > 0) return fromJson.slice(0, MAX_REFERENCE_IMAGES);
+  if (row.reference_image_url) return [row.reference_image_url];
+  return [];
+}
+
+/**
+ * Replace all reference image URLs for a product (keeps legacy first URL in sync).
+ */
+export async function setProductReferenceImages(productId: string, urls: string[]) {
+  const cleaned = urls.filter(Boolean).slice(0, MAX_REFERENCE_IMAGES);
   const { error } = await supabase
     .from('products')
-    .update({ reference_image_url: referenceImageUrl })
+    .update({
+      reference_image_urls: cleaned,
+      reference_image_url: cleaned[0] ?? null,
+    })
     .eq('id', productId);
 
   if (error) {
-    console.error('Error saving reference image URL:', error);
-    throw new Error(`Failed to save reference image: ${error.message}`);
+    console.error('Error saving reference image URLs:', error);
+    throw new Error(`Failed to save reference images: ${error.message}`);
   }
 }
 
 /**
- * Save reference image URL to a product variant
+ * Append one reference URL (merchant/admin upload).
  */
-export async function saveVariantReferenceImage(variantId: string, referenceImageUrl: string | null) {
+export async function appendProductReferenceImage(productId: string, newUrl: string) {
+  const { data, error: fetchError } = await supabase
+    .from('products')
+    .select('reference_image_url, reference_image_urls')
+    .eq('id', productId)
+    .single();
+
+  if (fetchError || !data) {
+    throw new Error(`Failed to load product for reference append: ${fetchError?.message}`);
+  }
+
+  const current = parseReferenceImageUrls(data);
+  if (current.length >= MAX_REFERENCE_IMAGES) {
+    throw new Error(`Maximum ${MAX_REFERENCE_IMAGES} reference images allowed`);
+  }
+  await setProductReferenceImages(productId, [...current, newUrl]);
+}
+
+/**
+ * Remove one reference URL by value (deletes file from storage when possible).
+ */
+export async function removeProductReferenceImageByUrl(productId: string, urlToRemove: string) {
+  const { data, error: fetchError } = await supabase
+    .from('products')
+    .select('reference_image_url, reference_image_urls')
+    .eq('id', productId)
+    .single();
+
+  if (fetchError || !data) {
+    throw new Error(`Failed to load product for reference remove: ${fetchError?.message}`);
+  }
+
+  const next = parseReferenceImageUrls(data).filter((u) => u !== urlToRemove);
+  if (urlToRemove) {
+    await deleteReferenceImage(urlToRemove);
+  }
+  await setProductReferenceImages(productId, next);
+}
+
+/**
+ * Save reference image URL to a product (merchant UI: single image replaces all).
+ */
+export async function saveProductReferenceImage(productId: string, referenceImageUrl: string | null) {
+  await setProductReferenceImages(productId, referenceImageUrl ? [referenceImageUrl] : []);
+}
+
+// --- Variant reference images (same pattern) ---
+
+export async function setVariantReferenceImages(variantId: string, urls: string[]) {
+  const cleaned = urls.filter(Boolean).slice(0, MAX_REFERENCE_IMAGES);
   const { error } = await supabase
     .from('product_variants')
-    .update({ reference_image_url: referenceImageUrl })
+    .update({
+      reference_image_urls: cleaned,
+      reference_image_url: cleaned[0] ?? null,
+    })
     .eq('id', variantId);
 
   if (error) {
-    console.error('Error saving variant reference image URL:', error);
-    throw new Error(`Failed to save variant reference image: ${error.message}`);
+    console.error('Error saving variant reference image URLs:', error);
+    throw new Error(`Failed to save variant reference images: ${error.message}`);
   }
+}
+
+export async function appendVariantReferenceImage(variantId: string, newUrl: string) {
+  const { data, error: fetchError } = await supabase
+    .from('product_variants')
+    .select('reference_image_url, reference_image_urls')
+    .eq('id', variantId)
+    .single();
+
+  if (fetchError || !data) {
+    throw new Error(`Failed to load variant for reference append: ${fetchError?.message}`);
+  }
+
+  const current = parseReferenceImageUrls(data);
+  if (current.length >= MAX_REFERENCE_IMAGES) {
+    throw new Error(`Maximum ${MAX_REFERENCE_IMAGES} reference images allowed`);
+  }
+  await setVariantReferenceImages(variantId, [...current, newUrl]);
+}
+
+export async function removeVariantReferenceImageByUrl(variantId: string, urlToRemove: string) {
+  const { data, error: fetchError } = await supabase
+    .from('product_variants')
+    .select('reference_image_url, reference_image_urls')
+    .eq('id', variantId)
+    .single();
+
+  if (fetchError || !data) {
+    throw new Error(`Failed to load variant for reference remove: ${fetchError?.message}`);
+  }
+
+  const next = parseReferenceImageUrls(data).filter((u) => u !== urlToRemove);
+  if (urlToRemove) {
+    await deleteReferenceImage(urlToRemove);
+  }
+  await setVariantReferenceImages(variantId, next);
+}
+
+/**
+ * Save reference image URL to a product variant (single image replaces all).
+ */
+export async function saveVariantReferenceImage(variantId: string, referenceImageUrl: string | null) {
+  await setVariantReferenceImages(variantId, referenceImageUrl ? [referenceImageUrl] : []);
 }
 
 /**

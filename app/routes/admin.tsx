@@ -25,7 +25,18 @@ import {
 import { SearchIcon } from "@shopify/polaris-icons";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import enTranslations from "@shopify/polaris/locales/en.json";
-import { supabase, updateShopMonthlySessions, uploadReferenceImage, saveProductReferenceImage, deleteReferenceImage, updateProductAiModel } from "../lib/supabase.server";
+import {
+  supabase,
+  updateShopMonthlySessions,
+  uploadReferenceImage,
+  appendProductReferenceImage,
+  removeProductReferenceImageByUrl,
+  appendVariantReferenceImage,
+  removeVariantReferenceImageByUrl,
+  updateProductAiModel,
+  parseReferenceImageUrls,
+  MAX_REFERENCE_IMAGES,
+} from "../lib/supabase.server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
@@ -96,9 +107,13 @@ export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
 interface VariantConfig {
   id: string;
-  variant_id: string;
+  shopify_variant_id: string;
   variant_title: string;
   transformation_prompt: string;
+  reference_image_url?: string | null;
+  reference_image_urls?: unknown;
+  /** Normalized in loader */
+  reference_urls: string[];
 }
 
 interface Product {
@@ -108,6 +123,9 @@ interface Product {
   product_image_url: string | null;
   transformation_prompt: string;
   reference_image_url: string | null;
+  reference_image_urls?: unknown;
+  /** Normalized in loader */
+  reference_urls: string[];
   ai_model: string | null;
   is_funnel_generated: boolean;
   category_id: string | null;
@@ -194,11 +212,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           .in("product_id", productIds.length > 0 ? productIds : ["none"]);
 
         // Attach variant configs to each product
-        const productsWithVariants = (products || []).map((product: { id: string }) => ({
+        const productsWithVariants = (products || []).map((product: { id: string; reference_image_url?: string | null; reference_image_urls?: unknown }) => ({
           ...product,
-          variant_configs: (variantConfigs || []).filter(
-            (vc: { product_id: string }) => vc.product_id === product.id
-          ),
+          reference_urls: parseReferenceImageUrls({
+            reference_image_url: product.reference_image_url,
+            reference_image_urls: product.reference_image_urls,
+          }),
+          variant_configs: (variantConfigs || [])
+            .filter((vc: { product_id: string }) => vc.product_id === product.id)
+            .map((vc: { id: string; product_id: string; reference_image_url?: string | null; reference_image_urls?: unknown }) => ({
+              ...vc,
+              reference_urls: parseReferenceImageUrls({
+                reference_image_url: vc.reference_image_url,
+                reference_image_urls: vc.reference_image_urls,
+              }),
+            })),
         }));
 
         // Fetch conversion stats for this shop (last 30 days)
@@ -436,6 +464,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (!productId || !imageFile || !shopDomain) {
       return json({ success: false, error: "Missing required fields" });
     }
+    if (!isValidUUID(productId)) {
+      return json({ success: false, error: "Invalid product ID" });
+    }
 
     try {
       const arrayBuffer = await imageFile.arrayBuffer();
@@ -449,11 +480,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         imageFile.type
       );
 
-      await saveProductReferenceImage(productId, publicUrl);
-      return json({ success: true, referenceImageUrl: publicUrl });
+      await appendProductReferenceImage(productId, publicUrl);
+      const { data: row } = await supabase
+        .from("products")
+        .select("reference_image_url, reference_image_urls")
+        .eq("id", productId)
+        .single();
+      return json({
+        success: true,
+        referenceImageUrls: parseReferenceImageUrls(row ?? undefined),
+      });
     } catch (error) {
       console.error("Error uploading reference image:", error);
-      return json({ success: false, error: "Upload failed" });
+      const message = error instanceof Error ? error.message : "Upload failed";
+      return json({ success: false, error: message });
     }
   }
 
@@ -461,14 +501,93 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const productId = formData.get("productId") as string;
     const currentUrl = formData.get("currentUrl") as string;
 
+    if (!isValidUUID(productId)) {
+      return json({ success: false, error: "Invalid product ID" });
+    }
+
     try {
-      if (currentUrl) {
-        await deleteReferenceImage(currentUrl);
-      }
-      await saveProductReferenceImage(productId, null);
-      return json({ success: true, referenceImageUrl: null });
+      await removeProductReferenceImageByUrl(productId, currentUrl);
+      const { data: row } = await supabase
+        .from("products")
+        .select("reference_image_url, reference_image_urls")
+        .eq("id", productId)
+        .single();
+      return json({
+        success: true,
+        referenceImageUrls: parseReferenceImageUrls(row ?? undefined),
+      });
     } catch (error) {
       console.error("Error removing reference image:", error);
+      return json({ success: false, error: "Remove failed" });
+    }
+  }
+
+  if (actionType === "upload-variant-reference-image") {
+    const productId = formData.get("productId") as string;
+    const variantId = formData.get("variantId") as string;
+    const imageFile = formData.get("image") as File;
+    const shopDomain = formData.get("shopDomain") as string;
+
+    if (!productId || !variantId || !imageFile || !shopDomain) {
+      return json({ success: false, error: "Missing required fields" });
+    }
+    if (!isValidUUID(productId) || !isValidUUID(variantId)) {
+      return json({ success: false, error: "Invalid product or variant ID" });
+    }
+
+    try {
+      const arrayBuffer = await imageFile.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const storageKey = `${productId}-v-${variantId}`;
+
+      const publicUrl = await uploadReferenceImage(
+        shopDomain,
+        storageKey,
+        buffer,
+        imageFile.name,
+        imageFile.type
+      );
+
+      await appendVariantReferenceImage(variantId, publicUrl);
+      const { data: row } = await supabase
+        .from("product_variants")
+        .select("reference_image_url, reference_image_urls")
+        .eq("id", variantId)
+        .single();
+      return json({
+        success: true,
+        referenceImageUrls: parseReferenceImageUrls(row ?? undefined),
+        targetVariantId: variantId,
+      });
+    } catch (error) {
+      console.error("Error uploading variant reference image:", error);
+      const message = error instanceof Error ? error.message : "Upload failed";
+      return json({ success: false, error: message });
+    }
+  }
+
+  if (actionType === "remove-variant-reference-image") {
+    const variantId = formData.get("variantId") as string;
+    const currentUrl = formData.get("currentUrl") as string;
+
+    if (!isValidUUID(variantId)) {
+      return json({ success: false, error: "Invalid variant ID" });
+    }
+
+    try {
+      await removeVariantReferenceImageByUrl(variantId, currentUrl);
+      const { data: row } = await supabase
+        .from("product_variants")
+        .select("reference_image_url, reference_image_urls")
+        .eq("id", variantId)
+        .single();
+      return json({
+        success: true,
+        referenceImageUrls: parseReferenceImageUrls(row ?? undefined),
+        targetVariantId: variantId,
+      });
+    } catch (error) {
+      console.error("Error removing variant reference image:", error);
       return json({ success: false, error: "Remove failed" });
     }
   }
@@ -512,22 +631,31 @@ export default function FoundersAdmin() {
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testLoading, setTestLoading] = useState(false);
   const refFetcher = useFetcher<any>();
-  const [refImageUrls, setRefImageUrls] = useState<Record<string, string | null>>({});
+  const [refImageUrls, setRefImageUrls] = useState<Record<string, string[]>>({});
+  const [variantRefImageUrls, setVariantRefImageUrls] = useState<Record<string, string[]>>({});
   const [aiModelOverrides, setAiModelOverrides] = useState<Record<string, string>>({});
 
-  // Track which product the ref fetcher is working on
-  const [refFetcherProductId, setRefFetcherProductId] = useState<string | null>(null);
-  const isUploadingRefFor = refFetcher.state !== "idle" ? refFetcherProductId : null;
+  const [refFetcherTarget, setRefFetcherTarget] = useState<
+    { type: "product" | "variant"; id: string } | null
+  >(null);
+  const isUploadingRefKey =
+    refFetcher.state !== "idle" && refFetcherTarget
+      ? `${refFetcherTarget.type}:${refFetcherTarget.id}`
+      : null;
 
-  // Update local state when refFetcher completes
+  // Clear target whenever the fetcher settles so loading never sticks on errors / empty responses.
   useEffect(() => {
-    if (refFetcher.data && refFetcher.state === "idle" && refFetcherProductId) {
-      if (refFetcher.data.referenceImageUrl !== undefined) {
-        setRefImageUrls(prev => ({ ...prev, [refFetcherProductId]: refFetcher.data.referenceImageUrl ?? null }));
+    if (refFetcher.state !== "idle" || !refFetcherTarget) return;
+    if (refFetcher.data?.referenceImageUrls !== undefined) {
+      const urls = refFetcher.data.referenceImageUrls as string[];
+      if (refFetcherTarget.type === "variant") {
+        setVariantRefImageUrls((prev) => ({ ...prev, [refFetcherTarget.id]: urls }));
+      } else {
+        setRefImageUrls((prev) => ({ ...prev, [refFetcherTarget.id]: urls }));
       }
-      setRefFetcherProductId(null);
     }
-  }, [refFetcher.data, refFetcher.state, refFetcherProductId]);
+    setRefFetcherTarget(null);
+  }, [refFetcher.data, refFetcher.state, refFetcherTarget]);
 
   // Filter shops by search query
   const filteredShops = (shops || []).filter((shop: Shop) =>
@@ -601,13 +729,18 @@ export default function FoundersAdmin() {
     submit(formData, { method: "POST" });
   };
 
-  const getRefImageUrl = (product: Product) => {
+  const getRefImageUrls = (product: Product) => {
     if (refImageUrls[product.id] !== undefined) return refImageUrls[product.id];
-    return product.reference_image_url;
+    return product.reference_urls ?? [];
+  };
+
+  const getVariantRefUrls = (vc: VariantConfig) => {
+    if (variantRefImageUrls[vc.id] !== undefined) return variantRefImageUrls[vc.id];
+    return vc.reference_urls ?? [];
   };
 
   const handleRefImageUpload = (productId: string, shopDomain: string, file: File) => {
-    setRefFetcherProductId(productId);
+    setRefFetcherTarget({ type: "product", id: productId });
     const formData = new FormData();
     formData.append("action", "upload-reference-image");
     formData.append("productId", productId);
@@ -617,10 +750,35 @@ export default function FoundersAdmin() {
   };
 
   const handleRefImageRemove = (productId: string, currentUrl: string) => {
-    setRefFetcherProductId(productId);
+    setRefFetcherTarget({ type: "product", id: productId });
     const formData = new FormData();
     formData.append("action", "remove-reference-image");
     formData.append("productId", productId);
+    formData.append("currentUrl", currentUrl);
+    refFetcher.submit(formData, { method: "POST" });
+  };
+
+  const handleVariantRefImageUpload = (
+    productId: string,
+    variantId: string,
+    shopDomain: string,
+    file: File
+  ) => {
+    setRefFetcherTarget({ type: "variant", id: variantId });
+    const formData = new FormData();
+    formData.append("action", "upload-variant-reference-image");
+    formData.append("productId", productId);
+    formData.append("variantId", variantId);
+    formData.append("shopDomain", shopDomain);
+    formData.append("image", file);
+    refFetcher.submit(formData, { method: "POST", encType: "multipart/form-data" });
+  };
+
+  const handleVariantRefImageRemove = (variantId: string, currentUrl: string) => {
+    setRefFetcherTarget({ type: "variant", id: variantId });
+    const formData = new FormData();
+    formData.append("action", "remove-variant-reference-image");
+    formData.append("variantId", variantId);
     formData.append("currentUrl", currentUrl);
     refFetcher.submit(formData, { method: "POST" });
   };
@@ -823,8 +981,9 @@ export default function FoundersAdmin() {
                                   {product.variant_configs && product.variant_configs.length > 0 && (
                                     <Badge tone="info">{`${product.variant_configs.length} variant${product.variant_configs.length > 1 ? 's' : ''}`}</Badge>
                                   )}
-                                  {getRefImageUrl(product) && (
-                                    <Badge tone="warning">Ref image</Badge>
+                                  {(getRefImageUrls(product).length > 0 ||
+                                    product.variant_configs?.some((vc) => getVariantRefUrls(vc).length > 0)) && (
+                                    <Badge tone="warning">Ref image(s)</Badge>
                                   )}
                                   {product.ai_model && (
                                     <Badge tone="attention">{product.ai_model}</Badge>
@@ -913,7 +1072,7 @@ export default function FoundersAdmin() {
                                             <InlineStack gap="200" blockAlign="center">
                                               <Badge>{vc.variant_title}</Badge>
                                               <Text as="span" variant="bodySm" tone="subdued">
-                                                ID: {vc.variant_id}
+                                                ID: {vc.shopify_variant_id}
                                               </Text>
                                             </InlineStack>
                                             {editingVariant === vc.id ? (
@@ -952,77 +1111,167 @@ export default function FoundersAdmin() {
                                               {vc.transformation_prompt}
                                             </pre>
                                           )}
+
+                                          <Divider />
+                                          <Text as="p" variant="bodySm" fontWeight="semibold">
+                                            Variant reference images (override product refs when any are set):
+                                          </Text>
+                                          <Text as="p" variant="bodySm" tone="subdued">
+                                            Up to {MAX_REFERENCE_IMAGES} images. Shown to the AI instead of product-level refs for this variant.
+                                          </Text>
+                                          <InlineStack gap="200" wrap>
+                                            {getVariantRefUrls(vc).map((url) => (
+                                              <InlineStack key={url} gap="200" blockAlign="center">
+                                                <div
+                                                  style={{
+                                                    border: "1px solid #e1e3e5",
+                                                    borderRadius: "8px",
+                                                    overflow: "hidden",
+                                                  }}
+                                                >
+                                                  <img
+                                                    src={url}
+                                                    alt="Variant ref"
+                                                    style={{
+                                                      width: "64px",
+                                                      height: "64px",
+                                                      objectFit: "cover",
+                                                      display: "block",
+                                                    }}
+                                                  />
+                                                </div>
+                                                <Button
+                                                  size="slim"
+                                                  variant="plain"
+                                                  tone="critical"
+                                                  onClick={() => handleVariantRefImageRemove(vc.id, url)}
+                                                  loading={isUploadingRefKey === `variant:${vc.id}`}
+                                                >
+                                                  Remove
+                                                </Button>
+                                              </InlineStack>
+                                            ))}
+                                          </InlineStack>
+                                          {getVariantRefUrls(vc).length < MAX_REFERENCE_IMAGES ? (
+                                            <InlineStack gap="200" blockAlign="center">
+                                              {isUploadingRefKey === `variant:${vc.id}` ? (
+                                                <Spinner size="small" />
+                                              ) : (
+                                                <>
+                                                  <input
+                                                    id={`variant-ref-upload-${vc.id}`}
+                                                    type="file"
+                                                    accept="image/*"
+                                                    style={{ display: "none" }}
+                                                    onChange={(e) => {
+                                                      const file = e.target.files?.[0];
+                                                      if (file)
+                                                        handleVariantRefImageUpload(
+                                                          product.id,
+                                                          vc.id,
+                                                          shop.shop_domain,
+                                                          file
+                                                        );
+                                                      e.target.value = "";
+                                                    }}
+                                                  />
+                                                  <Button
+                                                    size="slim"
+                                                    onClick={() =>
+                                                      document
+                                                        .getElementById(`variant-ref-upload-${vc.id}`)
+                                                        ?.click()
+                                                    }
+                                                  >
+                                                    Add variant reference
+                                                  </Button>
+                                                </>
+                                              )}
+                                            </InlineStack>
+                                          ) : null}
                                         </BlockStack>
                                       </Box>
                                     ))}
                                   </BlockStack>
                                 )}
 
-                                {/* Reference Image */}
+                                {/* Reference images (product-level; variants can override) */}
                                 <BlockStack gap="200">
                                   <Divider />
                                   <Text as="p" variant="bodySm" fontWeight="semibold">
-                                    Reference Image:
+                                    Product reference images:
                                   </Text>
-                                  {(() => {
-                                    const refUrl = getRefImageUrl(product);
-                                    const isUploading = isUploadingRefFor === product.id;
-                                    
-                                    if (refUrl) {
-                                      return (
-                                        <InlineStack gap="300" blockAlign="center">
-                                          <div style={{ border: '1px solid #e1e3e5', borderRadius: '8px', overflow: 'hidden' }}>
-                                            <img 
-                                              src={refUrl} 
-                                              alt="Reference" 
-                                              style={{ width: '80px', height: '80px', objectFit: 'cover', display: 'block' }} 
-                                            />
-                                          </div>
-                                          <BlockStack gap="100">
-                                            <Badge tone="success">Attached</Badge>
-                                            <Button
-                                              size="slim"
-                                              variant="plain"
-                                              tone="critical"
-                                              onClick={() => handleRefImageRemove(product.id, refUrl)}
-                                              loading={isUploading}
-                                            >
-                                              Remove
-                                            </Button>
-                                          </BlockStack>
-                                        </InlineStack>
-                                      );
-                                    }
-                                    
-                                    return (
-                                      <InlineStack gap="200" blockAlign="center">
-                                        <Text as="p" variant="bodySm" tone="subdued">None</Text>
-                                        {isUploading ? (
-                                          <Spinner size="small" />
-                                        ) : (
-                                          <>
-                                            <input
-                                              id={`ref-upload-${product.id}`}
-                                              type="file"
-                                              accept="image/*"
-                                              style={{ display: 'none' }}
-                                              onChange={(e) => {
-                                                const file = e.target.files?.[0];
-                                                if (file) handleRefImageUpload(product.id, shop.shop_domain, file);
-                                                e.target.value = '';
-                                              }}
-                                            />
-                                            <Button 
-                                              size="slim"
-                                              onClick={() => document.getElementById(`ref-upload-${product.id}`)?.click()}
-                                            >
-                                              Upload
-                                            </Button>
-                                          </>
-                                        )}
+                                  <Text as="p" variant="bodySm" tone="subdued">
+                                    Up to {MAX_REFERENCE_IMAGES} images sent to the AI with the shopper selfie. If a variant has its own refs, those replace these for that variant.
+                                  </Text>
+                                  <InlineStack gap="300" wrap blockAlign="center">
+                                    {getRefImageUrls(product).map((refUrl) => (
+                                      <InlineStack key={refUrl} gap="200" blockAlign="center">
+                                        <div
+                                          style={{
+                                            border: "1px solid #e1e3e5",
+                                            borderRadius: "8px",
+                                            overflow: "hidden",
+                                          }}
+                                        >
+                                          <img
+                                            src={refUrl}
+                                            alt="Reference"
+                                            style={{
+                                              width: "80px",
+                                              height: "80px",
+                                              objectFit: "cover",
+                                              display: "block",
+                                            }}
+                                          />
+                                        </div>
+                                        <Button
+                                          size="slim"
+                                          variant="plain"
+                                          tone="critical"
+                                          onClick={() => handleRefImageRemove(product.id, refUrl)}
+                                          loading={isUploadingRefKey === `product:${product.id}`}
+                                        >
+                                          Remove
+                                        </Button>
                                       </InlineStack>
-                                    );
-                                  })()}
+                                    ))}
+                                  </InlineStack>
+                                  {getRefImageUrls(product).length === 0 && (
+                                    <Text as="p" variant="bodySm" tone="subdued">
+                                      None
+                                    </Text>
+                                  )}
+                                  {getRefImageUrls(product).length < MAX_REFERENCE_IMAGES ? (
+                                    <InlineStack gap="200" blockAlign="center">
+                                      {isUploadingRefKey === `product:${product.id}` ? (
+                                        <Spinner size="small" />
+                                      ) : (
+                                        <>
+                                          <input
+                                            id={`ref-upload-${product.id}`}
+                                            type="file"
+                                            accept="image/*"
+                                            style={{ display: "none" }}
+                                            onChange={(e) => {
+                                              const file = e.target.files?.[0];
+                                              if (file)
+                                                handleRefImageUpload(product.id, shop.shop_domain, file);
+                                              e.target.value = "";
+                                            }}
+                                          />
+                                          <Button
+                                            size="slim"
+                                            onClick={() =>
+                                              document.getElementById(`ref-upload-${product.id}`)?.click()
+                                            }
+                                          >
+                                            Add reference image
+                                          </Button>
+                                        </>
+                                      )}
+                                    </InlineStack>
+                                  ) : null}
                                 </BlockStack>
 
                                 {/* AI Model Selector */}
