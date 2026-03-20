@@ -8,6 +8,7 @@ import {
   MODEL_OPENAI,
   type ReferenceImagePart,
 } from "../lib/ai.server";
+import { parseReferenceImageUrls } from "../lib/reference-images";
 import {
   getProductConfiguration,
   getVariantConfiguration,
@@ -15,7 +16,6 @@ import {
   productHasVariantConfigs,
   findShopByDomain,
   shopHasValidAccess,
-  parseReferenceImageUrls,
 } from "../lib/supabase.server";
 import { checkRateLimit, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
 

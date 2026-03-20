@@ -25,6 +25,7 @@ import {
 import { SearchIcon } from "@shopify/polaris-icons";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import enTranslations from "@shopify/polaris/locales/en.json";
+import { MAX_REFERENCE_IMAGES, parseReferenceImageUrls } from "../lib/reference-images";
 import {
   supabase,
   updateShopMonthlySessions,
@@ -34,8 +35,6 @@ import {
   appendVariantReferenceImage,
   removeVariantReferenceImageByUrl,
   updateProductAiModel,
-  parseReferenceImageUrls,
-  MAX_REFERENCE_IMAGES,
 } from "../lib/supabase.server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";

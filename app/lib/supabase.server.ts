@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { MAX_REFERENCE_IMAGES, parseReferenceImageUrls } from './reference-images';
 
 if (!process.env.SUPABASE_URL) {
   throw new Error('SUPABASE_URL environment variable is required');
@@ -1613,34 +1614,8 @@ export async function uploadReferenceImage(
   return urlData.publicUrl;
 }
 
-/** Max reference images stored per product / variant (enforced in app + DB usage) */
-export const MAX_REFERENCE_IMAGES = 5;
-
-function coerceReferenceUrlArray(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .filter((u): u is string => typeof u === 'string' && u.trim().length > 0)
-    .map((s) => s.trim());
-}
-
-/**
- * Normalize reference URLs from a DB row (JSON array and/or legacy single column).
- */
-export function parseReferenceImageUrls(
-  row:
-    | {
-        reference_image_url?: string | null;
-        reference_image_urls?: unknown;
-      }
-    | null
-    | undefined
-): string[] {
-  if (!row) return [];
-  const fromJson = coerceReferenceUrlArray(row.reference_image_urls);
-  if (fromJson.length > 0) return fromJson.slice(0, MAX_REFERENCE_IMAGES);
-  if (row.reference_image_url) return [row.reference_image_url];
-  return [];
-}
+// Re-export for server routes that already import from supabase.server
+export { MAX_REFERENCE_IMAGES, parseReferenceImageUrls };
 
 /**
  * Replace all reference image URLs for a product (keeps legacy first URL in sync).
