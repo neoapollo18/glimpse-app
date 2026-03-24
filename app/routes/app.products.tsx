@@ -175,9 +175,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       const shopifyVariantId = formData.get("shopifyVariantId") as string;
       const variantTitle = formData.get("variantTitle") as string;
       const transformationPrompt = formData.get("transformationPrompt") as string;
+      const displayColor = (formData.get("displayColor") as string) || null;
 
       // Save variant configuration
-      await saveVariantConfiguration(productId, shopifyVariantId, variantTitle, transformationPrompt);
+      await saveVariantConfiguration(productId, shopifyVariantId, variantTitle, transformationPrompt, displayColor);
 
       return { success: true, message: "Variant configured successfully!" };
     } catch (error) {
@@ -487,6 +488,7 @@ export default function Products() {
   const [configuredVariants, setConfiguredVariants] = useState<any[]>([]);
   const [selectedVariantForConfig, setSelectedVariantForConfig] = useState<any | null>(null);
   const [variantPrompt, setVariantPrompt] = useState("");
+  const [variantDisplayColor, setVariantDisplayColor] = useState("");
   const [variantModalActive, setVariantModalActive] = useState(false);
 
   // Pagination state
@@ -876,9 +878,10 @@ export default function Products() {
   const handleConfigureVariant = (variant: any) => {
     // Check if variant already configured
     const existingConfig = configuredVariants.find(v => v.shopify_variant_id === variant.id);
-    
+
     setSelectedVariantForConfig(variant);
     setVariantPrompt(existingConfig?.transformation_prompt || "");
+    setVariantDisplayColor(existingConfig?.display_color || "");
     setVariantModalActive(true);
   };
 
@@ -891,11 +894,13 @@ export default function Products() {
     formData.append("shopifyVariantId", selectedVariantForConfig.id);
     formData.append("variantTitle", selectedVariantForConfig.title);
     formData.append("transformationPrompt", variantPrompt);
+    if (variantDisplayColor.trim()) formData.append("displayColor", variantDisplayColor.trim());
 
     submit(formData, { method: "POST" });
     setVariantModalActive(false);
     setSelectedVariantForConfig(null);
     setVariantPrompt("");
+    setVariantDisplayColor("");
     
     // Reload configured variants to show updated status
     setTimeout(async () => {
@@ -1931,6 +1936,34 @@ export default function Products() {
                 placeholder="e.g., Apply vibrant red eyeliner to the person's eyes..."
                 autoComplete="off"
               />
+
+              <BlockStack gap="100">
+                <Text as="p" variant="bodyMd" fontWeight="medium">Swatch Color (Optional)</Text>
+                <InlineStack gap="300" blockAlign="center">
+                  <input
+                    type="color"
+                    value={variantDisplayColor || "#c4506a"}
+                    onChange={(e) => setVariantDisplayColor(e.target.value)}
+                    style={{ width: '40px', height: '40px', padding: '2px', border: '1px solid #c9cccf', borderRadius: '8px', cursor: 'pointer', opacity: variantDisplayColor ? 1 : 0.4 }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <TextField
+                      label=""
+                      labelHidden
+                      value={variantDisplayColor}
+                      onChange={(v) => setVariantDisplayColor(v)}
+                      placeholder="#c4506a"
+                      autoComplete="off"
+                      helpText="Hex color shown as a swatch in the widget shade picker"
+                    />
+                  </div>
+                  {variantDisplayColor && (
+                    <Button variant="plain" tone="critical" onClick={() => setVariantDisplayColor("")}>
+                      Clear
+                    </Button>
+                  )}
+                </InlineStack>
+              </BlockStack>
 
               <Banner tone="info">
                 <Text as="p" variant="bodyMd">

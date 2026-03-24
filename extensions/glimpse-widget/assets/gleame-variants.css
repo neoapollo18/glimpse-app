@@ -39,6 +39,7 @@
   flex-direction: column;
   gap: 20px;
   animation: gvm-enter 0.3s ease;
+  font-family: inherit;
 }
 
 @keyframes gvm-enter {
@@ -131,6 +132,7 @@
   border: 1.5px solid rgba(0, 0, 0, 0.08);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
+
 
 /* Variant title */
 .gvm-card-label {

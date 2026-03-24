@@ -766,10 +766,11 @@ export async function saveVariantConfiguration(
   productId: string,
   shopifyVariantId: string,
   variantTitle: string,
-  transformationPrompt: string
+  transformationPrompt: string,
+  displayColor?: string | null
 ) {
   console.log('Saving variant configuration:', { productId, shopifyVariantId, variantTitle });
-  
+
   try {
     // Check if variant config already exists
     const { data: existingVariant } = await supabase
@@ -778,29 +779,34 @@ export async function saveVariantConfiguration(
       .eq('product_id', productId)
       .eq('shopify_variant_id', shopifyVariantId)
       .single();
-    
+
     if (existingVariant) {
+      // Only include display_color in the update when explicitly passed —
+      // omitting it preserves any existing color set via the variant modal.
+      const updatePayload: Record<string, unknown> = {
+        variant_title: variantTitle,
+        transformation_prompt: transformationPrompt,
+        updated_at: new Date().toISOString(),
+      };
+      if (displayColor !== undefined) updatePayload.display_color = displayColor || null;
+
       // Update existing variant configuration
       const { data, error } = await supabase
         .from('product_variants')
-        .update({
-          variant_title: variantTitle,
-          transformation_prompt: transformationPrompt,
-          updated_at: new Date().toISOString()
-        })
+        .update(updatePayload)
         .eq('id', existingVariant.id)
         .select()
         .single();
-      
+
       if (error) {
         console.error('Variant update error:', error);
         throw new Error(`Failed to update variant configuration: ${error.message}`);
       }
-      
+
       console.log('✅ Variant configuration updated');
       return data;
     }
-    
+
     // Create new variant configuration
     const { data, error } = await supabase
       .from('product_variants')
@@ -808,7 +814,8 @@ export async function saveVariantConfiguration(
         product_id: productId,
         shopify_variant_id: shopifyVariantId,
         variant_title: variantTitle,
-        transformation_prompt: transformationPrompt
+        transformation_prompt: transformationPrompt,
+        display_color: displayColor || null,
       }])
       .select()
       .single();
