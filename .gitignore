@@ -25,3 +25,6 @@ database.sqlite
 .shopify.lock
 
 data
+
+# Claude Code context files (navigation aids, not source)
+.claude/

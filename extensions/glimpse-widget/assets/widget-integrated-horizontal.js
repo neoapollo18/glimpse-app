@@ -23,7 +23,9 @@ console.log('Gleame Integrated Horizontal Widget v2.0 loaded');
         cartToken: null,
         loadingTextInterval: null,
         viewTracked: false,
-        widget: null
+        widget: null,
+        carouselSlides: null,
+        currentSlide: 0,
       });
     }
     return instances.get(instanceId);
@@ -322,11 +324,23 @@ console.log('Gleame Integrated Horizontal Widget v2.0 loaded');
     const imageUpload = getElement(instanceId, 'imageUpload');
     const beforeImage = getElement(instanceId, 'beforeImage');
     const afterImage = getElement(instanceId, 'afterImage');
-    
+
     if (imageUpload) imageUpload.value = '';
     if (beforeImage) { beforeImage.onload = null; beforeImage.onerror = null; beforeImage.src = ''; }
     if (afterImage) { afterImage.onload = null; afterImage.onerror = null; afterImage.src = ''; }
-    
+
+    // Clean up any carousel injected into resultsState
+    const resultsState = getElement(instanceId, 'resultsState');
+    if (resultsState) {
+      const carouselRoot = resultsState.querySelector('.gvc-root');
+      if (carouselRoot) carouselRoot.remove();
+      const originalComparison = resultsState.querySelector('.horizontal-results');
+      if (originalComparison) originalComparison.style.display = '';
+    }
+    const instance = getInstance(instanceId);
+    instance.carouselSlides = null;
+    instance.currentSlide = 0;
+
     showStateHorizontal(instanceId, 'upload');
   };
   
@@ -499,14 +513,14 @@ console.log('Gleame Integrated Horizontal Widget v2.0 loaded');
           
           // For HEIC files, browser can't display - just start transform immediately
           if (isHeic) {
-            transformImage(instanceId, file);
+            checkVariantsAndProceed(instanceId, file);
           } else {
             beforeImg.onload = function() {
               beforeImg.onload = null;
               beforeImg.onerror = null;
               if (!transformationStarted) {
                 transformationStarted = true;
-                transformImage(instanceId, fileToSend);
+                checkVariantsAndProceed(instanceId, fileToSend);
               }
             };
             
@@ -519,7 +533,7 @@ console.log('Gleame Integrated Horizontal Widget v2.0 loaded');
             beforeImg.src = imageDataUrl;
           }
         } else {
-          transformImage(instanceId, isHeic ? file : fileToSend);
+          checkVariantsAndProceed(instanceId, isHeic ? file : fileToSend);
         }
       } catch (error) {
         showErrorHorizontal(instanceId, 'Error loading image preview. Please try again.');
@@ -635,6 +649,296 @@ console.log('Gleame Integrated Horizontal Widget v2.0 loaded');
     }
   }
   
+  // ============================================================
+  // VARIANT + CAROUSEL MODULE
+  // ============================================================
+
+  async function fetchConfiguredVariants(shopDomain, productId) {
+    try {
+      const params = new URLSearchParams({ shopDomain, productId });
+      const response = await fetch(
+        SHOPIFY_APP_URL + '/api/storefront/get-product-variants?' + params,
+        { headers: { 'X-Requested-With': 'XMLHttpRequest' } }
+      );
+      if (!response.ok) return [];
+      const data = await response.json();
+      return data.variants || [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  async function checkVariantsAndProceed(instanceId, file) {
+    const instance = getInstance(instanceId);
+    const widget = getWidgetElement(instanceId);
+    if (!instance.productId && widget) instance.productId = widget.getAttribute('data-product-id');
+    if (!instance.shopDomain && widget) instance.shopDomain = getShopDomain(widget);
+
+    if (!instance.productId || !instance.shopDomain) {
+      transformImage(instanceId, file);
+      return;
+    }
+
+    const variants = await fetchConfiguredVariants(instance.shopDomain, instance.productId);
+
+    if (variants.length === 0) {
+      transformImage(instanceId, file);
+      return;
+    }
+
+    openVariantModal(variants, function(selected) {
+      showStateHorizontal(instanceId, 'processing');
+      runMultiVariantTransform(instanceId, file, selected,
+        function(slides) { showCarouselInline(instanceId, slides); },
+        function(msg) { showErrorHorizontal(instanceId, msg); }
+      );
+    });
+  }
+
+  async function runMultiVariantTransform(instanceId, file, selectedVariants, onSuccess, onError) {
+    const instance = getInstance(instanceId);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      formData.append('productId', instance.productId);
+      formData.append('shopDomain', instance.shopDomain);
+      formData.append('widgetType', 'horizontal');
+      selectedVariants.forEach(function(v) { formData.append('variantIds[]', v.variantId); });
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(function() { controller.abort(); }, 120000);
+
+      let response;
+      try {
+        response = await fetch(SHOPIFY_APP_URL + '/api/storefront/transform-image', {
+          method: 'POST',
+          body: formData,
+          headers: { 'X-Requested-With': 'XMLHttpRequest' },
+          signal: controller.signal
+        });
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        if (fetchError.name === 'AbortError') throw new Error('Request timed out. Please try again.');
+        throw new Error('Network error. Please check your connection and try again.');
+      }
+      clearTimeout(timeoutId);
+
+      let result;
+      try { result = await response.json(); } catch (e) { throw new Error('Invalid server response. Please try again.'); }
+      if (!response.ok) throw new Error(result.error || 'Server error: ' + response.status);
+      if (!result.success) throw new Error(result.error || 'Transformation failed');
+
+      const slides = (result.results || []).map(function(r, i) {
+        return {
+          variantTitle: (selectedVariants[i] && selectedVariants[i].variantTitle) || ('Look ' + (i + 1)),
+          displayColor: (selectedVariants[i] && selectedVariants[i].displayColor) || null,
+          generatedImage: r.generatedImage || null,
+          processedInputImage: r.processedInputImage || null,
+          error: r.error || null
+        };
+      }).filter(function(s) { return !s.error && s.generatedImage; });
+
+      if (slides.length === 0) throw new Error('No transformations succeeded. Please try again.');
+      onSuccess(slides);
+    } catch (error) {
+      onError(error.message || 'Something went wrong. Please try again.');
+    }
+  }
+
+  function showCarouselInline(instanceId, slides) {
+    if (slides.length === 1) {
+      const beforeImg = getElement(instanceId, 'beforeImage');
+      const afterImg = getElement(instanceId, 'afterImage');
+      if (beforeImg && slides[0].processedInputImage) {
+        beforeImg.src = 'data:image/jpeg;base64,' + slides[0].processedInputImage;
+      }
+      if (afterImg) {
+        afterImg.onload = null; afterImg.onerror = null;
+        afterImg.src = 'data:image/jpeg;base64,' + slides[0].generatedImage;
+      }
+      showStateHorizontal(instanceId, 'results');
+      return;
+    }
+
+    showStateHorizontal(instanceId, 'results');
+    const resultsState = getElement(instanceId, 'resultsState');
+    if (!resultsState) return;
+
+    const originalComparison = resultsState.querySelector('.horizontal-results');
+    if (originalComparison) originalComparison.style.display = 'none';
+
+    const existing = resultsState.querySelector('.gvc-root');
+    if (existing) existing.remove();
+
+    const carouselRoot = document.createElement('div');
+    carouselRoot.className = 'gvc-root';
+    resultsState.insertBefore(carouselRoot, resultsState.firstChild);
+    buildCarousel(instanceId, slides, carouselRoot);
+  }
+
+  function buildCarousel(instanceId, slides, containerEl) {
+    const instance = getInstance(instanceId);
+    instance.carouselSlides = slides;
+    instance.currentSlide = 0;
+
+    const tabsHtml = slides.map(function(s, i) {
+      const dot = s.displayColor
+        ? '<span class="gvc-tab-dot" style="background:' + s.displayColor + '"></span>'
+        : '';
+      return '<button type="button" class="gvc-tab' + (i === 0 ? ' gvc-tab-active' : '') +
+        '" data-slide="' + i + '">' + dot + '<span>' + s.variantTitle + '</span></button>';
+    }).join('');
+
+    const slidesHtml = slides.map(function(s, i) {
+      return '<div class="gvc-slide' + (i === 0 ? ' gvc-slide-active' : '') + '" data-slide="' + i + '">' +
+        '<div class="gvc-comparison">' +
+        '<div class="gvc-side"><img class="gvc-img" src="data:image/jpeg;base64,' + s.processedInputImage + '" alt="Before"></div>' +
+        '<div class="gvc-side"><img class="gvc-img" src="data:image/jpeg;base64,' + s.generatedImage + '" alt="' + s.variantTitle + '"></div>' +
+        '</div>' +
+        '<p class="gvc-shade-label">' + s.variantTitle + '</p>' +
+        '</div>';
+    }).join('');
+
+    containerEl.innerHTML =
+      '<div class="gvc-tabs" id="gvc-tabs-' + instanceId + '">' + tabsHtml + '</div>' +
+      '<div class="gvc-slides-wrap">' + slidesHtml + '</div>';
+
+    var tabsEl = document.getElementById('gvc-tabs-' + instanceId);
+    if (tabsEl) {
+      tabsEl.addEventListener('click', function(e) {
+        var tab = e.target.closest('.gvc-tab');
+        if (!tab) return;
+        goToSlide(instanceId, parseInt(tab.dataset.slide, 10), containerEl);
+      });
+    }
+  }
+
+  function goToSlide(instanceId, idx, containerEl) {
+    const instance = getInstance(instanceId);
+    if (!instance.carouselSlides || idx < 0 || idx >= instance.carouselSlides.length) return;
+    const prev = instance.currentSlide;
+    instance.currentSlide = idx;
+
+    containerEl.querySelectorAll('.gvc-tab').forEach(function(t, i) {
+      t.classList.toggle('gvc-tab-active', i === idx);
+    });
+
+    containerEl.querySelectorAll('.gvc-slide').forEach(function(s, i) {
+      if (i === idx) {
+        s.classList.add('gvc-slide-active');
+        s.classList.remove('gvc-slide-exit');
+      } else if (i === prev) {
+        s.classList.remove('gvc-slide-active');
+        s.classList.add('gvc-slide-exit');
+        setTimeout(function() { s.classList.remove('gvc-slide-exit'); }, 250);
+      } else {
+        s.classList.remove('gvc-slide-active', 'gvc-slide-exit');
+      }
+    });
+  }
+
+  // Shared variant selector modal (DOM-injected singleton — shared with other widget scripts)
+
+  function ensureVariantModal() {
+    var modal = document.getElementById('gleame-variant-modal');
+    if (modal) return modal;
+
+    modal = document.createElement('div');
+    modal.id = 'gleame-variant-modal';
+    modal.innerHTML =
+      '<div class="gvm-backdrop"></div>' +
+      '<div class="gvm-sheet">' +
+        '<button type="button" class="gvm-close" id="gvm-close-btn">' +
+          '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>' +
+        '</button>' +
+        '<div class="gvm-header">' +
+          '<h3 class="gvm-title">Choose your shades</h3>' +
+          '<p class="gvm-subtitle">Select up to 3 to try on at once</p>' +
+        '</div>' +
+        '<div class="gvm-grid" id="gvm-grid"></div>' +
+        '<button type="button" class="gvm-cta" id="gvm-cta" disabled>Choose a shade</button>' +
+      '</div>';
+    document.body.appendChild(modal);
+
+    document.getElementById('gvm-close-btn').addEventListener('click', closeVariantModal);
+    modal.querySelector('.gvm-backdrop').addEventListener('click', closeVariantModal);
+    return modal;
+  }
+
+  function closeVariantModal() {
+    var modal = document.getElementById('gleame-variant-modal');
+    if (!modal) return;
+    modal.classList.remove('gvm-visible');
+    document.body.style.overflow = '';
+    window._gleameVariantOnConfirm = null;
+  }
+
+  function openVariantModal(variants, onConfirm) {
+    if (variants.length === 1) { onConfirm(variants); return; }
+
+    ensureVariantModal();
+    var grid = document.getElementById('gvm-grid');
+    var cta  = document.getElementById('gvm-cta');
+    var selected = [];
+
+    function updateCTA() {
+      var n = selected.length;
+      cta.disabled = n === 0;
+      cta.textContent = n === 0 ? 'Choose a shade'
+        : n === 1 ? 'Generate 1 Look'
+        : 'Generate ' + n + ' Looks';
+    }
+
+    grid.innerHTML = '';
+    variants.forEach(function(v) {
+      var card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'gvm-card';
+      card.dataset.variantId = v.variantId;
+
+      var swatchHtml = v.displayColor
+        ? '<span class="gvm-swatch" style="background:' + v.displayColor + '"></span>'
+        : '';
+      card.innerHTML = swatchHtml +
+        '<span class="gvm-card-label">' + v.variantTitle + '</span>' +
+        '<span class="gvm-checkmark">' +
+          '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' +
+        '</span>';
+
+      card.addEventListener('click', function() {
+        var idx = selected.findIndex(function(s) { return s.variantId === v.variantId; });
+        if (idx >= 0) {
+          selected.splice(idx, 1);
+          card.classList.remove('gvm-selected');
+        } else if (selected.length < 3) {
+          selected.push(v);
+          card.classList.add('gvm-selected');
+        }
+        grid.querySelectorAll('.gvm-card').forEach(function(c) {
+          c.classList.toggle('gvm-dimmed', selected.length >= 3 && !c.classList.contains('gvm-selected'));
+        });
+        updateCTA();
+      });
+
+      grid.appendChild(card);
+    });
+
+    updateCTA();
+
+    window._gleameVariantOnConfirm = function() {
+      if (selected.length === 0) return;
+      closeVariantModal();
+      onConfirm(selected);
+    };
+    document.getElementById('gvm-cta').onclick = function() {
+      window._gleameVariantOnConfirm && window._gleameVariantOnConfirm();
+    };
+
+    var modal = document.getElementById('gleame-variant-modal');
+    modal.classList.add('gvm-visible');
+    document.body.style.overflow = 'hidden';
+  }
+
   document.addEventListener('DOMContentLoaded', function() {
     // Initialize all horizontal widgets
     const widgets = document.querySelectorAll('.glimpse-integrated-horizontal');

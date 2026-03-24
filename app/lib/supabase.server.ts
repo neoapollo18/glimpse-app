@@ -883,6 +883,41 @@ export async function productHasVariantConfigs(productId: string): Promise<boole
   }
 }
 
+/**
+ * Get configured variants for the storefront widget variant selector.
+ * Storefront-safe: verifies shop + product ownership before returning data.
+ * Only returns variants that have explicit configurations (not all Shopify variants).
+ *
+ * @param shopDomain - Shop domain (e.g., "myshop.myshopify.com")
+ * @param productId  - Shopify product ID (GID or numeric)
+ * @returns Array of { variantId, variantTitle, displayColor } — empty if none configured
+ */
+export async function getConfiguredVariantsForStorefront(
+  shopDomain: string,
+  productId: string
+): Promise<Array<{ variantId: string; variantTitle: string; displayColor: string | null }>> {
+  // Security: verify shop owns this product before exposing variant list
+  const productConfig = await getProductConfiguration(shopDomain, productId);
+  if (!productConfig) return [];
+
+  const { data: variants, error } = await supabase
+    .from('product_variants')
+    .select('shopify_variant_id, variant_title, display_color')
+    .eq('product_id', productConfig.id)
+    .order('created_at', { ascending: true });
+
+  if (error || !variants) {
+    console.error('Error fetching variants for storefront:', error);
+    return [];
+  }
+
+  return variants.map(v => ({
+    variantId: v.shopify_variant_id as string,
+    variantTitle: v.variant_title as string,
+    displayColor: (v.display_color as string | null) ?? null,
+  }));
+}
+
 // ============================================
 // SHOP DATA CLEANUP (for uninstall)
 // ============================================

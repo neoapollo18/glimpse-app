@@ -1,0 +1,429 @@
+/* ============================================================
+   GLEAME VARIANT SELECTOR MODAL  (.gvm-*)
+   Used by all 5 widget types after photo capture
+   ============================================================ */
+
+#gleame-variant-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9999999;
+  align-items: center;
+  justify-content: center;
+}
+
+#gleame-variant-modal.gvm-visible {
+  display: flex;
+}
+
+.gvm-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(156, 163, 175, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+/* Sheet */
+.gvm-sheet {
+  position: relative;
+  background: #ffffff;
+  border-radius: 24px;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.2);
+  width: 480px;
+  max-width: calc(100vw - 32px);
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 40px 36px 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  animation: gvm-enter 0.3s ease;
+}
+
+@keyframes gvm-enter {
+  from { opacity: 0; transform: scale(0.95) translateY(20px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0);    }
+}
+
+/* Close button */
+.gvm-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #f3f4f6;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+  transition: background 0.2s ease, color 0.2s ease;
+  flex-shrink: 0;
+}
+.gvm-close:hover { background: #e5e7eb; color: #374151; }
+
+/* Header */
+.gvm-header { text-align: center; }
+
+.gvm-title {
+  font-size: 22px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 6px 0;
+  line-height: 1.2;
+}
+
+.gvm-subtitle {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0;
+}
+
+/* Variant grid — 2 cols desktop, 1 col mobile */
+.gvm-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+/* Variant card */
+.gvm-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: #f9fafb;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  text-align: left;
+  width: 100%;
+}
+
+.gvm-card:hover:not(.gvm-dimmed) {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+}
+
+.gvm-card.gvm-selected {
+  border-color: #8b5cf6;
+  background: #faf5ff;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.12);
+}
+
+.gvm-card.gvm-dimmed {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Color swatch */
+.gvm-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1.5px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+/* Variant title */
+.gvm-card-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  flex: 1;
+  line-height: 1.3;
+}
+
+/* Selection checkmark */
+.gvm-checkmark {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  flex-shrink: 0;
+}
+.gvm-card.gvm-selected .gvm-checkmark { opacity: 1; }
+
+/* CTA button */
+.gvm-cta {
+  width: 100%;
+  padding: 14px 24px;
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.3);
+}
+.gvm-cta:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4);
+}
+.gvm-cta:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+/* Mobile: bottom sheet */
+@media (max-width: 480px) {
+  #gleame-variant-modal { align-items: flex-end; }
+  .gvm-sheet {
+    border-radius: 20px 20px 0 0;
+    width: 100%;
+    max-width: 100%;
+    padding: 28px 20px 32px;
+    max-height: 88vh;
+  }
+  .gvm-grid { grid-template-columns: 1fr; }
+}
+
+
+/* ============================================================
+   CAROUSEL (enterprise tabs design)  (.gvc-*)
+   Embedded inline in integrated/horizontal/legacy widgets
+   ============================================================ */
+
+.gvc-root { width: 100%; }
+
+/* Segmented tab control */
+.gvc-tabs {
+  display: flex;
+  background: #f3f4f6;
+  border-radius: 50px;
+  padding: 4px;
+  gap: 2px;
+  margin-bottom: 14px;
+}
+
+.gvc-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 50px;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.gvc-tab-active {
+  background: #ffffff;
+  color: #1f2937;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+.gvc-tab-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* Slides */
+.gvc-slides-wrap { position: relative; }
+
+.gvc-slide {
+  display: none;
+  opacity: 0;
+  transform: scale(0.98);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.gvc-slide-active {
+  display: block;
+  opacity: 1;
+  transform: scale(1);
+}
+
+.gvc-slide-exit {
+  display: block;
+  opacity: 0;
+  transform: scale(0.98);
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+}
+
+/* Comparison pair */
+.gvc-comparison {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #f3f4f6;
+}
+
+.gvc-side { display: flex; }
+
+.gvc-img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  display: block;
+  image-orientation: from-image;
+}
+
+/* Shade caption below comparison */
+.gvc-shade-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #9ca3af;
+  text-align: center;
+  margin: 10px 0 0 0;
+  letter-spacing: 0.02em;
+}
+
+/* Error slide */
+.gvc-error-slide {
+  padding: 24px;
+  text-align: center;
+  color: #dc2626;
+  font-size: 14px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+}
+
+
+/* ============================================================
+   CAROUSEL MODAL  (.gcm-*)
+   Used by banner + button widgets (overlay, not inline)
+   ============================================================ */
+
+#gleame-carousel-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9999999;
+  background: rgba(156, 163, 175, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  align-items: center;
+  justify-content: center;
+}
+
+#gleame-carousel-modal.gcm-visible {
+  display: flex;
+}
+
+.gcm-sheet {
+  position: relative;
+  background: #f9f9f9;
+  border-radius: 24px;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.2);
+  width: 560px;
+  max-width: calc(100vw - 32px);
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 40px 36px 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  animation: gcm-enter 0.3s ease;
+}
+
+@keyframes gcm-enter {
+  from { opacity: 0; transform: scale(0.95) translateY(20px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0);    }
+}
+
+.gcm-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #f3f4f6;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.gcm-close:hover { background: #e5e7eb; color: #374151; }
+
+.gcm-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0;
+  text-align: center;
+}
+
+.gcm-actions {
+  display: flex;
+  justify-content: center;
+}
+
+.gcm-try-again {
+  padding: 10px 24px;
+  background: #f9fafb;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+.gcm-try-again:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+  transform: translateY(-1px);
+}
+
+.gcm-powered {
+  font-size: 11px;
+  color: rgba(107, 114, 128, 0.6);
+  text-align: center;
+  margin: 0;
+}
+.gcm-powered strong {
+  font-weight: 600;
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+@media (max-width: 480px) {
+  #gleame-carousel-modal { align-items: flex-end; }
+  .gcm-sheet {
+    border-radius: 20px 20px 0 0;
+    width: 100%;
+    max-width: 100%;
+    padding: 28px 20px 32px;
+  }
+}

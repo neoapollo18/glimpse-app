@@ -51,13 +51,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const imageFile = formData.get("image") as File;
     const productId = formData.get("productId") as string;
     const shopDomain = formData.get("shopDomain") as string;
-    const variantId = formData.get("variantId") as string | null;
     const widgetType = (formData.get("widgetType") as string) || "unknown";
 
+    // Multi-variant mode: variantIds[] sent as repeated FormData keys
+    // Single-variant / no-variant mode: legacy variantId key (backward compat)
+    const variantIds = formData.getAll("variantIds[]") as string[];
+    const variantId = variantIds.length === 0
+      ? (formData.get("variantId") as string | null)
+      : null;
+    const isMultiVariant = variantIds.length > 0;
+
     if (!imageFile || !productId || !shopDomain) {
-      return json({ 
-        error: "Missing required fields: image, productId, and shopDomain" 
-      }, { 
+      return json({
+        error: "Missing required fields: image, productId, and shopDomain"
+      }, {
         status: 400,
         headers: {
           "Access-Control-Allow-Origin": "*",
@@ -66,12 +73,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     // Log request details
-    const isHeicHeif = imageFile?.name?.toLowerCase().match(/\.(heic|heif)$/) || 
+    const isHeicHeif = imageFile?.name?.toLowerCase().match(/\.(heic|heif)$/) ||
                        ['image/heic', 'image/heif'].includes(imageFile?.type?.toLowerCase());
-    console.log('Storefront API called with:', { 
-      productId, 
-      shopDomain, 
-      variantId, 
+    console.log('Storefront API called with:', {
+      productId,
+      shopDomain,
+      variantId,
+      variantIds: isMultiVariant ? variantIds : undefined,
       widgetType,
       imageSize: imageFile?.size,
       imageType: imageFile?.type,
@@ -186,7 +194,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     // ============================================
-    // STEP 5: Get product (+ optional variant) configuration
+    // STEP 5: Get product configuration
     // ============================================
     const productRow = await getProductConfiguration(verifiedShopDomain, productId);
 
@@ -201,38 +209,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       });
     }
 
-    let transformationPrompt = productRow.transformation_prompt as string;
-    const variantRow =
-      variantId != null && String(variantId).trim() !== ""
-        ? await getVariantConfiguration(verifiedShopDomain, productId, variantId)
-        : null;
-
-    if (variantRow?.transformation_prompt) {
-      transformationPrompt = variantRow.transformation_prompt as string;
-    }
-
-    // Variant-specific reference images override product-level when the variant has any.
-    const referenceUrls = (() => {
-      const variantUrls = parseReferenceImageUrls(variantRow ?? undefined);
-      if (variantUrls.length > 0) return variantUrls;
-      return parseReferenceImageUrls(productRow);
-    })();
-
-    // Validate image file
-    const maxSize = 5 * 1024 * 1024; // 5MB for storefront (smaller than admin)
-
-    // Helper function to check if file is a valid image (including HEIC/HEIF)
+    // ============================================
+    // STEP 5b: Convert image to base64 (shared by all variants)
+    // ============================================
     const isValidImageFile = (file: File): boolean => {
-      // Standard image MIME type check
-      if (file.type.startsWith('image/')) {
-        return true;
-      }
-      // HEIC/HEIF specific MIME types
+      if (file.type.startsWith('image/')) return true;
       const heicMimeTypes = ['image/heic', 'image/heif', 'image/heic-sequence', 'image/heif-sequence'];
-      if (heicMimeTypes.includes(file.type.toLowerCase())) {
-        return true;
-      }
-      // Fallback: check by file extension for unrecognized MIME types (common with HEIC on some browsers)
+      if (heicMimeTypes.includes(file.type.toLowerCase())) return true;
       if (!file.type || file.type === '' || file.type === 'application/octet-stream') {
         const ext = file.name?.toLowerCase().split('.').pop();
         const validExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic', 'heif', 'avif'];
@@ -241,132 +224,174 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return false;
     };
 
-    // Check if it's actually an image (with HEIC/HEIF support)
     if (!isValidImageFile(imageFile)) {
-      return json({ 
-        error: "Please upload an image file (JPG, PNG, HEIC, etc.)." 
-      }, { 
+      return json({
+        error: "Please upload an image file (JPG, PNG, HEIC, etc.)."
+      }, {
         status: 400,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-        }
+        headers: { "Access-Control-Allow-Origin": "*" }
       });
     }
 
+    const maxSize = 5 * 1024 * 1024;
     if (imageFile.size > maxSize) {
-      return json({ 
-        error: "File too large. Please upload an image smaller than 5MB." 
-      }, { 
+      return json({
+        error: "File too large. Please upload an image smaller than 5MB."
+      }, {
         status: 400,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-        }
+        headers: { "Access-Control-Allow-Origin": "*" }
       });
     }
 
-    // Convert image to base64
     const arrayBuffer = await imageFile.arrayBuffer();
     const base64Image = Buffer.from(arrayBuffer).toString('base64');
 
-    // ============================================
-    // MODEL SELECTION
-    // Priority: admin override → auto-detect
-    // ============================================
+    // Model selection (same for all variants in this request)
     const adminModelOverride = productRow.ai_model as string | null;
-
     let modelToUse: string;
     if (adminModelOverride) {
       modelToUse = adminModelOverride;
       console.log(`🎛️ Admin model override: ${modelToUse}`);
     } else {
-      // Auto: use variant config detection
       const hasVariantConfigs = await productHasVariantConfigs(productRow.id);
       modelToUse = hasVariantConfigs ? GEMINI_MODEL_PRO : GEMINI_MODEL_FLASH;
       console.log(`Model auto-selection: hasVariantConfigs=${hasVariantConfigs}, using ${modelToUse}`);
     }
 
-    const referenceImages: ReferenceImagePart[] = [];
-    for (const refUrl of referenceUrls) {
-      try {
-        const refResponse = await fetch(refUrl);
-        if (refResponse.ok) {
-          const refBuffer = await refResponse.arrayBuffer();
-          referenceImages.push({
-            data: Buffer.from(refBuffer).toString('base64'),
-            mimeType: refResponse.headers.get('content-type') || 'image/jpeg',
-          });
-          console.log(
-            `📎 Reference image ${referenceImages.length} loaded (${Math.round(refBuffer.byteLength / 1024)}KB)`
-          );
+    // Helper: build prompt + reference images for a single variant
+    async function buildVariantConfig(vid: string | null) {
+      let prompt = productRow.transformation_prompt as string;
+      let referenceUrls = parseReferenceImageUrls(productRow);
+
+      if (vid && String(vid).trim() !== "") {
+        const variantRow = await getVariantConfiguration(verifiedShopDomain, productId, vid);
+        if (variantRow?.transformation_prompt) {
+          prompt = variantRow.transformation_prompt as string;
         }
-      } catch (refError) {
-        console.error('Failed to fetch reference image, skipping URL:', refUrl, refError);
+        const variantUrls = parseReferenceImageUrls(variantRow ?? undefined);
+        if (variantUrls.length > 0) referenceUrls = variantUrls;
       }
+
+      const referenceImages: ReferenceImagePart[] = [];
+      for (const refUrl of referenceUrls) {
+        try {
+          const refResponse = await fetch(refUrl);
+          if (refResponse.ok) {
+            const refBuffer = await refResponse.arrayBuffer();
+            referenceImages.push({
+              data: Buffer.from(refBuffer).toString('base64'),
+              mimeType: refResponse.headers.get('content-type') || 'image/jpeg',
+            });
+          }
+        } catch (refError) {
+          console.error('Failed to fetch reference image, skipping:', refUrl, refError);
+        }
+      }
+
+      return { prompt, referenceImages };
     }
-    const hasReferenceImages = referenceImages.length > 0;
 
-    // ============================================
-    // EXECUTE TRANSFORM
-    // ============================================
-    let result;
-
-    // If admin forced OpenAI directly
-    if (modelToUse === MODEL_OPENAI) {
-      console.log('🤖 Using OpenAI gpt-image-1.5');
-      result = await transformImageWithOpenAI({
-        inputImage: base64Image,
-        transformationPrompt,
-        mimeType: imageFile.type,
-        referenceImages,
-      });
-    }
-    // All Gemini paths (both admin override and auto-select)
-    else {
-      console.log(`🔀 Using Gemini model: ${modelToUse}${adminModelOverride ? ' (admin override)' : ' (auto)'}`);
-      result = await transformImage({
-        inputImage: base64Image,
-        transformationPrompt,
-        mimeType: imageFile.type,
-        model: modelToUse,
-        referenceImages,
-      });
-
-      // If Gemini fails AND reference images are present, fall back to OpenAI
-      // (OpenAI handles reference images well and has more permissive content filters)
-      if (!result.success && hasReferenceImages) {
-        console.log('⚠️ Gemini failed with reference image(s), falling back to OpenAI');
-        result = await transformImageWithOpenAI({
+    // Helper: run a single transform with Gemini → OpenAI fallback
+    async function runTransform(prompt: string, referenceImages: ReferenceImagePart[]) {
+      if (modelToUse === MODEL_OPENAI) {
+        return transformImageWithOpenAI({
           inputImage: base64Image,
-          transformationPrompt,
+          transformationPrompt: prompt,
           mimeType: imageFile.type,
           referenceImages,
         });
       }
+      let result = await transformImage({
+        inputImage: base64Image,
+        transformationPrompt: prompt,
+        mimeType: imageFile.type,
+        model: modelToUse,
+        referenceImages,
+      });
+      if (!result.success && referenceImages.length > 0) {
+        console.log('⚠️ Gemini failed with reference image(s), falling back to OpenAI');
+        result = await transformImageWithOpenAI({
+          inputImage: base64Image,
+          transformationPrompt: prompt,
+          mimeType: imageFile.type,
+          referenceImages,
+        });
+      }
+      return result;
     }
 
-    if (!result.success) {
-      return json({ 
-        error: result.error || "Image transformation failed" 
-      }, { 
-        status: 500,
+    // ============================================
+    // MULTI-VARIANT PATH (variantIds[] provided)
+    // ============================================
+    if (isMultiVariant) {
+      console.log(`Multi-variant transform: ${variantIds.length} variants`);
+
+      const results = await Promise.all(
+        variantIds.map(async (vid) => {
+          try {
+            const { prompt, referenceImages } = await buildVariantConfig(vid);
+            const result = await runTransform(prompt, referenceImages);
+
+            if (result.success) {
+              trackTransformationEvent(verifiedShopDomain, productId, 'transformation', widgetType).catch(() => {});
+            }
+
+            return {
+              variantId: vid,
+              generatedImage: result.generatedImage ?? null,
+              processedInputImage: result.processedInputImage ?? null,
+              error: result.success ? null : (result.error || 'Transformation failed'),
+            };
+          } catch (err) {
+            console.error(`Variant ${vid} transform error:`, err);
+            return {
+              variantId: vid,
+              generatedImage: null,
+              processedInputImage: null,
+              error: String(err),
+            };
+          }
+        })
+      );
+
+      console.log(`Multi-variant complete: ${results.filter(r => !r.error).length}/${results.length} succeeded`);
+
+      return json({ success: true, results }, {
         headers: {
           "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type, X-Requested-With",
         }
       });
     }
 
-    // Track analytics event (don't wait for it to complete)
-    trackTransformationEvent(verifiedShopDomain, productId, 'transformation', widgetType).catch(error => {
-      console.error('Failed to track analytics event:', error);
+    // ============================================
+    // SINGLE-VARIANT PATH (legacy / no variantIds[])
+    // Image validation, base64 conversion, and model selection already done above.
+    // ============================================
+    const { prompt: transformationPrompt, referenceImages: singleRefImages } = await buildVariantConfig(variantId);
+
+    const singleResult = await runTransform(transformationPrompt, singleRefImages);
+
+    if (!singleResult.success) {
+      return json({
+        error: singleResult.error || "Image transformation failed"
+      }, {
+        status: 500,
+        headers: { "Access-Control-Allow-Origin": "*" }
+      });
+    }
+
+    trackTransformationEvent(verifiedShopDomain, productId, 'transformation', widgetType).catch(err => {
+      console.error('Failed to track analytics event:', err);
     });
 
-    // Log successful transformation for analytics
     console.log(`Successful transformation for product ${productId} on shop ${verifiedShopDomain}`);
 
     return json({
       success: true,
-      generatedImage: result.generatedImage,
-      processedInputImage: result.processedInputImage,
+      generatedImage: singleResult.generatedImage,
+      processedInputImage: singleResult.processedInputImage,
     }, {
       headers: {
         "Access-Control-Allow-Origin": "*",

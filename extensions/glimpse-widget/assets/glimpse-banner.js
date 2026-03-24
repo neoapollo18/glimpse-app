@@ -26,7 +26,9 @@ console.log('Gleame Banner Widget v3.0 loaded');
         loadingInterval: null,
         loadingMessageIndex: 0,
         viewTracked: false,
-        widget: null
+        widget: null,
+        carouselSlides: null,
+        currentSlide: 0,
       });
     }
     return instances.get(instanceId);
@@ -365,7 +367,7 @@ console.log('Gleame Banner Widget v3.0 loaded');
       const isRecent = isRecentlyTakenPhoto(file);
 
       if (isHeic) {
-        await uploadAndTransform(instanceId, file);
+        await checkVariantsAndProceed(instanceId, file);
         event.target.value = '';
         return;
       }
@@ -377,13 +379,13 @@ console.log('Gleame Banner Widget v3.0 loaded');
           reader.onerror = reject;
           reader.readAsDataURL(file);
         });
-        
+
         const flippedDataUrl = await flipImageHorizontally(dataUrl);
         processedFile = dataUrlToFile(flippedDataUrl, file.name || 'selfie.jpg');
       }
 
       const compressedFile = await compressImage(processedFile);
-      await uploadAndTransform(instanceId, compressedFile);
+      await checkVariantsAndProceed(instanceId, compressedFile);
     } catch (error) {
       console.error('Error processing image:', error);
       setButtonLoading(instanceId, false);
@@ -547,6 +549,332 @@ console.log('Gleame Banner Widget v3.0 loaded');
     
     setButtonLoading(instanceId, false);
     showResultsModal(instanceId, beforeUrl, afterUrl);
+  }
+
+  // ============================================================
+  // VARIANT + CAROUSEL MODULE
+  // ============================================================
+
+  async function fetchConfiguredVariants(shopDomain, productId) {
+    try {
+      const params = new URLSearchParams({ shopDomain, productId });
+      const response = await fetch(
+        SHOPIFY_APP_URL + '/api/storefront/get-product-variants?' + params,
+        { headers: { 'X-Requested-With': 'XMLHttpRequest' } }
+      );
+      if (!response.ok) return [];
+      const data = await response.json();
+      return data.variants || [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  async function checkVariantsAndProceed(instanceId, file) {
+    const instance = getInstance(instanceId);
+    const widget = getWidgetElement(instanceId);
+    if (!instance.productId && widget) instance.productId = widget.getAttribute('data-product-id');
+    if (!instance.shopDomain && widget) instance.shopDomain = getShopDomain(widget);
+
+    if (!instance.productId || !instance.shopDomain) {
+      await uploadAndTransform(instanceId, file);
+      return;
+    }
+
+    const variants = await fetchConfiguredVariants(instance.shopDomain, instance.productId);
+
+    if (variants.length === 0) {
+      await uploadAndTransform(instanceId, file);
+      return;
+    }
+
+    // Stop button spinner while user picks variants
+    setButtonLoading(instanceId, false);
+
+    openVariantModal(variants, function(selected) {
+      setButtonLoading(instanceId, true);
+      runMultiVariantTransform(instanceId, file, selected,
+        function(slides) {
+          setButtonLoading(instanceId, false);
+          showCarouselModal(instanceId, slides);
+        },
+        function(msg) {
+          setButtonLoading(instanceId, false);
+          showErrorModal(instanceId, msg);
+        }
+      );
+    });
+  }
+
+  async function runMultiVariantTransform(instanceId, file, selectedVariants, onSuccess, onError) {
+    const instance = getInstance(instanceId);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      formData.append('productId', instance.productId);
+      formData.append('shopDomain', instance.shopDomain);
+      formData.append('widgetType', WIDGET_TYPE);
+      selectedVariants.forEach(function(v) { formData.append('variantIds[]', v.variantId); });
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(function() { controller.abort(); }, 120000);
+
+      let response;
+      try {
+        response = await fetch(SHOPIFY_APP_URL + '/api/storefront/transform-image', {
+          method: 'POST',
+          body: formData,
+          headers: { 'X-Requested-With': 'XMLHttpRequest' },
+          signal: controller.signal
+        });
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        if (fetchError.name === 'AbortError') throw new Error('Request timed out. Please try again.');
+        throw new Error('Network error. Please check your connection and try again.');
+      }
+      clearTimeout(timeoutId);
+
+      let result;
+      try { result = await response.json(); } catch (e) { throw new Error('Invalid server response. Please try again.'); }
+      if (!response.ok) throw new Error(result.error || 'Server error: ' + response.status);
+      if (!result.success) throw new Error(result.error || 'Transformation failed');
+
+      const slides = (result.results || []).map(function(r, i) {
+        return {
+          variantTitle: (selectedVariants[i] && selectedVariants[i].variantTitle) || ('Look ' + (i + 1)),
+          displayColor: (selectedVariants[i] && selectedVariants[i].displayColor) || null,
+          generatedImage: r.generatedImage || null,
+          processedInputImage: r.processedInputImage || null,
+          error: r.error || null
+        };
+      }).filter(function(s) { return !s.error && s.generatedImage; });
+
+      if (slides.length === 0) throw new Error('No transformations succeeded. Please try again.');
+      onSuccess(slides);
+    } catch (error) {
+      onError(error.message || 'Something went wrong. Please try again.');
+    }
+  }
+
+  // Show multi-variant results in the dedicated carousel modal overlay
+  function showCarouselModal(instanceId, slides) {
+    if (slides.length === 1) {
+      // Single result: reuse the existing results modal
+      const beforeUrl = 'data:image/jpeg;base64,' + slides[0].processedInputImage;
+      const afterUrl = 'data:image/jpeg;base64,' + slides[0].generatedImage;
+      showResultsModal(instanceId, beforeUrl, afterUrl);
+      return;
+    }
+
+    ensureCarouselModal();
+    const instance = getInstance(instanceId);
+    instance.carouselSlides = slides;
+    instance.currentSlide = 0;
+
+    const carouselModal = document.getElementById('gleame-carousel-modal');
+    const titleEl = carouselModal.querySelector('.gcm-title');
+    if (titleEl) titleEl.textContent = 'Your Virtual Try-On';
+
+    const contentEl = document.getElementById('gcm-content');
+    if (!contentEl) return;
+
+    const tabsHtml = slides.map(function(s, i) {
+      const dot = s.displayColor
+        ? '<span class="gvc-tab-dot" style="background:' + s.displayColor + '"></span>'
+        : '';
+      return '<button type="button" class="gvc-tab' + (i === 0 ? ' gvc-tab-active' : '') +
+        '" data-slide="' + i + '">' + dot + '<span>' + s.variantTitle + '</span></button>';
+    }).join('');
+
+    const slidesHtml = slides.map(function(s, i) {
+      return '<div class="gvc-slide' + (i === 0 ? ' gvc-slide-active' : '') + '" data-slide="' + i + '">' +
+        '<div class="gvc-comparison">' +
+        '<div class="gvc-side"><img class="gvc-img" src="data:image/jpeg;base64,' + s.processedInputImage + '" alt="Before"></div>' +
+        '<div class="gvc-side"><img class="gvc-img" src="data:image/jpeg;base64,' + s.generatedImage + '" alt="' + s.variantTitle + '"></div>' +
+        '</div>' +
+        '<p class="gvc-shade-label">' + s.variantTitle + '</p>' +
+        '</div>';
+    }).join('');
+
+    contentEl.innerHTML =
+      '<div class="gvc-tabs" id="gcm-tabs-' + instanceId + '">' + tabsHtml + '</div>' +
+      '<div class="gvc-slides-wrap">' + slidesHtml + '</div>';
+
+    var tabsEl = document.getElementById('gcm-tabs-' + instanceId);
+    if (tabsEl) {
+      tabsEl.addEventListener('click', function(e) {
+        var tab = e.target.closest('.gvc-tab');
+        if (!tab) return;
+        goToSlide(instanceId, parseInt(tab.dataset.slide, 10), contentEl);
+      });
+    }
+
+    carouselModal.classList.add('gcm-visible');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function goToSlide(instanceId, idx, containerEl) {
+    const instance = getInstance(instanceId);
+    if (!instance.carouselSlides || idx < 0 || idx >= instance.carouselSlides.length) return;
+    const prev = instance.currentSlide;
+    instance.currentSlide = idx;
+
+    containerEl.querySelectorAll('.gvc-tab').forEach(function(t, i) {
+      t.classList.toggle('gvc-tab-active', i === idx);
+    });
+
+    containerEl.querySelectorAll('.gvc-slide').forEach(function(s, i) {
+      if (i === idx) {
+        s.classList.add('gvc-slide-active');
+        s.classList.remove('gvc-slide-exit');
+      } else if (i === prev) {
+        s.classList.remove('gvc-slide-active');
+        s.classList.add('gvc-slide-exit');
+        setTimeout(function() { s.classList.remove('gvc-slide-exit'); }, 250);
+      } else {
+        s.classList.remove('gvc-slide-active', 'gvc-slide-exit');
+      }
+    });
+  }
+
+  function ensureCarouselModal() {
+    if (document.getElementById('gleame-carousel-modal')) return;
+    const modal = document.createElement('div');
+    modal.id = 'gleame-carousel-modal';
+    modal.innerHTML =
+      '<div class="gcm-sheet">' +
+        '<button type="button" class="gcm-close" id="gcm-close-btn">' +
+          '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>' +
+        '</button>' +
+        '<h3 class="gcm-title">Your Virtual Try-On</h3>' +
+        '<div id="gcm-content"></div>' +
+        '<div class="gcm-actions">' +
+          '<button type="button" class="gcm-try-again" id="gcm-try-again-btn">Try another photo</button>' +
+        '</div>' +
+        '<p class="gcm-powered">Powered by <strong>Gleame</strong></p>' +
+      '</div>';
+    document.body.appendChild(modal);
+
+    document.getElementById('gcm-close-btn').addEventListener('click', closeCarouselModal);
+    document.getElementById('gcm-try-again-btn').addEventListener('click', function() {
+      closeCarouselModal();
+      // Find the active banner instance and trigger file input
+      instances.forEach(function(_inst, id) {
+        window.bannerWidgetFunctions.triggerFileInput(id);
+      });
+    });
+    modal.addEventListener('click', function(e) {
+      if (e.target === modal) closeCarouselModal();
+    });
+  }
+
+  function closeCarouselModal() {
+    const modal = document.getElementById('gleame-carousel-modal');
+    if (!modal) return;
+    modal.classList.remove('gcm-visible');
+    document.body.style.overflow = '';
+  }
+
+  // Shared variant selector modal (DOM-injected singleton)
+
+  function ensureVariantModal() {
+    var modal = document.getElementById('gleame-variant-modal');
+    if (modal) return modal;
+
+    modal = document.createElement('div');
+    modal.id = 'gleame-variant-modal';
+    modal.innerHTML =
+      '<div class="gvm-backdrop"></div>' +
+      '<div class="gvm-sheet">' +
+        '<button type="button" class="gvm-close" id="gvm-close-btn">' +
+          '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>' +
+        '</button>' +
+        '<div class="gvm-header">' +
+          '<h3 class="gvm-title">Choose your shades</h3>' +
+          '<p class="gvm-subtitle">Select up to 3 to try on at once</p>' +
+        '</div>' +
+        '<div class="gvm-grid" id="gvm-grid"></div>' +
+        '<button type="button" class="gvm-cta" id="gvm-cta" disabled>Choose a shade</button>' +
+      '</div>';
+    document.body.appendChild(modal);
+
+    document.getElementById('gvm-close-btn').addEventListener('click', closeVariantModal);
+    modal.querySelector('.gvm-backdrop').addEventListener('click', closeVariantModal);
+    return modal;
+  }
+
+  function closeVariantModal() {
+    var modal = document.getElementById('gleame-variant-modal');
+    if (!modal) return;
+    modal.classList.remove('gvm-visible');
+    document.body.style.overflow = '';
+    window._gleameVariantOnConfirm = null;
+  }
+
+  function openVariantModal(variants, onConfirm) {
+    if (variants.length === 1) { onConfirm(variants); return; }
+
+    ensureVariantModal();
+    var grid = document.getElementById('gvm-grid');
+    var cta  = document.getElementById('gvm-cta');
+    var selected = [];
+
+    function updateCTA() {
+      var n = selected.length;
+      cta.disabled = n === 0;
+      cta.textContent = n === 0 ? 'Choose a shade'
+        : n === 1 ? 'Generate 1 Look'
+        : 'Generate ' + n + ' Looks';
+    }
+
+    grid.innerHTML = '';
+    variants.forEach(function(v) {
+      var card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'gvm-card';
+      card.dataset.variantId = v.variantId;
+
+      var swatchHtml = v.displayColor
+        ? '<span class="gvm-swatch" style="background:' + v.displayColor + '"></span>'
+        : '';
+      card.innerHTML = swatchHtml +
+        '<span class="gvm-card-label">' + v.variantTitle + '</span>' +
+        '<span class="gvm-checkmark">' +
+          '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' +
+        '</span>';
+
+      card.addEventListener('click', function() {
+        var idx = selected.findIndex(function(s) { return s.variantId === v.variantId; });
+        if (idx >= 0) {
+          selected.splice(idx, 1);
+          card.classList.remove('gvm-selected');
+        } else if (selected.length < 3) {
+          selected.push(v);
+          card.classList.add('gvm-selected');
+        }
+        grid.querySelectorAll('.gvm-card').forEach(function(c) {
+          c.classList.toggle('gvm-dimmed', selected.length >= 3 && !c.classList.contains('gvm-selected'));
+        });
+        updateCTA();
+      });
+
+      grid.appendChild(card);
+    });
+
+    updateCTA();
+
+    window._gleameVariantOnConfirm = function() {
+      if (selected.length === 0) return;
+      closeVariantModal();
+      onConfirm(selected);
+    };
+    document.getElementById('gvm-cta').onclick = function() {
+      window._gleameVariantOnConfirm && window._gleameVariantOnConfirm();
+    };
+
+    var modal = document.getElementById('gleame-variant-modal');
+    modal.classList.add('gvm-visible');
+    document.body.style.overflow = 'hidden';
   }
 
   // Initialize a single widget instance
