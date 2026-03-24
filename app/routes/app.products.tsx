@@ -319,7 +319,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
       // Save shade configurations (variant-specific prompts)
       if (shadeConfigsJson && productId) {
-        let shadeConfigs: Record<string, { title: string; responses: Record<string, any> }>;
+        let shadeConfigs: Record<string, { title: string; responses: Record<string, any>; displayColor?: string }>;
         try {
           shadeConfigs = JSON.parse(shadeConfigsJson);
         } catch {
@@ -364,7 +364,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             productId,
             variantId,
             config.title,
-            variantPrompt
+            variantPrompt,
+            config.displayColor ?? null
           );
           
           console.log(`✅ Saved shade config for variant: ${config.title}`);
@@ -526,6 +527,7 @@ export default function Products() {
 
   // Variant color profiles state - maps variantId -> { shade_name, hue_family, undertone, etc. }
   const [variantColorProfiles, setVariantColorProfiles] = useState<Record<string, Record<string, string | number>>>({});
+  const [variantDisplayColors, setVariantDisplayColors] = useState<Record<string, string>>({});
   const [expandedShadeVariants, setExpandedShadeVariants] = useState<Set<string>>(new Set());
 
   // Mode detection: funnel mode for new products OR editing funnel products
@@ -637,6 +639,7 @@ export default function Products() {
     setClassificationAttempted(false);
     // Reset variant color profiles
     setVariantColorProfiles({});
+    setVariantDisplayColors({});
     setExpandedShadeVariants(new Set());
     setReferenceImageUrl(null);
     setModalActive(true);
@@ -660,6 +663,7 @@ export default function Products() {
     setClassificationSuggestion(null);
     // Reset variant color profiles
     setVariantColorProfiles({});
+    setVariantDisplayColors({});
     setExpandedShadeVariants(new Set());
     // Load existing reference image
     setReferenceImageUrl(configuredProduct.reference_image_url || null);
@@ -681,6 +685,7 @@ export default function Products() {
     setClassificationAttempted(false);
     // Reset variant color profiles
     setVariantColorProfiles({});
+    setVariantDisplayColors({});
     setExpandedShadeVariants(new Set());
     setReferenceImageUrl(null);
   };
@@ -745,14 +750,17 @@ export default function Products() {
       formData.append("funnelResponses", JSON.stringify(funnelResponses));
       
       // Include shade configurations if any exist
-      if (Object.keys(variantColorProfiles).length > 0 && selectedProduct) {
+      if ((Object.keys(variantColorProfiles).length > 0 || Object.keys(variantDisplayColors).length > 0) && selectedProduct) {
         // Build variant configs with titles
-        const variantConfigs: Record<string, { title: string; responses: Record<string, string | number> }> = {};
+        const variantConfigs: Record<string, { title: string; responses: Record<string, string | number>; displayColor?: string }> = {};
         selectedProduct.variants.edges.forEach(({ node: variant }) => {
-          if (variantColorProfiles[variant.id] && Object.keys(variantColorProfiles[variant.id]).length > 0) {
+          const hasProfile = variantColorProfiles[variant.id] && Object.keys(variantColorProfiles[variant.id]).length > 0;
+          const hasColor = variantDisplayColors[variant.id]?.trim();
+          if (hasProfile || hasColor) {
             variantConfigs[variant.id] = {
               title: variant.title,
-              responses: variantColorProfiles[variant.id]
+              responses: variantColorProfiles[variant.id] || {},
+              ...(hasColor ? { displayColor: variantDisplayColors[variant.id].trim() } : {}),
             };
           }
         });
@@ -1528,7 +1536,7 @@ export default function Products() {
                                     {selectedProduct.variants.edges.map(({ node: variant }) => {
                                       const existingShadeConfig = configuredVariants.find(v => v.shopify_variant_id === variant.id);
                                       const currentInput = variantColorProfiles[variant.id];
-                                      const hasCurrentInput = currentInput && Object.keys(currentInput).length > 0;
+                                      const hasCurrentInput = (currentInput && Object.keys(currentInput).length > 0) || !!variantDisplayColors[variant.id]?.trim();
                                       const isExpanded = expandedShadeVariants.has(variant.id);
                                       
                                       return (
@@ -1592,6 +1600,51 @@ export default function Products() {
                                                     )}
                                                   </BlockStack>
                                                 ))}
+
+                                                {/* Swatch Color */}
+                                                <BlockStack gap="200">
+                                                  <Text as="p" variant="bodySm" fontWeight="semibold">
+                                                    Swatch Color (Optional)
+                                                  </Text>
+                                                  <Text as="p" variant="bodySm" tone="subdued">
+                                                    Displayed as a color dot in the widget's variant selector.
+                                                  </Text>
+                                                  <InlineStack gap="200" blockAlign="center">
+                                                    <input
+                                                      type="color"
+                                                      value={variantDisplayColors[variant.id] || (existingShadeConfig?.display_color ?? '#c4506a')}
+                                                      onChange={(e) => setVariantDisplayColors(prev => ({ ...prev, [variant.id]: e.target.value }))}
+                                                      style={{
+                                                        width: '36px',
+                                                        height: '36px',
+                                                        padding: '2px',
+                                                        border: '1px solid #c9cccf',
+                                                        borderRadius: '6px',
+                                                        cursor: 'pointer',
+                                                        opacity: (variantDisplayColors[variant.id] || existingShadeConfig?.display_color) ? 1 : 0.4,
+                                                      }}
+                                                    />
+                                                    <div style={{ flex: 1 }}>
+                                                      <TextField
+                                                        label=""
+                                                        labelHidden
+                                                        value={variantDisplayColors[variant.id] ?? (existingShadeConfig?.display_color || '')}
+                                                        onChange={(v) => setVariantDisplayColors(prev => ({ ...prev, [variant.id]: v }))}
+                                                        placeholder="#c4506a"
+                                                        autoComplete="off"
+                                                      />
+                                                    </div>
+                                                    {(variantDisplayColors[variant.id] || existingShadeConfig?.display_color) && (
+                                                      <Button
+                                                        size="slim"
+                                                        variant="plain"
+                                                        onClick={() => setVariantDisplayColors(prev => ({ ...prev, [variant.id]: '' }))}
+                                                      >
+                                                        Clear
+                                                      </Button>
+                                                    )}
+                                                  </InlineStack>
+                                                </BlockStack>
                                               </BlockStack>
                                             )}
                                             
@@ -1621,6 +1674,11 @@ export default function Products() {
                                                   onClick={() => {
                                                     // Clear local state
                                                     setVariantColorProfiles(prev => {
+                                                      const next = { ...prev };
+                                                      delete next[variant.id];
+                                                      return next;
+                                                    });
+                                                    setVariantDisplayColors(prev => {
                                                       const next = { ...prev };
                                                       delete next[variant.id];
                                                       return next;
