@@ -81,6 +81,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                     title
                     price
                     availableForSale
+                    featuredImage {
+                      url
+                    }
                   }
                 }
               }
@@ -406,6 +409,9 @@ interface ShopifyProduct {
         title: string;
         price: string;
         availableForSale: boolean;
+        featuredImage?: {
+          url: string;
+        } | null;
       };
     }>;
   };
@@ -1356,14 +1362,23 @@ export default function Products() {
                                 <Card key={variant.id}>
                                   <BlockStack gap="200">
                                     <InlineStack align="space-between" blockAlign="start">
-                                      <BlockStack gap="100">
-                                        <Text as="h5" variant="headingSm">{variant.title}</Text>
-                                        {variant.price && parseFloat(variant.price) > 0 && (
-                                          <Text as="p" variant="bodySm" tone="subdued">
-                                            ${variant.price} • {variant.availableForSale !== false ? 'Available' : 'Unavailable'}
-                                          </Text>
+                                      <InlineStack gap="300" blockAlign="center">
+                                        {variant.featuredImage?.url && (
+                                          <Thumbnail
+                                            source={variant.featuredImage.url}
+                                            alt={variant.title}
+                                            size="small"
+                                          />
                                         )}
-                                      </BlockStack>
+                                        <BlockStack gap="100">
+                                          <Text as="h5" variant="headingSm">{variant.title}</Text>
+                                          {variant.price && parseFloat(variant.price) > 0 && (
+                                            <Text as="p" variant="bodySm" tone="subdued">
+                                              ${variant.price} • {variant.availableForSale !== false ? 'Available' : 'Unavailable'}
+                                            </Text>
+                                          )}
+                                        </BlockStack>
+                                      </InlineStack>
                                       {existingConfig && (
                                         <Badge tone="success">Configured</Badge>
                                       )}
@@ -1544,9 +1559,16 @@ export default function Products() {
                                           <BlockStack gap="200">
                                             {/* Variant Header */}
                                             <InlineStack align="space-between" blockAlign="start">
-                                              <BlockStack gap="100">
+                                              <InlineStack gap="300" blockAlign="center">
+                                                {variant.featuredImage?.url && (
+                                                  <Thumbnail
+                                                    source={variant.featuredImage.url}
+                                                    alt={variant.title}
+                                                    size="small"
+                                                  />
+                                                )}
                                                 <Text as="h5" variant="headingSm">{variant.title}</Text>
-                                              </BlockStack>
+                                              </InlineStack>
                                               {(existingShadeConfig || hasCurrentInput) && (
                                                 <Badge tone="success">{existingShadeConfig ? "Configured" : "Modified"}</Badge>
                                               )}
@@ -1976,14 +1998,23 @@ export default function Products() {
         <Modal.Section>
           {selectedVariantForConfig && (
             <BlockStack gap="300">
-              <BlockStack gap="100">
-                <Text as="h3" variant="headingMd">
-                  {selectedVariantForConfig.title}
-                </Text>
-                <Text as="p" variant="bodyMd" tone="subdued">
-                  Configure a specific transformation prompt for this variant
-                </Text>
-              </BlockStack>
+              <InlineStack gap="300" blockAlign="center">
+                {selectedVariantForConfig.featuredImage?.url && (
+                  <Thumbnail
+                    source={selectedVariantForConfig.featuredImage.url}
+                    alt={selectedVariantForConfig.title}
+                    size="medium"
+                  />
+                )}
+                <BlockStack gap="100">
+                  <Text as="h3" variant="headingMd">
+                    {selectedVariantForConfig.title}
+                  </Text>
+                  <Text as="p" variant="bodyMd" tone="subdued">
+                    Configure a specific transformation prompt for this variant
+                  </Text>
+                </BlockStack>
+              </InlineStack>
 
               <TextField
                 label="Variant Transformation Prompt"
