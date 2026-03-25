@@ -170,15 +170,17 @@ console.log('Gleame Button Widget v3.0 loaded');
     const button = getElement(instanceId, 'mainButton');
     const btnText = button?.querySelector('.btn-text');
     const spinner = button?.querySelector('.btn-spinner');
-    
+    const cameraIcon = button?.querySelector('.btn-camera-icon');
+
     if (!button || !btnText) return;
-    
+
     if (isLoading) {
       button.classList.add('is-loading');
       if (spinner) spinner.style.display = 'block';
+      if (cameraIcon) cameraIcon.style.display = 'none';
       instance.loadingMessageIndex = 0;
       btnText.textContent = loadingMessages[0];
-      
+
       instance.loadingInterval = setInterval(() => {
         instance.loadingMessageIndex++;
         if (instance.loadingMessageIndex < loadingMessages.length) {
@@ -188,8 +190,9 @@ console.log('Gleame Button Widget v3.0 loaded');
     } else {
       button.classList.remove('is-loading');
       if (spinner) spinner.style.display = 'none';
+      if (cameraIcon) cameraIcon.style.display = '';
       btnText.textContent = instance.originalButtonText;
-      
+
       if (instance.loadingInterval) {
         clearInterval(instance.loadingInterval);
         instance.loadingInterval = null;
@@ -630,6 +633,7 @@ console.log('Gleame Button Widget v3.0 loaded');
 
       const slides = (result.results || []).map(function(r, i) {
         return {
+          variantId: (selectedVariants[i] && selectedVariants[i].variantId) || null,
           variantTitle: (selectedVariants[i] && selectedVariants[i].variantTitle) || ('Look ' + (i + 1)),
           displayColor: (selectedVariants[i] && selectedVariants[i].displayColor) || null,
           generatedImage: r.generatedImage || null,
@@ -661,10 +665,14 @@ console.log('Gleame Button Widget v3.0 loaded');
     const contentEl = document.getElementById('gcm-content');
     if (!contentEl) return;
 
+    const variantImages = window.gleameVariantImages || {};
     const tabsHtml = slides.map(function(s, i) {
-      const dot = s.displayColor
-        ? '<span class="gvc-tab-dot" style="background:' + s.displayColor + '"></span>'
-        : '';
+      const imgUrl = s.variantId && (variantImages[s.variantId] || variantImages[String(s.variantId)]);
+      const dot = imgUrl
+        ? '<img class="gvc-tab-img" src="' + imgUrl + '" alt="' + s.variantTitle + '">'
+        : s.displayColor
+          ? '<span class="gvc-tab-dot" style="background:' + s.displayColor + '"></span>'
+          : '';
       return '<button type="button" class="gvc-tab' + (i === 0 ? ' gvc-tab-active' : '') +
         '" data-slide="' + i + '">' + dot + '<span>' + s.variantTitle + '</span></button>';
     }).join('');
@@ -783,6 +791,11 @@ console.log('Gleame Button Widget v3.0 loaded');
 
     document.getElementById('gvm-close-btn').addEventListener('click', closeVariantModal);
     modal.querySelector('.gvm-backdrop').addEventListener('click', closeVariantModal);
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && document.getElementById('gleame-variant-modal')?.classList.contains('gvm-visible')) {
+        closeVariantModal();
+      }
+    });
     return modal;
   }
 
@@ -817,9 +830,13 @@ console.log('Gleame Button Widget v3.0 loaded');
       card.className = 'gvm-card';
       card.dataset.variantId = v.variantId;
 
-      var swatchHtml = v.displayColor
-        ? '<span class="gvm-swatch" style="background:' + v.displayColor + '"></span>'
-        : '';
+      var variantImages = window.gleameVariantImages || {};
+      var swatchImgUrl = variantImages[v.variantId] || variantImages[String(v.variantId)];
+      var swatchHtml = swatchImgUrl
+        ? '<img class="gvm-swatch" src="' + swatchImgUrl + '" alt="' + v.variantTitle + '">'
+        : v.displayColor
+          ? '<span class="gvm-swatch" style="background:' + v.displayColor + '"></span>'
+          : '<span class="gvm-swatch gvm-swatch-empty"></span>';
       card.innerHTML = swatchHtml +
         '<span class="gvm-card-label">' + v.variantTitle + '</span>' +
         '<span class="gvm-checkmark">' +

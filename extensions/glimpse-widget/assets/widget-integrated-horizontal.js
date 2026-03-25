@@ -730,6 +730,7 @@ console.log('Gleame Integrated Horizontal Widget v2.0 loaded');
 
       const slides = (result.results || []).map(function(r, i) {
         return {
+          variantId: (selectedVariants[i] && selectedVariants[i].variantId) || null,
           variantTitle: (selectedVariants[i] && selectedVariants[i].variantTitle) || ('Look ' + (i + 1)),
           displayColor: (selectedVariants[i] && selectedVariants[i].displayColor) || null,
           generatedImage: r.generatedImage || null,
@@ -781,10 +782,14 @@ console.log('Gleame Integrated Horizontal Widget v2.0 loaded');
     instance.carouselSlides = slides;
     instance.currentSlide = 0;
 
+    const variantImages = window.gleameVariantImages || {};
     const tabsHtml = slides.map(function(s, i) {
-      const dot = s.displayColor
-        ? '<span class="gvc-tab-dot" style="background:' + s.displayColor + '"></span>'
-        : '';
+      const imgUrl = s.variantId && (variantImages[s.variantId] || variantImages[String(s.variantId)]);
+      const dot = imgUrl
+        ? '<img class="gvc-tab-img" src="' + imgUrl + '" alt="' + s.variantTitle + '">'
+        : s.displayColor
+          ? '<span class="gvc-tab-dot" style="background:' + s.displayColor + '"></span>'
+          : '';
       return '<button type="button" class="gvc-tab' + (i === 0 ? ' gvc-tab-active' : '') +
         '" data-slide="' + i + '">' + dot + '<span>' + s.variantTitle + '</span></button>';
     }).join('');
@@ -862,6 +867,11 @@ console.log('Gleame Integrated Horizontal Widget v2.0 loaded');
 
     document.getElementById('gvm-close-btn').addEventListener('click', closeVariantModal);
     modal.querySelector('.gvm-backdrop').addEventListener('click', closeVariantModal);
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && document.getElementById('gleame-variant-modal')?.classList.contains('gvm-visible')) {
+        closeVariantModal();
+      }
+    });
     return modal;
   }
 
@@ -896,9 +906,13 @@ console.log('Gleame Integrated Horizontal Widget v2.0 loaded');
       card.className = 'gvm-card';
       card.dataset.variantId = v.variantId;
 
-      var swatchHtml = v.displayColor
-        ? '<span class="gvm-swatch" style="background:' + v.displayColor + '"></span>'
-        : '';
+      var variantImages = window.gleameVariantImages || {};
+      var swatchImgUrl = variantImages[v.variantId] || variantImages[String(v.variantId)];
+      var swatchHtml = swatchImgUrl
+        ? '<img class="gvm-swatch" src="' + swatchImgUrl + '" alt="' + v.variantTitle + '">'
+        : v.displayColor
+          ? '<span class="gvm-swatch" style="background:' + v.displayColor + '"></span>'
+          : '<span class="gvm-swatch gvm-swatch-empty"></span>';
       card.innerHTML = swatchHtml +
         '<span class="gvm-card-label">' + v.variantTitle + '</span>' +
         '<span class="gvm-checkmark">' +

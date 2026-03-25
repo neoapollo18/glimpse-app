@@ -148,6 +148,14 @@
 </div>
 
 <link rel="stylesheet" href="{{ 'gleame-camera.css' | asset_url }}">
+<script>
+  window.gleameVariantImages = window.gleameVariantImages || {};
+  {% for variant in product.variants %}
+    {% if variant.featured_image %}
+      window.gleameVariantImages['{{ variant.id }}'] = '{{ variant.featured_image | img_url: '100x100', crop: 'center' }}';
+    {% endif %}
+  {% endfor %}
+</script>
 <link rel="stylesheet" href="{{ 'gleame-variants.css' | asset_url }}">
 <script src="{{ 'gleame-camera.js' | asset_url }}" defer></script>
 <script src="{{ 'glimpse-button.js' | asset_url }}" defer></script>
