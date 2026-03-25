@@ -853,6 +853,16 @@ console.log('Gleame Legacy Widget v3.0 loaded');
 
   // Shared variant selector modal (DOM-injected singleton)
 
+  function copyWidgetFonts(el) {
+    var widget = document.querySelector('.glimpse-ai-widget');
+    if (!widget) return;
+    var cs = getComputedStyle(widget);
+    ['--header-font-family','--header-font-weight','--body-font-family','--body-font-weight'].forEach(function(v) {
+      var val = cs.getPropertyValue(v);
+      if (val) el.style.setProperty(v, val.trim());
+    });
+  }
+
   function ensureVariantModal() {
     var modal = document.getElementById('gleame-variant-modal');
     if (modal) return modal;
@@ -873,6 +883,7 @@ console.log('Gleame Legacy Widget v3.0 loaded');
         '<button type="button" class="gvm-cta" id="gvm-cta" disabled>Choose a shade</button>' +
       '</div>';
     document.body.appendChild(modal);
+    copyWidgetFonts(modal);
 
     document.getElementById('gvm-close-btn').addEventListener('click', closeVariantModal);
     modal.querySelector('.gvm-backdrop').addEventListener('click', closeVariantModal);

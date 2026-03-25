@@ -729,6 +729,16 @@ console.log('Gleame Button Widget v3.0 loaded');
     });
   }
 
+  function copyWidgetFonts(el) {
+    var widget = document.querySelector('.glimpse-ai-widget') || document.querySelector('[class*="glimpse-button"]');
+    if (!widget) return;
+    var cs = getComputedStyle(widget);
+    ['--header-font-family','--header-font-weight','--body-font-family','--body-font-weight'].forEach(function(v) {
+      var val = cs.getPropertyValue(v);
+      if (val) el.style.setProperty(v, val.trim());
+    });
+  }
+
   function ensureCarouselModal() {
     if (document.getElementById('gleame-carousel-modal')) return;
     const modal = document.createElement('div');
@@ -746,6 +756,7 @@ console.log('Gleame Button Widget v3.0 loaded');
         '<p class="gcm-powered">Powered by <strong>Gleame</strong></p>' +
       '</div>';
     document.body.appendChild(modal);
+    copyWidgetFonts(modal);
 
     document.getElementById('gcm-close-btn').addEventListener('click', closeCarouselModal);
     document.getElementById('gcm-try-again-btn').addEventListener('click', function() {
@@ -788,6 +799,7 @@ console.log('Gleame Button Widget v3.0 loaded');
         '<button type="button" class="gvm-cta" id="gvm-cta" disabled>Choose a shade</button>' +
       '</div>';
     document.body.appendChild(modal);
+    copyWidgetFonts(modal);
 
     document.getElementById('gvm-close-btn').addEventListener('click', closeVariantModal);
     modal.querySelector('.gvm-backdrop').addEventListener('click', closeVariantModal);

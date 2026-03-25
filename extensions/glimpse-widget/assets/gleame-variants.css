@@ -19,9 +19,9 @@
 .gvm-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(156, 163, 175, 0.6);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 /* Sheet */
@@ -39,7 +39,7 @@
   flex-direction: column;
   gap: 20px;
   animation: gvm-enter 0.3s ease;
-  font-family: inherit;
+  font-family: var(--body-font-family, inherit);
 }
 
 @keyframes gvm-enter {
@@ -71,14 +71,17 @@
 .gvm-header { text-align: center; }
 
 .gvm-title {
+  font-family: var(--header-font-family, inherit);
+  font-weight: var(--header-font-weight, 600);
   font-size: 22px;
-  font-weight: 600;
   color: #1f2937;
   margin: 0 0 6px 0;
   line-height: 1.2;
 }
 
 .gvm-subtitle {
+  font-family: var(--body-font-family, inherit);
+  font-weight: var(--body-font-weight, 400);
   font-size: 14px;
   color: #6b7280;
   margin: 0;
@@ -101,6 +104,7 @@
   border: 2px solid transparent;
   border-radius: 12px;
   cursor: pointer;
+  font-family: var(--body-font-family, inherit);
   transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
   text-align: left;
   width: 100%;
@@ -142,6 +146,7 @@
 
 /* Variant title */
 .gvm-card-label {
+  font-family: var(--body-font-family, inherit);
   font-size: 13px;
   font-weight: 500;
   color: #374151;
@@ -173,6 +178,7 @@
   color: #ffffff;
   border: none;
   border-radius: 12px;
+  font-family: var(--body-font-family, inherit);
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
@@ -211,14 +217,14 @@
 
 .gvc-root { width: 100%; }
 
-/* Segmented tab control */
+/* Variant tab chips */
 .gvc-tabs {
   display: flex;
-  background: #f3f4f6;
-  border-radius: 50px;
-  padding: 4px;
-  gap: 2px;
-  margin-bottom: 14px;
+  flex-wrap: wrap;
+  justify-content: center;
+  padding: 0;
+  gap: 8px;
+  margin-bottom: 16px;
   overflow-x: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -227,42 +233,57 @@
 
 .gvc-tab {
   flex-shrink: 0;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 8px 12px;
+  padding: 8px 16px;
   border-radius: 50px;
-  border: none;
-  background: transparent;
+  border: 1.5px solid #e5e7eb;
+  background: #ffffff;
   color: #6b7280;
-  font-size: 12px;
+  font-family: var(--body-font-family, inherit);
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+  transition: all 0.2s ease;
   white-space: nowrap;
 }
 
+.gvc-tab:hover {
+  border-color: #d1d5db;
+  background: #f9fafb;
+  color: #374151;
+}
+
 .gvc-tab-active {
-  background: #ffffff;
-  color: #1f2937;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  background: #f5f3ff;
+  color: #6d28d9;
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.08);
+}
+
+.gvc-tab-active:hover {
+  background: #f5f3ff;
+  color: #6d28d9;
+  border-color: #8b5cf6;
 }
 
 .gvc-tab-dot {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   flex-shrink: 0;
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  border: 1.5px solid rgba(0, 0, 0, 0.08);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .gvc-tab-img {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   flex-shrink: 0;
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  border: 1.5px solid rgba(0, 0, 0, 0.08);
   object-fit: cover;
   display: block;
 }
@@ -296,10 +317,11 @@
 .gvc-comparison {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  border-radius: 12px;
+  border-radius: 14px;
   overflow: hidden;
   background: #f3f4f6;
   width: 100%;
+  gap: 2px;
 }
 
 .gvc-slides-wrap,
@@ -311,7 +333,7 @@
 
 .gvc-img {
   width: 100%;
-  aspect-ratio: 1;
+  aspect-ratio: 3/4;
   object-fit: cover;
   display: block;
   image-orientation: from-image;
@@ -319,12 +341,13 @@
 
 /* Shade caption below comparison */
 .gvc-shade-label {
-  font-size: 12px;
+  font-family: var(--body-font-family, inherit);
+  font-size: 13px;
   font-weight: 500;
   color: #9ca3af;
   text-align: center;
-  margin: 10px 0 0 0;
-  letter-spacing: 0.02em;
+  margin: 12px 0 0 0;
+  letter-spacing: 0.01em;
 }
 
 /* Error slide */
@@ -349,9 +372,9 @@
   position: fixed;
   inset: 0;
   z-index: 9999999;
-  background: rgba(156, 163, 175, 0.6);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   align-items: center;
   justify-content: center;
 }
@@ -362,49 +385,52 @@
 
 .gcm-sheet {
   position: relative;
-  background: #f9f9f9;
-  border-radius: 24px;
-  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.2);
-  width: 560px;
+  background: #ffffff;
+  border-radius: 20px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.16), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  width: 520px;
   max-width: calc(100vw - 32px);
   max-height: 90vh;
   overflow-y: auto;
-  padding: 40px 36px 36px;
+  padding: 32px 28px 28px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  animation: gcm-enter 0.3s ease;
+  gap: 16px;
+  animation: gcm-enter 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  font-family: var(--body-font-family, inherit);
 }
 
 @keyframes gcm-enter {
-  from { opacity: 0; transform: scale(0.95) translateY(20px); }
+  from { opacity: 0; transform: scale(0.96) translateY(12px); }
   to   { opacity: 1; transform: scale(1)    translateY(0);    }
 }
 
 .gcm-close {
   position: absolute;
-  top: 20px;
-  right: 20px;
-  width: 36px;
-  height: 36px;
+  top: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  background: #f3f4f6;
+  background: transparent;
   border: none;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #6b7280;
-  transition: background 0.2s ease, color 0.2s ease;
+  color: #9ca3af;
+  transition: all 0.15s ease;
 }
-.gcm-close:hover { background: #e5e7eb; color: #374151; }
+.gcm-close:hover { background: #f3f4f6; color: #374151; }
 
 .gcm-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: #1f2937;
+  font-family: var(--header-font-family, inherit);
+  font-weight: var(--header-font-weight, 600);
+  font-size: 18px;
+  color: #111827;
   margin: 0;
   text-align: center;
+  letter-spacing: -0.01em;
 }
 
 .gcm-actions {
@@ -413,25 +439,28 @@
 }
 
 .gcm-try-again {
-  padding: 10px 24px;
-  background: #f9fafb;
-  border: 1px solid #d1d5db;
-  border-radius: 10px;
+  padding: 10px 28px;
+  background: #ffffff;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 50px;
+  font-family: var(--body-font-family, inherit);
   font-size: 14px;
-  font-weight: 500;
+  font-weight: var(--body-font-weight, 500);
   color: #374151;
   cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+  transition: all 0.2s ease;
 }
 .gcm-try-again:hover {
-  background: #f3f4f6;
-  border-color: #9ca3af;
+  background: #f9fafb;
+  border-color: #d1d5db;
   transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
 .gcm-powered {
+  font-family: var(--body-font-family, inherit);
   font-size: 11px;
-  color: rgba(107, 114, 128, 0.6);
+  color: rgba(107, 114, 128, 0.5);
   text-align: center;
   margin: 0;
 }
@@ -446,9 +475,22 @@
 @media (max-width: 480px) {
   #gleame-carousel-modal { align-items: flex-end; }
   .gcm-sheet {
-    border-radius: 20px 20px 0 0;
+    border-radius: 16px 16px 0 0;
     width: 100%;
     max-width: 100%;
-    padding: 28px 20px 32px;
+    padding: 24px 16px env(safe-area-inset-bottom, 24px);
+    gap: 12px;
+  }
+  .gvc-tabs {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    gap: 6px;
+  }
+  .gvc-tab {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+  .gvc-comparison {
+    border-radius: 12px;
   }
 }
