@@ -48,41 +48,43 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   let hasNextPage = true;
   let cursor: string | null = null;
 
-  while (hasNextPage) {
-    const response: Response = await admin.graphql(`
-      query GetProducts($first: Int!, $after: String) {
-        products(first: $first, after: $after) {
-          pageInfo {
-            hasNextPage
-            endCursor
-          }
-          edges {
-            node {
-              id
-              title
-              handle
-              status
-              vendor
-              productType
-              tags
-              images(first: 1) {
-                edges {
-                  node {
-                    id
-                    url
-                    altText
+  try {
+    while (hasNextPage) {
+      const response: Response = await admin.graphql(`
+        query GetProducts($first: Int!, $after: String) {
+          products(first: $first, after: $after) {
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+            edges {
+              node {
+                id
+                title
+                handle
+                status
+                vendor
+                productType
+                tags
+                images(first: 1) {
+                  edges {
+                    node {
+                      id
+                      url
+                      altText
+                    }
                   }
                 }
-              }
-              variants(first: 100) {
-                edges {
-                  node {
-                    id
-                    title
-                    price
-                    availableForSale
-                    featuredImage {
-                      url
+                variants(first: 100) {
+                  edges {
+                    node {
+                      id
+                      title
+                      price
+                      availableForSale
+                      featuredImage {
+                        url
+                      }
                     }
                   }
                 }
@@ -90,34 +92,44 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             }
           }
         }
-      }
-    `, {
-      variables: {
-        first: 250,
-        after: cursor
-      }
-    });
+      `, {
+        variables: {
+          first: 250,
+          after: cursor
+        }
+      });
 
-    const { data }: { data: any } = await response.json();
-    const products = data.products.edges.map(({ node }: { node: any }) => node);
-    allProducts.push(...products);
+      const json: any = await response.json();
 
-    hasNextPage = data.products.pageInfo.hasNextPage;
-    cursor = data.products.pageInfo.endCursor;
+      if (json.errors) {
+        console.error('Shopify GraphQL errors:', JSON.stringify(json.errors));
+        break;
+      }
+
+      if (!json.data?.products?.edges) {
+        console.error('Unexpected Shopify GraphQL response:', JSON.stringify(json));
+        break;
+      }
+
+      const products = json.data.products.edges.map(({ node }: { node: any }) => node);
+      allProducts.push(...products);
+
+      hasNextPage = json.data.products.pageInfo.hasNextPage;
+      cursor = json.data.products.pageInfo.endCursor;
+    }
+  } catch (error) {
+    console.error('Error fetching Shopify products:', error);
   }
 
   const shopifyProducts = allProducts;
 
   // Fetch configured products from Supabase (with category data joined)
-  console.log('🔍 DEBUG: Fetching products for shop:', session.shop);
-  const configuredProducts = session.shop 
+  const configuredProducts = session.shop
     ? await getConfiguredProductsWithCategory(session.shop)
     : [];
-  console.log('🔍 DEBUG: Found', configuredProducts.length, 'configured products');
 
   // Fetch all categories for the funnel UI dropdown
   const categories = await getCategories();
-  console.log('🔍 DEBUG: Found', categories.length, 'categories');
 
   return { shopifyProducts, configuredProducts, categories, shop: session.shop };
 };
