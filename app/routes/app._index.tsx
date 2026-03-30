@@ -951,7 +951,7 @@ function DashboardView({
             </Text>
           </BlockStack>
           <Button onClick={() => navigate("/app/analytics")}>
-            View Reports
+            View Analytics
           </Button>
         </InlineStack>
 
