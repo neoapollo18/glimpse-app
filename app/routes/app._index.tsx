@@ -1,6 +1,6 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { useLoaderData, useNavigate, useFetcher } from "@remix-run/react";
+import { useLoaderData, useNavigate, useRevalidator } from "@remix-run/react";
 import { useState, useEffect, useCallback } from "react";
 import {
   Page,
@@ -127,27 +127,31 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const intent = formData.get("intent") as string;
 
+  // All intents can optionally include a step update to avoid race conditions
+  const stepRaw = formData.get("step") as string | null;
+  const goalsRaw = formData.get("goals") as string | null;
+  const attributionRaw = formData.get("attribution") as string | null;
+
   switch (intent) {
     case "updateStep": {
-      const step = parseInt(formData.get("step") as string, 10);
+      const step = parseInt(stepRaw!, 10);
       await updateOnboardingStep(shopDomain, step);
       return json({ ok: true });
     }
-    case "saveSurvey": {
-      const goalsRaw = formData.get("goals") as string | null;
-      const attributionRaw = formData.get("attribution") as string | null;
+    case "saveSurveyAndStep": {
+      // Combined: save survey data AND update step in sequence (no race)
       const goals = goalsRaw ? JSON.parse(goalsRaw) : undefined;
       const attribution = attributionRaw ? JSON.parse(attributionRaw) : undefined;
       await saveOnboardingSurvey(shopDomain, goals, attribution);
+      if (stepRaw) {
+        await updateOnboardingStep(shopDomain, parseInt(stepRaw, 10));
+      }
       return json({ ok: true });
     }
     case "completeOnboarding": {
-      const goalsRaw = formData.get("goals") as string | null;
-      const attributionRaw = formData.get("attribution") as string | null;
       const goals = goalsRaw ? JSON.parse(goalsRaw) : [];
       const attribution = attributionRaw ? JSON.parse(attributionRaw) : [];
       await completeOnboardingDb(shopDomain);
-      // Fire-and-forget email notification
       sendOnboardingCompleteEmail(shopDomain, goals, attribution).catch(() => {});
       return json({ ok: true });
     }
@@ -707,7 +711,6 @@ function OnboardingWizard({
   initialAttribution,
   hasConfiguredProducts,
   onComplete,
-  fetcher,
   navigate,
 }: {
   initialStep: number;
@@ -715,7 +718,6 @@ function OnboardingWizard({
   initialAttribution: string[];
   hasConfiguredProducts: boolean;
   onComplete: () => void;
-  fetcher: ReturnType<typeof useFetcher>;
   navigate: ReturnType<typeof useNavigate>;
 }) {
   const [currentStep, setCurrentStep] = useState(
@@ -725,43 +727,63 @@ function OnboardingWizard({
   const [selectedAttribution, setSelectedAttribution] =
     useState<string[]>(initialAttribution);
 
-  const persistStep = useCallback(
-    (step: number) => {
-      fetcher.submit(
-        { intent: "updateStep", step: step.toString() },
-        { method: "post" }
-      );
+  // Sync state if loader data changes (e.g., revalidation after navigation)
+  useEffect(() => {
+    if (initialStep > 0) {
+      setCurrentStep(initialStep);
+    }
+  }, [initialStep]);
+
+  useEffect(() => {
+    setSelectedGoals(initialGoals);
+  }, [initialGoals]);
+
+  useEffect(() => {
+    setSelectedAttribution(initialAttribution);
+  }, [initialAttribution]);
+
+  // Helper: POST to the action and wait for it to complete
+  const persistToServer = useCallback(
+    async (data: Record<string, string>) => {
+      try {
+        await fetch(window.location.pathname, {
+          method: "POST",
+          body: new URLSearchParams(data),
+        });
+      } catch (e) {
+        console.error("Failed to persist onboarding state:", e);
+      }
     },
-    [fetcher]
+    []
   );
 
   const goToStep = useCallback(
     (step: number) => {
       setCurrentStep(step);
-      persistStep(step);
+      // Fire-and-forget for in-page transitions (no navigation away)
+      persistToServer({ intent: "updateStep", step: step.toString() });
     },
-    [persistStep]
+    [persistToServer]
   );
 
   const handleNextFromGoals = () => {
-    // Save goals when leaving step 2
-    fetcher.submit(
-      { intent: "saveSurvey", goals: JSON.stringify(selectedGoals) },
-      { method: "post" }
-    );
-    goToStep(3);
+    setCurrentStep(3);
+    // Single request: save goals AND update step together (no race)
+    persistToServer({
+      intent: "saveSurveyAndStep",
+      goals: JSON.stringify(selectedGoals),
+      step: "3",
+    });
   };
 
   const handleNextFromAttribution = () => {
-    // Save attribution when leaving step 3
-    fetcher.submit(
-      {
-        intent: "saveSurvey",
-        attribution: JSON.stringify(selectedAttribution),
-      },
-      { method: "post" }
-    );
-    goToStep(4);
+    setCurrentStep(4);
+    // Single request: save attribution AND update step together (no race)
+    persistToServer({
+      intent: "saveSurveyAndStep",
+      attribution: JSON.stringify(selectedAttribution),
+      step: "4",
+    });
   };
 
   const handleSkipAttribution = () => {
@@ -769,13 +791,10 @@ function OnboardingWizard({
   };
 
   const handleComplete = async () => {
-    await fetch(window.location.pathname, {
-      method: "POST",
-      body: new URLSearchParams({
-        intent: "completeOnboarding",
-        goals: JSON.stringify(selectedGoals),
-        attribution: JSON.stringify(selectedAttribution),
-      }),
+    await persistToServer({
+      intent: "completeOnboarding",
+      goals: JSON.stringify(selectedGoals),
+      attribution: JSON.stringify(selectedAttribution),
     });
     onComplete();
   };
@@ -1125,7 +1144,14 @@ export default function Dashboard() {
     onboarding,
   } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
-  const fetcher = useFetcher();
+  const { revalidate } = useRevalidator();
+
+  // Revalidate loader data on mount — ensures fresh state when returning
+  // from navigation (e.g., /app/products → /app)
+  useEffect(() => {
+    revalidate();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Skip onboarding if: explicitly completed, OR has products but never
   // started onboarding (pre-existing merchant)
@@ -1151,7 +1177,6 @@ export default function Dashboard() {
         initialAttribution={onboarding.attribution}
         hasConfiguredProducts={configuredProductsCount > 0}
         onComplete={() => setOnboardingCompleted(true)}
-        fetcher={fetcher}
         navigate={navigate}
       />
     );
