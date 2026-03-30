@@ -20,8 +20,6 @@ import {
 import {
   CheckCircleIcon,
   ProductIcon,
-  ChartVerticalFilledIcon,
-  SettingsIcon,
   ViewIcon,
   PlusCircleIcon,
   EditIcon,
@@ -958,7 +956,7 @@ function DashboardView({
         </InlineStack>
 
         {/* Stats Cards */}
-        <InlineGrid columns={{ xs: 1, sm: 3 }} gap="400">
+        <InlineGrid columns={{ xs: 1, sm: 2 }} gap="400">
           <Card>
             <BlockStack gap="200">
               <InlineStack align="space-between" blockAlign="center">
@@ -1007,174 +1005,94 @@ function DashboardView({
               </Text>
             </BlockStack>
           </Card>
-
-          <Card>
-            <BlockStack gap="200">
-              <InlineStack align="space-between" blockAlign="center">
-                <Text as="span" variant="bodyMd" tone="subdued">
-                  Status
-                </Text>
-                <Box
-                  background="bg-fill-success"
-                  padding="100"
-                  borderRadius="full"
-                >
-                  <Icon source={CheckCircleIcon} tone="success" />
-                </Box>
-              </InlineStack>
-              <Text as="p" variant="headingXl" fontWeight="bold">
-                Active
-              </Text>
-              <Text as="span" variant="bodySm" tone="subdued">
-                App connected and running
-              </Text>
-            </BlockStack>
-          </Card>
         </InlineGrid>
 
-        {/* Products Table + Sidebar */}
-        <InlineGrid columns={{ xs: 1, md: "2fr 1fr" }} gap="400">
-          <Card>
-            <BlockStack gap="400">
-              <InlineStack align="space-between" blockAlign="center">
-                <Text as="h2" variant="headingMd">
-                  Configured Products
-                </Text>
-                <Button
-                  icon={PlusCircleIcon}
-                  onClick={() => navigate("/app/products")}
-                >
-                  Add Product
-                </Button>
-              </InlineStack>
-
-              {productsWithStats.length === 0 ? (
-                <EmptyState
-                  heading="No products configured yet"
-                  action={{
-                    content: "Add Product",
-                    onAction: () => navigate("/app/products"),
-                  }}
-                  image=""
-                >
-                  <p>Configure your first product to start using Gleame.</p>
-                </EmptyState>
-              ) : (
-                <IndexTable
-                  resourceName={{
-                    singular: "product",
-                    plural: "products",
-                  }}
-                  itemCount={productsWithStats.length}
-                  headings={[
-                    { title: "Product" },
-                    { title: "Status" },
-                    { title: "Transformations" },
-                    { title: "Actions" },
-                  ]}
-                  selectable={false}
-                >
-                  {productsWithStats.map((product, index) => (
-                    <IndexTable.Row
-                      id={product.id}
-                      key={product.id}
-                      position={index}
-                    >
-                      <IndexTable.Cell>
-                        <Text
-                          as="span"
-                          variant="bodyMd"
-                          fontWeight="semibold"
-                        >
-                          {product.product_name.length > 43
-                            ? `${product.product_name.substring(0, 43)}...`
-                            : product.product_name}
-                        </Text>
-                      </IndexTable.Cell>
-                      <IndexTable.Cell>
-                        <Badge
-                          tone={product.isActive ? "success" : "attention"}
-                        >
-                          {product.isActive ? "Active" : "Pending"}
-                        </Badge>
-                      </IndexTable.Cell>
-                      <IndexTable.Cell>
-                        <Text as="span" variant="bodyMd">
-                          {product.transformations}
-                        </Text>
-                      </IndexTable.Cell>
-                      <IndexTable.Cell>
-                        <Button
-                          icon={EditIcon}
-                          size="slim"
-                          variant="plain"
-                          onClick={() => navigate("/app/products")}
-                        >
-                          Edit
-                        </Button>
-                      </IndexTable.Cell>
-                    </IndexTable.Row>
-                  ))}
-                </IndexTable>
-              )}
-            </BlockStack>
-          </Card>
-
-          {/* Sidebar */}
+        {/* Products Table */}
+        <Card>
           <BlockStack gap="400">
-            <Card>
-              <BlockStack gap="300">
-                <Text as="h2" variant="headingMd">
-                  Quick Actions
-                </Text>
-                <BlockStack gap="200">
-                  <Button
-                    icon={PlusCircleIcon}
-                    onClick={() => navigate("/app/products")}
-                    fullWidth
-                    textAlign="start"
-                  >
-                    Add Product
-                  </Button>
-                  <Button
-                    icon={ChartVerticalFilledIcon}
-                    onClick={() => navigate("/app/analytics")}
-                    fullWidth
-                    textAlign="start"
-                  >
-                    View Analytics
-                  </Button>
-                  <Button
-                    icon={SettingsIcon}
-                    onClick={() => navigate("/app/settings")}
-                    fullWidth
-                    textAlign="start"
-                  >
-                    Settings
-                  </Button>
-                </BlockStack>
-              </BlockStack>
-            </Card>
+            <InlineStack align="space-between" blockAlign="center">
+              <Text as="h2" variant="headingMd">
+                Configured Products
+              </Text>
+              <Button
+                icon={PlusCircleIcon}
+                onClick={() => navigate("/app/products")}
+              >
+                Add Product
+              </Button>
+            </InlineStack>
 
-            <Card>
-              <BlockStack gap="200">
-                <Text as="h2" variant="headingMd">
-                  Need Help?
-                </Text>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Check out our website or contact Intercom support for
-                  assistance.
-                </Text>
-                <Button
-                  variant="plain"
-                  onClick={() => window.open("https://gleame.ai", "_blank")}
-                >
-                  View Website →
-                </Button>
-              </BlockStack>
-            </Card>
+            {productsWithStats.length === 0 ? (
+              <EmptyState
+                heading="No products configured yet"
+                action={{
+                  content: "Add Product",
+                  onAction: () => navigate("/app/products"),
+                }}
+                image=""
+              >
+                <p>Configure your first product to start using Gleame.</p>
+              </EmptyState>
+            ) : (
+              <IndexTable
+                resourceName={{
+                  singular: "product",
+                  plural: "products",
+                }}
+                itemCount={productsWithStats.length}
+                headings={[
+                  { title: "Product" },
+                  { title: "Status" },
+                  { title: "Transformations" },
+                  { title: "Actions" },
+                ]}
+                selectable={false}
+              >
+                {productsWithStats.map((product, index) => (
+                  <IndexTable.Row
+                    id={product.id}
+                    key={product.id}
+                    position={index}
+                  >
+                    <IndexTable.Cell>
+                      <Text
+                        as="span"
+                        variant="bodyMd"
+                        fontWeight="semibold"
+                      >
+                        {product.product_name.length > 43
+                          ? `${product.product_name.substring(0, 43)}...`
+                          : product.product_name}
+                      </Text>
+                    </IndexTable.Cell>
+                    <IndexTable.Cell>
+                      <Badge
+                        tone={product.isActive ? "success" : "attention"}
+                      >
+                        {product.isActive ? "Active" : "Pending"}
+                      </Badge>
+                    </IndexTable.Cell>
+                    <IndexTable.Cell>
+                      <Text as="span" variant="bodyMd">
+                        {product.transformations}
+                      </Text>
+                    </IndexTable.Cell>
+                    <IndexTable.Cell>
+                      <Button
+                        icon={EditIcon}
+                        size="slim"
+                        variant="plain"
+                        onClick={() => navigate("/app/products")}
+                      >
+                        Edit
+                      </Button>
+                    </IndexTable.Cell>
+                  </IndexTable.Row>
+                ))}
+              </IndexTable>
+            )}
           </BlockStack>
-        </InlineGrid>
+        </Card>
       </BlockStack>
     </Page>
   );
@@ -1197,14 +1115,18 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const fetcher = useFetcher();
 
-  const [onboardingCompleted, setOnboardingCompleted] = useState(
-    onboarding.completed
-  );
+  const shouldSkipOnboarding =
+    onboarding.completed || configuredProductsCount > 0;
 
-  // Update if loader data changes (e.g., after navigation back)
+  const [onboardingCompleted, setOnboardingCompleted] =
+    useState(shouldSkipOnboarding);
+
+  // Update if loader data changes (e.g., after navigation back from products page)
   useEffect(() => {
-    setOnboardingCompleted(onboarding.completed);
-  }, [onboarding.completed]);
+    if (onboarding.completed || configuredProductsCount > 0) {
+      setOnboardingCompleted(true);
+    }
+  }, [onboarding.completed, configuredProductsCount]);
 
   if (!onboardingCompleted) {
     return (
