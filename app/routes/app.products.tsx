@@ -1188,10 +1188,14 @@ export default function Products() {
                   });
                   if (selected && selected.length > 0) {
                     const pickedProduct = selected[0];
+                    if (isConfigured(pickedProduct.id)) {
+                      (window as any).shopify.toast.show("This product is already configured", { isError: true });
+                      return;
+                    }
                     const match = shopifyProducts.find(
                       (p: ShopifyProduct) => p.id === pickedProduct.id
                     );
-                    if (match && !isConfigured(match.id)) {
+                    if (match) {
                       handleConfigure(match);
                     }
                   }
