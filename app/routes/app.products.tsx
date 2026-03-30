@@ -82,7 +82,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                       title
                       price
                       availableForSale
-                      featuredImage {
+                      image {
                         url
                       }
                     }
@@ -428,7 +428,7 @@ interface ShopifyProduct {
         title: string;
         price: string;
         availableForSale: boolean;
-        featuredImage?: {
+        image?: {
           url: string;
         } | null;
       };
@@ -1421,9 +1421,9 @@ export default function Products() {
                                   <BlockStack gap="200">
                                     <InlineStack align="space-between" blockAlign="start">
                                       <InlineStack gap="300" blockAlign="center">
-                                        {variant.featuredImage?.url && (
+                                        {variant.image?.url && (
                                           <Thumbnail
-                                            source={variant.featuredImage.url}
+                                            source={variant.image.url}
                                             alt={variant.title}
                                             size="small"
                                           />
@@ -1618,9 +1618,9 @@ export default function Products() {
                                             {/* Variant Header */}
                                             <InlineStack align="space-between" blockAlign="start">
                                               <InlineStack gap="300" blockAlign="center">
-                                                {variant.featuredImage?.url && (
+                                                {variant.image?.url && (
                                                   <Thumbnail
-                                                    source={variant.featuredImage.url}
+                                                    source={variant.image.url}
                                                     alt={variant.title}
                                                     size="small"
                                                   />
@@ -2057,9 +2057,9 @@ export default function Products() {
           {selectedVariantForConfig && (
             <BlockStack gap="300">
               <InlineStack gap="300" blockAlign="center">
-                {selectedVariantForConfig.featuredImage?.url && (
+                {selectedVariantForConfig.image?.url && (
                   <Thumbnail
-                    source={selectedVariantForConfig.featuredImage.url}
+                    source={selectedVariantForConfig.image.url}
                     alt={selectedVariantForConfig.title}
                     size="medium"
                   />
