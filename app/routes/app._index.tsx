@@ -859,7 +859,13 @@ function OnboardingWizard({
               onNext={() => goToStep(5)}
               onBack={() => goToStep(3)}
               onSkip={() => goToStep(5)}
-              onNavigateToProducts={() => navigate("/app/products")}
+              onNavigateToProducts={async () => {
+                await fetch(window.location.pathname, {
+                  method: "POST",
+                  body: new URLSearchParams({ intent: "updateStep", step: "4" }),
+                });
+                navigate("/app/products");
+              }}
             />
           )}
 
@@ -868,7 +874,13 @@ function OnboardingWizard({
               onNext={() => goToStep(6)}
               onBack={() => goToStep(4)}
               onSkip={() => goToStep(6)}
-              onNavigateToWidgets={() => navigate("/app/widgets")}
+              onNavigateToWidgets={async () => {
+                await fetch(window.location.pathname, {
+                  method: "POST",
+                  body: new URLSearchParams({ intent: "updateStep", step: "5" }),
+                });
+                navigate("/app/widgets");
+              }}
             />
           )}
 
@@ -1007,13 +1019,13 @@ function DashboardView({
           </Card>
         </InlineGrid>
 
-        {/* Actions */}
+        {/* Configured Products */}
         <Card>
-          <BlockStack gap="300">
-            <Text as="h2" variant="headingMd">
-              Actions
-            </Text>
-            <InlineStack gap="300">
+          <BlockStack gap="400">
+            <InlineStack align="space-between" blockAlign="center">
+              <Text as="h2" variant="headingMd">
+                Configured Products
+              </Text>
               <Button
                 icon={PlusCircleIcon}
                 onClick={() => navigate("/app/products")}
@@ -1021,15 +1033,6 @@ function DashboardView({
                 Add Product
               </Button>
             </InlineStack>
-          </BlockStack>
-        </Card>
-
-        {/* Configured Products */}
-        <Card>
-          <BlockStack gap="400">
-            <Text as="h2" variant="headingMd">
-              Configured Products
-            </Text>
 
             {productsWithStats.length === 0 ? (
               <EmptyState
@@ -1124,18 +1127,15 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const fetcher = useFetcher();
 
-  const shouldSkipOnboarding =
-    onboarding.completed || configuredProductsCount > 0;
-
   const [onboardingCompleted, setOnboardingCompleted] =
-    useState(shouldSkipOnboarding);
+    useState(onboarding.completed);
 
-  // Update if loader data changes (e.g., after navigation back from products page)
+  // Update if loader data changes
   useEffect(() => {
-    if (onboarding.completed || configuredProductsCount > 0) {
+    if (onboarding.completed) {
       setOnboardingCompleted(true);
     }
-  }, [onboarding.completed, configuredProductsCount]);
+  }, [onboarding.completed]);
 
   if (!onboardingCompleted) {
     return (

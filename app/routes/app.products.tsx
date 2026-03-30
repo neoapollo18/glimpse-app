@@ -1157,6 +1157,36 @@ export default function Products() {
           </Card>
         )}
 
+        {/* Actions */}
+        <Card>
+          <BlockStack gap="300">
+            <Text as="h2" variant="headingMd">
+              Actions
+            </Text>
+            <InlineStack gap="300">
+              <Button
+                onClick={async () => {
+                  const selected = await (window as any).shopify.resourcePicker({
+                    type: "product",
+                    multiple: false,
+                  });
+                  if (selected && selected.length > 0) {
+                    const pickedProduct = selected[0];
+                    const match = shopifyProducts.find(
+                      (p: ShopifyProduct) => p.id === pickedProduct.id
+                    );
+                    if (match) {
+                      handleConfigure(match);
+                    }
+                  }
+                }}
+              >
+                Add product
+              </Button>
+            </InlineStack>
+          </BlockStack>
+        </Card>
+
         {/* Configured Products Panel */}
         <Layout>
           <Layout.Section>
