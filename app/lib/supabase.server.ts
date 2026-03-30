@@ -1788,6 +1788,94 @@ export async function saveVariantReferenceImage(variantId: string, referenceImag
   await setVariantReferenceImages(variantId, referenceImageUrl ? [referenceImageUrl] : []);
 }
 
+// ============================================================
+// Onboarding Wizard
+// ============================================================
+
+export interface OnboardingState {
+  step: number;
+  completed: boolean;
+  goals: string[];
+  attribution: string[];
+}
+
+/**
+ * Get the current onboarding state for a shop
+ */
+export async function getOnboardingState(shopDomain: string): Promise<OnboardingState> {
+  const { data, error } = await supabase
+    .from('shops')
+    .select('onboarding_step, onboarding_completed, onboarding_goals, onboarding_attribution')
+    .eq('shop_domain', shopDomain)
+    .single();
+
+  if (error || !data) {
+    return { step: 0, completed: false, goals: [], attribution: [] };
+  }
+
+  return {
+    step: data.onboarding_step ?? 0,
+    completed: data.onboarding_completed ?? false,
+    goals: data.onboarding_goals ?? [],
+    attribution: data.onboarding_attribution ?? [],
+  };
+}
+
+/**
+ * Update the current onboarding step for a shop
+ */
+export async function updateOnboardingStep(shopDomain: string, step: number): Promise<void> {
+  const { error } = await supabase
+    .from('shops')
+    .update({ onboarding_step: step })
+    .eq('shop_domain', shopDomain);
+
+  if (error) {
+    console.error(`Error updating onboarding step for ${shopDomain}:`, error);
+  }
+}
+
+/**
+ * Save onboarding survey responses (goals and/or attribution)
+ */
+export async function saveOnboardingSurvey(
+  shopDomain: string,
+  goals?: string[],
+  attribution?: string[]
+): Promise<void> {
+  const updates: Record<string, unknown> = {};
+  if (goals !== undefined) updates.onboarding_goals = goals;
+  if (attribution !== undefined) updates.onboarding_attribution = attribution;
+
+  if (Object.keys(updates).length === 0) return;
+
+  const { error } = await supabase
+    .from('shops')
+    .update(updates)
+    .eq('shop_domain', shopDomain);
+
+  if (error) {
+    console.error(`Error saving onboarding survey for ${shopDomain}:`, error);
+  }
+}
+
+/**
+ * Mark onboarding as completed
+ */
+export async function completeOnboarding(shopDomain: string): Promise<void> {
+  const { error } = await supabase
+    .from('shops')
+    .update({
+      onboarding_completed: true,
+      onboarding_completed_at: new Date().toISOString(),
+    })
+    .eq('shop_domain', shopDomain);
+
+  if (error) {
+    console.error(`Error completing onboarding for ${shopDomain}:`, error);
+  }
+}
+
 /**
  * Delete a reference image from Supabase Storage given its URL
  */

@@ -1,10 +1,9 @@
-import type { LoaderFunctionArgs } from "@remix-run/node";
+import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { useLoaderData, useNavigate } from "@remix-run/react";
-import { useState, useEffect } from "react";
+import { useLoaderData, useNavigate, useFetcher } from "@remix-run/react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Page,
-  Layout,
   Text,
   Card,
   BlockStack,
@@ -13,15 +12,13 @@ import {
   Icon,
   Badge,
   Button,
-  Divider,
-  Banner,
   ProgressBar,
   IndexTable,
   EmptyState,
+  InlineGrid,
 } from "@shopify/polaris";
 import {
   CheckCircleIcon,
-  ClockIcon,
   ProductIcon,
   ChartVerticalFilledIcon,
   SettingsIcon,
@@ -31,7 +28,19 @@ import {
 } from "@shopify/polaris-icons";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { getConfiguredProducts, getAnalytics } from "../lib/supabase.server";
+import {
+  getConfiguredProducts,
+  getAnalytics,
+  getOnboardingState,
+  updateOnboardingStep,
+  saveOnboardingSurvey,
+  completeOnboarding as completeOnboardingDb,
+} from "../lib/supabase.server";
+import { sendOnboardingCompleteEmail } from "../lib/email.server";
+
+// ============================================================
+// Types
+// ============================================================
 
 interface ConfiguredProduct {
   id: string;
@@ -56,13 +65,22 @@ interface LoaderData {
   activeProducts: number;
   productStats: ProductStat[];
   allStepsComplete: boolean;
+  onboarding: {
+    step: number;
+    completed: boolean;
+    goals: string[];
+    attribution: string[];
+  };
 }
+
+// ============================================================
+// Loader
+// ============================================================
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
   const shopDomain = session.shop;
 
-  // Fetch shop owner's name from Shopify
   let ownerName = "";
   try {
     const response = await admin.graphql(`
@@ -78,17 +96,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("Error fetching shop owner name:", error);
   }
 
-  // Get configured products (full data)
-  const configuredProducts = await getConfiguredProducts(shopDomain);
+  const [configuredProducts, analytics, onboarding] = await Promise.all([
+    getConfiguredProducts(shopDomain),
+    getAnalytics(shopDomain, 365),
+    getOnboardingState(shopDomain),
+  ]);
+
   const configuredProductsCount = configuredProducts.length;
-
-  // Get analytics (all time)
-  const analytics = await getAnalytics(shopDomain, 365);
-
   const activeProducts = analytics?.productBreakdown?.length || 0;
   const productStats = (analytics?.productBreakdown || []) as ProductStat[];
-
-  // All steps complete = has products configured AND widget has been used
   const allStepsComplete = configuredProductsCount > 0 && activeProducts > 0;
 
   return json<LoaderData>({
@@ -99,82 +115,820 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     activeProducts,
     productStats,
     allStepsComplete,
+    onboarding,
   });
 };
 
-export default function Dashboard() {
-  const {
-    shopDomain,
-    ownerName,
-    configuredProducts,
-    configuredProductsCount,
-    activeProducts,
-    productStats,
-    allStepsComplete,
-  } = useLoaderData<typeof loader>();
-  const navigate = useNavigate();
-  
-  // State to track if user has "continued" past setup (persisted in localStorage)
-  const [showDashboardView, setShowDashboardView] = useState(false);
-  const [isLoaded, setIsLoaded] = useState(false);
+// ============================================================
+// Action
+// ============================================================
 
-  // Load persisted state from localStorage on mount
-  useEffect(() => {
-    const saved = localStorage.getItem('gleame_setup_completed');
-    if (saved === 'true') {
-      setShowDashboardView(true);
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const { session } = await authenticate.admin(request);
+  const shopDomain = session.shop;
+  const formData = await request.formData();
+  const intent = formData.get("intent") as string;
+
+  switch (intent) {
+    case "updateStep": {
+      const step = parseInt(formData.get("step") as string, 10);
+      await updateOnboardingStep(shopDomain, step);
+      return json({ ok: true });
     }
-    setIsLoaded(true);
-  }, []);
+    case "saveSurvey": {
+      const goalsRaw = formData.get("goals") as string | null;
+      const attributionRaw = formData.get("attribution") as string | null;
+      const goals = goalsRaw ? JSON.parse(goalsRaw) : undefined;
+      const attribution = attributionRaw ? JSON.parse(attributionRaw) : undefined;
+      await saveOnboardingSurvey(shopDomain, goals, attribution);
+      return json({ ok: true });
+    }
+    case "completeOnboarding": {
+      const goalsRaw = formData.get("goals") as string | null;
+      const attributionRaw = formData.get("attribution") as string | null;
+      const goals = goalsRaw ? JSON.parse(goalsRaw) : [];
+      const attribution = attributionRaw ? JSON.parse(attributionRaw) : [];
+      await completeOnboardingDb(shopDomain);
+      // Fire-and-forget email notification
+      sendOnboardingCompleteEmail(shopDomain, goals, attribution).catch(() => {});
+      return json({ ok: true });
+    }
+    default:
+      return json({ error: "Unknown intent" }, { status: 400 });
+  }
+};
 
-  // Save to localStorage when user continues to dashboard
-  const handleContinueToDashboard = () => {
-    localStorage.setItem('gleame_setup_completed', 'true');
-    setShowDashboardView(true);
+// ============================================================
+// Constants
+// ============================================================
+
+const TOTAL_STEPS = 6;
+
+const GOAL_OPTIONS = [
+  {
+    id: "conversion",
+    label: "Improve conversion rates",
+    description: "Help customers make faster purchasing decisions",
+    emoji: "📈",
+  },
+  {
+    id: "returns",
+    label: "Reduce return rates",
+    description: "Minimize returns due to sizing or fit issues",
+    emoji: "📦",
+  },
+  {
+    id: "other",
+    label: "Other",
+    description: "",
+    emoji: "✨",
+  },
+];
+
+const ATTRIBUTION_OPTIONS = [
+  { id: "shopify_app_store", label: "Shopify App Store", emoji: "🏪" },
+  { id: "google_search", label: "Google Search", emoji: "🔍" },
+  { id: "social_media", label: "Social Media", emoji: "📱" },
+  { id: "tiktok", label: "TikTok", emoji: "📣" },
+  { id: "another_store", label: "Saw it on another store", emoji: "🌐" },
+  { id: "ai_tools", label: "ChatGPT / AI tools", emoji: "🤖" },
+  { id: "word_of_mouth", label: "Word of mouth", emoji: "💬" },
+  { id: "other", label: "Other", emoji: "✨" },
+];
+
+const LOOM_EMBED_URL = "https://www.loom.com/embed/f9049be91b344462980e623eaf232f81";
+
+// ============================================================
+// Selectable Card Component
+// ============================================================
+
+function SelectableCard({
+  selected,
+  onClick,
+  children,
+}: {
+  selected: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        border: selected ? "2px solid #2C6ECB" : "1px solid #E1E3E5",
+        borderRadius: "12px",
+        padding: "16px",
+        cursor: "pointer",
+        background: selected ? "#F2F7FE" : "#FFFFFF",
+        transition: "all 0.15s ease",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ============================================================
+// Step Components
+// ============================================================
+
+function Step1Welcome({ onNext }: { onNext: () => void }) {
+  return (
+    <BlockStack gap="600">
+      <BlockStack gap="200" inlineAlign="center">
+        <Text as="h2" variant="headingLg" alignment="center">
+          What you can do with Gleame
+        </Text>
+        <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
+          Here's a quick overview of how Gleame will help your store
+        </Text>
+      </BlockStack>
+
+      <InlineGrid columns={{ xs: 1, sm: 2 }} gap="400">
+        <div
+          style={{
+            border: "1px solid #E1E3E5",
+            borderRadius: "12px",
+            padding: "24px",
+            background: "#FFFFFF",
+          }}
+        >
+          <BlockStack gap="300">
+            <Text as="span" variant="headingXl">
+              👕
+            </Text>
+            <Text as="h3" variant="headingMd">
+              Show shoppers how they'd look
+            </Text>
+            <Text as="p" variant="bodyMd" tone="subdued">
+              Allow shoppers to upload their photo and see how your products look
+              on them instantly.
+            </Text>
+          </BlockStack>
+        </div>
+
+        <div
+          style={{
+            border: "1px solid #E1E3E5",
+            borderRadius: "12px",
+            padding: "24px",
+            background: "#FFFFFF",
+          }}
+        >
+          <BlockStack gap="300">
+            <Text as="span" variant="headingXl">
+              📊
+            </Text>
+            <Text as="h3" variant="headingMd">
+              Increase Conversion Rate & Reduce Returns
+            </Text>
+            <Text as="p" variant="bodyMd" tone="subdued">
+              Help customers make confident purchasing decisions with AI-powered
+              try-on.
+            </Text>
+          </BlockStack>
+        </div>
+      </InlineGrid>
+
+      <InlineStack align="center">
+        <Button variant="primary" size="large" onClick={onNext}>
+          Get Started
+        </Button>
+      </InlineStack>
+    </BlockStack>
+  );
+}
+
+function Step2Goals({
+  selectedGoals,
+  onGoalsChange,
+  onNext,
+  onBack,
+}: {
+  selectedGoals: string[];
+  onGoalsChange: (goals: string[]) => void;
+  onNext: () => void;
+  onBack: () => void;
+}) {
+  const toggleGoal = (id: string) => {
+    onGoalsChange(
+      selectedGoals.includes(id)
+        ? selectedGoals.filter((g) => g !== id)
+        : [...selectedGoals, id]
+    );
   };
 
-  // Go back to setup guide (without clearing the saved state)
-  const handleViewSetupGuide = () => {
-    setShowDashboardView(false);
+  return (
+    <BlockStack gap="600">
+      <BlockStack gap="200" inlineAlign="center">
+        <Text as="h2" variant="headingLg" alignment="center">
+          What do you want to achieve?
+        </Text>
+        <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
+          Select all that apply
+        </Text>
+      </BlockStack>
+
+      <InlineGrid columns={{ xs: 1, sm: 2 }} gap="400">
+        {GOAL_OPTIONS.map((goal) => (
+          <SelectableCard
+            key={goal.id}
+            selected={selectedGoals.includes(goal.id)}
+            onClick={() => toggleGoal(goal.id)}
+          >
+            <InlineStack gap="300" blockAlign="start">
+              <Text as="span" variant="headingMd">
+                {goal.emoji}
+              </Text>
+              <BlockStack gap="100">
+                <Text as="span" variant="bodyMd" fontWeight="semibold">
+                  {goal.label}
+                </Text>
+                {goal.description && (
+                  <Text as="span" variant="bodySm" tone="subdued">
+                    {goal.description}
+                  </Text>
+                )}
+              </BlockStack>
+            </InlineStack>
+          </SelectableCard>
+        ))}
+      </InlineGrid>
+
+      <InlineStack align="space-between">
+        <Button onClick={onBack}>Back</Button>
+        <Button
+          variant="primary"
+          onClick={onNext}
+          disabled={selectedGoals.length === 0}
+        >
+          Continue
+        </Button>
+      </InlineStack>
+    </BlockStack>
+  );
+}
+
+function Step3Attribution({
+  selectedAttribution,
+  onAttributionChange,
+  onNext,
+  onBack,
+  onSkip,
+}: {
+  selectedAttribution: string[];
+  onAttributionChange: (attr: string[]) => void;
+  onNext: () => void;
+  onBack: () => void;
+  onSkip: () => void;
+}) {
+  const toggleAttribution = (id: string) => {
+    onAttributionChange(
+      selectedAttribution.includes(id)
+        ? selectedAttribution.filter((a) => a !== id)
+        : [...selectedAttribution, id]
+    );
   };
 
-  // Get display name - prefer owner's first name, fallback to store name
-  const ownerFirstName = ownerName ? ownerName.split(' ')[0] : '';
-  const storeName = shopDomain.replace('.myshopify.com', '').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  return (
+    <BlockStack gap="600">
+      <BlockStack gap="200" inlineAlign="center">
+        <Text as="h2" variant="headingLg" alignment="center">
+          How did you hear about us?
+        </Text>
+        <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
+          This helps us understand how merchants discover Gleame
+        </Text>
+      </BlockStack>
+
+      <InlineGrid columns={{ xs: 2, sm: 4 }} gap="300">
+        {ATTRIBUTION_OPTIONS.map((attr) => (
+          <SelectableCard
+            key={attr.id}
+            selected={selectedAttribution.includes(attr.id)}
+            onClick={() => toggleAttribution(attr.id)}
+          >
+            <BlockStack gap="200" inlineAlign="center">
+              <Text as="span" variant="headingLg" alignment="center">
+                {attr.emoji}
+              </Text>
+              <Text
+                as="span"
+                variant="bodySm"
+                fontWeight="medium"
+                alignment="center"
+              >
+                {attr.label}
+              </Text>
+            </BlockStack>
+          </SelectableCard>
+        ))}
+      </InlineGrid>
+
+      <InlineStack align="space-between">
+        <Button onClick={onBack}>Back</Button>
+        <InlineStack gap="200">
+          <Button onClick={onSkip}>Skip</Button>
+          <Button
+            variant="primary"
+            onClick={onNext}
+            disabled={selectedAttribution.length === 0}
+          >
+            Continue
+          </Button>
+        </InlineStack>
+      </InlineStack>
+    </BlockStack>
+  );
+}
+
+function Step4ProductSetup({
+  hasConfiguredProducts,
+  onNext,
+  onBack,
+  onSkip,
+  onNavigateToProducts,
+}: {
+  hasConfiguredProducts: boolean;
+  onNext: () => void;
+  onBack: () => void;
+  onSkip: () => void;
+  onNavigateToProducts: () => void;
+}) {
+  return (
+    <BlockStack gap="600">
+      <BlockStack gap="200" inlineAlign="center">
+        <Text as="h2" variant="headingLg" alignment="center">
+          Set up your first product
+        </Text>
+        <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
+          Train your AI model to show before/afters exactly how you want
+        </Text>
+      </BlockStack>
+
+      <div
+        style={{
+          border: "1px solid #E1E3E5",
+          borderRadius: "12px",
+          padding: "32px",
+          background: "#FFFFFF",
+          textAlign: "center",
+        }}
+      >
+        <BlockStack gap="400" inlineAlign="center">
+          {hasConfiguredProducts ? (
+            <>
+              <div
+                style={{
+                  width: "48px",
+                  height: "48px",
+                  borderRadius: "50%",
+                  background: "#AEE9D1",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  margin: "0 auto",
+                }}
+              >
+                <Icon source={CheckCircleIcon} tone="success" />
+              </div>
+              <Text as="p" variant="headingMd">
+                Product configured!
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                You can add more products anytime from the Products page.
+              </Text>
+            </>
+          ) : (
+            <>
+              <div
+                style={{
+                  width: "48px",
+                  height: "48px",
+                  borderRadius: "50%",
+                  background: "#F4F6F8",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  margin: "0 auto",
+                }}
+              >
+                <Icon source={ProductIcon} />
+              </div>
+              <Text as="p" variant="bodyMd" tone="subdued">
+                Select a product to configure AI transformations
+              </Text>
+              <Button onClick={onNavigateToProducts}>
+                Select Product
+              </Button>
+            </>
+          )}
+        </BlockStack>
+      </div>
+
+      <InlineStack align="space-between">
+        <Button onClick={onBack}>Back</Button>
+        <InlineStack gap="200">
+          {!hasConfiguredProducts && (
+            <Button onClick={onSkip}>Skip</Button>
+          )}
+          <Button
+            variant="primary"
+            onClick={onNext}
+          >
+            Continue
+          </Button>
+        </InlineStack>
+      </InlineStack>
+    </BlockStack>
+  );
+}
+
+function Step5GoLive({
+  onNext,
+  onBack,
+  onSkip,
+  onNavigateToWidgets,
+}: {
+  onNext: () => void;
+  onBack: () => void;
+  onSkip: () => void;
+  onNavigateToWidgets: () => void;
+}) {
+  return (
+    <BlockStack gap="600">
+      <BlockStack gap="200" inlineAlign="center">
+        <Text as="h2" variant="headingLg" alignment="center">
+          Get it live on your storefront
+        </Text>
+        <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
+          Add the Gleame widget to your theme so customers can try on products
+        </Text>
+      </BlockStack>
+
+      <InlineStack align="center">
+        <Button onClick={onNavigateToWidgets}>
+          View Widgets
+        </Button>
+      </InlineStack>
+
+      {/* Video Walkthrough */}
+      <BlockStack gap="300">
+        <Text as="h3" variant="headingMd">
+          Video Walkthrough
+        </Text>
+        <div
+          style={{
+            position: "relative",
+            paddingBottom: "56.25%",
+            height: 0,
+            borderRadius: "12px",
+            overflow: "hidden",
+            border: "1px solid #E1E3E5",
+          }}
+        >
+          <iframe
+            src={LOOM_EMBED_URL}
+            allow="fullscreen"
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "100%",
+            }}
+          />
+        </div>
+      </BlockStack>
+
+      {/* Quick Instructions */}
+      <div
+        style={{
+          border: "1px solid #E1E3E5",
+          borderRadius: "12px",
+          padding: "20px",
+          background: "#FFFFFF",
+        }}
+      >
+        <BlockStack gap="300">
+          <Text as="h3" variant="headingMd">
+            Quick Instructions
+          </Text>
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd">
+              1. Click "Add to Theme" button above
+            </Text>
+            <Text as="p" variant="bodyMd">
+              2. In the theme editor, find the "Gleame Widget" block
+            </Text>
+            <Text as="p" variant="bodyMd">
+              3. Drag it to your desired location on the product page
+            </Text>
+            <Text as="p" variant="bodyMd">
+              4. Click "Save" in the theme editor
+            </Text>
+          </BlockStack>
+        </BlockStack>
+      </div>
+
+      <InlineStack align="space-between">
+        <Button onClick={onBack}>Back</Button>
+        <InlineStack gap="200">
+          <Button onClick={onSkip}>Skip</Button>
+          <Button variant="primary" onClick={onNext}>
+            Continue
+          </Button>
+        </InlineStack>
+      </InlineStack>
+    </BlockStack>
+  );
+}
+
+function Step6Complete({
+  onFinish,
+}: {
+  onFinish: () => void;
+}) {
+  return (
+    <BlockStack gap="600">
+      <BlockStack gap="300" inlineAlign="center">
+        <Text as="span" variant="heading2xl" alignment="center">
+          🎉
+        </Text>
+        <Text as="h2" variant="headingLg" alignment="center">
+          You're all set!
+        </Text>
+        <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
+          Your store is ready for AI-powered virtual try-on. Customers can now
+          see how your products look on them before purchasing.
+        </Text>
+      </BlockStack>
+
+      <div
+        style={{
+          border: "1px solid #E1E3E5",
+          borderRadius: "12px",
+          padding: "24px",
+          background: "#FFFFFF",
+        }}
+      >
+        <BlockStack gap="300">
+          <Text as="h3" variant="headingMd">
+            What's next?
+          </Text>
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd">
+              • Add more products from the Products page
+            </Text>
+            <Text as="p" variant="bodyMd">
+              • Track performance in Analytics
+            </Text>
+            <Text as="p" variant="bodyMd">
+              • Customize widget styles in the Widgets page
+            </Text>
+          </BlockStack>
+        </BlockStack>
+      </div>
+
+      <InlineStack align="center">
+        <Button variant="primary" size="large" onClick={onFinish}>
+          Go to Dashboard
+        </Button>
+      </InlineStack>
+    </BlockStack>
+  );
+}
+
+// ============================================================
+// Onboarding Wizard
+// ============================================================
+
+function OnboardingWizard({
+  initialStep,
+  initialGoals,
+  initialAttribution,
+  hasConfiguredProducts,
+  onComplete,
+  fetcher,
+  navigate,
+}: {
+  initialStep: number;
+  initialGoals: string[];
+  initialAttribution: string[];
+  hasConfiguredProducts: boolean;
+  onComplete: () => void;
+  fetcher: ReturnType<typeof useFetcher>;
+  navigate: ReturnType<typeof useNavigate>;
+}) {
+  const [currentStep, setCurrentStep] = useState(
+    initialStep > 0 ? initialStep : 1
+  );
+  const [selectedGoals, setSelectedGoals] = useState<string[]>(initialGoals);
+  const [selectedAttribution, setSelectedAttribution] =
+    useState<string[]>(initialAttribution);
+
+  const persistStep = useCallback(
+    (step: number) => {
+      fetcher.submit(
+        { intent: "updateStep", step: step.toString() },
+        { method: "post" }
+      );
+    },
+    [fetcher]
+  );
+
+  const goToStep = useCallback(
+    (step: number) => {
+      setCurrentStep(step);
+      persistStep(step);
+    },
+    [persistStep]
+  );
+
+  const handleNextFromGoals = () => {
+    // Save goals when leaving step 2
+    fetcher.submit(
+      { intent: "saveSurvey", goals: JSON.stringify(selectedGoals) },
+      { method: "post" }
+    );
+    goToStep(3);
+  };
+
+  const handleNextFromAttribution = () => {
+    // Save attribution when leaving step 3
+    fetcher.submit(
+      {
+        intent: "saveSurvey",
+        attribution: JSON.stringify(selectedAttribution),
+      },
+      { method: "post" }
+    );
+    goToStep(4);
+  };
+
+  const handleSkipAttribution = () => {
+    goToStep(4);
+  };
+
+  const handleComplete = () => {
+    fetcher.submit(
+      {
+        intent: "completeOnboarding",
+        goals: JSON.stringify(selectedGoals),
+        attribution: JSON.stringify(selectedAttribution),
+      },
+      { method: "post" }
+    );
+    onComplete();
+  };
+
+  const progressPercentage = Math.round((currentStep / TOTAL_STEPS) * 100);
+
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "#F6F6F7",
+        padding: "0",
+      }}
+    >
+      {/* Header with progress */}
+      <div
+        style={{
+          maxWidth: "780px",
+          margin: "0 auto",
+          padding: "32px 20px 0",
+        }}
+      >
+        <InlineStack align="space-between" blockAlign="center">
+          <Text as="h1" variant="headingLg" fontWeight="bold">
+            Welcome to Gleame
+          </Text>
+          <Text as="span" variant="bodySm" tone="subdued">
+            Step {currentStep} of {TOTAL_STEPS}
+          </Text>
+        </InlineStack>
+
+        <div style={{ marginTop: "12px" }}>
+          <ProgressBar
+            progress={progressPercentage}
+            size="small"
+            tone="primary"
+          />
+        </div>
+      </div>
+
+      {/* Step content */}
+      <div
+        style={{
+          maxWidth: "780px",
+          margin: "0 auto",
+          padding: "40px 20px",
+        }}
+      >
+        <div
+          style={{
+            background: "#FFFFFF",
+            borderRadius: "16px",
+            padding: "40px",
+            boxShadow: "0 1px 3px rgba(0, 0, 0, 0.08)",
+          }}
+        >
+          {currentStep === 1 && <Step1Welcome onNext={() => goToStep(2)} />}
+
+          {currentStep === 2 && (
+            <Step2Goals
+              selectedGoals={selectedGoals}
+              onGoalsChange={setSelectedGoals}
+              onNext={handleNextFromGoals}
+              onBack={() => goToStep(1)}
+            />
+          )}
+
+          {currentStep === 3 && (
+            <Step3Attribution
+              selectedAttribution={selectedAttribution}
+              onAttributionChange={setSelectedAttribution}
+              onNext={handleNextFromAttribution}
+              onBack={() => goToStep(2)}
+              onSkip={handleSkipAttribution}
+            />
+          )}
+
+          {currentStep === 4 && (
+            <Step4ProductSetup
+              hasConfiguredProducts={hasConfiguredProducts}
+              onNext={() => goToStep(5)}
+              onBack={() => goToStep(3)}
+              onSkip={() => goToStep(5)}
+              onNavigateToProducts={() => navigate("/app/products")}
+            />
+          )}
+
+          {currentStep === 5 && (
+            <Step5GoLive
+              onNext={() => goToStep(6)}
+              onBack={() => goToStep(4)}
+              onSkip={() => goToStep(6)}
+              onNavigateToWidgets={() => navigate("/app/widgets")}
+            />
+          )}
+
+          {currentStep === 6 && <Step6Complete onFinish={handleComplete} />}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div
+        style={{
+          textAlign: "center",
+          padding: "0 20px 40px",
+        }}
+      >
+        <Text as="p" variant="bodySm" tone="subdued">
+          Need help?{" "}
+          <a
+            href="https://gleame.ai"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: "#2C6ECB", textDecoration: "none" }}
+          >
+            Contact our support team
+          </a>
+        </Text>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Dashboard View (existing dashboard)
+// ============================================================
+
+function DashboardView({
+  ownerName,
+  shopDomain,
+  configuredProducts,
+  configuredProductsCount,
+  activeProducts,
+  productStats,
+  navigate,
+}: {
+  ownerName: string;
+  shopDomain: string;
+  configuredProducts: ConfiguredProduct[];
+  configuredProductsCount: number;
+  activeProducts: number;
+  productStats: ProductStat[];
+  navigate: ReturnType<typeof useNavigate>;
+}) {
+  const ownerFirstName = ownerName ? ownerName.split(" ")[0] : "";
+  const storeName = shopDomain
+    .replace(".myshopify.com", "")
+    .replace(/-/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
   const displayName = ownerFirstName || storeName;
 
-  // Setup steps
-  const setupSteps = [
-    {
-      id: "configure",
-      title: "Set up your first product",
-      description: "Add AI transformation prompts to your products",
-      completed: configuredProductsCount > 0,
-      action: () => navigate("/app/products"),
-      actionLabel: "Add Product",
-    },
-    {
-      id: "widget",
-      title: "Add a widget to your theme",
-      description: "Place a Gleame block on your product pages",
-      completed: activeProducts > 0,
-      action: () => navigate("/app/widgets"),
-      actionLabel: "Add Widget",
-    },
-    {
-      id: "style",
-      title: "Configure your widget style",
-      description: "Customize colors, text, and layout for your widgets",
-      completed: activeProducts > 0,
-      action: () => navigate("/app/widgets"),
-      actionLabel: "Customize Widget",
-    },
-  ];
-
-  const completedSteps = setupSteps.filter((s) => s.completed).length;
-  const progressPercentage = Math.round((completedSteps / setupSteps.length) * 100);
-
-  // Merge configured products with their stats
   const productsWithStats = configuredProducts.map((product) => {
     const stats = productStats.find((s) => s.product_id === product.id);
     return {
@@ -184,328 +938,297 @@ export default function Dashboard() {
     };
   });
 
-  // Determine if we should show setup or dashboard view
-  // Wait for localStorage to load before deciding
-  const shouldShowSetup = !isLoaded || !allStepsComplete || !showDashboardView;
-
   return (
     <Page>
       <TitleBar title="Dashboard" />
       <BlockStack gap="600">
-        {/* Greeting Header */}
+        {/* Greeting */}
         <InlineStack align="space-between" blockAlign="center">
           <BlockStack gap="100">
             <Text as="h1" variant="headingXl">
-              {allStepsComplete && showDashboardView 
-                ? `Welcome back, ${displayName}!` 
-                : allStepsComplete 
-                  ? `You're all set, ${displayName}! 🎉`
-                  : `Welcome to Gleame, ${displayName}! 👋`
-              }
+              Welcome back, {displayName}!
             </Text>
             <Text as="p" variant="bodyMd" tone="subdued">
-              {allStepsComplete && showDashboardView
-                ? "Here's how your AI transformations are performing."
-                : allStepsComplete
-                  ? "Your setup is complete. Ready to view your dashboard?"
-                  : "Let's get your store set up with AI-powered product transformations."
-              }
+              Here's how your AI transformations are performing.
             </Text>
           </BlockStack>
-          {allStepsComplete && showDashboardView && (
-            <Button onClick={() => navigate("/app/analytics")}>
-              View Reports
-            </Button>
-          )}
+          <Button onClick={() => navigate("/app/analytics")}>
+            View Reports
+          </Button>
         </InlineStack>
 
-        {/* Welcome Banner for new users */}
-        {!allStepsComplete && (
-          <Banner title="Getting Started" tone="info">
-            <p>
-              Let customers see how they'll look with your products using AI-powered
-              transformations. Follow the setup guide below to get started.
-            </p>
-          </Banner>
-        )}
+        {/* Stats Cards */}
+        <InlineGrid columns={{ xs: 1, sm: 3 }} gap="400">
+          <Card>
+            <BlockStack gap="200">
+              <InlineStack align="space-between" blockAlign="center">
+                <Text as="span" variant="bodyMd" tone="subdued">
+                  Products Configured
+                </Text>
+                <Box
+                  background="bg-fill-info"
+                  padding="100"
+                  borderRadius="full"
+                >
+                  <Icon source={ProductIcon} tone="info" />
+                </Box>
+              </InlineStack>
+              <Text as="p" variant="headingXl" fontWeight="bold">
+                {configuredProductsCount}
+              </Text>
+              <Button
+                variant="plain"
+                onClick={() => navigate("/app/products")}
+              >
+                Manage products →
+              </Button>
+            </BlockStack>
+          </Card>
 
-        {/* Stats Cards Row - Only show when not in setup guide */}
-        {!shouldShowSetup && (
-          <Layout>
-            <Layout.Section variant="oneThird">
-              <Card>
-                <BlockStack gap="200">
-                  <InlineStack align="space-between" blockAlign="center">
-                    <Text as="span" variant="bodyMd" tone="subdued">
-                      Products Configured
-                    </Text>
-                    <Box background="bg-fill-info" padding="100" borderRadius="full">
-                      <Icon source={ProductIcon} tone="info" />
-                    </Box>
-                  </InlineStack>
-                  <Text as="p" variant="headingXl" fontWeight="bold">
-                    {configuredProductsCount}
-                  </Text>
-                  <Button variant="plain" onClick={() => navigate("/app/products")}>
-                    Manage products →
-                  </Button>
-                </BlockStack>
-              </Card>
-            </Layout.Section>
+          <Card>
+            <BlockStack gap="200">
+              <InlineStack align="space-between" blockAlign="center">
+                <Text as="span" variant="bodyMd" tone="subdued">
+                  Widgets Active
+                </Text>
+                <Box
+                  background="bg-fill-success"
+                  padding="100"
+                  borderRadius="full"
+                >
+                  <Icon source={ViewIcon} tone="success" />
+                </Box>
+              </InlineStack>
+              <Text as="p" variant="headingXl" fontWeight="bold">
+                {activeProducts}
+              </Text>
+              <Text as="span" variant="bodySm" tone="subdued">
+                products with transformations
+              </Text>
+            </BlockStack>
+          </Card>
 
-            <Layout.Section variant="oneThird">
-              <Card>
-                <BlockStack gap="200">
-                  <InlineStack align="space-between" blockAlign="center">
-                    <Text as="span" variant="bodyMd" tone="subdued">
-                      Widgets Active
-                    </Text>
-                    <Box background="bg-fill-success" padding="100" borderRadius="full">
-                      <Icon source={ViewIcon} tone="success" />
-                    </Box>
-                  </InlineStack>
-                  <Text as="p" variant="headingXl" fontWeight="bold">
-                    {activeProducts}
-                  </Text>
-                  <Text as="span" variant="bodySm" tone="subdued">
-                    products with transformations
-                  </Text>
-                </BlockStack>
-              </Card>
-            </Layout.Section>
+          <Card>
+            <BlockStack gap="200">
+              <InlineStack align="space-between" blockAlign="center">
+                <Text as="span" variant="bodyMd" tone="subdued">
+                  Status
+                </Text>
+                <Box
+                  background="bg-fill-success"
+                  padding="100"
+                  borderRadius="full"
+                >
+                  <Icon source={CheckCircleIcon} tone="success" />
+                </Box>
+              </InlineStack>
+              <Text as="p" variant="headingXl" fontWeight="bold">
+                Active
+              </Text>
+              <Text as="span" variant="bodySm" tone="subdued">
+                App connected and running
+              </Text>
+            </BlockStack>
+          </Card>
+        </InlineGrid>
 
-            <Layout.Section variant="oneThird">
-              <Card>
-                <BlockStack gap="200">
-                  <InlineStack align="space-between" blockAlign="center">
-                    <Text as="span" variant="bodyMd" tone="subdued">
-                      Status
-                    </Text>
-                    <Box background="bg-fill-success" padding="100" borderRadius="full">
-                      <Icon source={CheckCircleIcon} tone="success" />
-                    </Box>
-                  </InlineStack>
-                  <Text as="p" variant="headingXl" fontWeight="bold">
-                    Active
-                  </Text>
-                  <Text as="span" variant="bodySm" tone="subdued">
-                    App connected and running
-                  </Text>
-                </BlockStack>
-              </Card>
-            </Layout.Section>
-          </Layout>
-        )}
+        {/* Products Table + Sidebar */}
+        <InlineGrid columns={{ xs: 1, md: "2fr 1fr" }} gap="400">
+          <Card>
+            <BlockStack gap="400">
+              <InlineStack align="space-between" blockAlign="center">
+                <Text as="h2" variant="headingMd">
+                  Configured Products
+                </Text>
+                <Button
+                  icon={PlusCircleIcon}
+                  onClick={() => navigate("/app/products")}
+                >
+                  Add Product
+                </Button>
+              </InlineStack>
 
-        {/* SETUP VIEW - Show when setup incomplete or user hasn't continued */}
-        {shouldShowSetup && (
-          <Layout>
-            <Layout.Section>
-              <Card>
-                <BlockStack gap="400">
-                  <InlineStack align="space-between" blockAlign="center">
-                    <BlockStack gap="100">
-                      <Text as="h2" variant="headingMd">
-                        Setup Guide
-                      </Text>
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        {completedSteps} of {setupSteps.length} steps completed
-                      </Text>
-                    </BlockStack>
-                    {progressPercentage === 100 && (
-                      <Badge tone="success">Complete</Badge>
-                    )}
-                  </InlineStack>
-
-                  <ProgressBar progress={progressPercentage} size="small" tone="primary" />
-
-                  <Divider />
-
-                  <BlockStack gap="400">
-                    {setupSteps.map((step) => (
-                      <InlineStack
-                        key={step.id}
-                        gap="400"
-                        align="space-between"
-                        blockAlign="start"
-                        wrap={false}
-                      >
-                        <InlineStack gap="300" blockAlign="start">
-                          <Box paddingBlockStart="050">
-                            <Icon
-                              source={step.completed ? CheckCircleIcon : ClockIcon}
-                              tone={step.completed ? "success" : "subdued"}
-                            />
-                          </Box>
-                          <BlockStack gap="100">
-                            <InlineStack gap="200" blockAlign="center">
-                              <Text
-                                as="span"
-                                variant="bodyMd"
-                                fontWeight="semibold"
-                                tone={step.completed ? "subdued" : undefined}
-                              >
-                                {step.title}
-                              </Text>
-                              {step.completed && (
-                                <Badge tone="success" size="small">Done</Badge>
-                              )}
-                            </InlineStack>
-                            <Text as="p" variant="bodySm" tone="subdued">
-                              {step.description}
-                            </Text>
-                          </BlockStack>
-                        </InlineStack>
-                        {!step.completed && step.action && (
-                          <Button size="slim" onClick={step.action}>
-                            {step.actionLabel}
-                          </Button>
-                        )}
-                      </InlineStack>
-                    ))}
-                  </BlockStack>
-
-                  {/* Continue Button when complete */}
-                  {allStepsComplete && (
-                    <>
-                      <Divider />
-                      <InlineStack align="end">
-                        <Button variant="primary" onClick={handleContinueToDashboard}>
-                          Continue to Dashboard →
+              {productsWithStats.length === 0 ? (
+                <EmptyState
+                  heading="No products configured yet"
+                  action={{
+                    content: "Add Product",
+                    onAction: () => navigate("/app/products"),
+                  }}
+                  image=""
+                >
+                  <p>Configure your first product to start using Gleame.</p>
+                </EmptyState>
+              ) : (
+                <IndexTable
+                  resourceName={{
+                    singular: "product",
+                    plural: "products",
+                  }}
+                  itemCount={productsWithStats.length}
+                  headings={[
+                    { title: "Product" },
+                    { title: "Status" },
+                    { title: "Transformations" },
+                    { title: "Actions" },
+                  ]}
+                  selectable={false}
+                >
+                  {productsWithStats.map((product, index) => (
+                    <IndexTable.Row
+                      id={product.id}
+                      key={product.id}
+                      position={index}
+                    >
+                      <IndexTable.Cell>
+                        <Text
+                          as="span"
+                          variant="bodyMd"
+                          fontWeight="semibold"
+                        >
+                          {product.product_name.length > 43
+                            ? `${product.product_name.substring(0, 43)}...`
+                            : product.product_name}
+                        </Text>
+                      </IndexTable.Cell>
+                      <IndexTable.Cell>
+                        <Badge
+                          tone={product.isActive ? "success" : "attention"}
+                        >
+                          {product.isActive ? "Active" : "Pending"}
+                        </Badge>
+                      </IndexTable.Cell>
+                      <IndexTable.Cell>
+                        <Text as="span" variant="bodyMd">
+                          {product.transformations}
+                        </Text>
+                      </IndexTable.Cell>
+                      <IndexTable.Cell>
+                        <Button
+                          icon={EditIcon}
+                          size="slim"
+                          variant="plain"
+                          onClick={() => navigate("/app/products")}
+                        >
+                          Edit
                         </Button>
-                      </InlineStack>
-                    </>
-                  )}
-                </BlockStack>
-              </Card>
-            </Layout.Section>
-          </Layout>
-        )}
+                      </IndexTable.Cell>
+                    </IndexTable.Row>
+                  ))}
+                </IndexTable>
+              )}
+            </BlockStack>
+          </Card>
 
-        {/* DASHBOARD VIEW - Show when setup complete and user has continued */}
-        {!shouldShowSetup && (
-          <Layout>
-            <Layout.Section>
-              <Card>
-                <BlockStack gap="400">
-                  <InlineStack align="space-between" blockAlign="center">
-                    <Text as="h2" variant="headingMd">
-                      Configured Products
-                    </Text>
-                    <Button icon={PlusCircleIcon} onClick={() => navigate("/app/products")}>
-                      Add Product
-                    </Button>
-                  </InlineStack>
-
-                  {productsWithStats.length === 0 ? (
-                    <EmptyState
-                      heading="No products configured yet"
-                      action={{ content: "Add Product", onAction: () => navigate("/app/products") }}
-                      image=""
-                    >
-                      <p>Configure your first product to start using Gleame.</p>
-                    </EmptyState>
-                  ) : (
-                    <IndexTable
-                      resourceName={{ singular: "product", plural: "products" }}
-                      itemCount={productsWithStats.length}
-                      headings={[
-                        { title: "Product" },
-                        { title: "Status" },
-                        { title: "Transformations" },
-                        { title: "Actions" },
-                      ]}
-                      selectable={false}
-                    >
-                      {productsWithStats.map((product, index) => (
-                        <IndexTable.Row id={product.id} key={product.id} position={index}>
-                          <IndexTable.Cell>
-                            <Text as="span" variant="bodyMd" fontWeight="semibold">
-                              {product.product_name.length > 43 
-                                ? `${product.product_name.substring(0, 43)}...` 
-                                : product.product_name}
-                            </Text>
-                          </IndexTable.Cell>
-                          <IndexTable.Cell>
-                            <Badge tone={product.isActive ? "success" : "attention"}>
-                              {product.isActive ? "Active" : "Pending"}
-                            </Badge>
-                          </IndexTable.Cell>
-                          <IndexTable.Cell>
-                            <Text as="span" variant="bodyMd">
-                              {product.transformations}
-                            </Text>
-                          </IndexTable.Cell>
-                          <IndexTable.Cell>
-                            <Button
-                              icon={EditIcon}
-                              size="slim"
-                              variant="plain"
-                              onClick={() => navigate("/app/products")}
-                            >
-                              Edit
-                            </Button>
-                          </IndexTable.Cell>
-                        </IndexTable.Row>
-                      ))}
-                    </IndexTable>
-                  )}
-                </BlockStack>
-              </Card>
-            </Layout.Section>
-
-            {/* Sidebar for Dashboard View */}
-            <Layout.Section variant="oneThird">
-              <BlockStack gap="400">
-                <Card>
-                  <BlockStack gap="300">
-                    <Text as="h2" variant="headingMd">Quick Actions</Text>
-                    <BlockStack gap="200">
-                      <Button icon={PlusCircleIcon} onClick={() => navigate("/app/products")} fullWidth textAlign="start">
-                        Add Product
-                      </Button>
-                      <Button icon={ChartVerticalFilledIcon} onClick={() => navigate("/app/analytics")} fullWidth textAlign="start">
-                        View Analytics
-                      </Button>
-                      <Button icon={SettingsIcon} onClick={() => navigate("/app/settings")} fullWidth textAlign="start">
-                        Settings
-                      </Button>
-                    </BlockStack>
-                  </BlockStack>
-                </Card>
-
-                <Card>
-                  <BlockStack gap="200">
-                    <Text as="h2" variant="headingMd">Need Help?</Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Check out our website or contact Intercom support for assistance.
-                    </Text>
-                    <Button 
-                    variant="plain"
-                    onClick={() => window.open('https://gleame.ai', '_blank')}
+          {/* Sidebar */}
+          <BlockStack gap="400">
+            <Card>
+              <BlockStack gap="300">
+                <Text as="h2" variant="headingMd">
+                  Quick Actions
+                </Text>
+                <BlockStack gap="200">
+                  <Button
+                    icon={PlusCircleIcon}
+                    onClick={() => navigate("/app/products")}
+                    fullWidth
+                    textAlign="start"
                   >
-                    View Website →
+                    Add Product
                   </Button>
-                  </BlockStack>
-                </Card>
-
-                {/* Show setup button to go back */}
-                <Card>
-                  <BlockStack gap="200">
-                    <Text as="h2" variant="headingMd">Setup Guide</Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Completed all steps
-                    </Text>
-                    <Button variant="plain" onClick={handleViewSetupGuide}>
-                      View Setup Guide →
-                    </Button>
-                  </BlockStack>
-                </Card>
+                  <Button
+                    icon={ChartVerticalFilledIcon}
+                    onClick={() => navigate("/app/analytics")}
+                    fullWidth
+                    textAlign="start"
+                  >
+                    View Analytics
+                  </Button>
+                  <Button
+                    icon={SettingsIcon}
+                    onClick={() => navigate("/app/settings")}
+                    fullWidth
+                    textAlign="start"
+                  >
+                    Settings
+                  </Button>
+                </BlockStack>
               </BlockStack>
-            </Layout.Section>
-          </Layout>
-        )}
+            </Card>
+
+            <Card>
+              <BlockStack gap="200">
+                <Text as="h2" variant="headingMd">
+                  Need Help?
+                </Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Check out our website or contact Intercom support for
+                  assistance.
+                </Text>
+                <Button
+                  variant="plain"
+                  onClick={() => window.open("https://gleame.ai", "_blank")}
+                >
+                  View Website →
+                </Button>
+              </BlockStack>
+            </Card>
+          </BlockStack>
+        </InlineGrid>
       </BlockStack>
     </Page>
+  );
+}
+
+// ============================================================
+// Main Component
+// ============================================================
+
+export default function Dashboard() {
+  const {
+    shopDomain,
+    ownerName,
+    configuredProducts,
+    configuredProductsCount,
+    activeProducts,
+    productStats,
+    onboarding,
+  } = useLoaderData<typeof loader>();
+  const navigate = useNavigate();
+  const fetcher = useFetcher();
+
+  const [onboardingCompleted, setOnboardingCompleted] = useState(
+    onboarding.completed
+  );
+
+  // Update if loader data changes (e.g., after navigation back)
+  useEffect(() => {
+    setOnboardingCompleted(onboarding.completed);
+  }, [onboarding.completed]);
+
+  if (!onboardingCompleted) {
+    return (
+      <OnboardingWizard
+        initialStep={onboarding.step}
+        initialGoals={onboarding.goals}
+        initialAttribution={onboarding.attribution}
+        hasConfiguredProducts={configuredProductsCount > 0}
+        onComplete={() => setOnboardingCompleted(true)}
+        fetcher={fetcher}
+        navigate={navigate}
+      />
+    );
+  }
+
+  return (
+    <DashboardView
+      ownerName={ownerName}
+      shopDomain={shopDomain}
+      configuredProducts={configuredProducts}
+      configuredProductsCount={configuredProductsCount}
+      activeProducts={activeProducts}
+      productStats={productStats}
+      navigate={navigate}
+    />
   );
 }
