@@ -1007,13 +1007,13 @@ function DashboardView({
           </Card>
         </InlineGrid>
 
-        {/* Products Table */}
+        {/* Actions */}
         <Card>
-          <BlockStack gap="400">
-            <InlineStack align="space-between" blockAlign="center">
-              <Text as="h2" variant="headingMd">
-                Configured Products
-              </Text>
+          <BlockStack gap="300">
+            <Text as="h2" variant="headingMd">
+              Actions
+            </Text>
+            <InlineStack gap="300">
               <Button
                 icon={PlusCircleIcon}
                 onClick={() => navigate("/app/products")}
@@ -1021,6 +1021,15 @@ function DashboardView({
                 Add Product
               </Button>
             </InlineStack>
+          </BlockStack>
+        </Card>
+
+        {/* Configured Products */}
+        <Card>
+          <BlockStack gap="400">
+            <Text as="h2" variant="headingMd">
+              Configured Products
+            </Text>
 
             {productsWithStats.length === 0 ? (
               <EmptyState
