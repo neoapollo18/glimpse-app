@@ -338,21 +338,19 @@ function Step2Goals({
             selected={selectedGoals.includes(goal.id)}
             onClick={() => toggleGoal(goal.id)}
           >
-            <InlineStack gap="300" blockAlign="start">
-              <Text as="span" variant="headingMd">
+            <BlockStack gap="200">
+              <Text as="span" variant="headingLg">
                 {goal.emoji}
               </Text>
-              <BlockStack gap="100">
-                <Text as="span" variant="bodyMd" fontWeight="semibold">
-                  {goal.label}
+              <Text as="span" variant="bodyMd" fontWeight="semibold">
+                {goal.label}
+              </Text>
+              {goal.description && (
+                <Text as="span" variant="bodySm" tone="subdued">
+                  {goal.description}
                 </Text>
-                {goal.description && (
-                  <Text as="span" variant="bodySm" tone="subdued">
-                    {goal.description}
-                  </Text>
-                )}
-              </BlockStack>
-            </InlineStack>
+              )}
+            </BlockStack>
           </SelectableCard>
         ))}
       </InlineGrid>
@@ -746,10 +744,13 @@ function OnboardingWizard({
   const persistToServer = useCallback(
     async (data: Record<string, string>) => {
       try {
-        await fetch(window.location.pathname, {
+        const res = await fetch(window.location.href, {
           method: "POST",
           body: new URLSearchParams(data),
         });
+        if (!res.ok) {
+          console.error("Onboarding persist failed:", res.status, await res.text().catch(() => ""));
+        }
       } catch (e) {
         console.error("Failed to persist onboarding state:", e);
       }
@@ -879,10 +880,7 @@ function OnboardingWizard({
               onBack={() => goToStep(3)}
               onSkip={() => goToStep(5)}
               onNavigateToProducts={async () => {
-                await fetch(window.location.pathname, {
-                  method: "POST",
-                  body: new URLSearchParams({ intent: "updateStep", step: "4" }),
-                });
+                await persistToServer({ intent: "updateStep", step: "4" });
                 navigate("/app/products");
               }}
             />
@@ -894,10 +892,7 @@ function OnboardingWizard({
               onBack={() => goToStep(4)}
               onSkip={() => goToStep(6)}
               onNavigateToWidgets={async () => {
-                await fetch(window.location.pathname, {
-                  method: "POST",
-                  body: new URLSearchParams({ intent: "updateStep", step: "5" }),
-                });
+                await persistToServer({ intent: "updateStep", step: "5" });
                 navigate("/app/widgets");
               }}
             />
@@ -1153,10 +1148,13 @@ export default function Dashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Skip onboarding if: explicitly completed, OR has products but never
-  // started onboarding (pre-existing merchant)
+  // Skip onboarding if:
+  // 1. Explicitly completed, OR
+  // 2. 2+ products configured (merchant is clearly set up), OR
+  // 3. Has products but never started onboarding (pre-existing merchant)
   const shouldSkipOnboarding =
     onboarding.completed ||
+    configuredProductsCount >= 2 ||
     (configuredProductsCount > 0 && onboarding.step === 0);
 
   const [onboardingCompleted, setOnboardingCompleted] =
@@ -1164,7 +1162,11 @@ export default function Dashboard() {
 
   // Update if loader data changes
   useEffect(() => {
-    if (onboarding.completed || (configuredProductsCount > 0 && onboarding.step === 0)) {
+    if (
+      onboarding.completed ||
+      configuredProductsCount >= 2 ||
+      (configuredProductsCount > 0 && onboarding.step === 0)
+    ) {
       setOnboardingCompleted(true);
     }
   }, [onboarding.completed, configuredProductsCount, onboarding.step]);
