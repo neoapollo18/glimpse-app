@@ -768,15 +768,15 @@ function OnboardingWizard({
     goToStep(4);
   };
 
-  const handleComplete = () => {
-    fetcher.submit(
-      {
+  const handleComplete = async () => {
+    await fetch(window.location.pathname, {
+      method: "POST",
+      body: new URLSearchParams({
         intent: "completeOnboarding",
         goals: JSON.stringify(selectedGoals),
         attribution: JSON.stringify(selectedAttribution),
-      },
-      { method: "post" }
-    );
+      }),
+    });
     onComplete();
   };
 
@@ -1127,15 +1127,21 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const fetcher = useFetcher();
 
+  // Skip onboarding if: explicitly completed, OR has products but never
+  // started onboarding (pre-existing merchant)
+  const shouldSkipOnboarding =
+    onboarding.completed ||
+    (configuredProductsCount > 0 && onboarding.step === 0);
+
   const [onboardingCompleted, setOnboardingCompleted] =
-    useState(onboarding.completed);
+    useState(shouldSkipOnboarding);
 
   // Update if loader data changes
   useEffect(() => {
-    if (onboarding.completed) {
+    if (onboarding.completed || (configuredProductsCount > 0 && onboarding.step === 0)) {
       setOnboardingCompleted(true);
     }
-  }, [onboarding.completed]);
+  }, [onboarding.completed, configuredProductsCount, onboarding.step]);
 
   if (!onboardingCompleted) {
     return (

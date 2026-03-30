@@ -1169,13 +1169,16 @@ export default function Products() {
                   const selected = await (window as any).shopify.resourcePicker({
                     type: "product",
                     multiple: false,
+                    filter: {
+                      hidden: false,
+                    },
                   });
                   if (selected && selected.length > 0) {
                     const pickedProduct = selected[0];
                     const match = shopifyProducts.find(
                       (p: ShopifyProduct) => p.id === pickedProduct.id
                     );
-                    if (match) {
+                    if (match && !isConfigured(match.id)) {
                       handleConfigure(match);
                     }
                   }
