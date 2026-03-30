@@ -102,12 +102,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       const json: any = await response.json();
 
       if (json.errors) {
-        console.error('Shopify GraphQL errors:', JSON.stringify(json.errors));
+        console.error('Shopify GraphQL errors for', session.shop, ':', JSON.stringify(json.errors));
         break;
       }
 
       if (!json.data?.products?.edges) {
-        console.error('Unexpected Shopify GraphQL response:', JSON.stringify(json));
+        console.error('Unexpected Shopify GraphQL response for', session.shop, ':', JSON.stringify(json).slice(0, 500));
         break;
       }
 
@@ -118,10 +118,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       cursor = json.data.products.pageInfo.endCursor;
     }
   } catch (error) {
-    console.error('Error fetching Shopify products:', error);
+    console.error('Error fetching Shopify products for', session.shop, ':', error);
   }
 
   const shopifyProducts = allProducts;
+  const shopifyProductsError = allProducts.length === 0
+    ? "Could not load products from Shopify. Try refreshing the page."
+    : null;
+
+  if (allProducts.length === 0) {
+    console.error(`WARNING: Shopify returned 0 products for shop ${session.shop}`);
+  }
 
   // Fetch configured products from Supabase (with category data joined)
   const configuredProducts = session.shop
@@ -131,7 +138,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Fetch all categories for the funnel UI dropdown
   const categories = await getCategories();
 
-  return { shopifyProducts, configuredProducts, categories, shop: session.shop };
+  return { shopifyProducts, configuredProducts, categories, shop: session.shop, shopifyProductsError };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -483,7 +490,7 @@ interface ClassificationSuggestion {
 }
 
 export default function Products() {
-  const { shopifyProducts, configuredProducts, categories } = useLoaderData<typeof loader>();
+  const { shopifyProducts, configuredProducts, categories, shopifyProductsError } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const submit = useSubmit();
   const [selectedProduct, setSelectedProduct] = useState<ShopifyProduct | null>(null);
@@ -1155,6 +1162,12 @@ export default function Products() {
               </InlineStack>
             </div>
           </Card>
+        )}
+
+        {shopifyProductsError && (
+          <Banner title="Product loading issue" tone="warning">
+            <p>{shopifyProductsError}</p>
+          </Banner>
         )}
 
         {/* Actions */}
