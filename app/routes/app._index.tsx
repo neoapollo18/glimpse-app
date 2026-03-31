@@ -1,7 +1,7 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { useLoaderData, useNavigate, useRevalidator } from "@remix-run/react";
-import { useState, useEffect, useCallback } from "react";
+import { useLoaderData, useNavigate, useRevalidator, useFetcher } from "@remix-run/react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Page,
   Text,
@@ -724,6 +724,40 @@ function OnboardingWizard({
   const [selectedGoals, setSelectedGoals] = useState<string[]>(initialGoals);
   const [selectedAttribution, setSelectedAttribution] =
     useState<string[]>(initialAttribution);
+  const fetcher = useFetcher();
+  const currentStepRef = useRef(currentStep);
+
+  // Keep ref in sync so the unmount effect always has the latest step
+  useEffect(() => {
+    currentStepRef.current = currentStep;
+  }, [currentStep]);
+
+  // Persist step 1 on first mount if DB has step 0 (step 1 is never persisted otherwise)
+  useEffect(() => {
+    if (initialStep === 0) {
+      fetcher.submit(
+        { intent: "updateStep", step: "1" },
+        { method: "POST" }
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // On unmount (user navigating away), persist the current step
+  useEffect(() => {
+    return () => {
+      const step = currentStepRef.current;
+      if (step > 0) {
+        // Use sendBeacon for reliable delivery during navigation
+        const data = new URLSearchParams({
+          intent: "updateStep",
+          step: step.toString(),
+        });
+        navigator.sendBeacon(window.location.href, data);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Sync state if loader data changes (e.g., revalidation after navigation)
   useEffect(() => {
@@ -740,22 +774,12 @@ function OnboardingWizard({
     setSelectedAttribution(initialAttribution);
   }, [initialAttribution]);
 
-  // Helper: POST to the action and wait for it to complete
+  // Helper: persist via fetcher (properly authenticated in embedded apps)
   const persistToServer = useCallback(
-    async (data: Record<string, string>) => {
-      try {
-        const res = await fetch(window.location.href, {
-          method: "POST",
-          body: new URLSearchParams(data),
-        });
-        if (!res.ok) {
-          console.error("Onboarding persist failed:", res.status, await res.text().catch(() => ""));
-        }
-      } catch (e) {
-        console.error("Failed to persist onboarding state:", e);
-      }
+    (data: Record<string, string>) => {
+      fetcher.submit(data, { method: "POST" });
     },
-    []
+    [fetcher]
   );
 
   const goToStep = useCallback(
@@ -791,8 +815,8 @@ function OnboardingWizard({
     goToStep(4);
   };
 
-  const handleComplete = async () => {
-    await persistToServer({
+  const handleComplete = () => {
+    persistToServer({
       intent: "completeOnboarding",
       goals: JSON.stringify(selectedGoals),
       attribution: JSON.stringify(selectedAttribution),
@@ -879,8 +903,8 @@ function OnboardingWizard({
               onNext={() => goToStep(5)}
               onBack={() => goToStep(3)}
               onSkip={() => goToStep(5)}
-              onNavigateToProducts={async () => {
-                await persistToServer({ intent: "updateStep", step: "4" });
+              onNavigateToProducts={() => {
+                persistToServer({ intent: "updateStep", step: "4" });
                 navigate("/app/products");
               }}
             />
@@ -891,8 +915,8 @@ function OnboardingWizard({
               onNext={() => goToStep(6)}
               onBack={() => goToStep(4)}
               onSkip={() => goToStep(6)}
-              onNavigateToWidgets={async () => {
-                await persistToServer({ intent: "updateStep", step: "5" });
+              onNavigateToWidgets={() => {
+                persistToServer({ intent: "updateStep", step: "5" });
                 navigate("/app/widgets");
               }}
             />

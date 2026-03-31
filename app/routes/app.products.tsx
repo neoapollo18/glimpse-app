@@ -47,6 +47,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const allProducts: any[] = [];
   let hasNextPage = true;
   let cursor: string | null = null;
+  let fetchError = false;
 
   try {
     while (hasNextPage) {
@@ -103,11 +104,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
       if (json.errors) {
         console.error('Shopify GraphQL errors for', session.shop, ':', JSON.stringify(json.errors));
+        fetchError = true;
         break;
       }
 
       if (!json.data?.products?.edges) {
         console.error('Unexpected Shopify GraphQL response for', session.shop, ':', JSON.stringify(json).slice(0, 500));
+        fetchError = true;
         break;
       }
 
@@ -119,16 +122,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   } catch (error) {
     console.error('Error fetching Shopify products for', session.shop, ':', error);
+    fetchError = true;
   }
 
   const shopifyProducts = allProducts;
-  const shopifyProductsError = allProducts.length === 0
+  const shopifyProductsError = fetchError
     ? "Could not load products from Shopify. Try refreshing the page."
     : null;
-
-  if (allProducts.length === 0) {
-    console.error(`WARNING: Shopify returned 0 products for shop ${session.shop}`);
-  }
 
   // Fetch configured products from Supabase (with category data joined)
   const configuredProducts = session.shop
