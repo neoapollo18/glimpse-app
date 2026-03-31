@@ -1,7 +1,7 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { useLoaderData, useNavigate, useRevalidator, useFetcher } from "@remix-run/react";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Page,
   Text,
@@ -725,37 +725,24 @@ function OnboardingWizard({
   const [selectedAttribution, setSelectedAttribution] =
     useState<string[]>(initialAttribution);
   const fetcher = useFetcher();
-  const currentStepRef = useRef(currentStep);
+  const [pendingNav, setPendingNav] = useState<string | null>(null);
 
-  // Keep ref in sync so the unmount effect always has the latest step
+  // Navigate only after the fetcher finishes persisting the step
   useEffect(() => {
-    currentStepRef.current = currentStep;
-  }, [currentStep]);
+    if (pendingNav && fetcher.state === "idle") {
+      navigate(pendingNav);
+      setPendingNav(null);
+    }
+  }, [fetcher.state, pendingNav, navigate]);
 
   // Persist step 1 on first mount if DB has step 0 (step 1 is never persisted otherwise)
   useEffect(() => {
     if (initialStep === 0) {
       fetcher.submit(
         { intent: "updateStep", step: "1" },
-        { method: "POST" }
+        { method: "POST", action: "/app?index" }
       );
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // On unmount (user navigating away), persist the current step
-  useEffect(() => {
-    return () => {
-      const step = currentStepRef.current;
-      if (step > 0) {
-        // Use sendBeacon for reliable delivery during navigation
-        const data = new URLSearchParams({
-          intent: "updateStep",
-          step: step.toString(),
-        });
-        navigator.sendBeacon(window.location.href, data);
-      }
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -774,10 +761,10 @@ function OnboardingWizard({
     setSelectedAttribution(initialAttribution);
   }, [initialAttribution]);
 
-  // Helper: persist via fetcher (properly authenticated in embedded apps)
+  // Helper: persist via fetcher with explicit action targeting the index route
   const persistToServer = useCallback(
     (data: Record<string, string>) => {
-      fetcher.submit(data, { method: "POST" });
+      fetcher.submit(data, { method: "POST", action: "/app?index" });
     },
     [fetcher]
   );
@@ -905,7 +892,7 @@ function OnboardingWizard({
               onSkip={() => goToStep(5)}
               onNavigateToProducts={() => {
                 persistToServer({ intent: "updateStep", step: "4" });
-                navigate("/app/products");
+                setPendingNav("/app/products");
               }}
             />
           )}
@@ -917,7 +904,7 @@ function OnboardingWizard({
               onSkip={() => goToStep(6)}
               onNavigateToWidgets={() => {
                 persistToServer({ intent: "updateStep", step: "5" });
-                navigate("/app/widgets");
+                setPendingNav("/app/widgets");
               }}
             />
           )}
