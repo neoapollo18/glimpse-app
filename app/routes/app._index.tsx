@@ -1,7 +1,7 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { useLoaderData, useNavigate, useRevalidator, useFetcher } from "@remix-run/react";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Page,
   Text,
@@ -100,6 +100,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     getOnboardingState(shopDomain),
   ]);
 
+  console.log(`[Onboarding Loader] shop=${shopDomain}, step=${onboarding.step}, completed=${onboarding.completed}`);
+
   const configuredProductsCount = configuredProducts.length;
   const activeProducts = analytics?.productBreakdown?.length || 0;
   const productStats = (analytics?.productBreakdown || []) as ProductStat[];
@@ -132,10 +134,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const goalsRaw = formData.get("goals") as string | null;
   const attributionRaw = formData.get("attribution") as string | null;
 
+  console.log(`[Onboarding Action] intent=${intent}, step=${stepRaw}, shop=${shopDomain}`);
+
   switch (intent) {
     case "updateStep": {
       const step = parseInt(stepRaw!, 10);
+      console.log(`[Onboarding Action] Saving step ${step} for ${shopDomain}`);
       await updateOnboardingStep(shopDomain, step);
+      console.log(`[Onboarding Action] Step ${step} saved successfully`);
       return json({ ok: true });
     }
     case "saveSurveyAndStep": {
@@ -726,13 +732,21 @@ function OnboardingWizard({
     useState<string[]>(initialAttribution);
   const fetcher = useFetcher();
   const [pendingNav, setPendingNav] = useState<string | null>(null);
+  const prevFetcherState = useRef(fetcher.state);
 
-  // Navigate only after the fetcher finishes persisting the step
+  // Navigate only after the fetcher transitions from non-idle back to idle
+  // (i.e., after the save actually completes). This prevents navigating
+  // before the submission has started processing.
   useEffect(() => {
-    if (pendingNav && fetcher.state === "idle") {
+    if (
+      pendingNav &&
+      prevFetcherState.current !== "idle" &&
+      fetcher.state === "idle"
+    ) {
       navigate(pendingNav);
       setPendingNav(null);
     }
+    prevFetcherState.current = fetcher.state;
   }, [fetcher.state, pendingNav, navigate]);
 
   // Persist step 1 on first mount if DB has step 0 (step 1 is never persisted otherwise)
@@ -746,24 +760,10 @@ function OnboardingWizard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sync state if loader data changes (e.g., revalidation after navigation)
-  useEffect(() => {
-    if (initialStep > 0) {
-      setCurrentStep(initialStep);
-    }
-  }, [initialStep]);
-
-  useEffect(() => {
-    setSelectedGoals(initialGoals);
-  }, [initialGoals]);
-
-  useEffect(() => {
-    setSelectedAttribution(initialAttribution);
-  }, [initialAttribution]);
-
   // Helper: persist via fetcher with explicit action targeting the index route
   const persistToServer = useCallback(
     (data: Record<string, string>) => {
+      console.log("[Onboarding] persistToServer called with:", data);
       fetcher.submit(data, { method: "POST", action: "/app?index" });
     },
     [fetcher]
