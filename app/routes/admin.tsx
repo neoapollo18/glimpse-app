@@ -1,6 +1,6 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { useLoaderData, useSubmit, useFetcher } from "@remix-run/react";
+import { useLoaderData, useFetcher } from "@remix-run/react";
 import { useState, useEffect } from "react";
 import {
   AppProvider,
@@ -614,7 +614,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function FoundersAdmin() {
   const { shops, stats, error } = useLoaderData<typeof loader>();
-  const submit = useSubmit();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedShop, setExpandedShop] = useState<string | null>(null);
@@ -629,6 +628,7 @@ export default function FoundersAdmin() {
   const [testImageUrl, setTestImageUrl] = useState("");
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testLoading, setTestLoading] = useState(false);
+  const updateFetcher = useFetcher<any>();
   const refFetcher = useFetcher<any>();
   const [refImageUrls, setRefImageUrls] = useState<Record<string, string[]>>({});
   const [variantRefImageUrls, setVariantRefImageUrls] = useState<Record<string, string[]>>({});
@@ -699,7 +699,7 @@ export default function FoundersAdmin() {
     formData.append("action", "update-variant-prompt");
     formData.append("variantId", variantId);
     formData.append("prompt", editVariantPromptValue);
-    submit(formData, { method: "POST" });
+    updateFetcher.submit(formData, { method: "POST" });
     setEditingVariant(null);
     setEditVariantPromptValue("");
   };
@@ -709,7 +709,7 @@ export default function FoundersAdmin() {
     formData.append("action", "update-prompt");
     formData.append("productId", productId);
     formData.append("prompt", editPromptValue);
-    submit(formData, { method: "POST" });
+    updateFetcher.submit(formData, { method: "POST" });
     setEditingProduct(null);
     setEditPromptValue("");
   };
@@ -725,7 +725,7 @@ export default function FoundersAdmin() {
     formData.append("action", "update-ai-model");
     formData.append("productId", productId);
     formData.append("aiModel", model);
-    submit(formData, { method: "POST" });
+    updateFetcher.submit(formData, { method: "POST" });
   };
 
   const getRefImageUrls = (product: Product) => {
