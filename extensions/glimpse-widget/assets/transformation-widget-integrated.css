@@ -270,8 +270,11 @@
 
 .comparison-side {
   flex: 1;
-  border-radius: 8px;
+  min-width: 0;
+  border-radius: var(--image-border-radius);
+  border: var(--image-border);
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 .comparison-img {
@@ -279,9 +282,6 @@
   height: 220px;
   object-fit: cover;
   display: block;
-  border-radius: var(--image-border-radius);
-  border: var(--image-border);
-  box-sizing: border-box;
   image-orientation: from-image;
 }
 
