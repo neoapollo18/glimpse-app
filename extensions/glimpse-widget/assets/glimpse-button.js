@@ -24,6 +24,7 @@ console.log('Gleame Button Widget v3.0 loaded');
         loadingMessageIndex: 0,
         viewTracked: false,
         widget: null,
+        variantsPromise: null,
         carouselSlides: null,
         currentSlide: 0,
       });
@@ -573,7 +574,9 @@ console.log('Gleame Button Widget v3.0 loaded');
       return;
     }
 
-    const variants = await fetchConfiguredVariants(instance.shopDomain, instance.productId);
+    const variants = instance.variantsPromise
+      ? await instance.variantsPromise
+      : await fetchConfiguredVariants(instance.shopDomain, instance.productId);
 
     if (variants.length === 0) {
       transformImage(instanceId, file);
@@ -913,7 +916,12 @@ console.log('Gleame Button Widget v3.0 loaded');
       instance.viewTracked = true;
       trackEvent(instanceId, 'widget_view');
     }
-    
+
+    // Prefetch configured variants so upload has zero delay
+    if (instance.shopDomain && instance.productId) {
+      instance.variantsPromise = fetchConfiguredVariants(instance.shopDomain, instance.productId);
+    }
+
     // Move modals to body for proper full-screen overlay
     const resultsModal = getElement(instanceId, 'resultsModal');
     const errorModal = getElement(instanceId, 'errorModal');
