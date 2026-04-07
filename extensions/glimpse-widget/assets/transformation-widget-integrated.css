@@ -34,7 +34,6 @@
   margin-right: 0;
   box-shadow: var(--widget-shadow);
   border: var(--widget-border);
-  max-width: 480px;
   width: 100%;
   font-family: var(--body-font-family);
   font-weight: var(--body-font-weight);
