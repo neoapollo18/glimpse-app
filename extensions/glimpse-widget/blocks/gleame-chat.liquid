@@ -1,0 +1,16 @@
+<!-- Gleame AI Chat Assistant — App Embed Block -->
+<div id="gleame-chat-root"
+     data-shop-domain="{{ shop.permanent_domain }}"
+     style="display:none">
+</div>
+
+{{ 'gleame-chat.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'gleame-chat.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "Gleame AI Assistant",
+  "target": "body",
+  "settings": []
+}
+{% endschema %}

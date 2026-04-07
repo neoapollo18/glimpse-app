@@ -1,0 +1,492 @@
+/* ============================================================
+   GLEAME AI CHAT ASSISTANT (.gleame-chat-*)
+   Floating chat bubble + panel on every storefront page
+   ============================================================ */
+
+/* Reset for chat elements */
+#gleame-chat-root,
+#gleame-chat-root * {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* ---- Bubble ---- */
+.gleame-chat-bubble {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--gleame-chat-bubble-color, #1f2937);
+  border: none;
+  cursor: pointer;
+  z-index: 999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  overflow: hidden;
+}
+
+.gleame-chat-bubble:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
+}
+
+.gleame-chat-bubble-avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.gleame-chat-bubble-icon {
+  width: 28px;
+  height: 28px;
+  color: #ffffff;
+}
+
+/* Close X when chat is open */
+.gleame-chat-bubble-close {
+  width: 24px;
+  height: 24px;
+  color: #ffffff;
+}
+
+/* ---- Greeting notification ---- */
+.gleame-chat-greeting {
+  position: fixed;
+  bottom: 90px;
+  right: 20px;
+  max-width: 280px;
+  background: #ffffff;
+  border-radius: 18px 18px 4px 18px;
+  padding: 14px 18px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+  z-index: 999998;
+  opacity: 0;
+  transform: translateY(10px) scale(0.95);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  cursor: pointer;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.gleame-chat-greeting.gleame-chat-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.gleame-chat-greeting-text {
+  font-size: 14px;
+  line-height: 1.45;
+  color: #1f2937;
+}
+
+.gleame-chat-greeting-close {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #6b7280;
+  transition: background 0.15s;
+}
+
+.gleame-chat-greeting-close:hover {
+  background: #e5e7eb;
+}
+
+/* ---- Chat Panel ---- */
+.gleame-chat-panel {
+  position: fixed;
+  bottom: 90px;
+  right: 20px;
+  width: 380px;
+  max-height: 560px;
+  background: #ffffff;
+  border-radius: 20px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.15);
+  z-index: 999999;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(16px) scale(0.96);
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.gleame-chat-panel.gleame-chat-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+/* Header */
+.gleame-chat-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  background: var(--gleame-chat-accent-color, #8b5cf6);
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.gleame-chat-header-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.gleame-chat-header-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.gleame-chat-header-info {
+  flex: 1;
+}
+
+.gleame-chat-header-name {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.gleame-chat-header-status {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.gleame-chat-header-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+
+.gleame-chat-header-close:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Messages area */
+.gleame-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 200px;
+  max-height: 380px;
+  scrollbar-width: thin;
+}
+
+/* Message bubbles */
+.gleame-chat-msg {
+  max-width: 85%;
+  animation: gleame-chat-msg-in 0.25s ease;
+}
+
+@keyframes gleame-chat-msg-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.gleame-chat-msg-bot {
+  align-self: flex-start;
+}
+
+.gleame-chat-msg-user {
+  align-self: flex-end;
+}
+
+.gleame-chat-msg-bubble {
+  padding: 12px 16px;
+  border-radius: 18px;
+  font-size: 14px;
+  line-height: 1.45;
+  word-wrap: break-word;
+}
+
+.gleame-chat-msg-bot .gleame-chat-msg-bubble {
+  background: #f3f4f6;
+  color: #1f2937;
+  border-bottom-left-radius: 6px;
+}
+
+.gleame-chat-msg-user .gleame-chat-msg-bubble {
+  background: var(--gleame-chat-accent-color, #8b5cf6);
+  color: #ffffff;
+  border-bottom-right-radius: 6px;
+}
+
+/* Button group (flow options, preference options) */
+.gleame-chat-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.gleame-chat-btn {
+  display: block;
+  width: 100%;
+  padding: 12px 16px;
+  border: 1.5px solid var(--gleame-chat-accent-color, #8b5cf6);
+  border-radius: 12px;
+  background: #ffffff;
+  color: var(--gleame-chat-accent-color, #8b5cf6);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.gleame-chat-btn:hover {
+  background: var(--gleame-chat-accent-color, #8b5cf6);
+  color: #ffffff;
+}
+
+/* Typing indicator */
+.gleame-chat-typing {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 18px;
+  background: #f3f4f6;
+  border-radius: 18px;
+  border-bottom-left-radius: 6px;
+  align-self: flex-start;
+}
+
+.gleame-chat-typing-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #9ca3af;
+  animation: gleame-chat-bounce 1.2s infinite;
+}
+
+.gleame-chat-typing-dot:nth-child(2) { animation-delay: 0.15s; }
+.gleame-chat-typing-dot:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes gleame-chat-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-6px); opacity: 1; }
+}
+
+/* Upload area */
+.gleame-chat-upload {
+  margin-top: 8px;
+}
+
+.gleame-chat-upload-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 14px;
+  border: 2px dashed #d1d5db;
+  border-radius: 12px;
+  background: #fafafa;
+  color: #6b7280;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.gleame-chat-upload-btn:hover {
+  border-color: var(--gleame-chat-accent-color, #8b5cf6);
+  background: #f5f3ff;
+  color: var(--gleame-chat-accent-color, #8b5cf6);
+}
+
+/* User uploaded image preview */
+.gleame-chat-msg-image {
+  max-width: 100%;
+  border-radius: 12px;
+  display: block;
+}
+
+/* Product cards */
+.gleame-chat-product-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.gleame-chat-product-image {
+  width: 100%;
+  aspect-ratio: 3/4;
+  object-fit: cover;
+  display: block;
+}
+
+.gleame-chat-product-info {
+  padding: 12px 14px;
+}
+
+.gleame-chat-product-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 4px;
+  line-height: 1.3;
+}
+
+.gleame-chat-product-price {
+  font-size: 13px;
+  color: #6b7280;
+  margin-bottom: 10px;
+}
+
+.gleame-chat-product-shop-btn {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  background: var(--gleame-chat-accent-color, #8b5cf6);
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+  transition: opacity 0.15s;
+}
+
+.gleame-chat-product-shop-btn:hover {
+  opacity: 0.9;
+}
+
+/* Input area */
+.gleame-chat-input-area {
+  padding: 12px 16px;
+  border-top: 1px solid #f3f4f6;
+  flex-shrink: 0;
+}
+
+.gleame-chat-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gleame-chat-input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 20px;
+  font-size: 14px;
+  outline: none;
+  background: #f9fafb;
+  transition: border-color 0.15s;
+}
+
+.gleame-chat-input:focus {
+  border-color: var(--gleame-chat-accent-color, #8b5cf6);
+}
+
+.gleame-chat-send-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--gleame-chat-accent-color, #8b5cf6);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  flex-shrink: 0;
+  transition: opacity 0.15s;
+}
+
+.gleame-chat-send-btn:hover {
+  opacity: 0.85;
+}
+
+/* Powered by */
+.gleame-chat-powered {
+  text-align: center;
+  padding: 8px;
+  font-size: 11px;
+  color: rgba(107, 114, 128, 0.6);
+}
+
+.gleame-chat-powered strong {
+  font-weight: 600;
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ---- Mobile ---- */
+@media (max-width: 480px) {
+  .gleame-chat-panel {
+    bottom: 0;
+    right: 0;
+    left: 0;
+    width: 100%;
+    max-height: 100dvh;
+    height: 100dvh;
+    border-radius: 0;
+  }
+
+  .gleame-chat-panel.gleame-chat-visible {
+    transform: translateY(0) scale(1);
+  }
+
+  .gleame-chat-messages {
+    max-height: none;
+    flex: 1;
+  }
+
+  .gleame-chat-greeting {
+    right: 16px;
+    left: 80px;
+    max-width: none;
+  }
+}
+
+/* ---- Hidden utility ---- */
+.gleame-chat-hidden {
+  display: none !important;
+}

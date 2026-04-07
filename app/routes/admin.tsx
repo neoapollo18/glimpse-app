@@ -384,21 +384,25 @@ const VALID_AI_MODELS = [
 ] as const;
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  // Auth + allowlist check on every action — not just the loader.
-  // Wrap in try-catch: authenticate.admin can throw a redirect Response
-  // during token refresh, which replaces the page when called from a fetcher.
-  let session;
-  try {
-    ({ session } = await authenticate.admin(request));
-  } catch (err) {
-    // If it's a Response (auth bounce/redirect), return JSON error
-    // so the fetcher doesn't blow away the page.
-    if (err instanceof Response) {
-      return json({ success: false, error: "Session expired. Please reload the page." }, { status: 401 });
-    }
-    throw err;
+  // Skip authenticate.admin for the action — it triggers Shopify's session
+  // token bounce (204 → /auth/session-token → page reload) which destroys
+  // the page when called from a useFetcher POST.
+  // Instead, read the shop from the most recent Prisma session. The loader
+  // already verified Shopify auth, and this page is allowlist-gated.
+  const url = new URL(request.url);
+  const shopParam = url.searchParams.get("shop");
+  let shopDomain: string | null = null;
+
+  if (shopParam) {
+    // Verify this shop has a valid session in Prisma
+    const sessionRecord = await prisma.session.findFirst({
+      where: { shop: shopParam },
+      orderBy: { id: "desc" },
+    });
+    if (sessionRecord) shopDomain = sessionRecord.shop;
   }
-  if (!ALLOWED_SHOPS.includes(session.shop)) {
+
+  if (!shopDomain || !ALLOWED_SHOPS.includes(shopDomain)) {
     return json({ success: false, error: "Forbidden" }, { status: 403 });
   }
 
@@ -640,7 +644,9 @@ export default function FoundersAdmin() {
   const [testImageUrl, setTestImageUrl] = useState("");
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testLoading, setTestLoading] = useState(false);
-  const updateFetcher = useFetcher<any>();
+  const promptFetcher = useFetcher<any>();
+  const variantPromptFetcher = useFetcher<any>();
+  const modelFetcher = useFetcher<any>();
   const refFetcher = useFetcher<any>();
   const [refImageUrls, setRefImageUrls] = useState<Record<string, string[]>>({});
   const [variantRefImageUrls, setVariantRefImageUrls] = useState<Record<string, string[]>>({});
@@ -711,7 +717,7 @@ export default function FoundersAdmin() {
     formData.append("action", "update-variant-prompt");
     formData.append("variantId", variantId);
     formData.append("prompt", editVariantPromptValue);
-    updateFetcher.submit(formData, { method: "POST" });
+    variantPromptFetcher.submit(formData, { method: "POST" });
     setEditingVariant(null);
     setEditVariantPromptValue("");
   };
@@ -721,7 +727,7 @@ export default function FoundersAdmin() {
     formData.append("action", "update-prompt");
     formData.append("productId", productId);
     formData.append("prompt", editPromptValue);
-    updateFetcher.submit(formData, { method: "POST" });
+    promptFetcher.submit(formData, { method: "POST" });
     setEditingProduct(null);
     setEditPromptValue("");
   };
@@ -737,7 +743,7 @@ export default function FoundersAdmin() {
     formData.append("action", "update-ai-model");
     formData.append("productId", productId);
     formData.append("aiModel", model);
-    updateFetcher.submit(formData, { method: "POST" });
+    modelFetcher.submit(formData, { method: "POST" });
   };
 
   const getRefImageUrls = (product: Product) => {

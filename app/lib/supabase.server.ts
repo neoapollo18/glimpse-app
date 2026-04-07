@@ -1911,6 +1911,120 @@ export async function completeOnboarding(shopDomain: string): Promise<void> {
   }
 }
 
+// ============================================================
+// Chat Assistant Config
+// ============================================================
+
+export interface ChatAssistantConfig {
+  enabled: boolean;
+  assistant_name: string;
+  avatar_url: string | null;
+  bubble_color: string;
+  accent_color: string;
+  greeting_message: string;
+  greeting_delay_seconds: number;
+  recommend_button_text: string;
+  preference_question: string;
+  preference_options: string[];
+  num_recommendations: number;
+  product_scope: string;
+  selected_product_ids: string[];
+}
+
+const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
+  enabled: false,
+  assistant_name: 'Laura',
+  avatar_url: null,
+  bubble_color: '#1f2937',
+  accent_color: '#8b5cf6',
+  greeting_message: "Hey I'm Laura, your shopping assistant ✨",
+  greeting_delay_seconds: 2,
+  recommend_button_text: 'Find my perfect shade',
+  preference_question: 'What kind of look are you going for?',
+  preference_options: ['Natural', 'Bold', 'Glossy', 'Surprise me'],
+  num_recommendations: 3,
+  product_scope: 'all_configured',
+  selected_product_ids: [],
+};
+
+export async function getChatAssistantConfig(shopDomain: string): Promise<ChatAssistantConfig> {
+  const { data, error } = await supabase
+    .from('chat_assistant_config')
+    .select('*')
+    .eq('shop_domain', shopDomain)
+    .single();
+
+  if (error || !data) {
+    return { ...CHAT_ASSISTANT_DEFAULTS };
+  }
+
+  return {
+    enabled: data.enabled ?? CHAT_ASSISTANT_DEFAULTS.enabled,
+    assistant_name: data.assistant_name ?? CHAT_ASSISTANT_DEFAULTS.assistant_name,
+    avatar_url: data.avatar_url ?? CHAT_ASSISTANT_DEFAULTS.avatar_url,
+    bubble_color: data.bubble_color ?? CHAT_ASSISTANT_DEFAULTS.bubble_color,
+    accent_color: data.accent_color ?? CHAT_ASSISTANT_DEFAULTS.accent_color,
+    greeting_message: data.greeting_message ?? CHAT_ASSISTANT_DEFAULTS.greeting_message,
+    greeting_delay_seconds: data.greeting_delay_seconds ?? CHAT_ASSISTANT_DEFAULTS.greeting_delay_seconds,
+    recommend_button_text: data.recommend_button_text ?? CHAT_ASSISTANT_DEFAULTS.recommend_button_text,
+    preference_question: data.preference_question ?? CHAT_ASSISTANT_DEFAULTS.preference_question,
+    preference_options: data.preference_options ?? CHAT_ASSISTANT_DEFAULTS.preference_options,
+    num_recommendations: data.num_recommendations ?? CHAT_ASSISTANT_DEFAULTS.num_recommendations,
+    product_scope: data.product_scope ?? CHAT_ASSISTANT_DEFAULTS.product_scope,
+    selected_product_ids: data.selected_product_ids ?? CHAT_ASSISTANT_DEFAULTS.selected_product_ids,
+  };
+}
+
+export async function saveChatAssistantConfig(
+  shopDomain: string,
+  config: Partial<ChatAssistantConfig>
+): Promise<void> {
+  const { error } = await supabase
+    .from('chat_assistant_config')
+    .upsert(
+      {
+        shop_domain: shopDomain,
+        ...config,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'shop_domain' }
+    );
+
+  if (error) {
+    console.error(`Error saving chat assistant config for ${shopDomain}:`, error);
+  }
+}
+
+export async function getAllChatAssistantConfigs(): Promise<
+  Array<{ shop_domain: string } & ChatAssistantConfig>
+> {
+  const { data, error } = await supabase
+    .from('chat_assistant_config')
+    .select('*')
+    .order('shop_domain');
+
+  if (error || !data) {
+    return [];
+  }
+
+  return data.map((row) => ({
+    shop_domain: row.shop_domain,
+    enabled: row.enabled ?? false,
+    assistant_name: row.assistant_name ?? CHAT_ASSISTANT_DEFAULTS.assistant_name,
+    avatar_url: row.avatar_url,
+    bubble_color: row.bubble_color ?? CHAT_ASSISTANT_DEFAULTS.bubble_color,
+    accent_color: row.accent_color ?? CHAT_ASSISTANT_DEFAULTS.accent_color,
+    greeting_message: row.greeting_message ?? CHAT_ASSISTANT_DEFAULTS.greeting_message,
+    greeting_delay_seconds: row.greeting_delay_seconds ?? CHAT_ASSISTANT_DEFAULTS.greeting_delay_seconds,
+    recommend_button_text: row.recommend_button_text ?? CHAT_ASSISTANT_DEFAULTS.recommend_button_text,
+    preference_question: row.preference_question ?? CHAT_ASSISTANT_DEFAULTS.preference_question,
+    preference_options: row.preference_options ?? CHAT_ASSISTANT_DEFAULTS.preference_options,
+    num_recommendations: row.num_recommendations ?? CHAT_ASSISTANT_DEFAULTS.num_recommendations,
+    product_scope: row.product_scope ?? CHAT_ASSISTANT_DEFAULTS.product_scope,
+    selected_product_ids: row.selected_product_ids ?? [],
+  }));
+}
+
 /**
  * Delete a reference image from Supabase Storage given its URL
  */
