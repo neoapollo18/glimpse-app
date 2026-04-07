@@ -1,6 +1,6 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { useLoaderData, useNavigate, useRevalidator, useFetcher } from "@remix-run/react";
+import { useLoaderData, useNavigate, useFetcher } from "@remix-run/react";
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Page,
@@ -734,6 +734,26 @@ function OnboardingWizard({
   const [pendingNav, setPendingNav] = useState<string | null>(null);
   const prevFetcherState = useRef(fetcher.state);
 
+  // Sync currentStep with server state when initialStep changes
+  // (e.g. after revalidation or returning from another page)
+  useEffect(() => {
+    const serverStep = initialStep > 0 ? initialStep : 1;
+    setCurrentStep((prev) => Math.max(prev, serverStep));
+  }, [initialStep]);
+
+  // Sync survey selections when loader data refreshes
+  const goalsKey = initialGoals.join(",");
+  useEffect(() => {
+    if (initialGoals.length > 0) setSelectedGoals(initialGoals);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [goalsKey]);
+
+  const attributionKey = initialAttribution.join(",");
+  useEffect(() => {
+    if (initialAttribution.length > 0) setSelectedAttribution(initialAttribution);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attributionKey]);
+
   // Navigate only after the fetcher transitions from non-idle back to idle
   // (i.e., after the save actually completes). This prevents navigating
   // before the submission has started processing.
@@ -1150,14 +1170,6 @@ export default function Dashboard() {
     onboarding,
   } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
-  const { revalidate } = useRevalidator();
-
-  // Revalidate loader data on mount — ensures fresh state when returning
-  // from navigation (e.g., /app/products → /app)
-  useEffect(() => {
-    revalidate();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Skip onboarding if:
   // 1. Explicitly completed, OR
