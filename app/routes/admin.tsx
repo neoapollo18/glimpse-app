@@ -384,10 +384,22 @@ const VALID_AI_MODELS = [
 ] as const;
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  // Auth + allowlist check on every action — not just the loader
-  const { session } = await authenticate.admin(request);
+  // Auth + allowlist check on every action — not just the loader.
+  // Wrap in try-catch: authenticate.admin can throw a redirect Response
+  // during token refresh, which replaces the page when called from a fetcher.
+  let session;
+  try {
+    ({ session } = await authenticate.admin(request));
+  } catch (err) {
+    // If it's a Response (auth bounce/redirect), return JSON error
+    // so the fetcher doesn't blow away the page.
+    if (err instanceof Response) {
+      return json({ success: false, error: "Session expired. Please reload the page." }, { status: 401 });
+    }
+    throw err;
+  }
   if (!ALLOWED_SHOPS.includes(session.shop)) {
-    throw new Response("Forbidden", { status: 403 });
+    return json({ success: false, error: "Forbidden" }, { status: 403 });
   }
 
   const formData = await request.formData();
