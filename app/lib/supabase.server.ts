@@ -1822,9 +1822,40 @@ export async function getOnboardingState(shopDomain: string): Promise<Onboarding
 }
 
 /**
+ * Ensure a shop row exists in the database.
+ * New merchants hit onboarding before configuring products, so the row
+ * created by getOrCreateShop (product flow) may not exist yet.
+ */
+async function ensureShopExists(shopDomain: string): Promise<void> {
+  const { data } = await supabase
+    .from('shops')
+    .select('id')
+    .eq('shop_domain', shopDomain)
+    .single();
+
+  if (!data) {
+    const { error } = await supabase
+      .from('shops')
+      .insert([{
+        shop_domain: shopDomain,
+        shopify_id: shopDomain.replace('.myshopify.com', ''),
+        shop_name: shopDomain.replace('.myshopify.com', ''),
+      }]);
+
+    if (error && error.code !== '23505') { // ignore unique violation (race condition)
+      console.error(`Error creating shop row for ${shopDomain}:`, error);
+    }
+  }
+}
+
+/**
  * Update the current onboarding step for a shop
  */
 export async function updateOnboardingStep(shopDomain: string, step: number): Promise<void> {
+  // Ensure the shop row exists — new merchants go through onboarding
+  // before configuring any products, so the row may not exist yet.
+  await ensureShopExists(shopDomain);
+
   const { error } = await supabase
     .from('shops')
     .update({ onboarding_step: step })
@@ -1849,6 +1880,8 @@ export async function saveOnboardingSurvey(
 
   if (Object.keys(updates).length === 0) return;
 
+  await ensureShopExists(shopDomain);
+
   const { error } = await supabase
     .from('shops')
     .update(updates)
@@ -1863,6 +1896,8 @@ export async function saveOnboardingSurvey(
  * Mark onboarding as completed
  */
 export async function completeOnboarding(shopDomain: string): Promise<void> {
+  await ensureShopExists(shopDomain);
+
   const { error } = await supabase
     .from('shops')
     .update({
