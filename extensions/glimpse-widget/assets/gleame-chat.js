@@ -18,6 +18,11 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     else shopDomain = window.location.hostname;
   }
 
+  function isMobile() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+           (navigator.maxTouchPoints && navigator.maxTouchPoints > 2 && /Mobi/.test(navigator.userAgent));
+  }
+
   // ---- State ----
   var config = null;
   var isOpen = false;
@@ -199,15 +204,33 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       '<div class="gleame-chat-header-name">' + escapeHtml(config.assistantName) + '</div>' +
       '<div class="gleame-chat-header-status">Online</div>';
 
+    var expandSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
+    var shrinkSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
+
+    var expandBtn = document.createElement('button');
+    expandBtn.className = 'gleame-chat-header-expand';
+    expandBtn.setAttribute('aria-label', 'Expand');
+    expandBtn.innerHTML = expandSvg;
+    expandBtn.onclick = function() {
+      var isExpanded = panel.classList.toggle('gleame-chat-expanded');
+      expandBtn.innerHTML = isExpanded ? shrinkSvg : expandSvg;
+      expandBtn.setAttribute('aria-label', isExpanded ? 'Shrink' : 'Expand');
+    };
+
     var closeBtn = document.createElement('button');
     closeBtn.className = 'gleame-chat-header-close';
     closeBtn.setAttribute('aria-label', 'Close');
     closeBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
     closeBtn.onclick = closeChat;
 
+    var actions = document.createElement('div');
+    actions.className = 'gleame-chat-header-actions';
+    actions.appendChild(expandBtn);
+    actions.appendChild(closeBtn);
+
     header.appendChild(avatarWrap);
     header.appendChild(info);
-    header.appendChild(closeBtn);
+    header.appendChild(actions);
 
     // Messages
     messagesContainer = document.createElement('div');
@@ -217,15 +240,9 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     inputArea = document.createElement('div');
     inputArea.className = 'gleame-chat-input-area';
 
-    // Powered by
-    var powered = document.createElement('div');
-    powered.className = 'gleame-chat-powered';
-    powered.innerHTML = 'Powered by <strong>Gleame</strong>';
-
     panel.appendChild(header);
     panel.appendChild(messagesContainer);
     panel.appendChild(inputArea);
-    panel.appendChild(powered);
     root.appendChild(panel);
   }
 
@@ -267,7 +284,10 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       currentStep = 'upload';
 
       setTimeout(function() {
-        addBotMessage("Upload a photo and I'll show you what looks best on you!");
+        var photoMsg = isMobile()
+          ? "Upload a photo and I'll show you what looks best on you!"
+          : "Take a photo or upload one and I'll show you what looks best on you!";
+        addBotMessage(photoMsg);
         setTimeout(function() { showUploadButton(); }, 300);
       }, 400);
 
@@ -280,10 +300,14 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     var uploadWrap = document.createElement('div');
     uploadWrap.className = 'gleame-chat-msg gleame-chat-msg-bot';
 
+    var btnGroup = document.createElement('div');
+    btnGroup.className = 'gleame-chat-upload';
+
+    // Upload a Photo button
     var uploadBtn = document.createElement('button');
     uploadBtn.className = 'gleame-chat-upload-btn';
     uploadBtn.innerHTML =
-      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>' +
+      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>' +
       '<span>Upload a Photo</span>';
 
     var fileInput = document.createElement('input');
@@ -306,8 +330,33 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       handlePhotoUpload(file);
     };
 
-    uploadWrap.appendChild(uploadBtn);
-    uploadWrap.appendChild(fileInput);
+    // Take a Photo button
+    var cameraBtn = document.createElement('button');
+    cameraBtn.className = 'gleame-chat-upload-btn';
+    cameraBtn.innerHTML =
+      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>' +
+      '<span>Take a Photo</span>';
+
+    cameraBtn.onclick = function() {
+      if (window.gleameCamera) {
+        window.gleameCamera.open(
+          function(file) { handlePhotoUpload(file); },
+          function() { fileInput.click(); }
+        );
+      } else {
+        // Fallback: open file picker with camera capture hint
+        fileInput.setAttribute('capture', 'user');
+        fileInput.click();
+        fileInput.removeAttribute('capture');
+      }
+    };
+
+    btnGroup.appendChild(uploadBtn);
+    if (!isMobile()) {
+      btnGroup.appendChild(cameraBtn);
+    }
+    btnGroup.appendChild(fileInput);
+    uploadWrap.appendChild(btnGroup);
     messagesContainer.appendChild(uploadWrap);
     scrollToBottom();
   }
@@ -331,10 +380,18 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     };
     reader.readAsDataURL(file);
 
-    // Show typing indicator
+    // Show generating feedback with spinner
     currentStep = 'loading';
     setTimeout(function() {
-      showTyping();
+      var loadingMsg = document.createElement('div');
+      loadingMsg.className = 'gleame-chat-msg gleame-chat-msg-bot';
+      loadingMsg.id = 'gleame-chat-loading-msg';
+      var bubble = document.createElement('div');
+      bubble.className = 'gleame-chat-msg-bubble';
+      bubble.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" style="display:inline-block;vertical-align:middle;margin-right:8px;animation:gleame-chat-spin 0.8s linear infinite"><circle cx="12" cy="12" r="10" stroke="#9ca3af" stroke-width="3" fill="none" stroke-dasharray="31.4 31.4" stroke-linecap="round"/></svg>Generating your personalized look...';
+      loadingMsg.appendChild(bubble);
+      messagesContainer.appendChild(loadingMsg);
+      scrollToBottom();
       sendRecommendation(file);
     }, 600);
   }
@@ -351,7 +408,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     })
     .then(function(res) { return res.json(); })
     .then(function(data) {
-      hideTyping();
+      removeLoadingMsg();
       if (data.recommendations && data.recommendations.length > 0) {
         currentStep = 'results';
         addBotMessage("Here's what I found for you! ✨");
@@ -365,7 +422,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       }
     })
     .catch(function(err) {
-      hideTyping();
+      removeLoadingMsg();
       console.error('Gleame Chat: recommend error', err);
       addBotMessage("Something went wrong. Please try again!");
       currentStep = 'idle';
@@ -413,6 +470,11 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     wrap.appendChild(btnGroup);
     messagesContainer.appendChild(wrap);
     scrollToBottom();
+  }
+
+  function removeLoadingMsg() {
+    var el = document.getElementById('gleame-chat-loading-msg');
+    if (el && el.parentNode) el.parentNode.removeChild(el);
   }
 
   var typingEl = null;

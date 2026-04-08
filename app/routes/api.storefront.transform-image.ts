@@ -18,6 +18,7 @@ import {
   shopHasValidAccess,
 } from "../lib/supabase.server";
 import { checkRateLimit, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
+import { safeFetch } from "../lib/safe-fetch.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   try {
@@ -275,8 +276,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       const referenceImages: ReferenceImagePart[] = [];
       for (const refUrl of referenceUrls) {
         try {
-          const refResponse = await fetch(refUrl);
-          if (refResponse.ok) {
+          const refResponse = await safeFetch(refUrl);
+          if (refResponse && refResponse.ok) {
             const refBuffer = await refResponse.arrayBuffer();
             referenceImages.push({
               data: Buffer.from(refBuffer).toString('base64'),

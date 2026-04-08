@@ -60,13 +60,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           needsBilling = true;
         }
       } catch (mantleError) {
-        // If Mantle fails, let users through (don't block if billing service is down)
-        console.error('Mantle error (allowing access):', mantleError);
+        // Fail closed: if we can't verify subscription, require billing.
+        // This prevents free access during Mantle outages.
+        // Merchants can still reach /app/welcome and /app/billing to fix their state.
+        console.error('Mantle error (requiring billing):', mantleError);
+        needsBilling = true;
       }
     }
   } catch (error) {
-    // If grandfathered check fails, let users through
-    console.error('Grandfathered check error (allowing access):', error);
+    // If grandfathered check fails, fail closed — require billing
+    console.error('Grandfathered check error (requiring billing):', error);
+    needsBilling = true;
   }
 
   // Generate Intercom JWT for Identity Verification

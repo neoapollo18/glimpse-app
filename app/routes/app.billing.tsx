@@ -109,13 +109,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   try {
     if (actionType === "cancel") {
-      await cancelSubscription(customerApiToken);
-      
-      // Update subscription status with correct grace period expiry
-      const currentPeriodEnd = formData.get("currentPeriodEnd") as string | null;
-      const gracePeriodExpiry = currentPeriodEnd ? new Date(currentPeriodEnd) : null;
+      const cancelledSubscription = await cancelSubscription(customerApiToken);
+
+      // Use the actual period end from Mantle's response — never trust client FormData
+      const periodEnd = (cancelledSubscription as { currentPeriodEnd?: string })?.currentPeriodEnd;
+      const gracePeriodExpiry = periodEnd ? new Date(periodEnd) : null;
       await updateShopSubscriptionStatus(shopDomain, 'grace_period', gracePeriodExpiry);
-      
+
       return json({ success: true });
     }
 

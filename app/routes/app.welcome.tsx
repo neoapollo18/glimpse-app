@@ -18,7 +18,7 @@ import { StarFilledIcon, CheckIcon } from "@shopify/polaris-icons";
 import { useState, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import { identifyAndGetCustomer, subscribeCustomer, sendUsageEvent } from "../lib/mantle.server";
-import { updateShopSubscriptionStatus, updateShopMonthlySessions } from "../lib/supabase.server";
+import { updateShopMonthlySessions } from "../lib/supabase.server";
 import { getMonthlySessionsCount } from "../lib/shopify-analytics.server";
 import { SESSION_TIERS } from "../lib/pricing-tiers";
 import { 
@@ -119,9 +119,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     const subscription = await subscribeCustomer(customerApiToken, planId, returnUrl);
 
-    // Pre-set subscription status to 'trial' since all new subscriptions start with trial
-    // This will be confirmed/updated when they return to billing page
-    await updateShopSubscriptionStatus(shopDomain, 'trial', null);
+    // NOTE: Do NOT set subscription status here — merchant hasn't completed Shopify
+    // checkout yet (confirmationUrl). Status will be synced from Mantle when they
+    // return to the app and the billing page loader runs (app.billing.tsx).
+    // Setting 'trial' prematurely would grant access before payment is confirmed.
 
     // Send initial usage event to Mantle so they have baseline session count
     try {

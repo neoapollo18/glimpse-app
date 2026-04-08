@@ -1656,6 +1656,34 @@ export async function uploadReferenceImage(
   return urlData.publicUrl;
 }
 
+export async function uploadAvatarImage(
+  shopDomain: string,
+  fileBuffer: Buffer,
+  fileName: string,
+  contentType: string
+): Promise<string> {
+  const sanitizedShop = shopDomain.replace(/[^a-zA-Z0-9.-]/g, '_');
+  const ext = fileName.split('.').pop() || 'jpg';
+  const storagePath = `${sanitizedShop}/avatar-${Date.now()}.${ext}`;
+
+  const { data, error } = await supabase.storage
+    .from('reference-images')
+    .upload(storagePath, fileBuffer, {
+      contentType,
+      upsert: true,
+    });
+
+  if (error) {
+    throw new Error(`Failed to upload avatar: ${error.message}`);
+  }
+
+  const { data: urlData } = supabase.storage
+    .from('reference-images')
+    .getPublicUrl(data.path);
+
+  return urlData.publicUrl;
+}
+
 // Re-export for server routes that already import from supabase.server
 export { MAX_REFERENCE_IMAGES, parseReferenceImageUrls };
 
