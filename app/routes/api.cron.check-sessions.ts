@@ -92,12 +92,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   console.log('🕐 Starting session usage sync to Mantle...');
 
-  const results = {
+  const results: {
+    checked: number;
+    cached: number;
+    sent: number;
+    skipped: number;
+    errors: number;
+    errorDetails: string[];
+  } = {
     checked: 0,
     cached: 0,  // Sessions saved to Supabase
     sent: 0,    // Sessions sent to Mantle (billing renewal)
     skipped: 0, // No active subscription
     errors: 0,
+    errorDetails: [],
   };
 
   try {
@@ -141,6 +149,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         if (sessionCount === null) {
           console.error(`❌ ${shop}: Failed to fetch sessions`);
           results.errors++;
+          results.errorDetails.push(`${shop}: ShopifyQL query failed`);
           continue;
         }
 
@@ -170,8 +179,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         }
 
       } catch (error) {
-        console.error(`❌ Error processing ${shop}:`, error);
+        const msg = error instanceof Error ? error.message : String(error);
+        console.error(`❌ Error processing ${shop}:`, msg);
         results.errors++;
+        results.errorDetails.push(`${shop}: ${msg}`);
       }
     }
 
