@@ -38,20 +38,21 @@ async function fetchSessionsDirectly(shop: string, accessToken: string): Promise
     });
 
     if (!response.ok) {
-      console.error(`Shopify API error for ${shop}: ${response.status}`);
+      const body = await response.text();
+      console.error(`Shopify API error for ${shop}: ${response.status} - ${body}`);
       return null;
     }
 
     const result = await response.json();
 
     if (result.errors?.length > 0) {
-      console.error(`GraphQL errors for ${shop}:`, result.errors);
+      console.error(`GraphQL errors for ${shop}:`, JSON.stringify(result.errors));
       return null;
     }
 
     const shopifyqlData = result.data?.shopifyqlQuery;
     if (shopifyqlData?.parseErrors?.length > 0) {
-      console.error(`ShopifyQL parse errors for ${shop}:`, shopifyqlData.parseErrors);
+      console.error(`ShopifyQL parse errors for ${shop}:`, JSON.stringify(shopifyqlData.parseErrors));
       return null;
     }
 
@@ -147,9 +148,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         // Fetch current sessions from Shopify
         const sessionCount = await fetchSessionsDirectly(shop, accessToken);
         if (sessionCount === null) {
-          console.error(`❌ ${shop}: Failed to fetch sessions`);
+          // Re-run to capture the specific error for the response
+          let debugInfo = 'unknown';
+          try {
+            const debugRes = await fetch(`https://${shop}/admin/api/2024-10/graphql.json`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': accessToken },
+              body: JSON.stringify({ query: `query { shopifyqlQuery(query: "FROM sessions SHOW sessions SINCE -90d") { tableData { columns { name } rows } parseErrors { message } } }` }),
+            });
+            const debugBody = await debugRes.text();
+            debugInfo = `status=${debugRes.status} body=${debugBody.substring(0, 300)}`;
+          } catch (e) { debugInfo = String(e); }
+
           results.errors++;
-          results.errorDetails.push(`${shop}: ShopifyQL query failed`);
+          results.errorDetails.push(`${shop}: ${debugInfo}`);
           continue;
         }
 
