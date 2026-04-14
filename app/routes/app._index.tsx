@@ -540,13 +540,13 @@ function Step4ChoosePath({
             </Text>
             <BlockStack gap="150">
               <Text as="p" variant="bodySm" tone="subdued">
-                • 30-min guided walkthrough on Zoom
+                • 15-min guided walkthrough on Zoom
               </Text>
               <Text as="p" variant="bodySm" tone="subdued">
                 • We configure your products and widget with you
               </Text>
               <Text as="p" variant="bodySm" tone="subdued">
-                • Tailored tips for your catalog — free, no commitment
+                • Free, low commitment
               </Text>
             </BlockStack>
           </BlockStack>
