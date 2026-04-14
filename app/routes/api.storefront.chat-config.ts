@@ -48,6 +48,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       preferenceOptions: config.preference_options,
       numRecommendations: config.num_recommendations,
     },
-    { headers: CORS_HEADERS }
+    {
+      headers: {
+        ...CORS_HEADERS,
+        "Cache-Control": "public, max-age=60",
+      },
+    }
   );
 };

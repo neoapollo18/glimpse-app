@@ -37,11 +37,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const formData = await request.formData();
     const imageFile = formData.get("image") as File;
     const shopDomain = formData.get("shopDomain") as string;
-    const preference = formData.get("preference") as string;
+    // preference is accepted as a form field for future category-based filtering;
+    // currently not used to avoid rejecting requests when the field is empty.
 
-    if (!imageFile || !shopDomain || !preference) {
+    if (!imageFile || !shopDomain) {
       return json(
-        { error: "Missing required fields: image, shopDomain, preference" },
+        { error: "Missing required fields: image, shopDomain" },
         { status: 400, headers: CORS_HEADERS }
       );
     }
@@ -81,114 +82,140 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     // Get eligible products
     let products = await getConfiguredProducts(verifiedDomain);
-    if (chatConfig.product_scope === "selected" && chatConfig.selected_product_ids.length > 0) {
-      products = products.filter((p: { id: string }) =>
-        chatConfig.selected_product_ids.includes(p.id)
-      );
+    if (chatConfig.product_scope === "selected") {
+      const selectedIds = chatConfig.selected_product_ids || [];
+      if (selectedIds.length === 0) {
+        return json(
+          { recommendations: [], error: "No products selected for recommendations" },
+          { status: 200, headers: CORS_HEADERS }
+        );
+      }
+      products = products.filter((p: { id: string }) => selectedIds.includes(p.id));
     }
 
     if (products.length === 0) {
       return json(
-        { error: "No products available for recommendations" },
-        { status: 404, headers: CORS_HEADERS }
+        { recommendations: [], error: "No products available for recommendations" },
+        { status: 200, headers: CORS_HEADERS }
       );
     }
 
-    // Rule-based selection: shuffle and pick top N
-    // (Future: match preference to product categories for smarter selection)
-    const shuffled = [...products].sort(() => Math.random() - 0.5);
-    const selected = shuffled.slice(0, chatConfig.num_recommendations);
+    // Clamp desired count to a safe range (matches admin UI slider 1..5)
+    const desiredCount = Math.max(
+      1,
+      Math.min(5, Number(chatConfig.num_recommendations) || 3)
+    );
 
-    // Convert image to base64
+    // Uniform Fisher-Yates shuffle
+    const shuffled = [...products];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    // Convert image to base64 once
     const arrayBuffer = await imageFile.arrayBuffer();
     const base64Image = Buffer.from(arrayBuffer).toString("base64");
 
-    // Run transforms in parallel for each selected product
-    const results = await Promise.all(
-      selected.map(async (product: {
-        id: string;
-        product_name: string;
-        shopify_id: string;
-        transformation_prompt: string;
-        ai_model?: string | null;
-        reference_image_url?: string | null;
-        reference_image_urls?: string[];
-      }) => {
-        try {
-          const prompt = product.transformation_prompt;
-          const referenceUrls = parseReferenceImageUrls(product);
+    type Product = {
+      id: string;
+      product_name: string;
+      shopify_id: string;
+      transformation_prompt: string;
+      ai_model?: string | null;
+      reference_image_url?: string | null;
+      reference_image_urls?: string[];
+    };
 
-          // Fetch reference images
-          const referenceImages: ReferenceImagePart[] = [];
-          for (const refUrl of referenceUrls) {
-            try {
-              const refResponse = await safeFetch(refUrl);
-              if (refResponse && refResponse.ok) {
-                const refBuffer = await refResponse.arrayBuffer();
-                referenceImages.push({
-                  data: Buffer.from(refBuffer).toString("base64"),
-                  mimeType: refResponse.headers.get("content-type") || "image/jpeg",
-                });
-              }
-            } catch {
-              // Skip failed reference images
+    const transformProduct = async (product: Product) => {
+      try {
+        const prompt = product.transformation_prompt;
+        const referenceUrls = parseReferenceImageUrls(product);
+
+        const referenceImages: ReferenceImagePart[] = [];
+        for (const refUrl of referenceUrls) {
+          try {
+            const refResponse = await safeFetch(refUrl);
+            if (refResponse && refResponse.ok) {
+              const refBuffer = await refResponse.arrayBuffer();
+              referenceImages.push({
+                data: Buffer.from(refBuffer).toString("base64"),
+                mimeType: refResponse.headers.get("content-type") || "image/jpeg",
+              });
             }
+          } catch {
+            // Skip failed reference images
           }
+        }
 
-          // Use flash model for speed (multiple transforms)
-          const modelToUse = (product.ai_model as string) || GEMINI_MODEL_FLASH;
+        const modelToUse = (product.ai_model as string) || GEMINI_MODEL_FLASH;
 
-          let result;
-          if (modelToUse === MODEL_OPENAI) {
+        let result;
+        if (modelToUse === MODEL_OPENAI) {
+          result = await transformImageWithOpenAI({
+            inputImage: base64Image,
+            transformationPrompt: prompt,
+            mimeType: imageFile.type,
+            referenceImages,
+          });
+        } else {
+          result = await transformImage({
+            inputImage: base64Image,
+            transformationPrompt: prompt,
+            mimeType: imageFile.type,
+            model: modelToUse,
+            referenceImages,
+          });
+          if (!result.success && referenceImages.length > 0) {
             result = await transformImageWithOpenAI({
               inputImage: base64Image,
               transformationPrompt: prompt,
               mimeType: imageFile.type,
               referenceImages,
             });
-          } else {
-            result = await transformImage({
-              inputImage: base64Image,
-              transformationPrompt: prompt,
-              mimeType: imageFile.type,
-              model: modelToUse,
-              referenceImages,
-            });
-            // Fallback to OpenAI if Gemini fails with reference images
-            if (!result.success && referenceImages.length > 0) {
-              result = await transformImageWithOpenAI({
-                inputImage: base64Image,
-                transformationPrompt: prompt,
-                mimeType: imageFile.type,
-                referenceImages,
-              });
-            }
           }
-
-          if (result.success) {
-            trackTransformationEvent(verifiedDomain, product.shopify_id, "transformation", "chat").catch(() => {});
-          }
-
-          return {
-            productId: product.shopify_id,
-            title: product.product_name,
-            tryOnPreview: result.generatedImage ?? null,
-            error: result.success ? null : (result.error || "Transform failed"),
-          };
-        } catch (err) {
-          console.error(`Chat recommend transform error for ${product.id}:`, err);
-          return {
-            productId: product.shopify_id,
-            title: product.product_name,
-            tryOnPreview: null,
-            error: "Transform failed",
-          };
         }
-      })
-    );
 
-    // Filter to only successful results
-    const recommendations = results.filter((r) => r.tryOnPreview !== null);
+        if (result.success) {
+          trackTransformationEvent(verifiedDomain, product.shopify_id, "transformation", "chat").catch(() => {});
+        }
+
+        return {
+          productId: product.shopify_id,
+          title: product.product_name,
+          tryOnPreview: result.generatedImage ?? null,
+          error: result.success ? null : (result.error || "Transform failed"),
+        };
+      } catch (err) {
+        console.error(`Chat recommend transform error for ${product.id}:`, err);
+        return {
+          productId: product.shopify_id,
+          title: product.product_name,
+          tryOnPreview: null,
+          error: "Transform failed",
+        };
+      }
+    };
+
+    // First pass: transform the top N shuffled products in parallel
+    const firstBatch = shuffled.slice(0, desiredCount) as Product[];
+    const firstResults = await Promise.all(firstBatch.map(transformProduct));
+    let successful = firstResults.filter((r) => r.tryOnPreview !== null);
+
+    // Backfill: if any failed and we still have products in the pool, try more
+    if (successful.length < desiredCount && shuffled.length > desiredCount) {
+      const needed = desiredCount - successful.length;
+      const backfillPool = shuffled.slice(
+        desiredCount,
+        desiredCount + Math.min(needed * 2, shuffled.length - desiredCount)
+      ) as Product[];
+      const backfillResults = await Promise.all(backfillPool.map(transformProduct));
+      successful = successful.concat(
+        backfillResults.filter((r) => r.tryOnPreview !== null)
+      );
+    }
+
+    const recommendations = successful.slice(0, desiredCount);
 
     return json({ recommendations }, { headers: CORS_HEADERS });
   } catch (err) {
