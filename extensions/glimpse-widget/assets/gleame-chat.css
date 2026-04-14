@@ -226,7 +226,8 @@
   flex-shrink: 0 !important;
 }
 
-.gleame-chat-header-expand {
+.gleame-chat-header-expand,
+.gleame-chat-header-reset {
   width: 28px;
   height: 28px;
   border-radius: 6px;
@@ -242,7 +243,8 @@
   padding: 0;
 }
 
-.gleame-chat-header-expand:hover {
+.gleame-chat-header-expand:hover,
+.gleame-chat-header-reset:hover {
   color: #ffffff;
 }
 
