@@ -555,15 +555,25 @@ console.log('Gleame Chat Assistant v1.0 loaded');
 
       var titleEl = document.createElement('div');
       titleEl.className = 'gleame-chat-product-title';
-      titleEl.textContent = rec.title || '';
+      titleEl.textContent = rec.productName || rec.title || '';
       info.appendChild(titleEl);
+
+      if (rec.variantTitle) {
+        var variantEl = document.createElement('div');
+        variantEl.className = 'gleame-chat-product-variant';
+        variantEl.textContent = rec.variantTitle;
+        info.appendChild(variantEl);
+      }
 
       var shopLink = document.createElement('a');
       shopLink.className = 'gleame-chat-product-shop-btn';
       shopLink.target = '_top';
       // Shopify search with type=product filter keeps matches scoped to products
       // (themes like Dawn honor the filter; falls back to unfiltered search otherwise).
-      shopLink.href = '/search?type=product&q=' + encodeURIComponent(rec.title || '');
+      // Search by product name only — variant titles like "She's a Wildflower"
+      // would otherwise miss the parent product page.
+      var searchQuery = rec.productName || rec.title || '';
+      shopLink.href = '/search?type=product&q=' + encodeURIComponent(searchQuery);
       shopLink.textContent = 'Shop This';
       info.appendChild(shopLink);
 

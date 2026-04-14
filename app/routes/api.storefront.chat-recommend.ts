@@ -14,6 +14,7 @@ import {
   getConfiguredProducts,
   getChatAssistantConfig,
   trackTransformationEvent,
+  getVariantsForProducts,
 } from "../lib/supabase.server";
 import { checkRateLimit, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
 import { safeFetch } from "../lib/safe-fetch.server";
@@ -106,17 +107,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       Math.min(5, Number(chatConfig.num_recommendations) || 3)
     );
 
-    // Uniform Fisher-Yates shuffle
-    const shuffled = [...products];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-
-    // Convert image to base64 once
-    const arrayBuffer = await imageFile.arrayBuffer();
-    const base64Image = Buffer.from(arrayBuffer).toString("base64");
-
     type Product = {
       id: string;
       product_name: string;
@@ -127,10 +117,94 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       reference_image_urls?: string[];
     };
 
-    const transformProduct = async (product: Product) => {
+    type Variant = {
+      id: string;
+      product_id: string;
+      shopify_variant_id: string;
+      variant_title: string;
+      transformation_prompt: string;
+      ai_model?: string | null;
+      reference_image_url?: string | null;
+      reference_image_urls?: string[];
+    };
+
+    type Candidate = { product: Product; variant: Variant | null };
+
+    // Build a flat candidate pool: one entry per configured variant, plus one
+    // entry for any product without variants. This lets the assistant recommend
+    // specific shades (e.g. "She's a Wildflower") rather than the parent product.
+    const productList = products as Product[];
+    const variants = (await getVariantsForProducts(productList.map((p) => p.id))) as Variant[];
+    const variantsByProduct = new Map<string, Variant[]>();
+    for (const v of variants) {
+      const arr = variantsByProduct.get(v.product_id);
+      if (arr) arr.push(v);
+      else variantsByProduct.set(v.product_id, [v]);
+    }
+
+    const candidates: Candidate[] = [];
+    for (const product of productList) {
+      const productVariants = variantsByProduct.get(product.id);
+      if (productVariants && productVariants.length > 0) {
+        for (const variant of productVariants) {
+          candidates.push({ product, variant });
+        }
+      } else {
+        candidates.push({ product, variant: null });
+      }
+    }
+
+    if (candidates.length === 0) {
+      return json(
+        { recommendations: [], error: "No products available for recommendations" },
+        { status: 200, headers: CORS_HEADERS }
+      );
+    }
+
+    // Uniform Fisher-Yates shuffle
+    const shuffled = [...candidates];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    // Diversity pass: prefer one variant per product so a shop with one
+    // multi-variant product can't fill every recommendation slot with shades
+    // of the same item. Repeats from the same product are kept as a tail
+    // fallback for catalogs smaller than `desiredCount`.
+    const seenProducts = new Set<string>();
+    const uniquePassFirst: Candidate[] = [];
+    const uniquePassRest: Candidate[] = [];
+    for (const c of shuffled) {
+      if (seenProducts.has(c.product.id)) {
+        uniquePassRest.push(c);
+      } else {
+        seenProducts.add(c.product.id);
+        uniquePassFirst.push(c);
+      }
+    }
+    const ordered = uniquePassFirst.concat(uniquePassRest);
+
+    // Convert image to base64 once
+    const arrayBuffer = await imageFile.arrayBuffer();
+    const base64Image = Buffer.from(arrayBuffer).toString("base64");
+
+    const transformCandidate = async (candidate: Candidate) => {
+      const { product, variant } = candidate;
+      // Variant config wins over product config when present; fall back per field
+      // so a variant with a missing prompt still uses the product's prompt.
+      const source = variant || product;
+      const productName = product.product_name;
+      const variantTitle = variant?.variant_title || null;
+      const displayTitle = variantTitle
+        ? `${productName} — ${variantTitle}`
+        : productName;
       try {
-        const prompt = product.transformation_prompt;
-        const referenceUrls = parseReferenceImageUrls(product);
+        const prompt = source.transformation_prompt || product.transformation_prompt;
+        // Reference images: prefer variant's own refs, else product's
+        const referenceUrls = parseReferenceImageUrls(source).length > 0
+          ? parseReferenceImageUrls(source)
+          : parseReferenceImageUrls(product);
 
         const referenceImages: ReferenceImagePart[] = [];
         for (const refUrl of referenceUrls) {
@@ -148,7 +222,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           }
         }
 
-        const modelToUse = (product.ai_model as string) || GEMINI_MODEL_FLASH;
+        const modelToUse = (variant?.ai_model as string) || (product.ai_model as string) || GEMINI_MODEL_FLASH;
 
         let result;
         if (modelToUse === MODEL_OPENAI) {
@@ -182,34 +256,40 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
         return {
           productId: product.shopify_id,
-          title: product.product_name,
+          variantId: variant?.shopify_variant_id ?? null,
+          title: displayTitle,
+          productName,
+          variantTitle,
           tryOnPreview: result.generatedImage ?? null,
           error: result.success ? null : (result.error || "Transform failed"),
         };
       } catch (err) {
-        console.error(`Chat recommend transform error for ${product.id}:`, err);
+        console.error(`Chat recommend transform error for ${product.id}${variant ? `/${variant.id}` : ""}:`, err);
         return {
           productId: product.shopify_id,
-          title: product.product_name,
+          variantId: variant?.shopify_variant_id ?? null,
+          title: displayTitle,
+          productName,
+          variantTitle,
           tryOnPreview: null,
           error: "Transform failed",
         };
       }
     };
 
-    // First pass: transform the top N shuffled products in parallel
-    const firstBatch = shuffled.slice(0, desiredCount) as Product[];
-    const firstResults = await Promise.all(firstBatch.map(transformProduct));
+    // First pass: transform the top N candidates in parallel
+    const firstBatch = ordered.slice(0, desiredCount);
+    const firstResults = await Promise.all(firstBatch.map(transformCandidate));
     let successful = firstResults.filter((r) => r.tryOnPreview !== null);
 
-    // Backfill: if any failed and we still have products in the pool, try more
-    if (successful.length < desiredCount && shuffled.length > desiredCount) {
+    // Backfill: if any failed and we still have candidates in the pool, try more
+    if (successful.length < desiredCount && ordered.length > desiredCount) {
       const needed = desiredCount - successful.length;
-      const backfillPool = shuffled.slice(
+      const backfillPool = ordered.slice(
         desiredCount,
-        desiredCount + Math.min(needed * 2, shuffled.length - desiredCount)
-      ) as Product[];
-      const backfillResults = await Promise.all(backfillPool.map(transformProduct));
+        desiredCount + Math.min(needed * 2, ordered.length - desiredCount)
+      );
+      const backfillResults = await Promise.all(backfillPool.map(transformCandidate));
       successful = successful.concat(
         backfillResults.filter((r) => r.tryOnPreview !== null)
       );

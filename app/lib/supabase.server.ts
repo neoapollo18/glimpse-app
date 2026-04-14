@@ -862,6 +862,29 @@ export async function getProductVariants(productId: string) {
 }
 
 /**
+ * Bulk-fetch configured variants for many products in a single query.
+ * Used by chat-recommend to flatten product+variant pairs into a candidate pool
+ * without N+1 queries.
+ * @param productIds - Internal product IDs (UUIDs) from the products table
+ * @returns Array of variant rows across all requested products
+ */
+export async function getVariantsForProducts(productIds: string[]) {
+  if (productIds.length === 0) return [];
+
+  const { data: variants, error } = await supabase
+    .from('product_variants')
+    .select('*')
+    .in('product_id', productIds);
+
+  if (error) {
+    console.error('Error bulk-fetching product variants:', error);
+    return [];
+  }
+
+  return variants || [];
+}
+
+/**
  * Check if a product has any configured variants in the database
  * Used to determine which AI model to use (Pro for products with variant configs, Flash otherwise)
  * @param productId - Internal product ID from products table (UUID)
