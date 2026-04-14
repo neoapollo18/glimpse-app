@@ -170,7 +170,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 // Constants
 // ============================================================
 
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 7;
+
+const CONTACT_URL = "https://www.gleame.ai/contact";
 
 const GOAL_OPTIONS = [
   {
@@ -448,7 +450,125 @@ function Step3Attribution({
   );
 }
 
-function Step4ProductSetup({
+function Step4ChoosePath({
+  onContinueSelfServe,
+  onBookCall,
+  onBack,
+}: {
+  onContinueSelfServe: () => void;
+  onBookCall: () => void;
+  onBack: () => void;
+}) {
+  return (
+    <BlockStack gap="600">
+      <BlockStack gap="200" inlineAlign="center">
+        <Text as="h2" variant="headingLg" alignment="center">
+          How would you like to get set up?
+        </Text>
+        <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
+          Go at your own pace, or let our team configure Gleame with you
+        </Text>
+      </BlockStack>
+
+      <InlineGrid columns={{ xs: 1, sm: 2 }} gap="400">
+        {/* Self-serve card */}
+        <div
+          style={{
+            border: "1px solid #E1E3E5",
+            borderRadius: "12px",
+            padding: "24px",
+            background: "#FFFFFF",
+            display: "flex",
+            flexDirection: "column",
+            gap: "16px",
+          }}
+        >
+          <BlockStack gap="300">
+            <Text as="span" variant="headingXl">
+              🛠️
+            </Text>
+            <Text as="h3" variant="headingMd">
+              I'll set it up myself
+            </Text>
+            <BlockStack gap="150">
+              <Text as="p" variant="bodySm" tone="subdued">
+                • Walk through each step at your own pace
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                • Typical setup takes about 10 minutes
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                • Full control over every prompt and widget setting
+              </Text>
+            </BlockStack>
+          </BlockStack>
+          <div style={{ marginTop: "auto" }}>
+            <Button onClick={onContinueSelfServe} fullWidth>
+              Continue setup
+            </Button>
+          </div>
+        </div>
+
+        {/* Book-a-call card (recommended) */}
+        <div
+          style={{
+            border: "2px solid #2C6ECB",
+            borderRadius: "12px",
+            padding: "24px",
+            background: "#F2F7FE",
+            display: "flex",
+            flexDirection: "column",
+            gap: "16px",
+            position: "relative",
+          }}
+        >
+          <div
+            style={{
+              position: "absolute",
+              top: "-10px",
+              right: "16px",
+            }}
+          >
+            <Badge tone="info">Recommended</Badge>
+          </div>
+          <BlockStack gap="300">
+            <Text as="span" variant="headingXl">
+              🎯
+            </Text>
+            <Text as="h3" variant="headingMd">
+              Get set up with our team
+            </Text>
+            <BlockStack gap="150">
+              <Text as="p" variant="bodySm" tone="subdued">
+                • 30-min guided walkthrough on Zoom
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                • We configure your products and widget with you
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                • Tailored tips for your catalog — free, no commitment
+              </Text>
+            </BlockStack>
+          </BlockStack>
+          <div style={{ marginTop: "auto" }}>
+            <Button variant="primary" onClick={onBookCall} fullWidth>
+              Book a call
+            </Button>
+          </div>
+        </div>
+      </InlineGrid>
+
+      <InlineStack align="space-between">
+        <Button onClick={onBack}>Back</Button>
+        <Text as="span" variant="bodySm" tone="subdued">
+          You can reach out anytime at gleame.ai/contact
+        </Text>
+      </InlineStack>
+    </BlockStack>
+  );
+}
+
+function Step5ProductSetup({
   hasConfiguredProducts,
   onNext,
   onBack,
@@ -550,7 +670,7 @@ function Step4ProductSetup({
   );
 }
 
-function Step5GoLive({
+function Step6GoLive({
   onNext,
   onBack,
   onSkip,
@@ -650,7 +770,7 @@ function Step5GoLive({
   );
 }
 
-function Step6Complete({
+function Step7Complete({
   onFinish,
 }: {
   onFinish: () => void;
@@ -822,6 +942,13 @@ function OnboardingWizard({
     goToStep(4);
   };
 
+  const handleBookCall = () => {
+    if (typeof window !== "undefined") {
+      window.open(CONTACT_URL, "_blank", "noopener,noreferrer");
+    }
+    goToStep(5);
+  };
+
   const handleComplete = () => {
     persistToServer({
       intent: "completeOnboarding",
@@ -905,31 +1032,39 @@ function OnboardingWizard({
           )}
 
           {currentStep === 4 && (
-            <Step4ProductSetup
-              hasConfiguredProducts={hasConfiguredProducts}
-              onNext={() => goToStep(5)}
+            <Step4ChoosePath
+              onContinueSelfServe={() => goToStep(5)}
+              onBookCall={handleBookCall}
               onBack={() => goToStep(3)}
-              onSkip={() => goToStep(5)}
+            />
+          )}
+
+          {currentStep === 5 && (
+            <Step5ProductSetup
+              hasConfiguredProducts={hasConfiguredProducts}
+              onNext={() => goToStep(6)}
+              onBack={() => goToStep(4)}
+              onSkip={() => goToStep(6)}
               onNavigateToProducts={() => {
-                persistToServer({ intent: "updateStep", step: "4" });
+                persistToServer({ intent: "updateStep", step: "5" });
                 setPendingNav("/app/products");
               }}
             />
           )}
 
-          {currentStep === 5 && (
-            <Step5GoLive
-              onNext={() => goToStep(6)}
-              onBack={() => goToStep(4)}
-              onSkip={() => goToStep(6)}
+          {currentStep === 6 && (
+            <Step6GoLive
+              onNext={() => goToStep(7)}
+              onBack={() => goToStep(5)}
+              onSkip={() => goToStep(7)}
               onNavigateToWidgets={() => {
-                persistToServer({ intent: "updateStep", step: "5" });
+                persistToServer({ intent: "updateStep", step: "6" });
                 setPendingNav("/app/widgets");
               }}
             />
           )}
 
-          {currentStep === 6 && <Step6Complete onFinish={handleComplete} />}
+          {currentStep === 7 && <Step7Complete onFinish={handleComplete} />}
         </div>
       </div>
 
