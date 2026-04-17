@@ -422,10 +422,12 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     messagesContainer = document.createElement('div');
     messagesContainer.className = 'gleame-chat-messages';
 
-    // Disclaimer
+    // Disclaimer — privacy notice with link
     var disclaimer = document.createElement('div');
     disclaimer.className = 'gleame-chat-disclaimer';
-    disclaimer.textContent = 'AI-generated. Results may vary.';
+    disclaimer.innerHTML =
+      'This assistant is powered by Gleame AI. Any photos you submit are processed in real time to generate personalized recommendations and are not stored. For more information, see our ' +
+      '<a class="gleame-chat-disclaimer-link" href="https://www.gleame.ai/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.';
 
     panel.appendChild(header);
     panel.appendChild(messagesContainer);
