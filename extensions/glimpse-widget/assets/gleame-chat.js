@@ -475,9 +475,8 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     if (action.indexOf('preference:') === 0) {
       preference = action.replace('preference:', '');
 
-      var photoMsg = isMobile()
-        ? "Upload a photo and I'll show you what looks best on you!"
-        : "Take a photo or upload one and I'll show you what looks best on you!";
+      var photoMsg = config.photoUploadMessage
+        || "Take a photo or upload one and I'll show you what looks best on you!";
       pushMessage({ type: 'bot-text', text: photoMsg });
       pushMessage({ type: 'bot-upload', consumed: false });
     }

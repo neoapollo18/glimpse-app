@@ -47,6 +47,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       recommendButtonText: config.recommend_button_text,
       preferenceQuestion: config.preference_question,
       preferenceOptions: config.preference_options,
+      photoUploadMessage: config.photo_upload_message,
       numRecommendations: config.num_recommendations,
     },
     {
