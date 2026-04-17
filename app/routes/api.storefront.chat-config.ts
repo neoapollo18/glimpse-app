@@ -40,6 +40,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       assistantName: config.assistant_name,
       avatarUrl: config.avatar_url,
       bubbleColor: config.bubble_color,
+      bubbleText: config.bubble_text,
       accentColor: config.accent_color,
       greetingMessage: config.greeting_message,
       greetingDelaySeconds: config.greeting_delay_seconds,

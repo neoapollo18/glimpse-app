@@ -1971,6 +1971,7 @@ export interface ChatAssistantConfig {
   assistant_name: string;
   avatar_url: string | null;
   bubble_color: string;
+  bubble_text: string;
   accent_color: string;
   greeting_message: string;
   greeting_delay_seconds: number;
@@ -1987,6 +1988,7 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   assistant_name: 'Laura',
   avatar_url: null,
   bubble_color: '#1f2937',
+  bubble_text: 'Try on a shade',
   accent_color: '#8b5cf6',
   greeting_message: "Hey I'm Laura, your shopping assistant ✨",
   greeting_delay_seconds: 2,
@@ -2014,6 +2016,7 @@ export async function getChatAssistantConfig(shopDomain: string): Promise<ChatAs
     assistant_name: data.assistant_name ?? CHAT_ASSISTANT_DEFAULTS.assistant_name,
     avatar_url: data.avatar_url ?? CHAT_ASSISTANT_DEFAULTS.avatar_url,
     bubble_color: data.bubble_color ?? CHAT_ASSISTANT_DEFAULTS.bubble_color,
+    bubble_text: data.bubble_text ?? CHAT_ASSISTANT_DEFAULTS.bubble_text,
     accent_color: data.accent_color ?? CHAT_ASSISTANT_DEFAULTS.accent_color,
     greeting_message: data.greeting_message ?? CHAT_ASSISTANT_DEFAULTS.greeting_message,
     greeting_delay_seconds: data.greeting_delay_seconds ?? CHAT_ASSISTANT_DEFAULTS.greeting_delay_seconds,
@@ -2064,6 +2067,7 @@ export async function getAllChatAssistantConfigs(): Promise<
     assistant_name: row.assistant_name ?? CHAT_ASSISTANT_DEFAULTS.assistant_name,
     avatar_url: row.avatar_url,
     bubble_color: row.bubble_color ?? CHAT_ASSISTANT_DEFAULTS.bubble_color,
+    bubble_text: row.bubble_text ?? CHAT_ASSISTANT_DEFAULTS.bubble_text,
     accent_color: row.accent_color ?? CHAT_ASSISTANT_DEFAULTS.accent_color,
     greeting_message: row.greeting_message ?? CHAT_ASSISTANT_DEFAULTS.greeting_message,
     greeting_delay_seconds: row.greeting_delay_seconds ?? CHAT_ASSISTANT_DEFAULTS.greeting_delay_seconds,

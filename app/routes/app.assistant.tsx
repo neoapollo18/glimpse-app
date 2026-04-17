@@ -63,6 +63,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       assistant_name: formData.get("assistant_name") as string,
       avatar_url: (formData.get("avatar_url") as string) || null,
       bubble_color: formData.get("bubble_color") as string,
+      bubble_text: formData.get("bubble_text") as string,
       accent_color: formData.get("accent_color") as string,
       greeting_message: formData.get("greeting_message") as string,
       greeting_delay_seconds: parseInt(formData.get("greeting_delay_seconds") as string, 10),
@@ -91,6 +92,7 @@ export default function AssistantConfig() {
   const [assistantName, setAssistantName] = useState(config.assistant_name);
   const [avatarUrl, setAvatarUrl] = useState(config.avatar_url || "");
   const [bubbleColor, setBubbleColor] = useState(config.bubble_color);
+  const [bubbleText, setBubbleText] = useState(config.bubble_text);
   const [accentColor, setAccentColor] = useState(config.accent_color);
   const [greetingMessage, setGreetingMessage] = useState(config.greeting_message);
   const [greetingDelay, setGreetingDelay] = useState(config.greeting_delay_seconds);
@@ -128,6 +130,7 @@ export default function AssistantConfig() {
     formData.append("assistant_name", assistantName);
     formData.append("avatar_url", avatarUrl);
     formData.append("bubble_color", bubbleColor);
+    formData.append("bubble_text", bubbleText);
     formData.append("accent_color", accentColor);
     formData.append("greeting_message", greetingMessage);
     formData.append("greeting_delay_seconds", String(greetingDelay));
@@ -139,7 +142,7 @@ export default function AssistantConfig() {
     formData.append("selected_product_ids", JSON.stringify(selectedProductIds));
     fetcher.submit(formData, { method: "POST" });
   }, [
-    fetcher, enabled, assistantName, avatarUrl, bubbleColor, accentColor,
+    fetcher, enabled, assistantName, avatarUrl, bubbleColor, bubbleText, accentColor,
     greetingMessage, greetingDelay, recommendButtonText, preferenceQuestion,
     preferenceOptions, numRecommendations, productScope, selectedProductIds,
   ]);
@@ -273,6 +276,15 @@ export default function AssistantConfig() {
                     Square image, at least 80x80px. Leave empty for default icon.
                   </Text>
                 </BlockStack>
+                <TextField
+                  label="Bubble Text"
+                  value={bubbleText}
+                  onChange={setBubbleText}
+                  autoComplete="off"
+                  maxLength={40}
+                  showCharacterCount
+                  helpText='Label shown inside the floating pill (e.g. "Try on a shade")'
+                />
                 <InlineStack gap="400" wrap={false}>
                   <div style={{ flex: 1 }}>
                     <TextField
@@ -296,7 +308,7 @@ export default function AssistantConfig() {
                           }}
                         />
                       }
-                      helpText="The floating chat button"
+                      helpText="The floating chat pill"
                     />
                   </div>
                   <div style={{ flex: 1 }}>
@@ -651,41 +663,45 @@ export default function AssistantConfig() {
                   </div>
                 )}
 
-                {/* Bubble */}
+                {/* Bubble — pill when closed, circle × when open */}
                 <div
                   style={{
                     position: "absolute",
                     bottom: 12,
                     right: 12,
-                    width: 48,
-                    height: 48,
-                    borderRadius: "50%",
+                    height: previewOpen ? 40 : 44,
+                    minWidth: previewOpen ? 40 : 44,
+                    padding: previewOpen ? 0 : "0 16px 0 14px",
+                    borderRadius: previewOpen ? "50%" : 999,
                     background: bubbleColor,
-                    display: "flex",
+                    color: "#fff",
+                    display: "inline-flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
+                    gap: previewOpen ? 0 : 8,
+                    boxShadow: "0 6px 20px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08)",
                     cursor: "pointer",
                     overflow: "hidden",
+                    whiteSpace: "nowrap",
+                    transition: "height 0.25s, min-width 0.25s, padding 0.25s, border-radius 0.25s, gap 0.25s",
                   }}
                   onClick={() => setPreviewOpen(!previewOpen)}
                 >
                   {previewOpen ? (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round">
                       <line x1="18" y1="6" x2="6" y2="18" />
                       <line x1="6" y1="6" x2="18" y2="18" />
                     </svg>
-                  ) : avatarUrl ? (
-                    <img
-                      src={avatarUrl}
-                      alt=""
-                      style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }}
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                    />
                   ) : (
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                    </svg>
+                    <>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="#fff" style={{ flexShrink: 0 }} aria-hidden="true">
+                        <path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8z" />
+                        <path d="M19 14l.9 2.6L22 17.5l-2.1.9L19 21l-.9-2.6L16 17.5l2.1-.9z" opacity="0.7" />
+                      </svg>
+                      <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.01em", lineHeight: 1 }}>
+                        {bubbleText || "Try on a shade"}
+                      </span>
+                    </>
                   )}
                 </div>
               </div>
