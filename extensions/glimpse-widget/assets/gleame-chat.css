@@ -711,9 +711,9 @@
 /* Disclaimer (minimal footer) */
 .gleame-chat-disclaimer {
   text-align: center !important;
-  padding: 8px 14px 10px !important;
-  font-size: 10px !important;
-  line-height: 1.45 !important;
+  padding: 7px 14px 9px !important;
+  font-size: 8px !important;
+  line-height: 1.4 !important;
   color: rgba(107, 114, 128, 0.7) !important;
   background: #ffffff !important;
   flex-shrink: 0 !important;
