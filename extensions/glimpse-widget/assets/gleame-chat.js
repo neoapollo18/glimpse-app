@@ -84,6 +84,8 @@ console.log('Gleame Chat Assistant v1.0 loaded');
                 return {
                   productId: r.productId,
                   variantId: r.variantId,
+                  productHandle: r.productHandle,
+                  variantNumericId: r.variantNumericId,
                   productName: r.productName,
                   variantTitle: r.variantTitle,
                   title: r.title,
@@ -196,21 +198,30 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   }
 
   // ---- Bubble ----
+  var BUBBLE_PILL_HTML =
+    '<svg class="gleame-chat-bubble-sparkle" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
+      '<path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8z"/>' +
+      '<path d="M19 14l.9 2.6L22 17.5l-2.1.9L19 21l-.9-2.6L16 17.5l2.1-.9z" opacity=".7"/>' +
+    '</svg>' +
+    '<span class="gleame-chat-bubble-text"></span>';
+
+  var BUBBLE_CLOSE_HTML =
+    '<svg class="gleame-chat-bubble-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+
+  function bubbleLabel() {
+    return (config && config.bubbleText) || 'Try on a shade';
+  }
+
   function renderBubble() {
     bubble = document.createElement('button');
+    bubble.type = 'button';
     bubble.className = 'gleame-chat-bubble';
-    bubble.setAttribute('aria-label', 'Open chat');
+    bubble.setAttribute('aria-label', bubbleLabel());
+    bubble.setAttribute('aria-expanded', 'false');
     bubble.onclick = toggleChat;
-
-    if (config.avatarUrl) {
-      var img = document.createElement('img');
-      img.src = config.avatarUrl;
-      img.alt = config.assistantName;
-      img.className = 'gleame-chat-bubble-avatar';
-      bubble.appendChild(img);
-    } else {
-      bubble.innerHTML = '<svg class="gleame-chat-bubble-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
-    }
+    bubble.innerHTML = BUBBLE_PILL_HTML;
+    var textEl = bubble.querySelector('.gleame-chat-bubble-text');
+    if (textEl) textEl.textContent = bubbleLabel();
 
     root.appendChild(bubble);
   }
@@ -342,18 +353,17 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   function updateBubbleIcon(showClose) {
     if (!bubble) return;
     if (showClose) {
-      bubble.innerHTML = '<svg class="gleame-chat-bubble-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+      bubble.classList.add('gleame-chat-bubble-open');
+      bubble.setAttribute('aria-label', 'Close');
+      bubble.setAttribute('aria-expanded', 'true');
+      bubble.innerHTML = BUBBLE_CLOSE_HTML;
     } else {
-      bubble.innerHTML = '';
-      if (config.avatarUrl) {
-        var img = document.createElement('img');
-        img.src = config.avatarUrl;
-        img.alt = config.assistantName;
-        img.className = 'gleame-chat-bubble-avatar';
-        bubble.appendChild(img);
-      } else {
-        bubble.innerHTML = '<svg class="gleame-chat-bubble-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
-      }
+      bubble.classList.remove('gleame-chat-bubble-open');
+      bubble.setAttribute('aria-label', bubbleLabel());
+      bubble.setAttribute('aria-expanded', 'false');
+      bubble.innerHTML = BUBBLE_PILL_HTML;
+      var textEl = bubble.querySelector('.gleame-chat-bubble-text');
+      if (textEl) textEl.textContent = bubbleLabel();
     }
   }
 
@@ -412,8 +422,14 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     messagesContainer = document.createElement('div');
     messagesContainer.className = 'gleame-chat-messages';
 
+    // Disclaimer
+    var disclaimer = document.createElement('div');
+    disclaimer.className = 'gleame-chat-disclaimer';
+    disclaimer.textContent = 'AI-generated. Results may vary.';
+
     panel.appendChild(header);
     panel.appendChild(messagesContainer);
+    panel.appendChild(disclaimer);
     root.appendChild(panel);
   }
 
@@ -484,19 +500,49 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     };
     reader.readAsDataURL(file);
 
-    // Show transient loading spinner (not persisted)
+    // Show transient skeleton placeholders (Gemini-style) — not persisted
     setTimeout(function() {
-      var loadingMsg = document.createElement('div');
-      loadingMsg.className = 'gleame-chat-msg gleame-chat-msg-bot';
-      loadingMsg.id = 'gleame-chat-loading-msg';
-      var loadingBubble = document.createElement('div');
-      loadingBubble.className = 'gleame-chat-msg-bubble';
-      loadingBubble.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" style="display:inline-block;vertical-align:middle;margin-right:8px;animation:gleame-chat-spin 0.8s linear infinite"><circle cx="12" cy="12" r="10" stroke="#9ca3af" stroke-width="3" fill="none" stroke-dasharray="31.4 31.4" stroke-linecap="round"/></svg>Generating your personalized look...';
-      loadingMsg.appendChild(loadingBubble);
-      messagesContainer.appendChild(loadingMsg);
-      scrollToBottom();
+      renderLoadingSkeletons();
       sendRecommendation(file);
     }, 600);
+  }
+
+  function renderLoadingSkeletons() {
+    var count = Math.max(1, Math.min(5, Number(config && config.numRecommendations) || 3));
+
+    var wrap = document.createElement('div');
+    wrap.id = 'gleame-chat-loading-msg';
+    wrap.className = 'gleame-chat-loading-wrap';
+
+    var caption = document.createElement('div');
+    caption.className = 'gleame-chat-msg gleame-chat-msg-bot';
+    caption.setAttribute('role', 'status');
+    caption.setAttribute('aria-live', 'polite');
+    caption.innerHTML =
+      '<div class="gleame-chat-msg-bubble gleame-chat-loading-caption">' +
+        '<span>Creating your looks</span>' +
+        '<span class="gleame-chat-loading-dots" aria-hidden="true"><i></i><i></i><i></i></span>' +
+      '</div>';
+    wrap.appendChild(caption);
+
+    for (var i = 0; i < count; i++) {
+      var skel = document.createElement('div');
+      skel.className = 'gleame-chat-msg gleame-chat-msg-bot';
+      skel.innerHTML =
+        '<div class="gleame-chat-skeleton-card">' +
+          '<div class="gleame-chat-skeleton-image"></div>' +
+          '<div class="gleame-chat-skeleton-body">' +
+            '<div class="gleame-chat-skeleton-line gleame-chat-skeleton-line-lg"></div>' +
+            '<div class="gleame-chat-skeleton-line gleame-chat-skeleton-line-sm"></div>' +
+            '<div class="gleame-chat-skeleton-btn"></div>' +
+          '</div>' +
+        '</div>';
+      skel.style.animationDelay = (i * 80) + 'ms';
+      wrap.appendChild(skel);
+    }
+
+    messagesContainer.appendChild(wrap);
+    scrollToBottom();
   }
 
   function sendRecommendation(file) {
@@ -708,16 +754,18 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   }
 
   function renderProductCards(recommendations) {
-    recommendations.forEach(function(rec) {
+    recommendations.forEach(function(rec, idx) {
       var card = document.createElement('div');
-      card.className = 'gleame-chat-msg gleame-chat-msg-bot';
+      card.className = 'gleame-chat-msg gleame-chat-msg-bot gleame-chat-card-enter';
+      card.style.animationDelay = (idx * 90) + 'ms';
 
       var cardInner = document.createElement('div');
       cardInner.className = 'gleame-chat-product-card';
 
       if (rec.tryOnPreview) {
         var previewImg = document.createElement('img');
-        previewImg.className = 'gleame-chat-product-image';
+        previewImg.className = 'gleame-chat-product-image gleame-chat-image-reveal';
+        previewImg.style.animationDelay = (idx * 90) + 'ms';
         previewImg.src = 'data:image/jpeg;base64,' + rec.tryOnPreview;
         previewImg.alt = rec.title || '';
         previewImg.onerror = function() { previewImg.style.display = 'none'; };
@@ -742,8 +790,15 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       var shopLink = document.createElement('a');
       shopLink.className = 'gleame-chat-product-shop-btn';
       shopLink.target = '_top';
-      var searchQuery = rec.productName || rec.title || '';
-      shopLink.href = '/search?type=product&q=' + encodeURIComponent(searchQuery);
+      var handle = (rec.productHandle || '').trim();
+      if (handle) {
+        var url = '/products/' + encodeURIComponent(handle);
+        if (rec.variantNumericId) url += '?variant=' + encodeURIComponent(rec.variantNumericId);
+        shopLink.href = url;
+      } else {
+        var searchQuery = rec.productName || rec.title || '';
+        shopLink.href = '/search?type=product&q=' + encodeURIComponent(searchQuery);
+      }
       shopLink.textContent = 'Shop This';
       info.appendChild(shopLink);
 

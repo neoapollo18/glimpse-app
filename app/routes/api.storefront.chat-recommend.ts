@@ -25,6 +25,26 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type, X-Requested-With",
 };
 
+// Shopify's default product handle is the slugified title. Merchants can
+// override it in admin, in which case this falls out of sync — but for the
+// default case this produces the correct /products/{handle} URL without a
+// round-trip to Shopify.
+function slugifyHandle(title: string | null | undefined): string {
+  if (!title) return "";
+  return title
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function extractNumericId(gid: string | null | undefined): string | null {
+  if (!gid) return null;
+  const last = gid.split("/").pop() || "";
+  return /^\d+$/.test(last) ? last : null;
+}
+
 export const action = async ({ request }: ActionFunctionArgs) => {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: CORS_HEADERS });
@@ -257,6 +277,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return {
           productId: product.shopify_id,
           variantId: variant?.shopify_variant_id ?? null,
+          productHandle: slugifyHandle(productName),
+          variantNumericId: extractNumericId(variant?.shopify_variant_id),
           title: displayTitle,
           productName,
           variantTitle,
@@ -268,6 +290,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return {
           productId: product.shopify_id,
           variantId: variant?.shopify_variant_id ?? null,
+          productHandle: slugifyHandle(productName),
+          variantNumericId: extractNumericId(variant?.shopify_variant_id),
           title: displayTitle,
           productName,
           variantTitle,
