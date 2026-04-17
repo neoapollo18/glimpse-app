@@ -503,47 +503,47 @@ console.log('Gleame Chat Assistant v1.0 loaded');
 
     // Show transient skeleton placeholders (Gemini-style) — not persisted
     setTimeout(function() {
-      renderLoadingSkeletons();
+      renderLoadingSpinner();
       sendRecommendation(file);
     }, 600);
   }
 
-  function renderLoadingSkeletons() {
-    var count = Math.max(1, Math.min(5, Number(config && config.numRecommendations) || 3));
+  var LOADING_PHRASES = [
+    'Reading your undertones',
+    "Browsing ORLY's shade range",
+    'Finding your best match',
+    'Applying to your hand',
+  ];
+  var loadingPhraseInterval = null;
 
+  function renderLoadingSpinner() {
     var wrap = document.createElement('div');
     wrap.id = 'gleame-chat-loading-msg';
-    wrap.className = 'gleame-chat-loading-wrap';
+    wrap.className = 'gleame-chat-msg gleame-chat-msg-bot';
 
-    var caption = document.createElement('div');
-    caption.className = 'gleame-chat-msg gleame-chat-msg-bot';
-    caption.setAttribute('role', 'status');
-    caption.setAttribute('aria-live', 'polite');
-    caption.innerHTML =
-      '<div class="gleame-chat-msg-bubble gleame-chat-loading-caption">' +
-        '<span>Creating your looks</span>' +
-        '<span class="gleame-chat-loading-dots" aria-hidden="true"><i></i><i></i><i></i></span>' +
-      '</div>';
-    wrap.appendChild(caption);
+    var bubble = document.createElement('div');
+    bubble.className = 'gleame-chat-msg-bubble gleame-chat-loading-bubble';
+    bubble.setAttribute('role', 'status');
+    bubble.setAttribute('aria-live', 'polite');
 
-    for (var i = 0; i < count; i++) {
-      var skel = document.createElement('div');
-      skel.className = 'gleame-chat-msg gleame-chat-msg-bot';
-      skel.innerHTML =
-        '<div class="gleame-chat-skeleton-card">' +
-          '<div class="gleame-chat-skeleton-image"></div>' +
-          '<div class="gleame-chat-skeleton-body">' +
-            '<div class="gleame-chat-skeleton-line gleame-chat-skeleton-line-lg"></div>' +
-            '<div class="gleame-chat-skeleton-line gleame-chat-skeleton-line-sm"></div>' +
-            '<div class="gleame-chat-skeleton-btn"></div>' +
-          '</div>' +
-        '</div>';
-      skel.style.animationDelay = (i * 80) + 'ms';
-      wrap.appendChild(skel);
-    }
+    var spinner = document.createElement('div');
+    spinner.className = 'gleame-chat-spinner';
 
+    var text = document.createElement('span');
+    text.className = 'gleame-chat-loading-text';
+    text.textContent = LOADING_PHRASES[0];
+
+    bubble.appendChild(spinner);
+    bubble.appendChild(text);
+    wrap.appendChild(bubble);
     messagesContainer.appendChild(wrap);
     scrollToBottom();
+
+    var idx = 0;
+    loadingPhraseInterval = setInterval(function() {
+      idx = (idx + 1) % LOADING_PHRASES.length;
+      text.textContent = LOADING_PHRASES[idx];
+    }, 1800);
   }
 
   function sendRecommendation(file) {
@@ -810,6 +810,10 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   }
 
   function removeLoadingMsg() {
+    if (loadingPhraseInterval) {
+      clearInterval(loadingPhraseInterval);
+      loadingPhraseInterval = null;
+    }
     var el = document.getElementById('gleame-chat-loading-msg');
     if (el && el.parentNode) el.parentNode.removeChild(el);
   }
