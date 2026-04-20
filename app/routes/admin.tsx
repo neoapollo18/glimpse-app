@@ -1,6 +1,6 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { useLoaderData, useFetcher } from "@remix-run/react";
+import { useLoaderData, useFetcher, type ShouldRevalidateFunction } from "@remix-run/react";
 import { useState, useEffect } from "react";
 import {
   AppProvider,
@@ -347,6 +347,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 };
 
+// Disable automatic loader revalidation after fetcher actions.
+// The loader calls authenticate.admin(request), but this page uses Polaris's
+// AppProvider (not @shopify/shopify-app-remix/react), so fetcher requests don't
+// carry a Shopify session token. Revalidation after a save can hit the 204
+// session-token bounce and render a blank/static page over the UI.
+// The action handlers skip authenticate.admin for the same reason; we handle
+// UI updates optimistically via local state (prompt overrides, ref image maps,
+// AI model overrides). Full page reload re-seeds the loader via the iframe.
+export const shouldRevalidate: ShouldRevalidateFunction = ({ formMethod }) => {
+  // Only revalidate on GET navigations (e.g. initial load, route changes).
+  return !formMethod || formMethod.toUpperCase() === "GET";
+};
+
 // Sanitize and validate prompt input
 function sanitizePrompt(prompt: string | null): { valid: boolean; sanitized: string; error?: string } {
   if (!prompt || typeof prompt !== 'string') {
@@ -651,6 +664,10 @@ export default function FoundersAdmin() {
   const [refImageUrls, setRefImageUrls] = useState<Record<string, string[]>>({});
   const [variantRefImageUrls, setVariantRefImageUrls] = useState<Record<string, string[]>>({});
   const [aiModelOverrides, setAiModelOverrides] = useState<Record<string, string>>({});
+  // Optimistic overrides: loader revalidation is disabled, so we mirror saved
+  // prompts here and render them below if present.
+  const [promptOverrides, setPromptOverrides] = useState<Record<string, string>>({});
+  const [variantPromptOverrides, setVariantPromptOverrides] = useState<Record<string, string>>({});
 
   const [refFetcherTarget, setRefFetcherTarget] = useState<
     { type: "product" | "variant"; id: string } | null
@@ -692,7 +709,7 @@ export default function FoundersAdmin() {
 
   const startEditPrompt = (product: Product) => {
     setEditingProduct(product.id);
-    setEditPromptValue(product.transformation_prompt);
+    setEditPromptValue(promptOverrides[product.id] ?? product.transformation_prompt);
     setEditingVariant(null); // Cancel any variant editing
   };
 
@@ -703,7 +720,7 @@ export default function FoundersAdmin() {
 
   const startEditVariantPrompt = (variant: VariantConfig) => {
     setEditingVariant(variant.id);
-    setEditVariantPromptValue(variant.transformation_prompt);
+    setEditVariantPromptValue(variantPromptOverrides[variant.id] ?? variant.transformation_prompt);
     setEditingProduct(null); // Cancel any product editing
   };
 
@@ -713,24 +730,34 @@ export default function FoundersAdmin() {
   };
 
   const saveVariantPrompt = (variantId: string) => {
+    const submittedPrompt = editVariantPromptValue;
     const formData = new FormData();
     formData.append("action", "update-variant-prompt");
     formData.append("variantId", variantId);
-    formData.append("prompt", editVariantPromptValue);
+    formData.append("prompt", submittedPrompt);
     variantPromptFetcher.submit(formData, { method: "POST" });
+    setVariantPromptOverrides((prev) => ({ ...prev, [variantId]: submittedPrompt }));
     setEditingVariant(null);
     setEditVariantPromptValue("");
   };
 
   const savePrompt = (productId: string) => {
+    const submittedPrompt = editPromptValue;
     const formData = new FormData();
     formData.append("action", "update-prompt");
     formData.append("productId", productId);
-    formData.append("prompt", editPromptValue);
+    formData.append("prompt", submittedPrompt);
     promptFetcher.submit(formData, { method: "POST" });
+    setPromptOverrides((prev) => ({ ...prev, [productId]: submittedPrompt }));
     setEditingProduct(null);
     setEditPromptValue("");
   };
+
+  const getProductPrompt = (product: Product) =>
+    promptOverrides[product.id] ?? product.transformation_prompt;
+
+  const getVariantPrompt = (vc: VariantConfig) =>
+    variantPromptOverrides[vc.id] ?? vc.transformation_prompt;
 
   const getAiModel = (product: Product) => {
     if (aiModelOverrides[product.id] !== undefined) return aiModelOverrides[product.id];
@@ -1057,14 +1084,14 @@ export default function FoundersAdmin() {
                                       background="bg-surface-secondary"
                                       borderRadius="200"
                                     >
-                                      <pre style={{ 
-                                        whiteSpace: "pre-wrap", 
+                                      <pre style={{
+                                        whiteSpace: "pre-wrap",
                                         wordBreak: "break-word",
                                         margin: 0,
                                         fontFamily: "monospace",
                                         fontSize: "12px"
                                       }}>
-                                        {product.transformation_prompt}
+                                        {getProductPrompt(product)}
                                       </pre>
                                     </Box>
                                   )}
@@ -1116,8 +1143,8 @@ export default function FoundersAdmin() {
                                               autoComplete="off"
                                             />
                                           ) : (
-                                            <pre style={{ 
-                                              whiteSpace: "pre-wrap", 
+                                            <pre style={{
+                                              whiteSpace: "pre-wrap",
                                               wordBreak: "break-word",
                                               margin: 0,
                                               fontFamily: "monospace",
@@ -1125,7 +1152,7 @@ export default function FoundersAdmin() {
                                               maxHeight: "150px",
                                               overflow: "auto"
                                             }}>
-                                              {vc.transformation_prompt}
+                                              {getVariantPrompt(vc)}
                                             </pre>
                                           )}
 
