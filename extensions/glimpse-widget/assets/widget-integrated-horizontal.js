@@ -9,7 +9,7 @@ console.log('Gleame Integrated Horizontal Widget v2.0 loaded');
   // Instance state storage - keyed by block.id
   const instances = new Map();
   
-  const loadingMessages = ['Analyzing image...', 'Creating preview...', 'Working our magic...', 'Almost there...'];
+  const loadingMessages = ['Scanning your hand...', 'Applying your shades...', 'Finishing touches...', 'Almost ready...'];
   const SHOPIFY_APP_URL = 'https://glimpse-app-charles.onrender.com';
   const WIDGET_TYPE = 'horizontal';
   

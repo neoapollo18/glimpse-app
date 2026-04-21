@@ -9,7 +9,7 @@ console.log('Gleame Banner Widget v3.0 loaded');
   
   const SHOPIFY_APP_URL = 'https://glimpse-app-charles.onrender.com';
   const WIDGET_TYPE = 'banner';
-  const loadingMessages = ['Processing...', 'Analyzing...', 'Creating magic...', 'Almost there...'];
+  const loadingMessages = ['Scanning your hand...', 'Applying your shades...', 'Finishing touches...', 'Almost ready...'];
 
   // Initialize namespace
   window.bannerWidgetFunctions = window.bannerWidgetFunctions || {};
@@ -171,7 +171,7 @@ console.log('Gleame Banner Widget v3.0 loaded');
     if (isLoading) {
       instance.originalButtonText = btnText.textContent;
       btn.classList.add('is-loading');
-      spinner.style.display = 'inline-block';
+      spinner.style.display = 'inline-flex';
       btnText.textContent = loadingMessages[0];
       
       instance.loadingMessageIndex = 0;

@@ -9,7 +9,7 @@ console.log('Gleame Button Widget v3.0 loaded');
   
   const SHOPIFY_APP_URL = 'https://glimpse-app-charles.onrender.com';
   const WIDGET_TYPE = 'button';
-  const loadingMessages = ['Processing...', 'Analyzing...', 'Creating magic...', 'Almost there...'];
+  const loadingMessages = ['Scanning your hand...', 'Applying your shades...', 'Finishing touches...', 'Almost ready...'];
   
   // Get or create instance state
   function getInstance(instanceId) {
@@ -177,7 +177,7 @@ console.log('Gleame Button Widget v3.0 loaded');
 
     if (isLoading) {
       button.classList.add('is-loading');
-      if (spinner) spinner.style.display = 'block';
+      if (spinner) spinner.style.display = 'inline-flex';
       if (cameraIcon) cameraIcon.style.display = 'none';
       instance.loadingMessageIndex = 0;
       btnText.textContent = loadingMessages[0];

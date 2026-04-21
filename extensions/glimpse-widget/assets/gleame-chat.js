@@ -512,10 +512,10 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   }
 
   var LOADING_PHRASES = [
-    'Reading your undertones',
-    "Browsing ORLY's shade range",
-    'Finding your best match',
-    'Applying to your hand',
+    'Scanning your hand...',
+    'Applying your shades...',
+    'Finishing touches...',
+    'Almost ready...',
   ];
   var loadingPhraseInterval = null;
 
@@ -529,9 +529,6 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     bubble.setAttribute('role', 'status');
     bubble.setAttribute('aria-live', 'polite');
 
-    var spinner = document.createElement('div');
-    spinner.className = 'gleame-chat-spinner';
-
     var text = document.createElement('span');
     text.className = 'gleame-chat-loading-text';
     text.textContent = LOADING_PHRASES[0];
@@ -541,7 +538,6 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     dots.setAttribute('aria-hidden', 'true');
     dots.innerHTML = '<i></i><i></i><i></i>';
 
-    bubble.appendChild(spinner);
     bubble.appendChild(text);
     bubble.appendChild(dots);
     wrap.appendChild(bubble);

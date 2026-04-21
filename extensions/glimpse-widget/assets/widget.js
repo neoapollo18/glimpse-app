@@ -8,7 +8,7 @@ console.log('Gleame Legacy Widget v3.0 loaded');
   // Instance state storage - keyed by block.id
   const instances = new Map();
   
-  const loadingMessages = ['Analyzing image...', 'Creating your transformation...', 'Working our magic...', 'Almost there...'];
+  const loadingMessages = ['Scanning your hand...', 'Applying your shades...', 'Finishing touches...', 'Almost ready...'];
   const SHOPIFY_APP_URL = 'https://glimpse-app-charles.onrender.com';
   const WIDGET_TYPE = 'legacy';
   
@@ -377,12 +377,12 @@ console.log('Gleame Legacy Widget v3.0 loaded');
   function startLoadingTextAnimation(instanceId) {
     const instance = getInstance(instanceId);
     const widget = getWidgetElement(instanceId);
-    const loadingTextEl = widget?.querySelector('.loading-text');
+    const loadingTextEl = widget?.querySelector('.loading-text-content') || widget?.querySelector('.loading-text');
     if (!loadingTextEl) return;
-    
+
     let currentIndex = 0;
     loadingTextEl.textContent = loadingMessages[currentIndex];
-    
+
     instance.loadingTextInterval = setInterval(() => {
       currentIndex++;
       if (currentIndex < loadingMessages.length) {
