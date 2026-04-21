@@ -9,7 +9,7 @@ console.log('Gleame Banner Widget v3.0 loaded');
   
   const SHOPIFY_APP_URL = 'https://glimpse-app-charles.onrender.com';
   const WIDGET_TYPE = 'banner';
-  const loadingMessages = ['Analyzing characteristics...', 'Personalizing results...', 'Applying to your photo...', 'Finishing touches...'];
+  const loadingMessages = ['Analyzing characteristics', 'Personalizing results', 'Applying to your photo', 'Finishing touches'];
 
   // Initialize namespace
   window.bannerWidgetFunctions = window.bannerWidgetFunctions || {};

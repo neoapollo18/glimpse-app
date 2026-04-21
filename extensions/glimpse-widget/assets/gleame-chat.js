@@ -512,10 +512,10 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   }
 
   var LOADING_PHRASES = [
-    'Analyzing characteristics...',
-    'Personalizing results...',
-    'Applying to your photo...',
-    'Finishing touches...',
+    'Analyzing characteristics',
+    'Personalizing results',
+    'Applying to your photo',
+    'Finishing touches',
   ];
   var loadingPhraseInterval = null;
 

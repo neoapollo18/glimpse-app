@@ -90,8 +90,8 @@
       <h2 class="banner-title">{{ title_text }}</h2>
       <p class="banner-description">{{ description_text }}</p>
       <button type="button" class="banner-button button-style-{{ button_style }}" id="bannerMainButton-{{ block.id }}" onclick="window.bannerWidgetFunctions.triggerFileInput('{{ block.id }}')">
-        <span class="banner-spinner-inline" style="display: none;" aria-hidden="true"><i></i><i></i><i></i></span>
         <span class="button-text">{{ button_text }}</span>
+        <span class="banner-spinner-inline" style="display: none;" aria-hidden="true"><i></i><i></i><i></i></span>
       </button>
       {% if show_disclaimer %}
         <p class="banner-disclaimer">{{ disclaimer_text }}</p>
