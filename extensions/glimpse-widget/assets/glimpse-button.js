@@ -796,7 +796,7 @@ console.log('Gleame Button Widget v3.0 loaded');
         '</button>' +
         '<div class="gvm-header">' +
           '<h3 class="gvm-title">Choose your shades</h3>' +
-          '<p class="gvm-subtitle">Select up to 3 to try on at once</p>' +
+          '<p class="gvm-subtitle">Pick up to 3 to try on together<span class="gvm-count" id="gvm-count">0 / 3</span></p>' +
         '</div>' +
         '<div class="gvm-grid" id="gvm-grid"></div>' +
         '<button type="button" class="gvm-cta" id="gvm-cta" disabled>Choose a shade</button>' +
@@ -828,6 +828,7 @@ console.log('Gleame Button Widget v3.0 loaded');
     ensureVariantModal();
     var grid = document.getElementById('gvm-grid');
     var cta  = document.getElementById('gvm-cta');
+    var countEl = document.getElementById('gvm-count');
     var selected = [];
 
     function updateCTA() {
@@ -836,9 +837,22 @@ console.log('Gleame Button Widget v3.0 loaded');
       cta.textContent = n === 0 ? 'Choose a shade'
         : n === 1 ? 'Generate 1 Look'
         : 'Generate ' + n + ' Looks';
+      if (countEl) {
+        countEl.textContent = n + ' / 3';
+        countEl.classList.toggle('gvm-count-full', n >= 3);
+      }
+    }
+
+    function updateFade() {
+      var scrollable = grid.scrollHeight > grid.clientHeight + 1;
+      var atTop = grid.scrollTop < 2;
+      var atBottom = grid.scrollTop + grid.clientHeight >= grid.scrollHeight - 2;
+      grid.classList.toggle('gvm-fade-top', scrollable && !atTop);
+      grid.classList.toggle('gvm-fade-bottom', scrollable && !atBottom);
     }
 
     grid.innerHTML = '';
+    grid.classList.remove('gvm-fade-top', 'gvm-fade-bottom');
     variants.forEach(function(v) {
       var card = document.createElement('button');
       card.type = 'button';
@@ -847,16 +861,29 @@ console.log('Gleame Button Widget v3.0 loaded');
 
       var variantImages = window.gleameVariantImages || {};
       var swatchImgUrl = variantImages[v.variantId] || variantImages[String(v.variantId)];
-      var swatchHtml = swatchImgUrl
-        ? '<img class="gvm-swatch" src="' + swatchImgUrl + '" alt="' + v.variantTitle + '">'
-        : v.displayColor
-          ? '<span class="gvm-swatch" style="background:' + v.displayColor + '"></span>'
-          : '<span class="gvm-swatch gvm-swatch-empty"></span>';
-      card.innerHTML = swatchHtml +
-        '<span class="gvm-card-label">' + v.variantTitle + '</span>' +
-        '<span class="gvm-checkmark">' +
-          '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' +
-        '</span>';
+      var swatch;
+      if (swatchImgUrl) {
+        swatch = document.createElement('img');
+        swatch.className = 'gvm-swatch';
+        swatch.src = swatchImgUrl;
+        swatch.alt = v.variantTitle || '';
+      } else if (v.displayColor) {
+        swatch = document.createElement('span');
+        swatch.className = 'gvm-swatch';
+        swatch.style.background = v.displayColor;
+      } else {
+        swatch = document.createElement('span');
+        swatch.className = 'gvm-swatch gvm-swatch-empty';
+      }
+      var label = document.createElement('span');
+      label.className = 'gvm-card-label';
+      label.textContent = v.variantTitle || '';
+      var checkmark = document.createElement('span');
+      checkmark.className = 'gvm-checkmark';
+      checkmark.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+      card.appendChild(swatch);
+      card.appendChild(label);
+      card.appendChild(checkmark);
 
       card.addEventListener('click', function() {
         var idx = selected.findIndex(function(s) { return s.variantId === v.variantId; });
@@ -890,6 +917,8 @@ console.log('Gleame Button Widget v3.0 loaded');
     var modal = document.getElementById('gleame-variant-modal');
     modal.classList.add('gvm-visible');
     document.body.style.overflow = 'hidden';
+    grid.onscroll = updateFade;
+    requestAnimationFrame(updateFade);
   }
 
   // Initialize a single widget instance
