@@ -50,7 +50,10 @@ const ALLOWED_SHOPS = [
   "hx5hqt-na.myshopify.com",
 ];
 
-// Fetch monthly sessions directly from Shopify API
+// Fetch monthly sessions directly from Shopify API.
+// Formula matches the cron job (api.cron.check-sessions.ts): 90-day sum / 3.
+// Any change here MUST be mirrored in the cron — the cron's value is what's
+// sent to Mantle flex billing on renewal, and the two must stay in sync.
 async function fetchMonthlySessionsForShop(shop: string, accessToken: string): Promise<number | null> {
   try {
     const query = `
@@ -74,13 +77,23 @@ async function fetchMonthlySessionsForShop(shop: string, accessToken: string): P
       body: JSON.stringify({ query }),
     });
 
-    if (!response.ok) return null;
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      console.error(`[sessions] ${shop}: HTTP ${response.status} ${body.substring(0, 300)}`);
+      return null;
+    }
 
     const result = await response.json();
-    if (result.errors?.length > 0) return null;
+    if (result.errors?.length > 0) {
+      console.error(`[sessions] ${shop}: GraphQL errors`, JSON.stringify(result.errors));
+      return null;
+    }
 
     const shopifyqlData = result.data?.shopifyqlQuery;
-    if (shopifyqlData?.parseErrors?.length > 0) return null;
+    if (shopifyqlData?.parseErrors?.length > 0) {
+      console.error(`[sessions] ${shop}: ShopifyQL parseErrors`, JSON.stringify(shopifyqlData.parseErrors));
+      return null;
+    }
 
     const tableData = shopifyqlData?.tableData;
     if (!tableData?.rows?.length) return 0;
@@ -88,7 +101,10 @@ async function fetchMonthlySessionsForShop(shop: string, accessToken: string): P
     const sessionsColumnIndex = tableData.columns.findIndex(
       (col: { name: string }) => col.name.toLowerCase() === 'sessions'
     );
-    if (sessionsColumnIndex === -1) return null;
+    if (sessionsColumnIndex === -1) {
+      console.error(`[sessions] ${shop}: no 'sessions' column in response`, JSON.stringify(tableData.columns));
+      return null;
+    }
 
     let totalSessions = 0;
     for (const row of tableData.rows) {
@@ -97,8 +113,22 @@ async function fetchMonthlySessionsForShop(shop: string, accessToken: string): P
     }
 
     return Math.round(totalSessions / 3); // Average monthly (90 days / 3)
-  } catch {
+  } catch (err) {
+    console.error(`[sessions] ${shop}: fetch threw`, err);
     return null;
+  }
+}
+
+// Bump only sessions_updated_at without touching monthly_sessions. Used when a
+// fetch fails so the 7-day staleness check doesn't retry the same broken shop
+// on every admin load.
+async function markSessionFetchAttempted(shopDomain: string): Promise<void> {
+  const { error } = await supabase
+    .from('shops')
+    .update({ sessions_updated_at: new Date().toISOString() })
+    .eq('shop_domain', shopDomain);
+  if (error) {
+    console.error(`[sessions] ${shopDomain}: failed to mark attempt`, error);
   }
 }
 
@@ -277,25 +307,28 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     if (staleShops.length > 0) {
       try {
+        // Match the cron's token-selection logic: one per shop, newest first.
+        // Without distinct + orderBy, Prisma may return a stale/revoked token
+        // from a prior install and every admin load silently 401s.
         const prismaShops = await prisma.session.findMany({
-          where: { isOnline: false },
+          where: { isOnline: false, accessToken: { not: '' } },
           select: { shop: true, accessToken: true },
+          distinct: ['shop'],
+          orderBy: { id: 'desc' },
         });
 
-        // Deduplicate by shop
         const shopTokenMap = new Map<string, string>();
         for (const ps of prismaShops) {
-          if (ps.accessToken && !shopTokenMap.has(ps.shop)) {
-            shopTokenMap.set(ps.shop, ps.accessToken);
-          }
+          if (ps.accessToken) shopTokenMap.set(ps.shop, ps.accessToken);
         }
 
-        // Only fetch for stale shops (limit to 20 per page load to avoid timeouts)
+        // Limit to 20 per page load so we don't fan out 50+ parallel Shopify
+        // calls on admin open; cron handles the long tail weekly.
         const shopsToUpdate = staleShops
           .filter(s => shopTokenMap.has(s.shop_domain))
           .slice(0, 20);
 
-        console.log(`📊 Admin: Refreshing sessions for ${shopsToUpdate.length} stale shops (${staleShops.length} total stale)`);
+        console.log(`📊 Admin: refreshing sessions for ${shopsToUpdate.length}/${staleShops.length} stale shops`);
 
         const sessionUpdates = shopsToUpdate.map(async (shop) => {
           const token = shopTokenMap.get(shop.shop_domain)!;
@@ -303,15 +336,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           if (sessions !== null) {
             await updateShopMonthlySessions(shop.shop_domain, sessions);
             shop.monthlySessions = sessions;
+            shop.sessions_updated_at = new Date().toISOString();
+          } else {
+            // Failed fetch: bump updated_at so we don't hammer this shop on
+            // every load. The N/A badge + stale badge will make this visible.
+            await markSessionFetchAttempted(shop.shop_domain);
+            shop.sessions_updated_at = new Date().toISOString();
           }
           return { shopDomain: shop.shop_domain, sessions };
         });
 
         const results = await Promise.all(sessionUpdates);
         const successCount = results.filter(r => r.sessions !== null).length;
-        console.log(`📊 Admin: Updated sessions for ${successCount}/${results.length} shops`);
+        console.log(`📊 Admin: updated sessions for ${successCount}/${results.length} shops`);
       } catch (sessionError) {
-        console.error('Error fetching sessions:', sessionError);
+        console.error('[sessions] batch refresh failed:', sessionError);
       }
     }
 
@@ -380,6 +419,24 @@ function sanitizePrompt(prompt: string | null): { valid: boolean; sanitized: str
     .replace(/<[^>]*>/g, ''); // Remove any HTML tags
   
   return { valid: true, sanitized };
+}
+
+// Relative time string for "checked X ago" labels. Used in the shop header
+// session badge so it's obvious when a count is stale without digging into DB.
+function formatRelativeTime(iso: string): string {
+  const now = Date.now();
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return "—";
+  const sec = Math.max(0, Math.floor((now - then) / 1000));
+  if (sec < 60) return "just now";
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  if (day < 30) return `${day}d ago`;
+  const mo = Math.floor(day / 30);
+  return `${mo}mo ago`;
 }
 
 // Validate UUID format
@@ -638,6 +695,34 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ success: true });
   }
 
+  if (actionType === "refresh-sessions") {
+    // Per-shop manual refresh. Writes monthly_sessions/sessions_updated_at in
+    // Supabase exactly like the cron; does NOT call Mantle — flex billing
+    // remains driven exclusively by the cron's renewal-window logic.
+    const targetShopDomain = formData.get("targetShopDomain") as string;
+    if (!targetShopDomain || typeof targetShopDomain !== "string") {
+      return json({ success: false, error: "Missing targetShopDomain" });
+    }
+
+    const targetSession = await prisma.session.findFirst({
+      where: { shop: targetShopDomain, isOnline: false, accessToken: { not: "" } },
+      orderBy: { id: "desc" },
+    });
+    if (!targetSession?.accessToken) {
+      return json({ success: false, error: "No access token for target shop" });
+    }
+
+    const sessions = await fetchMonthlySessionsForShop(targetShopDomain, targetSession.accessToken);
+    const updatedAt = new Date().toISOString();
+    if (sessions !== null) {
+      await updateShopMonthlySessions(targetShopDomain, sessions);
+      return json({ success: true, monthlySessions: sessions, sessionsUpdatedAt: updatedAt });
+    } else {
+      await markSessionFetchAttempted(targetShopDomain);
+      return json({ success: false, error: "Shopify fetch failed (see server logs)", sessionsUpdatedAt: updatedAt });
+    }
+  }
+
   return json({ success: false, error: "Unknown action" });
 };
 
@@ -661,6 +746,7 @@ export default function FoundersAdmin() {
   const variantPromptFetcher = useFetcher<any>();
   const modelFetcher = useFetcher<any>();
   const refFetcher = useFetcher<any>();
+  const sessionsFetcher = useFetcher<any>();
   const [refImageUrls, setRefImageUrls] = useState<Record<string, string[]>>({});
   const [variantRefImageUrls, setVariantRefImageUrls] = useState<Record<string, string[]>>({});
   const [aiModelOverrides, setAiModelOverrides] = useState<Record<string, string>>({});
@@ -668,6 +754,28 @@ export default function FoundersAdmin() {
   // prompts here and render them below if present.
   const [promptOverrides, setPromptOverrides] = useState<Record<string, string>>({});
   const [variantPromptOverrides, setVariantPromptOverrides] = useState<Record<string, string>>({});
+  // Per-shop session count overrides from manual refresh. `count` is null when
+  // the refresh failed (still updates timestamp so we can show "checked Xm ago").
+  const [sessionOverrides, setSessionOverrides] = useState<
+    Record<string, { count: number | null; updatedAt: string }>
+  >({});
+  const [refreshingShop, setRefreshingShop] = useState<string | null>(null);
+
+  // Apply session refresh results to local state when the fetcher settles.
+  useEffect(() => {
+    if (sessionsFetcher.state !== "idle" || !refreshingShop) return;
+    const data = sessionsFetcher.data;
+    if (data) {
+      setSessionOverrides((prev) => ({
+        ...prev,
+        [refreshingShop]: {
+          count: typeof data.monthlySessions === "number" ? data.monthlySessions : null,
+          updatedAt: data.sessionsUpdatedAt ?? new Date().toISOString(),
+        },
+      }));
+    }
+    setRefreshingShop(null);
+  }, [sessionsFetcher.data, sessionsFetcher.state, refreshingShop]);
 
   const [refFetcherTarget, setRefFetcherTarget] = useState<
     { type: "product" | "variant"; id: string } | null
@@ -758,6 +866,23 @@ export default function FoundersAdmin() {
 
   const getVariantPrompt = (vc: VariantConfig) =>
     variantPromptOverrides[vc.id] ?? vc.transformation_prompt;
+
+  const getSessionInfo = (shop: Shop) => {
+    const override = sessionOverrides[shop.shop_domain];
+    if (override) return { count: override.count, updatedAt: override.updatedAt };
+    return {
+      count: shop.monthlySessions ?? null,
+      updatedAt: shop.sessions_updated_at ?? null,
+    };
+  };
+
+  const refreshShopSessions = (shopDomain: string) => {
+    setRefreshingShop(shopDomain);
+    const formData = new FormData();
+    formData.append("action", "refresh-sessions");
+    formData.append("targetShopDomain", shopDomain);
+    sessionsFetcher.submit(formData, { method: "POST" });
+  };
 
   const getAiModel = (product: Product) => {
     if (aiModelOverrides[product.id] !== undefined) return aiModelOverrides[product.id];
@@ -951,11 +1076,30 @@ export default function FoundersAdmin() {
                   <BlockStack gap="100">
                     <InlineStack gap="200" blockAlign="center">
                       <Text as="h3" variant="headingMd">{shop.shop_domain}</Text>
-                      {shop.monthlySessions !== null && shop.monthlySessions !== undefined ? (
-                        <Badge tone="info">{`${shop.monthlySessions.toLocaleString()} sessions/mo`}</Badge>
-                      ) : (
-                        <Badge tone="attention">Sessions: N/A</Badge>
-                      )}
+                      {(() => {
+                        const info = getSessionInfo(shop);
+                        return info.count !== null && info.count !== undefined ? (
+                          <Badge tone="info">{`${info.count.toLocaleString()} sessions/mo`}</Badge>
+                        ) : (
+                          <Badge tone="attention">Sessions: N/A</Badge>
+                        );
+                      })()}
+                      {(() => {
+                        const info = getSessionInfo(shop);
+                        if (!info.updatedAt) return null;
+                        return (
+                          <Text as="span" variant="bodySm" tone="subdued">
+                            checked {formatRelativeTime(info.updatedAt)}
+                          </Text>
+                        );
+                      })()}
+                      <Button
+                        size="micro"
+                        onClick={() => refreshShopSessions(shop.shop_domain)}
+                        loading={refreshingShop === shop.shop_domain}
+                      >
+                        Refresh
+                      </Button>
                     </InlineStack>
                     <Text as="p" variant="bodySm" tone="subdued">
                       {shop.products.length} product{shop.products.length !== 1 ? "s" : ""} configured
