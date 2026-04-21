@@ -296,8 +296,11 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     panel.classList.add('gleame-chat-visible');
     updateBubbleIcon(true);
 
-    // Start conversation if first time, or restart if previous flow ended
-    if (messages.length === 0 || conversationEnded) {
+    // Start conversation only if there's nothing to restore. A finished flow
+    // (conversationEnded === true) is preserved so reopening shows prior
+    // messages; the trailing "Start a new search" / "Try again" button lets
+    // the user restart on demand.
+    if (messages.length === 0) {
       resetConversation();
       startConversation();
     }
@@ -581,6 +584,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       if (data.recommendations && data.recommendations.length > 0) {
         pushMessage({ type: 'bot-text', text: "Here's what I found for you! ✨" });
         pushMessage({ type: 'bot-cards', recommendations: data.recommendations });
+        pushMessage({ type: 'bot-buttons', buttons: [{ label: 'Start a new search', action: 'recommend' }], consumed: false });
         trackEvent('chat_recommendation_shown');
         conversationEnded = true;
         saveState();
