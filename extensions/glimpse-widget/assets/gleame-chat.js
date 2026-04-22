@@ -563,6 +563,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     wrap.appendChild(text);
     messagesContainer.appendChild(wrap);
     scrollToBottom();
+    playWipe(text);
 
     var idx = 0;
     loadingPhraseInterval = setInterval(function() {
@@ -572,13 +573,15 @@ console.log('Gleame Chat Assistant v1.0 loaded');
         return;
       }
       idx++;
-      var next = LOADING_PHRASES[idx];
-      text.style.opacity = '0';
-      setTimeout(function() {
-        text.textContent = next;
-        text.style.opacity = '1';
-      }, 120);
+      text.textContent = LOADING_PHRASES[idx];
+      playWipe(text);
     }, 6000);
+  }
+
+  function playWipe(el) {
+    el.classList.remove('gleame-chat-wipe-in');
+    void el.offsetWidth;
+    el.classList.add('gleame-chat-wipe-in');
   }
 
   function sendRecommendation(file) {
