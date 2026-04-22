@@ -397,6 +397,63 @@
   to { transform: rotate(360deg); }
 }
 
+/* Loading row (no bubble) — shown while photos generate.
+   Mirrors Claude's "thinking" treatment: bare row, logo shimmer, cycling text. */
+.gleame-chat-loading-row {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  padding: 6px 2px !important;
+  background: transparent !important;
+  color: #4b5563 !important;
+  font-size: 14px !important;
+  line-height: 1.45 !important;
+}
+
+.gleame-chat-loading-logo-wrap {
+  width: 22px !important;
+  height: 22px !important;
+  flex-shrink: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  animation: gleame-chat-loading-breathe 1.6s ease-in-out infinite !important;
+}
+
+.gleame-chat-loading-logo {
+  width: 100% !important;
+  height: 100% !important;
+  display: block !important;
+}
+
+.gleame-chat-loading-logo-p1 {
+  animation: gleame-chat-loading-p1 1.4s ease-in-out infinite !important;
+}
+
+.gleame-chat-loading-logo-p2 {
+  animation: gleame-chat-loading-p2 1.4s ease-in-out infinite !important;
+}
+
+.gleame-chat-loading-text {
+  opacity: 1;
+  transition: opacity 120ms ease-out !important;
+}
+
+@keyframes gleame-chat-loading-p1 {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+@keyframes gleame-chat-loading-p2 {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+@keyframes gleame-chat-loading-breathe {
+  0%, 100% { transform: scale(0.94); }
+  50% { transform: scale(1); }
+}
+
 /* Typing indicator */
 .gleame-chat-typing {
   display: flex !important;
@@ -698,6 +755,10 @@
   .gleame-chat-card-enter,
   .gleame-chat-msg,
   .gleame-chat-loading-dots i,
+  .gleame-chat-loading-logo-wrap,
+  .gleame-chat-loading-logo-p1,
+  .gleame-chat-loading-logo-p2,
+  .gleame-chat-loading-text,
   .gleame-chat-skeleton-image,
   .gleame-chat-skeleton-line,
   .gleame-chat-skeleton-btn,
