@@ -437,7 +437,7 @@
 .gleame-chat-loading-text {
   display: inline-block !important;
   color: #111827 !important;
-  font-weight: 500 !important;
+  font-weight: 400 !important;
 }
 
 .gleame-chat-loading-text::after {
