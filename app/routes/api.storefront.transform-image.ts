@@ -5,7 +5,7 @@ import {
   transformImageWithOpenAI,
   GEMINI_MODEL_PRO,
   GEMINI_MODEL_FLASH,
-  MODEL_OPENAI,
+  isOpenAIModel,
   type ReferenceImagePart,
 } from "../lib/ai.server";
 import { parseReferenceImageUrls } from "../lib/reference-images";
@@ -294,11 +294,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     // Helper: run a single transform with Gemini → OpenAI fallback
     async function runTransform(prompt: string, referenceImages: ReferenceImagePart[]) {
-      if (modelToUse === MODEL_OPENAI) {
+      if (isOpenAIModel(modelToUse)) {
         return transformImageWithOpenAI({
           inputImage: base64Image,
           transformationPrompt: prompt,
           mimeType: imageFile.type,
+          model: modelToUse,
           referenceImages,
         });
       }

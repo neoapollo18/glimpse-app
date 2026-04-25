@@ -13,6 +13,12 @@ export const GEMINI_MODEL_PRO = "gemini-3-pro-image-preview";           // Varia
 export const GEMINI_MODEL_FLASH = "gemini-2.5-flash-image";             // Standard (skincare etc)
 export const GEMINI_MODEL_FLASH_31 = "gemini-3.1-flash-image-preview";  // New: higher quality, uses 2K input
 export const MODEL_OPENAI = "gpt-image-1.5";                            // OpenAI gpt-image-1.5
+export const MODEL_OPENAI_2 = "gpt-image-2";                            // OpenAI gpt-image-2 (medium quality)
+
+export const OPENAI_MODELS = new Set<string>([MODEL_OPENAI, MODEL_OPENAI_2]);
+export function isOpenAIModel(model: string | null | undefined): boolean {
+  return !!model && OPENAI_MODELS.has(model);
+}
 
 // Max resolution per model (px on longest side)
 // OpenAI not listed here — it uses its own compression path in transformImageWithOpenAI
@@ -280,6 +286,7 @@ export async function transformImage(
 function callOpenAIImageEdit(
   images: { buffer: Buffer; filename: string }[],
   prompt: string,
+  model: string = MODEL_OPENAI,
 ): Promise<any> {
   return new Promise((resolve, reject) => {
     const apiKey = process.env.OPENAI_API_KEY;
@@ -289,7 +296,7 @@ function callOpenAIImageEdit(
     }
 
     const form = new NodeFormData();
-    form.append('model', 'gpt-image-1.5');
+    form.append('model', model);
     form.append('prompt', prompt);
     form.append('size', '1024x1024');
     form.append('quality', 'medium');
@@ -361,16 +368,17 @@ export async function transformImageWithOpenAI(
       });
     }
 
-    console.log(`Using OpenAI gpt-image-1.5 with ${images.length} image(s)`);
+    const openaiModel = isOpenAIModel(request.model) ? (request.model as string) : MODEL_OPENAI;
+    console.log(`Using OpenAI ${openaiModel} with ${images.length} image(s)`);
 
     // Wrap the prompt with safety context for OpenAI's content filter
-    const safetyFramedPrompt = 
+    const safetyFramedPrompt =
       `[CONTEXT: This is a professional e-commerce virtual hair product try-on tool. ` +
       `The customer has uploaded a headshot to preview how a wig/hair product would look on them. ` +
       `This is a standard retail product visualization, similar to virtual eyeglasses or hat try-on tools.]\n\n` +
       request.transformationPrompt;
 
-    const result = await callOpenAIImageEdit(images, safetyFramedPrompt);
+    const result = await callOpenAIImageEdit(images, safetyFramedPrompt, openaiModel);
 
     const imageData = result.data?.[0]?.b64_json;
     if (!imageData) {

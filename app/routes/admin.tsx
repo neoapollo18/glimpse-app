@@ -451,6 +451,7 @@ const VALID_AI_MODELS = [
   'gemini-3.1-flash-image-preview',
   'gemini-3-pro-image-preview',
   'gpt-image-1.5',
+  'gpt-image-2',
 ] as const;
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -1479,6 +1480,7 @@ export default function FoundersAdmin() {
                                           { label: "Gemini 3.1 Flash (2K)", value: "gemini-3.1-flash-image-preview" },
                                           { label: "Gemini 3 Pro", value: "gemini-3-pro-image-preview" },
                                           { label: "OpenAI gpt-image-1.5", value: "gpt-image-1.5" },
+                                          { label: "OpenAI gpt-image-2 (medium)", value: "gpt-image-2" },
                                         ]}
                                         value={getAiModel(product)}
                                         onChange={(value) => saveAiModel(product.id, value)}
