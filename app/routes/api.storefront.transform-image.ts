@@ -55,6 +55,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const productId = formData.get("productId") as string;
     const shopDomain = formData.get("shopDomain") as string;
     const widgetType = (formData.get("widgetType") as string) || "unknown";
+    const cartToken = (formData.get("cartToken") as string | null) || undefined;
 
     // Multi-variant mode: variantIds[] sent as repeated FormData keys
     // Single-variant / no-variant mode: legacy variantId key (backward compat)
@@ -352,7 +353,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             const result = await runTransform(prompt, referenceImages);
 
             if (result.success) {
-              trackTransformationEvent(verifiedShopDomain, productId, 'transformation', widgetType).catch(() => {});
+              trackTransformationEvent(verifiedShopDomain, productId, 'transformation', widgetType, cartToken).catch(() => {});
             }
 
             return {
@@ -401,7 +402,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       });
     }
 
-    trackTransformationEvent(verifiedShopDomain, productId, 'transformation', widgetType).catch(err => {
+    trackTransformationEvent(verifiedShopDomain, productId, 'transformation', widgetType, cartToken).catch(err => {
       console.error('Failed to track analytics event:', err);
     });
 

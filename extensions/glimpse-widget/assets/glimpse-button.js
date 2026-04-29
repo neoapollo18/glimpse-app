@@ -466,7 +466,8 @@ console.log('Gleame Button Widget v3.0 loaded');
       formData.append('shopDomain', instance.shopDomain);
       formData.append('widgetType', 'button');
       if (instance.variantId) formData.append('variantId', instance.variantId);
-      
+      if (instance.cartToken) formData.append('cartToken', instance.cartToken);
+
       console.log('Gleame Button: Sending transform for instance', instanceId, {
         productId: instance.productId,
         shopDomain: instance.shopDomain,
@@ -610,6 +611,7 @@ console.log('Gleame Button Widget v3.0 loaded');
       formData.append('shopDomain', instance.shopDomain);
       formData.append('widgetType', WIDGET_TYPE);
       selectedVariants.forEach(function(v) { formData.append('variantIds[]', v.variantId); });
+      if (instance.cartToken) formData.append('cartToken', instance.cartToken);
 
       const controller = new AbortController();
       const timeoutId = setTimeout(function() { controller.abort(); }, 120000);

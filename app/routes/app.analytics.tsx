@@ -23,7 +23,7 @@ import {
 } from "@shopify/polaris-icons";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { getAnalytics } from "../lib/supabase.server";
+import { getAnalytics, getConversionStats, getTopTrafficSources, type TrafficSourceStat } from "../lib/supabase.server";
 import { useState, useCallback } from "react";
 
 interface WidgetBreakdown {
@@ -46,11 +46,48 @@ interface AnalyticsData {
   productBreakdown: ProductBreakdown[];
 }
 
+interface AttributionStats {
+  totalOrders: number;
+  ordersWithWidgetUsage: number;
+  conversionRate: number;
+  totalRevenue: number;
+  widgetAttributedRevenue: number;
+  repeatOrders: number;
+  repeatOrdersWithWidget: number;
+  avgDaysToConversion: number;
+  trafficSources: TrafficSourceStat[];
+}
+
+const EMPTY_ATTRIBUTION: AttributionStats = {
+  totalOrders: 0,
+  ordersWithWidgetUsage: 0,
+  conversionRate: 0,
+  totalRevenue: 0,
+  widgetAttributedRevenue: 0,
+  repeatOrders: 0,
+  repeatOrdersWithWidget: 0,
+  avgDaysToConversion: 0,
+  trafficSources: [],
+};
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
 
-  const analytics7Days = await getAnalytics(session.shop, 7);
-  const analytics30Days = await getAnalytics(session.shop, 30);
+  const [
+    analytics7Days,
+    analytics30Days,
+    conversion7Days,
+    conversion30Days,
+    sources7Days,
+    sources30Days,
+  ] = await Promise.all([
+    getAnalytics(session.shop, 7),
+    getAnalytics(session.shop, 30),
+    getConversionStats(session.shop, 7),
+    getConversionStats(session.shop, 30),
+    getTopTrafficSources(session.shop, 7),
+    getTopTrafficSources(session.shop, 30),
+  ]);
 
   // Fetch product images from Shopify
   const response = await admin.graphql(`
@@ -99,11 +136,35 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     productBreakdown: (analytics30Days?.productBreakdown || []) as ProductBreakdown[],
   };
 
-  return json({ analytics7: safeAnalytics7, analytics30: safeAnalytics30, productImages });
+  const buildAttribution = (
+    conv: Awaited<ReturnType<typeof getConversionStats>>,
+    sources: TrafficSourceStat[],
+  ): AttributionStats => ({
+    totalOrders: conv?.totalOrders ?? 0,
+    ordersWithWidgetUsage: conv?.ordersWithWidgetUsage ?? 0,
+    conversionRate: conv?.conversionRate ?? 0,
+    totalRevenue: conv?.totalRevenue ?? 0,
+    widgetAttributedRevenue: conv?.widgetAttributedRevenue ?? 0,
+    repeatOrders: conv?.repeatOrders ?? 0,
+    repeatOrdersWithWidget: conv?.repeatOrdersWithWidget ?? 0,
+    avgDaysToConversion: conv?.avgDaysToConversion ?? 0,
+    trafficSources: sources ?? [],
+  });
+
+  const attribution7 = buildAttribution(conversion7Days, sources7Days);
+  const attribution30 = buildAttribution(conversion30Days, sources30Days);
+
+  return json({
+    analytics7: safeAnalytics7,
+    analytics30: safeAnalytics30,
+    attribution7,
+    attribution30,
+    productImages,
+  });
 };
 
 export default function Analytics() {
-  const { analytics7, analytics30, productImages } = useLoaderData<typeof loader>();
+  const { analytics7, analytics30, attribution7, attribution30, productImages } = useLoaderData<typeof loader>();
   const [timeRange, setTimeRange] = useState("30");
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
 
@@ -113,6 +174,9 @@ export default function Analytics() {
   ];
 
   const currentData = timeRange === "7" ? analytics7 : analytics30;
+  const currentAttribution: AttributionStats =
+    (timeRange === "7" ? attribution7 : attribution30) ?? EMPTY_ATTRIBUTION;
+  const hasAttributionData = currentAttribution.totalOrders > 0;
 
   const toggleProduct = useCallback((productId: string) => {
     setExpandedProducts((prev) => {
@@ -149,6 +213,111 @@ export default function Analytics() {
             />
           </InlineStack>
         </InlineStack>
+
+        {/* Attribution — widget-driven conversion + revenue */}
+        <BlockStack gap="300">
+          <InlineStack gap="200" blockAlign="center">
+            <Text as="h2" variant="headingMd">Attribution</Text>
+            <Badge tone="success">From Shopify</Badge>
+          </InlineStack>
+
+          {!hasAttributionData ? (
+            <Card padding="400">
+              <BlockStack gap="200">
+                <Text as="p" variant="bodyMd" fontWeight="semibold">
+                  No orders tracked yet
+                </Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Once shoppers complete a purchase, you'll see widget-attributed revenue, repeat-purchase rate, and top traffic sources here.
+                </Text>
+              </BlockStack>
+            </Card>
+          ) : (
+            <BlockStack gap="400">
+              <InlineGrid columns={{ xs: 1, sm: 2, md: 4 }} gap="400">
+                <Card padding="400">
+                  <BlockStack gap="200">
+                    <Text as="span" variant="bodySm" tone="subdued">Widget conversion rate</Text>
+                    <Text as="p" variant="headingXl" fontWeight="bold">
+                      {currentAttribution.conversionRate.toFixed(1)}%
+                    </Text>
+                    <Text as="span" variant="bodySm" tone="subdued">
+                      {currentAttribution.ordersWithWidgetUsage.toLocaleString()} of {currentAttribution.totalOrders.toLocaleString()} orders
+                    </Text>
+                  </BlockStack>
+                </Card>
+
+                <Card padding="400">
+                  <BlockStack gap="200">
+                    <Text as="span" variant="bodySm" tone="subdued">Widget-attributed revenue</Text>
+                    <Text as="p" variant="headingXl" fontWeight="bold">
+                      ${currentAttribution.widgetAttributedRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </Text>
+                    <Text as="span" variant="bodySm" tone="subdued">
+                      of ${currentAttribution.totalRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })} total
+                    </Text>
+                  </BlockStack>
+                </Card>
+
+                <Card padding="400">
+                  <BlockStack gap="200">
+                    <Text as="span" variant="bodySm" tone="subdued">Repeat purchases</Text>
+                    <Text as="p" variant="headingXl" fontWeight="bold">
+                      {currentAttribution.repeatOrdersWithWidget.toLocaleString()}
+                    </Text>
+                    <Text as="span" variant="bodySm" tone="subdued">
+                      after a try-on
+                    </Text>
+                  </BlockStack>
+                </Card>
+
+                <Card padding="400">
+                  <BlockStack gap="200">
+                    <Text as="span" variant="bodySm" tone="subdued">Avg days to convert</Text>
+                    <Text as="p" variant="headingXl" fontWeight="bold">
+                      {currentAttribution.avgDaysToConversion > 0
+                        ? currentAttribution.avgDaysToConversion.toFixed(1)
+                        : "—"}
+                    </Text>
+                    <Text as="span" variant="bodySm" tone="subdued">
+                      first visit → purchase
+                    </Text>
+                  </BlockStack>
+                </Card>
+              </InlineGrid>
+
+              {currentAttribution.trafficSources.length > 0 && (
+                <Card padding="0">
+                  <Box padding="400" paddingBlockEnd="300">
+                    <Text as="h3" variant="headingSm">Top traffic sources for widget-attributed orders</Text>
+                  </Box>
+                  <Divider />
+                  <Box padding="400" paddingBlockStart="300">
+                    <BlockStack gap="200">
+                      {currentAttribution.trafficSources.map((src) => (
+                        <InlineStack key={src.source} align="space-between" blockAlign="center">
+                          <Text as="span" variant="bodyMd" fontWeight="semibold">
+                            {src.source}
+                          </Text>
+                          <InlineStack gap="400" blockAlign="center">
+                            <Text as="span" variant="bodySm" tone="subdued">
+                              {src.orders.toLocaleString()} {src.orders === 1 ? "order" : "orders"}
+                            </Text>
+                            <Text as="span" variant="bodyMd" fontWeight="semibold">
+                              ${src.revenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            </Text>
+                          </InlineStack>
+                        </InlineStack>
+                      ))}
+                    </BlockStack>
+                  </Box>
+                </Card>
+              )}
+            </BlockStack>
+          )}
+        </BlockStack>
+
+        <Divider />
 
         {/* Stats Cards */}
         <InlineGrid columns={{ xs: 1, sm: 3, md: 3 }} gap="400">

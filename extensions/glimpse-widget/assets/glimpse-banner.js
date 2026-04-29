@@ -486,6 +486,9 @@ console.log('Gleame Banner Widget v3.0 loaded');
     if (instance.variantId) {
       formData.append('variantId', instance.variantId);
     }
+    if (instance.cartToken) {
+      formData.append('cartToken', instance.cartToken);
+    }
 
     console.log('Gleame Banner: Sending transform for instance', instanceId, {
       productId: instance.productId,
@@ -618,6 +621,9 @@ console.log('Gleame Banner Widget v3.0 loaded');
       formData.append('shopDomain', instance.shopDomain);
       formData.append('widgetType', WIDGET_TYPE);
       selectedVariants.forEach(function(v) { formData.append('variantIds[]', v.variantId); });
+      if (instance.cartToken) {
+        formData.append('cartToken', instance.cartToken);
+      }
 
       const controller = new AbortController();
       const timeoutId = setTimeout(function() { controller.abort(); }, 120000);

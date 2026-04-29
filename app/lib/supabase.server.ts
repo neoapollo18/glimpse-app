@@ -389,6 +389,21 @@ export async function trackTransformationEvent(
  * Record an order from the orders/create webhook
  * Used for conversion attribution tracking
  */
+export interface OrderJourneyData {
+  firstTouchSource?: string | null;
+  firstTouchSourceType?: string | null;
+  firstTouchLandingPage?: string | null;
+  firstTouchUtm?: Record<string, string | null> | null;
+  firstTouchAt?: string | null;
+  lastTouchSource?: string | null;
+  lastTouchSourceType?: string | null;
+  lastTouchLandingPage?: string | null;
+  lastTouchUtm?: Record<string, string | null> | null;
+  lastTouchAt?: string | null;
+  customerOrderIndex?: number | null;
+  daysToConversion?: number | null;
+}
+
 export async function recordOrder(
   shopDomain: string,
   orderData: {
@@ -399,6 +414,7 @@ export async function recordOrder(
     currency?: string;
     customerId?: string;
     createdAt?: string;
+    journey?: OrderJourneyData;
   }
 ) {
   try {
@@ -408,6 +424,7 @@ export async function recordOrder(
       return null;
     }
 
+    const j = orderData.journey;
     const { data, error } = await supabase
       .from('widget_orders')
       .upsert([{
@@ -418,7 +435,20 @@ export async function recordOrder(
         total_price: orderData.totalPrice || null,
         currency: orderData.currency || 'USD',
         customer_id: orderData.customerId || null,
-        shopify_created_at: orderData.createdAt || new Date().toISOString()
+        shopify_created_at: orderData.createdAt || new Date().toISOString(),
+        first_touch_source: j?.firstTouchSource ?? null,
+        first_touch_source_type: j?.firstTouchSourceType ?? null,
+        first_touch_landing_page: j?.firstTouchLandingPage ?? null,
+        first_touch_utm: j?.firstTouchUtm ?? null,
+        first_touch_at: j?.firstTouchAt ?? null,
+        last_touch_source: j?.lastTouchSource ?? null,
+        last_touch_source_type: j?.lastTouchSourceType ?? null,
+        last_touch_landing_page: j?.lastTouchLandingPage ?? null,
+        last_touch_utm: j?.lastTouchUtm ?? null,
+        last_touch_at: j?.lastTouchAt ?? null,
+        customer_order_index: j?.customerOrderIndex ?? null,
+        days_to_conversion: j?.daysToConversion ?? null,
+        // is_repeat_customer is a Postgres-generated column (customer_order_index >= 2)
       }], {
         onConflict: 'shop_id,shopify_order_id'
       })
@@ -464,17 +494,58 @@ export async function getConversionStats(shopDomain: string, daysBack: number = 
 
     // RPC returns array, get first row
     const stats = Array.isArray(data) ? data[0] : data;
-    
+
     return {
       totalOrders: Number(stats?.total_orders || 0),
       ordersWithWidgetUsage: Number(stats?.orders_with_widget_usage || 0),
       conversionRate: Number(stats?.conversion_rate || 0),
       totalRevenue: Number(stats?.total_revenue || 0),
-      widgetAttributedRevenue: Number(stats?.widget_attributed_revenue || 0)
+      widgetAttributedRevenue: Number(stats?.widget_attributed_revenue || 0),
+      repeatOrders: Number(stats?.repeat_orders || 0),
+      repeatOrdersWithWidget: Number(stats?.repeat_orders_with_widget || 0),
+      avgDaysToConversion: Number(stats?.avg_days_to_conversion || 0),
     };
   } catch (error) {
     console.error('Error in getConversionStats:', error);
     return null;
+  }
+}
+
+export interface TrafficSourceStat {
+  source: string;
+  orders: number;
+  revenue: number;
+}
+
+export async function getTopTrafficSources(
+  shopDomain: string,
+  daysBack: number = 30,
+  limit: number = 5,
+): Promise<TrafficSourceStat[]> {
+  try {
+    const shop = await findShopByDomain(shopDomain);
+    if (!shop) return [];
+
+    const { data, error } = await supabase
+      .rpc('get_top_traffic_sources', {
+        p_shop_id: shop.id,
+        p_days_back: daysBack,
+        p_limit: limit,
+      });
+
+    if (error) {
+      console.error('Error getting top traffic sources:', error);
+      return [];
+    }
+
+    return (Array.isArray(data) ? data : []).map((row: { source: string; orders: number | string; revenue: number | string }) => ({
+      source: row.source,
+      orders: Number(row.orders || 0),
+      revenue: Number(row.revenue || 0),
+    }));
+  } catch (error) {
+    console.error('Error in getTopTrafficSources:', error);
+    return [];
   }
 }
 

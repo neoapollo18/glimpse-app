@@ -586,6 +586,7 @@ console.log('Gleame Integrated Horizontal Widget v2.0 loaded');
       formData.append('shopDomain', instance.shopDomain);
       formData.append('widgetType', 'horizontal');
       if (instance.variantId) formData.append('variantId', instance.variantId);
+      if (instance.cartToken) formData.append('cartToken', instance.cartToken);
       console.log('Gleame Horizontal: Sending transform for instance', instanceId, {
         productId: instance.productId,
         shopDomain: instance.shopDomain,
@@ -712,6 +713,7 @@ console.log('Gleame Integrated Horizontal Widget v2.0 loaded');
       formData.append('shopDomain', instance.shopDomain);
       formData.append('widgetType', 'horizontal');
       selectedVariants.forEach(function(v) { formData.append('variantIds[]', v.variantId); });
+      if (instance.cartToken) formData.append('cartToken', instance.cartToken);
 
       const controller = new AbortController();
       const timeoutId = setTimeout(function() { controller.abort(); }, 120000);
