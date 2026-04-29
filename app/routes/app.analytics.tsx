@@ -49,12 +49,14 @@ interface AnalyticsData {
 interface AttributionStats {
   totalOrders: number;
   ordersWithWidgetUsage: number;
-  conversionRate: number;
+  conversionRate: number;             // % of buyers who used widget (order coverage)
   totalRevenue: number;
   widgetAttributedRevenue: number;
   repeatOrders: number;
   repeatOrdersWithWidget: number;
-  avgDaysToConversion: number;
+  widgetSessions: number;             // distinct widget-engaged carts in window
+  widgetSessionsConverted: number;    // of those, how many bought
+  widgetPurchaseRate: number;         // % of widget users who bought
   trafficSources: TrafficSourceStat[];
 }
 
@@ -66,7 +68,9 @@ const EMPTY_ATTRIBUTION: AttributionStats = {
   widgetAttributedRevenue: 0,
   repeatOrders: 0,
   repeatOrdersWithWidget: 0,
-  avgDaysToConversion: 0,
+  widgetSessions: 0,
+  widgetSessionsConverted: 0,
+  widgetPurchaseRate: 0,
   trafficSources: [],
 };
 
@@ -147,7 +151,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     widgetAttributedRevenue: conv?.widgetAttributedRevenue ?? 0,
     repeatOrders: conv?.repeatOrders ?? 0,
     repeatOrdersWithWidget: conv?.repeatOrdersWithWidget ?? 0,
-    avgDaysToConversion: conv?.avgDaysToConversion ?? 0,
+    widgetSessions: conv?.widgetSessions ?? 0,
+    widgetSessionsConverted: conv?.widgetSessionsConverted ?? 0,
+    widgetPurchaseRate: conv?.widgetPurchaseRate ?? 0,
     trafficSources: sources ?? [],
   });
 
@@ -176,7 +182,8 @@ export default function Analytics() {
   const currentData = timeRange === "7" ? analytics7 : analytics30;
   const currentAttribution: AttributionStats =
     (timeRange === "7" ? attribution7 : attribution30) ?? EMPTY_ATTRIBUTION;
-  const hasAttributionData = currentAttribution.totalOrders > 0;
+  const hasAttributionData =
+    currentAttribution.totalOrders > 0 || currentAttribution.widgetSessions > 0;
 
   const toggleProduct = useCallback((productId: string) => {
     setExpandedProducts((prev) => {
@@ -237,12 +244,12 @@ export default function Analytics() {
               <InlineGrid columns={{ xs: 1, sm: 2, md: 4 }} gap="400">
                 <Card padding="400">
                   <BlockStack gap="200">
-                    <Text as="span" variant="bodySm" tone="subdued">Widget conversion rate</Text>
+                    <Text as="span" variant="bodySm" tone="subdued">Widget → Purchase rate</Text>
                     <Text as="p" variant="headingXl" fontWeight="bold">
-                      {currentAttribution.conversionRate.toFixed(1)}%
+                      {currentAttribution.widgetPurchaseRate.toFixed(1)}%
                     </Text>
                     <Text as="span" variant="bodySm" tone="subdued">
-                      {currentAttribution.ordersWithWidgetUsage.toLocaleString()} of {currentAttribution.totalOrders.toLocaleString()} orders
+                      {currentAttribution.widgetSessionsConverted.toLocaleString()} of {currentAttribution.widgetSessions.toLocaleString()} widget sessions converted
                     </Text>
                   </BlockStack>
                 </Card>
@@ -261,26 +268,24 @@ export default function Analytics() {
 
                 <Card padding="400">
                   <BlockStack gap="200">
-                    <Text as="span" variant="bodySm" tone="subdued">Repeat purchases</Text>
+                    <Text as="span" variant="bodySm" tone="subdued">Order coverage</Text>
                     <Text as="p" variant="headingXl" fontWeight="bold">
-                      {currentAttribution.repeatOrdersWithWidget.toLocaleString()}
+                      {currentAttribution.conversionRate.toFixed(1)}%
                     </Text>
                     <Text as="span" variant="bodySm" tone="subdued">
-                      after a try-on
+                      {currentAttribution.ordersWithWidgetUsage.toLocaleString()} of {currentAttribution.totalOrders.toLocaleString()} orders used the widget
                     </Text>
                   </BlockStack>
                 </Card>
 
                 <Card padding="400">
                   <BlockStack gap="200">
-                    <Text as="span" variant="bodySm" tone="subdued">Avg days to convert</Text>
+                    <Text as="span" variant="bodySm" tone="subdued">Repeat purchases</Text>
                     <Text as="p" variant="headingXl" fontWeight="bold">
-                      {currentAttribution.avgDaysToConversion > 0
-                        ? currentAttribution.avgDaysToConversion.toFixed(1)
-                        : "—"}
+                      {currentAttribution.repeatOrdersWithWidget.toLocaleString()}
                     </Text>
                     <Text as="span" variant="bodySm" tone="subdued">
-                      first visit → purchase
+                      after a try-on
                     </Text>
                   </BlockStack>
                 </Card>

@@ -498,12 +498,17 @@ export async function getConversionStats(shopDomain: string, daysBack: number = 
     return {
       totalOrders: Number(stats?.total_orders || 0),
       ordersWithWidgetUsage: Number(stats?.orders_with_widget_usage || 0),
+      // % of buyers who used widget (order coverage)
       conversionRate: Number(stats?.conversion_rate || 0),
       totalRevenue: Number(stats?.total_revenue || 0),
       widgetAttributedRevenue: Number(stats?.widget_attributed_revenue || 0),
       repeatOrders: Number(stats?.repeat_orders || 0),
       repeatOrdersWithWidget: Number(stats?.repeat_orders_with_widget || 0),
-      avgDaysToConversion: Number(stats?.avg_days_to_conversion || 0),
+      // Distinct widget-engaged carts in window, and how many converted
+      widgetSessions: Number(stats?.widget_sessions || 0),
+      widgetSessionsConverted: Number(stats?.widget_sessions_converted || 0),
+      // % of widget users who bought (the headline ROI metric)
+      widgetPurchaseRate: Number(stats?.widget_purchase_rate || 0),
     };
   } catch (error) {
     console.error('Error in getConversionStats:', error);
