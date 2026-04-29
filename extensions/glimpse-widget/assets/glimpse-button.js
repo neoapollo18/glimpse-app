@@ -940,6 +940,13 @@ console.log('Gleame Button Widget v3.0 loaded');
     instance.variantId = getCurrentVariantId();
     const rawCartToken = widget.getAttribute('data-cart-token');
     instance.cartToken = (rawCartToken && rawCartToken.trim()) ? rawCartToken.trim() : null;
+    // Liquid attribute is rendered server-side and goes stale after AJAX
+    // add-to-cart. Refresh from the live cart so attribution catches users
+    // who add to cart mid-session before opening the widget.
+    fetch('/cart.js', { credentials: 'same-origin' })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(cart) { if (cart && cart.token) instance.cartToken = cart.token; })
+      .catch(function() {});
     instance.originalButtonText = widget.getAttribute('data-button-text') || 'TRY IT ON';
     
     // Track widget view (only once per instance)
