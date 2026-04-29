@@ -4,6 +4,8 @@ import {
   transformImage,
   transformImageWithOpenAI,
   GEMINI_MODEL_FLASH,
+  MODEL_OPENAI,
+  MODEL_OPENAI_2,
   isOpenAIModel,
   type ReferenceImagePart,
 } from "../lib/ai.server";
@@ -253,6 +255,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             model: modelToUse,
             referenceImages,
           });
+          // Degrade gpt-image-2 → gpt-image-1.5 on failure (org verification etc).
+          if (!result.success && modelToUse === MODEL_OPENAI_2) {
+            console.log(`⚠️ ${MODEL_OPENAI_2} failed in chat-recommend, falling back to ${MODEL_OPENAI}`);
+            result = await transformImageWithOpenAI({
+              inputImage: base64Image,
+              transformationPrompt: prompt,
+              mimeType: imageFile.type,
+              model: MODEL_OPENAI,
+              referenceImages,
+            });
+          }
         } else {
           result = await transformImage({
             inputImage: base64Image,
@@ -262,6 +275,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             referenceImages,
           });
           if (!result.success && referenceImages.length > 0) {
+            // Defaults to gpt-image-1.5 — cheapest verified OpenAI path.
             result = await transformImageWithOpenAI({
               inputImage: base64Image,
               transformationPrompt: prompt,

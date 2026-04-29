@@ -20,6 +20,19 @@ export function isOpenAIModel(model: string | null | undefined): boolean {
   return !!model && OPENAI_MODELS.has(model);
 }
 
+type OpenAIQuality = 'low' | 'medium' | 'high' | 'auto';
+type OpenAISize = '1024x1024' | '1024x1536' | '1536x1024' | 'auto';
+
+const OPENAI_QUALITY_BY_MODEL: Record<string, OpenAIQuality> = {
+  [MODEL_OPENAI]: 'high',
+  [MODEL_OPENAI_2]: 'medium',
+};
+
+interface OpenAIImageEditResponse {
+  data?: Array<{ b64_json?: string }>;
+  error?: { message?: string; type?: string; code?: string };
+}
+
 // Max resolution per model (px on longest side)
 // OpenAI not listed here — it uses its own compression path in transformImageWithOpenAI
 const MODEL_MAX_PX: Record<string, number> = {
@@ -282,24 +295,57 @@ export async function transformImage(
   }
 }
 
+// Structured OpenAI error so retry/classification logic can inspect status
+// code and error type instead of substring-matching the message.
+class OpenAIError extends Error {
+  statusCode?: number;
+  errorType?: string;
+  constructor(message: string, opts?: { statusCode?: number; errorType?: string }) {
+    super(message);
+    this.name = 'OpenAIError';
+    this.statusCode = opts?.statusCode;
+    this.errorType = opts?.errorType;
+  }
+}
+
+// Permanent errors — retrying won't change the outcome, so abort the loop.
+function isOpenAIPermanentError(err: Error): boolean {
+  if (err instanceof OpenAIError) {
+    // Any 4xx is a client-side problem; retrying with the same payload won't help.
+    if (err.statusCode && err.statusCode >= 400 && err.statusCode < 500) return true;
+    if (err.errorType === 'invalid_request_error') return true;
+  }
+  const m = err.message.toLowerCase();
+  // Caught by error.message even when we don't have a status code (network-level failures).
+  if (m.includes('must be verified')) return true;
+  if (m.includes('content_policy') || m.includes('moderation_blocked')) return true;
+  // Timeouts already burned ~120s of the budget; retrying just delays the eventual failure.
+  if (m.includes('timed out')) return true;
+  // Configuration error — fail fast.
+  if (m.includes('not configured')) return true;
+  return false;
+}
+
 // Direct HTTP call to OpenAI image edit API (bypasses SDK FormData issues in Remix)
 function callOpenAIImageEdit(
   images: { buffer: Buffer; filename: string }[],
   prompt: string,
-  model: string = MODEL_OPENAI,
-): Promise<any> {
+  model: string,
+  quality: OpenAIQuality,
+  size: OpenAISize,
+): Promise<OpenAIImageEditResponse> {
   return new Promise((resolve, reject) => {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      reject(new Error('OPENAI_API_KEY not configured'));
+      reject(new OpenAIError('OPENAI_API_KEY not configured'));
       return;
     }
 
     const form = new NodeFormData();
     form.append('model', model);
     form.append('prompt', prompt);
-    form.append('size', '1024x1024');
-    form.append('quality', 'medium');
+    form.append('size', size);
+    form.append('quality', quality);
 
     for (const img of images) {
       form.append('image[]', img.buffer, {
@@ -317,18 +363,28 @@ function callOpenAIImageEdit(
         ...form.getHeaders(),
       },
     }, (res) => {
-      let data = '';
-      res.on('data', (chunk: string) => data += chunk);
+      const chunks: Buffer[] = [];
+      res.on('data', (chunk: Buffer) => chunks.push(chunk));
       res.on('end', () => {
+        const data = Buffer.concat(chunks).toString('utf8');
+        const status = res.statusCode;
         try {
-          const parsed = JSON.parse(data);
-          if (res.statusCode && res.statusCode >= 400) {
-            reject(new Error(parsed.error?.message || `OpenAI API error: ${res.statusCode}`));
+          const parsed = JSON.parse(data) as OpenAIImageEditResponse;
+          if (status && status >= 400) {
+            const msg = parsed.error?.message || `OpenAI API error: ${status}`;
+            reject(new OpenAIError(`${msg} (status ${status})`, {
+              statusCode: status,
+              errorType: parsed.error?.type,
+            }));
           } else {
             resolve(parsed);
           }
         } catch {
-          reject(new Error(`Failed to parse OpenAI response: ${data.substring(0, 200)}`));
+          // Non-JSON body (HTML error page, partial response, etc.)
+          reject(new OpenAIError(
+            `Failed to parse OpenAI response: ${data.substring(0, 200)}`,
+            { statusCode: status },
+          ));
         }
       });
     });
@@ -336,11 +392,41 @@ function callOpenAIImageEdit(
     req.on('error', reject);
     req.setTimeout(120000, () => {
       req.destroy();
-      reject(new Error('OpenAI API request timed out (120s)'));
+      reject(new OpenAIError('OpenAI API request timed out (120s)'));
     });
 
     form.pipe(req);
   });
+}
+
+async function callOpenAIImageEditWithRetry(
+  images: { buffer: Buffer; filename: string }[],
+  prompt: string,
+  model: string,
+  quality: OpenAIQuality,
+  size: OpenAISize,
+  // 1 retry caps worst-case at ~2 × per-request timeout. Combined with the
+  // gpt-image-2 → gpt-image-1.5 fallback in the caller, customer-facing
+  // ceiling stays under ~4 min on a hung connection.
+  maxRetries: number = 1,
+): Promise<OpenAIImageEditResponse> {
+  let lastError: Error | null = null;
+  console.log(`Using OpenAI ${model} (quality=${quality}, size=${size}) with ${images.length} image(s)`);
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      if (attempt > 0) {
+        console.log(`OpenAI retry ${attempt}/${maxRetries}...`);
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt - 1)));
+      }
+      return await callOpenAIImageEdit(images, prompt, model, quality, size);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.error(`OpenAI attempt ${attempt + 1} failed:`, lastError.message);
+      if (isOpenAIPermanentError(lastError)) break;
+    }
+  }
+  throw lastError || new Error('OpenAI API failed after retries');
 }
 
 // OpenAI GPT Image-based transformation (for products with reference images, e.g. wigs)
@@ -369,16 +455,25 @@ export async function transformImageWithOpenAI(
     }
 
     const openaiModel = isOpenAIModel(request.model) ? (request.model as string) : MODEL_OPENAI;
-    console.log(`Using OpenAI ${openaiModel} with ${images.length} image(s)`);
+    const quality = OPENAI_QUALITY_BY_MODEL[openaiModel] ?? 'auto';
 
-    // Wrap the prompt with safety context for OpenAI's content filter
+    // Wrap the prompt with safety context for OpenAI's content filter.
+    // Kept category-agnostic — gpt-image-1.5 / gpt-image-2 are used for wigs,
+    // makeup, skincare, and hair products alike.
     const safetyFramedPrompt =
-      `[CONTEXT: This is a professional e-commerce virtual hair product try-on tool. ` +
-      `The customer has uploaded a headshot to preview how a wig/hair product would look on them. ` +
-      `This is a standard retail product visualization, similar to virtual eyeglasses or hat try-on tools.]\n\n` +
+      `[CONTEXT: This is a professional e-commerce virtual try-on tool for beauty, ` +
+      `cosmetics, and hair products. The customer has uploaded a headshot to preview how ` +
+      `the product would look on them. This is a standard retail product visualization, ` +
+      `similar to virtual makeup, eyeglasses, or hair try-on tools.]\n\n` +
       request.transformationPrompt;
 
-    const result = await callOpenAIImageEdit(images, safetyFramedPrompt, openaiModel);
+    const result = await callOpenAIImageEditWithRetry(
+      images,
+      safetyFramedPrompt,
+      openaiModel,
+      quality,
+      'auto',
+    );
 
     const imageData = result.data?.[0]?.b64_json;
     if (!imageData) {
@@ -402,12 +497,19 @@ export async function transformImageWithOpenAI(
         stack: error.stack,
       });
 
-      if (error.message?.includes('rate_limit') || error.message?.includes('429')) {
+      const msg = error.message.toLowerCase();
+      if (msg.includes('must be verified')) {
+        userMessage = 'This AI model requires OpenAI organization verification.';
+      } else if (msg.includes('rate_limit') || msg.includes('429')) {
         userMessage = 'Too many requests. Please wait a moment and try again.';
-      } else if (error.message?.includes('billing') || error.message?.includes('quota')) {
+      } else if (msg.includes('billing') || msg.includes('quota')) {
         userMessage = 'Service quota exceeded. Please try again later.';
-      } else if (error.message?.includes('invalid_api_key') || error.message?.includes('401')) {
+      } else if (msg.includes('invalid_api_key') || msg.includes('401')) {
         userMessage = 'Authentication failed. Please check your API configuration.';
+      } else if (msg.includes('content_policy') || msg.includes('moderation_blocked')) {
+        userMessage = 'Image was rejected by content moderation. Try a different photo.';
+      } else if (msg.includes('timed out')) {
+        userMessage = 'AI service timed out. Please try again.';
       }
     }
 

@@ -5,6 +5,8 @@ import {
   transformImageWithOpenAI,
   GEMINI_MODEL_PRO,
   GEMINI_MODEL_FLASH,
+  MODEL_OPENAI,
+  MODEL_OPENAI_2,
   isOpenAIModel,
   type ReferenceImagePart,
 } from "../lib/ai.server";
@@ -295,13 +297,27 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // Helper: run a single transform with Gemini → OpenAI fallback
     async function runTransform(prompt: string, referenceImages: ReferenceImagePart[]) {
       if (isOpenAIModel(modelToUse)) {
-        return transformImageWithOpenAI({
+        let result = await transformImageWithOpenAI({
           inputImage: base64Image,
           transformationPrompt: prompt,
           mimeType: imageFile.type,
           model: modelToUse,
           referenceImages,
         });
+        // gpt-image-2 currently requires org verification; if it fails for any
+        // reason, degrade to gpt-image-1.5 instead of returning an error to
+        // the customer.
+        if (!result.success && modelToUse === MODEL_OPENAI_2) {
+          console.log(`⚠️ ${MODEL_OPENAI_2} failed, falling back to ${MODEL_OPENAI}`);
+          result = await transformImageWithOpenAI({
+            inputImage: base64Image,
+            transformationPrompt: prompt,
+            mimeType: imageFile.type,
+            model: MODEL_OPENAI,
+            referenceImages,
+          });
+        }
+        return result;
       }
       let result = await transformImage({
         inputImage: base64Image,
@@ -311,7 +327,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         referenceImages,
       });
       if (!result.success && referenceImages.length > 0) {
-        console.log('⚠️ Gemini failed with reference image(s), falling back to OpenAI');
+        // No `model:` passed → defaults to gpt-image-1.5 (cheapest verified path).
+        console.log('⚠️ Gemini failed with reference image(s), falling back to OpenAI gpt-image-1.5');
         result = await transformImageWithOpenAI({
           inputImage: base64Image,
           transformationPrompt: prompt,
