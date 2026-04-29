@@ -43,6 +43,10 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   var config = null;
   var greetingShown = false;
   var inFlightRequest = null;
+  // When recommendations are shown, anchor the scroll to the message right
+  // before the cards (the "Here's what I found" bot-text) so the user lands
+  // on the FIRST product and scrolls top → bottom, not bottom → top.
+  var cardsAnchorEl = null;
 
   // ---- DOM refs ----
   var bubble = null;
@@ -346,6 +350,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     conversationEnded = false;
     preference = null;
     pendingRequest = false;
+    cardsAnchorEl = null;
     if (messagesContainer) {
       while (messagesContainer.firstChild) {
         messagesContainer.removeChild(messagesContainer.firstChild);
@@ -651,11 +656,13 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     while (messagesContainer.firstChild) {
       messagesContainer.removeChild(messagesContainer.firstChild);
     }
+    cardsAnchorEl = null;
     messages.forEach(function(m) { renderMessage(m); });
   }
 
   function renderMessage(m) {
     if (!messagesContainer) return;
+    var anchorCandidate = null;
     switch (m.type) {
       case 'bot-text':
         renderTextBubble(m.text, 'bot');
@@ -673,10 +680,21 @@ console.log('Gleame Chat Assistant v1.0 loaded');
         if (!m.consumed) renderUpload(m);
         break;
       case 'bot-cards':
+        // Anchor scroll to the message immediately preceding the cards (the
+        // "Here's what I found" intro), so the FIRST card is visible at the
+        // top of the scroll viewport.
+        anchorCandidate = messagesContainer.lastElementChild;
         renderProductCards(m.recommendations || []);
         break;
     }
-    scrollToBottom();
+    if (anchorCandidate) {
+      cardsAnchorEl = anchorCandidate;
+    }
+    if (cardsAnchorEl && messagesContainer.contains(cardsAnchorEl)) {
+      scrollAnchorToTop(cardsAnchorEl);
+    } else {
+      scrollToBottom();
+    }
   }
 
   function renderTextBubble(text, role) {
@@ -864,6 +882,16 @@ console.log('Gleame Chat Assistant v1.0 loaded');
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
       }, 50);
     }
+  }
+
+  function scrollAnchorToTop(el) {
+    if (!messagesContainer || !el) return;
+    setTimeout(function() {
+      if (!messagesContainer.contains(el)) return;
+      var rect = el.getBoundingClientRect();
+      var contRect = messagesContainer.getBoundingClientRect();
+      messagesContainer.scrollTop += rect.top - contRect.top;
+    }, 50);
   }
 
   function escapeHtml(str) {
