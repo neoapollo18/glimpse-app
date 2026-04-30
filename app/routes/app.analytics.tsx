@@ -48,12 +48,8 @@ interface AnalyticsData {
 
 interface AttributionStats {
   totalOrders: number;
-  ordersWithWidgetUsage: number;
-  conversionRate: number;             // % of buyers who used widget (order coverage)
   totalRevenue: number;
   widgetAttributedRevenue: number;
-  repeatOrders: number;
-  repeatOrdersWithWidget: number;
   widgetSessions: number;             // distinct widget-engaged carts in window
   widgetSessionsConverted: number;    // of those, how many bought
   widgetPurchaseRate: number;         // % of widget users who bought
@@ -62,12 +58,8 @@ interface AttributionStats {
 
 const EMPTY_ATTRIBUTION: AttributionStats = {
   totalOrders: 0,
-  ordersWithWidgetUsage: 0,
-  conversionRate: 0,
   totalRevenue: 0,
   widgetAttributedRevenue: 0,
-  repeatOrders: 0,
-  repeatOrdersWithWidget: 0,
   widgetSessions: 0,
   widgetSessionsConverted: 0,
   widgetPurchaseRate: 0,
@@ -145,12 +137,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     sources: TrafficSourceStat[],
   ): AttributionStats => ({
     totalOrders: conv?.totalOrders ?? 0,
-    ordersWithWidgetUsage: conv?.ordersWithWidgetUsage ?? 0,
-    conversionRate: conv?.conversionRate ?? 0,
     totalRevenue: conv?.totalRevenue ?? 0,
     widgetAttributedRevenue: conv?.widgetAttributedRevenue ?? 0,
-    repeatOrders: conv?.repeatOrders ?? 0,
-    repeatOrdersWithWidget: conv?.repeatOrdersWithWidget ?? 0,
     widgetSessions: conv?.widgetSessions ?? 0,
     widgetSessionsConverted: conv?.widgetSessionsConverted ?? 0,
     widgetPurchaseRate: conv?.widgetPurchaseRate ?? 0,
@@ -235,13 +223,13 @@ export default function Analytics() {
                   No orders tracked yet
                 </Text>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  Once shoppers complete a purchase, you'll see widget-attributed revenue, repeat-purchase rate, and top traffic sources here.
+                  Once shoppers complete a purchase, you'll see widget-attributed revenue and top traffic sources here.
                 </Text>
               </BlockStack>
             </Card>
           ) : (
             <BlockStack gap="400">
-              <InlineGrid columns={{ xs: 1, sm: 2, md: 4 }} gap="400">
+              <InlineGrid columns={{ xs: 1, sm: 2 }} gap="400">
                 <Card padding="400">
                   <BlockStack gap="200">
                     <Text as="span" variant="bodySm" tone="subdued">Widget → Purchase rate</Text>
@@ -262,30 +250,6 @@ export default function Analytics() {
                     </Text>
                     <Text as="span" variant="bodySm" tone="subdued">
                       of ${currentAttribution.totalRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })} total
-                    </Text>
-                  </BlockStack>
-                </Card>
-
-                <Card padding="400">
-                  <BlockStack gap="200">
-                    <Text as="span" variant="bodySm" tone="subdued">Order coverage</Text>
-                    <Text as="p" variant="headingXl" fontWeight="bold">
-                      {currentAttribution.conversionRate.toFixed(1)}%
-                    </Text>
-                    <Text as="span" variant="bodySm" tone="subdued">
-                      {currentAttribution.ordersWithWidgetUsage.toLocaleString()} of {currentAttribution.totalOrders.toLocaleString()} orders used the widget
-                    </Text>
-                  </BlockStack>
-                </Card>
-
-                <Card padding="400">
-                  <BlockStack gap="200">
-                    <Text as="span" variant="bodySm" tone="subdued">Repeat purchases</Text>
-                    <Text as="p" variant="headingXl" fontWeight="bold">
-                      {currentAttribution.repeatOrdersWithWidget.toLocaleString()}
-                    </Text>
-                    <Text as="span" variant="bodySm" tone="subdued">
-                      after a try-on
                     </Text>
                   </BlockStack>
                 </Card>
