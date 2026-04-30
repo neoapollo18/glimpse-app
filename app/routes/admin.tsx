@@ -50,6 +50,17 @@ const ALLOWED_SHOPS = [
   "hx5hqt-na.myshopify.com",
 ];
 
+// Scopes whose absence makes `shopifyqlQuery` return `undefinedField` even
+// after Level 2 protected-customer-data approval. Used to flag shops whose
+// offline token predates the scope being added to the app config — those
+// shops need to re-OAuth before sessions data will populate.
+const SCOPES_REQUIRED_FOR_SESSIONS = ["read_reports", "read_analytics"] as const;
+
+function diffMissingScopes(scopeStr: string | null | undefined): string[] {
+  const granted = new Set((scopeStr ?? "").split(",").map((s) => s.trim()).filter(Boolean));
+  return SCOPES_REQUIRED_FOR_SESSIONS.filter((s) => !granted.has(s));
+}
+
 // Fetch monthly sessions directly from Shopify API.
 // Formula matches the cron job (api.cron.check-sessions.ts): 90-day sum / 3.
 // Any change here MUST be mirrored in the cron — the cron's value is what's
@@ -182,6 +193,10 @@ interface Shop {
   conversionStats?: ConversionStats | null;
   monthlySessions?: number | null;
   sessions_updated_at?: string | null;
+  /** Empty array = all required scopes granted. Non-empty = re-OAuth needed
+   * before `shopifyqlQuery` will work. Null = no offline token in Prisma
+   * (uninstalled or never installed). */
+  missingSessionScopes: string[] | null;
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -209,11 +224,25 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     if (shopsError) {
       console.error("Error fetching shops:", shopsError);
-      return json({ 
-        shops: [], 
+      return json({
+        shops: [],
         stats: { totalShops: 0, totalProducts: 0, totalTransformations: 0 },
-        error: shopsError.message 
+        error: shopsError.message
       });
+    }
+
+    // Pull offline tokens + granted scopes per shop up front. Used both to
+    // refresh stale session counts (later in this loader) and to compute
+    // `missingSessionScopes` for every shop in the response.
+    const prismaShops = await prisma.session.findMany({
+      where: { isOnline: false, accessToken: { not: '' } },
+      select: { shop: true, accessToken: true, scope: true },
+      distinct: ['shop'],
+      orderBy: { id: 'desc' },
+    });
+    const shopTokenMap = new Map<string, { token: string; scope: string | null }>();
+    for (const ps of prismaShops) {
+      if (ps.accessToken) shopTokenMap.set(ps.shop, { token: ps.accessToken, scope: ps.scope });
     }
 
     // For each shop, fetch products with category info and variant configs
@@ -284,12 +313,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           console.log('Conversion stats not available for', shop.shop_domain);
         }
 
-        return { 
-          ...shop, 
-          products: productsWithVariants, 
+        const tokenEntry = shopTokenMap.get(shop.shop_domain);
+        const missingSessionScopes = tokenEntry
+          ? diffMissingScopes(tokenEntry.scope)
+          : null;
+
+        return {
+          ...shop,
+          products: productsWithVariants,
           conversionStats,
           monthlySessions: shop.monthly_sessions ?? null,
           sessions_updated_at: shop.sessions_updated_at ?? null,
+          missingSessionScopes,
         };
       })
     );
@@ -307,21 +342,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     if (staleShops.length > 0) {
       try {
-        // Match the cron's token-selection logic: one per shop, newest first.
-        // Without distinct + orderBy, Prisma may return a stale/revoked token
-        // from a prior install and every admin load silently 401s.
-        const prismaShops = await prisma.session.findMany({
-          where: { isOnline: false, accessToken: { not: '' } },
-          select: { shop: true, accessToken: true },
-          distinct: ['shop'],
-          orderBy: { id: 'desc' },
-        });
-
-        const shopTokenMap = new Map<string, string>();
-        for (const ps of prismaShops) {
-          if (ps.accessToken) shopTokenMap.set(ps.shop, ps.accessToken);
-        }
-
         // Limit to 20 per page load so we don't fan out 50+ parallel Shopify
         // calls on admin open; cron handles the long tail weekly.
         const shopsToUpdate = staleShops
@@ -331,7 +351,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         console.log(`📊 Admin: refreshing sessions for ${shopsToUpdate.length}/${staleShops.length} stale shops`);
 
         const sessionUpdates = shopsToUpdate.map(async (shop) => {
-          const token = shopTokenMap.get(shop.shop_domain)!;
+          const token = shopTokenMap.get(shop.shop_domain)!.token;
           const sessions = await fetchMonthlySessionsForShop(shop.shop_domain, token);
           if (sessions !== null) {
             await updateShopMonthlySessions(shop.shop_domain, sessions);
@@ -1079,11 +1099,19 @@ export default function FoundersAdmin() {
                       <Text as="h3" variant="headingMd">{shop.shop_domain}</Text>
                       {(() => {
                         const info = getSessionInfo(shop);
-                        return info.count !== null && info.count !== undefined ? (
-                          <Badge tone="info">{`${info.count.toLocaleString()} sessions/mo`}</Badge>
-                        ) : (
-                          <Badge tone="attention">Sessions: N/A</Badge>
-                        );
+                        if (info.count !== null && info.count !== undefined) {
+                          return <Badge tone="info">{`${info.count.toLocaleString()} sessions/mo`}</Badge>;
+                        }
+                        const missing = shop.missingSessionScopes;
+                        if (missing && missing.length > 0) {
+                          return (
+                            <Badge tone="warning">{`Reauth needed (missing ${missing.join(", ")})`}</Badge>
+                          );
+                        }
+                        if (missing === null) {
+                          return <Badge tone="critical">No offline token</Badge>;
+                        }
+                        return <Badge tone="attention">Sessions: N/A</Badge>;
                       })()}
                       {(() => {
                         const info = getSessionInfo(shop);
