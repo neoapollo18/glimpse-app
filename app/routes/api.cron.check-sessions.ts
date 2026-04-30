@@ -28,7 +28,7 @@ async function fetchSessionsDirectly(shop: string, accessToken: string): Promise
       }
     `;
 
-    const response = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
+    const response = await fetch(`https://${shop}/admin/api/2025-07/graphql.json`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -151,7 +151,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           // Re-run to capture the specific error for the response
           let debugInfo = 'unknown';
           try {
-            const debugRes = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
+            const debugRes = await fetch(`https://${shop}/admin/api/2025-07/graphql.json`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': accessToken },
               body: JSON.stringify({ query: `query { shopifyqlQuery(query: "FROM sessions SHOW sessions SINCE -90d") { tableData { columns { name } rows } parseErrors { message } } }` }),

@@ -79,7 +79,7 @@ async function fetchMonthlySessionsForShop(shop: string, accessToken: string): P
       }
     `;
 
-    const response = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
+    const response = await fetch(`https://${shop}/admin/api/2025-07/graphql.json`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
