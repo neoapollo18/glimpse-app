@@ -180,13 +180,33 @@ console.log('Gleame Integrated Widget v2.0 loaded');
     instance.shopDomain = getShopDomain(widget);
     instance.variantId = getCurrentVariantId();
     const rawCartToken = widget.getAttribute('data-cart-token');
-    instance.cartToken = (rawCartToken && rawCartToken.trim()) ? rawCartToken.trim() : null;
-    // Liquid attribute is rendered server-side and goes stale after AJAX
-    // add-to-cart. Refresh from the live cart so attribution catches users
-    // who add to cart mid-session before opening the widget.
+    const trimmedRaw = (rawCartToken && rawCartToken.trim()) || '';
+    // 32-hex tokens come from themes still on the legacy cart cookie and
+    // never appear on orders/create — treat as null so the refresh below
+    // can pick up a real Cart-API token instead.
+    const isLegacyHex = /^[0-9a-f]{32}$/.test(trimmedRaw);
+    instance.cartToken = (trimmedRaw && !isLegacyHex) ? trimmedRaw.split('?')[0] : null;
+    // Shopify doesn't mint a cart token until the cart has a line or an
+    // attribute, so try-ons on empty carts can't be attributed. Read the
+    // token if one exists; otherwise force creation via a hidden attribute
+    // (underscore prefix = invisible in checkout / order notifications).
     fetch('/cart.js', { credentials: 'same-origin' })
       .then(function(r) { return r.ok ? r.json() : null; })
-      .then(function(cart) { if (cart && cart.token) instance.cartToken = cart.token; })
+      .then(function(cart) {
+        if (cart && cart.token) {
+          instance.cartToken = String(cart.token).split('?')[0];
+          return null;
+        }
+        return fetch('/cart/update.js', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ attributes: { _gleame: '1' } })
+        }).then(function(r) { return r.ok ? r.json() : null; });
+      })
+      .then(function(cart) {
+        if (cart && cart.token) instance.cartToken = String(cart.token).split('?')[0];
+      })
       .catch(function() {});
     
     // Log initialization for debugging
