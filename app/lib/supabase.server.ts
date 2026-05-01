@@ -99,35 +99,41 @@ export async function getProductConfiguration(shopDomain: string, shopifyId: str
     .select('*')
     .eq('shop_id', shop.id)
     .eq('shopify_id', searchShopifyId)
-    .single();
+    .maybeSingle();
 
   if (error) {
     console.error('Error fetching product configuration:', error);
-    
-    // Also try searching with just the numeric part in case it's stored differently
-    if (shopifyId.includes('/')) {
-      const numericId = shopifyId.split('/').pop();
-      console.log('Trying with numeric ID:', numericId);
-      
-      const { data: altProduct, error: altError } = await supabase
-        .from('products')
-        .select('*')
-        .eq('shop_id', shop.id)
-        .eq('shopify_id', numericId)
-        .single();
-        
-      if (!altError && altProduct) {
-        console.log('Found product with numeric ID');
-        return altProduct;
-      }
-
-    }
-    
     return null;
   }
 
-  console.log('Found product:', product);
-  return product;
+  if (product) {
+    console.log('Found product:', product);
+    return product;
+  }
+
+  // Fallback: legacy rows may store the numeric ID instead of the GID format.
+  if (shopifyId.includes('/')) {
+    const numericId = shopifyId.split('/').pop();
+    console.log('Trying with numeric ID:', numericId);
+
+    const { data: altProduct, error: altError } = await supabase
+      .from('products')
+      .select('*')
+      .eq('shop_id', shop.id)
+      .eq('shopify_id', numericId)
+      .maybeSingle();
+
+    if (altError) {
+      console.error('Error fetching product configuration (numeric fallback):', altError);
+      return null;
+    }
+    if (altProduct) {
+      console.log('Found product with numeric ID');
+      return altProduct;
+    }
+  }
+
+  return null;
 }
 
 export async function saveProductConfiguration(
@@ -290,6 +296,19 @@ export async function deleteProductConfiguration(configuredProductId: string) {
   }
 }
 
+// Strip the `?key=…` suffix Shopify's Storefront Cart API attaches to cart
+// tokens. The orders/create webhook delivers the bare cart id (e.g.
+// `hWNBepxLNsgcAYGhzHwyh8Ww`) while `/cart.js` and Liquid `cart.token` return
+// the keyed form (`hWNBepxLNsgcAYGhzHwyh8Ww?key=…`). Without this,
+// analytics_events.cart_token never joins widget_orders.cart_token.
+function normalizeCartToken(raw?: string | null): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const id = trimmed.split('?')[0];
+  return id || null;
+}
+
 // Analytics functions
 export async function trackTransformationEvent(
   shopDomain: string,
@@ -299,6 +318,8 @@ export async function trackTransformationEvent(
   cartToken?: string
 ) {
   try {
+    const normalizedCartToken = normalizeCartToken(cartToken);
+
     // Get shop with fallback logic
     const shop = await findShopByDomain(shopDomain);
 
@@ -340,7 +361,7 @@ export async function trackTransformationEvent(
               product_id: altProduct.id,
               event_type: eventType,
               widget_type: widgetType,
-              cart_token: cartToken || null
+              cart_token: normalizedCartToken
             }])
             .select()
             .single();
@@ -367,7 +388,7 @@ export async function trackTransformationEvent(
         product_id: product.id,
         event_type: eventType,
         widget_type: widgetType,
-        cart_token: cartToken || null
+        cart_token: normalizedCartToken
       }])
       .select()
       .single();
@@ -430,7 +451,7 @@ export async function recordOrder(
       .upsert([{
         shop_id: shop.id,
         shopify_order_id: orderData.shopifyOrderId,
-        cart_token: orderData.cartToken || null,
+        cart_token: normalizeCartToken(orderData.cartToken),
         order_number: orderData.orderNumber || null,
         total_price: orderData.totalPrice || null,
         currency: orderData.currency || 'USD',
