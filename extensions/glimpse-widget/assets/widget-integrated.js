@@ -180,23 +180,28 @@ console.log('Gleame Integrated Widget v2.0 loaded');
     instance.shopDomain = getShopDomain(widget);
     instance.variantId = getCurrentVariantId();
     const rawCartToken = widget.getAttribute('data-cart-token');
-    const trimmedRaw = (rawCartToken && rawCartToken.trim()) || '';
-    // 32-hex tokens come from themes still on the legacy cart cookie and
-    // never appear on orders/create — treat as null so the refresh below
-    // can pick up a real Cart-API token instead.
-    const isLegacyHex = /^[0-9a-f]{32}$/.test(trimmedRaw);
-    instance.cartToken = (trimmedRaw && !isLegacyHex) ? trimmedRaw.split('?')[0] : null;
-    // Shopify doesn't mint a cart token until the cart has a line or an
-    // attribute, so try-ons on empty carts can't be attributed. Read the
-    // token if one exists; otherwise force creation via a hidden attribute
-    // (underscore prefix = invisible in checkout / order notifications).
+    // 32-hex tokens come from sessions on Shopify's legacy cart cookie —
+    // /cart.js and /cart/update.js can both return them when the browser
+    // already has such a cookie, but orders/create never echoes them.
+    // Reject at every source so we don't pollute attribution with
+    // un-joinable tokens.
+    const isLegacyHex = function(t) { return /^[0-9a-f]{32}$/.test(t); };
+    const acceptToken = function(t) {
+      if (!t) return null;
+      const stripped = String(t).split('?')[0];
+      return (stripped && !isLegacyHex(stripped)) ? stripped : null;
+    };
+    instance.cartToken = acceptToken((rawCartToken && rawCartToken.trim()) || '');
+    // Try /cart.js first; if no matchable token, force-mint via
+    // /cart/update.js with a hidden attribute (underscore prefix =
+    // invisible in checkout / order notifications). Sessions whose cart
+    // cookie is locked to legacy format will end up with cartToken=null,
+    // which is correct — they can't be joined to orders anyway.
     fetch('/cart.js', { credentials: 'same-origin' })
       .then(function(r) { return r.ok ? r.json() : null; })
       .then(function(cart) {
-        if (cart && cart.token) {
-          instance.cartToken = String(cart.token).split('?')[0];
-          return null;
-        }
+        const t = acceptToken(cart && cart.token);
+        if (t) { instance.cartToken = t; return null; }
         return fetch('/cart/update.js', {
           method: 'POST',
           credentials: 'same-origin',
@@ -205,7 +210,8 @@ console.log('Gleame Integrated Widget v2.0 loaded');
         }).then(function(r) { return r.ok ? r.json() : null; });
       })
       .then(function(cart) {
-        if (cart && cart.token) instance.cartToken = String(cart.token).split('?')[0];
+        const t = acceptToken(cart && cart.token);
+        if (t) instance.cartToken = t;
       })
       .catch(function() {});
     
