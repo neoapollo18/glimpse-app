@@ -157,6 +157,21 @@ export const RATE_LIMITS = {
     limit: 100,
     windowMs: 60 * 1000, // 1 minute
   },
+  // Analyze-skin API - vision LLM call, more expensive than transform per call
+  // but feature is gated to allowlisted shops so volume is bounded. Stricter
+  // per-IP limits to discourage casual abuse on the public endpoint.
+  ANALYZE_SKIN_PER_IP_MINUTE: {
+    limit: 5,
+    windowMs: 60 * 1000,
+  },
+  ANALYZE_SKIN_PER_IP_HOUR: {
+    limit: 20,
+    windowMs: 60 * 60 * 1000,
+  },
+  ANALYZE_SKIN_PER_SHOP_HOUR: {
+    limit: 200,
+    windowMs: 60 * 60 * 1000,
+  },
 } as const;
 
 // ============================================

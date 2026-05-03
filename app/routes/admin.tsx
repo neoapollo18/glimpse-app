@@ -21,6 +21,7 @@ import {
   Divider,
   Box,
   Icon,
+  Checkbox,
 } from "@shopify/polaris";
 import { SearchIcon } from "@shopify/polaris-icons";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
@@ -197,6 +198,8 @@ interface Shop {
    * before `shopifyqlQuery` will work. Null = no offline token in Prisma
    * (uninstalled or never installed). */
   missingSessionScopes: string[] | null;
+  /** Feature flag for AI skin analysis. Default false; flipped here in /admin. */
+  is_skin_analysis_enabled?: boolean;
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -716,6 +719,29 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ success: true });
   }
 
+  if (actionType === "update-skin-analysis-enabled") {
+    // Founders-only toggle for the AI skin-analysis feature flag. Default
+    // is FALSE for every shop; flipped manually here.
+    const targetShopDomain = formData.get("targetShopDomain") as string;
+    const enabledRaw = formData.get("enabled");
+    if (!targetShopDomain || typeof targetShopDomain !== "string") {
+      return json({ success: false, error: "Missing targetShopDomain" });
+    }
+    const enabled = enabledRaw === "true";
+
+    const { error: updateError } = await supabase
+      .from("shops")
+      .update({ is_skin_analysis_enabled: enabled })
+      .eq("shop_domain", targetShopDomain);
+
+    if (updateError) {
+      console.error(`[skin-analysis] toggle failed for ${targetShopDomain}:`, updateError);
+      return json({ success: false, error: updateError.message });
+    }
+    console.log(`✅ Skin analysis ${enabled ? "ENABLED" : "DISABLED"} for ${targetShopDomain}`);
+    return json({ success: true, isEnabled: enabled });
+  }
+
   if (actionType === "refresh-sessions") {
     // Per-shop manual refresh. Writes monthly_sessions/sessions_updated_at in
     // Supabase exactly like the cron; does NOT call Mantle — flex billing
@@ -768,6 +794,7 @@ export default function FoundersAdmin() {
   const modelFetcher = useFetcher<any>();
   const refFetcher = useFetcher<any>();
   const sessionsFetcher = useFetcher<any>();
+  const skinAnalysisFetcher = useFetcher<any>();
   const [refImageUrls, setRefImageUrls] = useState<Record<string, string[]>>({});
   const [variantRefImageUrls, setVariantRefImageUrls] = useState<Record<string, string[]>>({});
   const [aiModelOverrides, setAiModelOverrides] = useState<Record<string, string>>({});
@@ -781,6 +808,22 @@ export default function FoundersAdmin() {
     Record<string, { count: number | null; updatedAt: string }>
   >({});
   const [refreshingShop, setRefreshingShop] = useState<string | null>(null);
+  // Optimistic overrides for the skin-analysis feature flag toggle.
+  const [skinAnalysisOverrides, setSkinAnalysisOverrides] = useState<Record<string, boolean>>({});
+  const [togglingSkinAnalysisShop, setTogglingSkinAnalysisShop] = useState<string | null>(null);
+
+  // Apply skin-analysis toggle results to local state when the fetcher settles.
+  useEffect(() => {
+    if (skinAnalysisFetcher.state !== "idle" || !togglingSkinAnalysisShop) return;
+    const data = skinAnalysisFetcher.data;
+    if (data?.success && typeof data.isEnabled === "boolean") {
+      setSkinAnalysisOverrides((prev) => ({
+        ...prev,
+        [togglingSkinAnalysisShop]: data.isEnabled,
+      }));
+    }
+    setTogglingSkinAnalysisShop(null);
+  }, [skinAnalysisFetcher.data, skinAnalysisFetcher.state, togglingSkinAnalysisShop]);
 
   // Apply session refresh results to local state when the fetcher settles.
   useEffect(() => {
@@ -903,6 +946,22 @@ export default function FoundersAdmin() {
     formData.append("action", "refresh-sessions");
     formData.append("targetShopDomain", shopDomain);
     sessionsFetcher.submit(formData, { method: "POST" });
+  };
+
+  const isSkinAnalysisEnabled = (shop: Shop) =>
+    skinAnalysisOverrides[shop.shop_domain] ?? Boolean(shop.is_skin_analysis_enabled);
+
+  const toggleSkinAnalysis = (shop: Shop) => {
+    const next = !isSkinAnalysisEnabled(shop);
+    setTogglingSkinAnalysisShop(shop.shop_domain);
+    // Optimistic flip — the fetcher useEffect overwrites this with the
+    // server-confirmed value when it settles.
+    setSkinAnalysisOverrides((prev) => ({ ...prev, [shop.shop_domain]: next }));
+    const formData = new FormData();
+    formData.append("action", "update-skin-analysis-enabled");
+    formData.append("targetShopDomain", shop.shop_domain);
+    formData.append("enabled", String(next));
+    skinAnalysisFetcher.submit(formData, { method: "POST" });
   };
 
   const getAiModel = (product: Product) => {
@@ -1134,9 +1193,17 @@ export default function FoundersAdmin() {
                       {shop.products.length} product{shop.products.length !== 1 ? "s" : ""} configured
                     </Text>
                   </BlockStack>
-                  <Button onClick={() => toggleShop(shop.id)}>
-                    {expandedShop === shop.id ? "Collapse" : "View Products"}
-                  </Button>
+                  <BlockStack gap="200" align="end">
+                    <Checkbox
+                      label="Skin Analysis (beta)"
+                      checked={isSkinAnalysisEnabled(shop)}
+                      onChange={() => toggleSkinAnalysis(shop)}
+                      disabled={togglingSkinAnalysisShop === shop.shop_domain}
+                    />
+                    <Button onClick={() => toggleShop(shop.id)}>
+                      {expandedShop === shop.id ? "Collapse" : "View Products"}
+                    </Button>
+                  </BlockStack>
                 </InlineStack>
 
                 {/* Conversion Stats - Always visible */}

@@ -12,6 +12,7 @@ import jwt from "jsonwebtoken";
 import { authenticate } from "../shopify.server";
 import { identifyAndGetCustomer } from "../lib/mantle.server";
 import { isShopGrandfathered, markShopAsGrandfathered } from "../lib/supabase.server";
+import { isSkinAnalysisEnabledForShop } from "../lib/skin-analysis.server";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
@@ -84,18 +85,29 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     );
   }
 
-  return json({ 
+  // Feature flag — skin analysis nav link is hidden by default. Default
+  // FALSE for every shop; flipped manually from /admin (founders).
+  // Kept in a try/catch so a DB hiccup never blocks app render.
+  let isSkinAnalysisEnabled = false;
+  try {
+    isSkinAnalysisEnabled = await isSkinAnalysisEnabledForShop(shopDomain);
+  } catch (err) {
+    console.error("[app loader] skin-analysis flag check failed:", err);
+  }
+
+  return json({
     apiKey: process.env.SHOPIFY_API_KEY || "",
     shop: session.shop,
     intercomAppId: process.env.INTERCOM_APP_ID || "",
     intercomUserJwt,
     needsBilling,
     isOnBillingPage,
+    isSkinAnalysisEnabled,
   });
 };
 
 export default function App() {
-  const { apiKey, shop, intercomAppId, intercomUserJwt, needsBilling } = useLoaderData<typeof loader>();
+  const { apiKey, shop, intercomAppId, intercomUserJwt, needsBilling, isSkinAnalysisEnabled } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const location = useLocation();
   const [isRedirecting, setIsRedirecting] = useState(false);
@@ -154,6 +166,7 @@ export default function App() {
           <Link to="/app/widgets">Widgets</Link>
           <Link to="/app/products">Products</Link>
           <Link to="/app/assistant">AI Assistant</Link>
+          {isSkinAnalysisEnabled && <Link to="/app/skin-analysis">Skin Analysis</Link>}
           <Link to="/app/analytics">Analytics</Link>
           <Link to="/app/placeholders">Placeholders</Link>
           <Link to="/app/billing">Billing</Link>

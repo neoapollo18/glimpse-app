@@ -102,7 +102,7 @@ function isHeicBuffer(buffer: Buffer): boolean {
 }
 
 // Compress image for faster processing and lower costs
-async function compressImage(base64Image: string, mimeType: string, maxPx: number = 720): Promise<{
+export async function compressImage(base64Image: string, mimeType: string, maxPx: number = 720): Promise<{
   compressedBase64: string;
   compressedMimeType: string;
   originalSize: number;
