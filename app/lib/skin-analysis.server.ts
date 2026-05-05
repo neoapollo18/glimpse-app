@@ -5,11 +5,12 @@
  * duration of this call and is never written to disk, DB, logs, or cache, per
  * legal/PRIVACY_POLICY.md §5.2 (same posture as the try-on transform path).
  *
- * Calls OpenAI gpt-4o with a strict JSON schema so the response shape is
- * guaranteed at the API level — no defensive parsing on the way out.
+ * Uses Google Gemini (same vendor as our try-on path) with structured JSON
+ * output. Gemini's structured output is best-effort rather than strict, so
+ * we still defensively parse the response.
  */
 
-import OpenAI from 'openai';
+import { GoogleGenAI } from '@google/genai';
 import { compressImage } from './ai.server';
 import { supabase, findShopByDomain } from './supabase.server';
 import prisma from '../db.server';
@@ -17,16 +18,17 @@ import prisma from '../db.server';
 // Model pinned. If/when we upgrade, do it deliberately and re-run the
 // offline tone-fairness audit (scripts/skin-tone-audit.mjs) against the
 // new model before flipping merchants over.
-export const SKIN_ANALYSIS_MODEL = 'gpt-4o-2024-11-20';
+export const SKIN_ANALYSIS_MODEL = 'gemini-2.5-flash';
 
-// Vision benefits from more detail than the try-on pipeline; 1024px on the
-// long edge maps to OpenAI's "high detail" tier without burning extra tokens.
+// Vision benefits from more detail than the try-on pipeline; 1024px gives
+// Gemini enough resolution to catch fine lines / pore texture without
+// blowing up token cost.
 const SKIN_ANALYSIS_MAX_PX = 1024;
 
-// OpenAI SDK v5 default request timeout is 600s — way too long for a
-// customer-facing storefront call where someone is staring at a spinner.
-// 30s is enough headroom for gpt-4o vision (typical p99 ~10-15s).
-const OPENAI_REQUEST_TIMEOUT_MS = 30_000;
+// Gemini SDK has no first-class per-request timeout that we can rely on
+// across versions — wrap with Promise.race instead. 30s is enough headroom
+// for gemini-2.5-flash vision (typical p99 ~5-10s).
+const GEMINI_REQUEST_TIMEOUT_MS = 30_000;
 
 // Shopify Admin GraphQL — used to hydrate product cards. 8s is plenty;
 // admin queries normally return in <500ms.
@@ -106,11 +108,12 @@ export interface AnalyzeSkinResponse {
 }
 
 // ---------------------------------------------------------------------------
-// JSON schema (strict mode)
+// JSON schema (Gemini structured output)
 // ---------------------------------------------------------------------------
-// Note: OpenAI's strict mode requires `additionalProperties: false`, every
-// property listed in `required`, and `null` allowed via `type: ["X","null"]`
-// rather than `nullable: true`.
+// Gemini follows OpenAPI 3.0 schema conventions: nullability is expressed
+// with `nullable: true` (NOT `type: ["X","null"]`), and `additionalProperties`
+// is not enforced. Schema enforcement is best-effort — defensive parsing
+// downstream catches stragglers.
 const scoreProperty = {
   type: 'integer',
   minimum: 0,
@@ -119,25 +122,26 @@ const scoreProperty = {
 
 const SKIN_ANALYSIS_JSON_SCHEMA = {
   type: 'object',
-  additionalProperties: false,
   required: ['rejected', 'reason', 'skin_type', 'scores', 'notes'],
   properties: {
     rejected: { type: 'boolean' },
     reason: {
-      type: ['string', 'null'],
-      enum: [...REJECTION_REASONS, null],
+      type: 'string',
+      nullable: true,
+      enum: [...REJECTION_REASONS],
     },
     skin_type: {
-      type: ['string', 'null'],
-      enum: [...SKIN_TYPES, null],
+      type: 'string',
+      nullable: true,
+      enum: [...SKIN_TYPES],
     },
     scores: {
-      type: ['object', 'null'],
-      additionalProperties: false,
+      type: 'object',
+      nullable: true,
       required: [...SCORE_KEYS],
       properties: Object.fromEntries(SCORE_KEYS.map((k) => [k, scoreProperty])),
     },
-    notes: { type: ['string', 'null'], maxLength: 400 },
+    notes: { type: 'string', nullable: true, maxLength: 400 },
   },
 } as const;
 
@@ -196,16 +200,34 @@ export function buildSystemPrompt(
 }
 
 // ---------------------------------------------------------------------------
-// OpenAI client (lazy — only constructed when called, so import-time errors
+// Gemini client (lazy — only constructed when called, so import-time errors
 // don't fire if the env var is missing in non-storefront contexts)
 // ---------------------------------------------------------------------------
-let _client: OpenAI | null = null;
-function client(): OpenAI {
+let _client: GoogleGenAI | null = null;
+function client(): GoogleGenAI {
   if (_client) return _client;
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) throw new Error('OPENAI_API_KEY not configured');
-  _client = new OpenAI({ apiKey: key });
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) throw new Error('GEMINI_API_KEY not configured');
+  _client = new GoogleGenAI({ apiKey: key });
   return _client;
+}
+
+interface GeminiResponse {
+  candidates?: Array<{
+    content?: { parts?: Array<{ text?: string }> };
+  }>;
+  text?: string;
+}
+
+/** Pull the JSON text out of a Gemini response, tolerating both shapes. */
+function extractText(response: GeminiResponse | null | undefined): string {
+  if (!response) return '';
+  if (typeof response.text === 'string' && response.text) return response.text;
+  const parts = response.candidates?.[0]?.content?.parts;
+  if (Array.isArray(parts)) {
+    return parts.map((p) => (typeof p.text === 'string' ? p.text : '')).join('');
+  }
+  return '';
 }
 
 // ---------------------------------------------------------------------------
@@ -234,48 +256,46 @@ export async function analyzeSkin(req: AnalyzeSkinRequest): Promise<AnalyzeSkinR
 
   const systemPrompt = buildSystemPrompt(req.systemPromptOverride, req.emphasisConcerns);
 
-  let raw: string | null | undefined;
+  let raw = '';
   try {
-    const response = await client().chat.completions.create(
-      {
-        model: SKIN_ANALYSIS_MODEL,
-        // Deterministic-ish — vision LLMs benefit from a touch of variability
-        // for narration, but we want stable scores. Low temp wins for both.
-        temperature: 0.2,
-        response_format: {
-          type: 'json_schema',
-          json_schema: {
-            name: 'skin_analysis',
-            strict: true,
-            schema: SKIN_ANALYSIS_JSON_SCHEMA,
-          },
+    const responsePromise = client().models.generateContent({
+      model: SKIN_ANALYSIS_MODEL,
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: 'Analyze this skin photo.' },
+            { inlineData: { mimeType: compressedMimeType, data: compressedBase64 } },
+          ],
         },
-        messages: [
-          { role: 'system', content: systemPrompt },
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: 'Analyze this skin photo.' },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: `data:${compressedMimeType};base64,${compressedBase64}`,
-                  // High detail = the model sees a 1024-px tile pair instead
-                  // of the low-detail 512-px summary. Required for catching
-                  // fine lines, pore texture, etc.
-                  detail: 'high',
-                },
-              },
-            ],
-          },
-        ],
+      ],
+      config: {
+        systemInstruction: systemPrompt,
+        responseMimeType: 'application/json',
+        // Cast — Gemini's TS schema type is more restrictive than what
+        // we hand-rolled (it wants `Type` enum instead of literal strings),
+        // but the underlying API accepts the JSON-schema-shaped object.
+        responseSchema: SKIN_ANALYSIS_JSON_SCHEMA as unknown as Record<string, unknown>,
+        // Low-but-not-zero temperature — stable scores with a touch of
+        // variability so narration doesn't read templated.
+        temperature: 0.2,
       },
-      { timeout: OPENAI_REQUEST_TIMEOUT_MS }
+    });
+
+    // SDK abort support varies by version; Promise.race is the
+    // version-stable way to enforce a hard deadline.
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`Gemini request timed out after ${GEMINI_REQUEST_TIMEOUT_MS}ms`)),
+        GEMINI_REQUEST_TIMEOUT_MS,
+      ),
     );
-    raw = response.choices[0]?.message?.content;
+
+    const response = (await Promise.race([responsePromise, timeoutPromise])) as GeminiResponse;
+    raw = extractText(response);
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'OpenAI request failed';
-    console.error('[skin-analysis] OpenAI call threw:', message);
+    const message = err instanceof Error ? err.message : 'Gemini request failed';
+    console.error('[skin-analysis] Gemini call threw:', message);
     return {
       success: false,
       error: 'Skin analysis is temporarily unavailable. Please try again in a moment.',
@@ -283,7 +303,7 @@ export async function analyzeSkin(req: AnalyzeSkinRequest): Promise<AnalyzeSkinR
     };
   }
 
-  if (!raw) {
+  if (!raw.trim()) {
     return {
       success: false,
       error: 'Empty response from analysis service.',
@@ -291,14 +311,30 @@ export async function analyzeSkin(req: AnalyzeSkinRequest): Promise<AnalyzeSkinR
     };
   }
 
+  // Gemini occasionally wraps JSON in ```json fences despite responseMimeType
+  // being application/json. Strip them defensively before parsing.
+  const cleaned = raw
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/```\s*$/i, '')
+    .trim();
+
   let parsed: SkinAnalysisResult;
   try {
-    parsed = JSON.parse(raw) as SkinAnalysisResult;
+    parsed = JSON.parse(cleaned) as SkinAnalysisResult;
   } catch {
-    // strict mode should make this unreachable in practice. If we ever land
-    // here, the model returned non-JSON despite the schema — log and fail
-    // soft.
-    console.error('[skin-analysis] Strict JSON parse failed. First 200 chars:', raw.slice(0, 200));
+    console.error('[skin-analysis] JSON parse failed. First 200 chars:', cleaned.slice(0, 200));
+    return {
+      success: false,
+      error: 'Could not interpret analysis. Please try again.',
+      latencyMs: Date.now() - t0,
+    };
+  }
+
+  // Gemini's structured-output enforcement is best-effort — verify the
+  // shape we depend on rather than trusting the schema.
+  if (!parsed || typeof parsed.rejected !== 'boolean') {
+    console.error('[skin-analysis] Response missing required fields:', cleaned.slice(0, 200));
     return {
       success: false,
       error: 'Could not interpret analysis. Please try again.',
