@@ -18,7 +18,7 @@ import prisma from '../db.server';
 // Model pinned. If/when we upgrade, do it deliberately and re-run the
 // offline tone-fairness audit (scripts/skin-tone-audit.mjs) against the
 // new model before flipping merchants over.
-export const SKIN_ANALYSIS_MODEL = 'gemini-2.5-flash';
+export const SKIN_ANALYSIS_MODEL = 'gemini-2.5-pro';
 
 // Vision benefits from more detail than the try-on pipeline; 1024px gives
 // Gemini enough resolution to catch fine lines / pore texture without
@@ -26,9 +26,9 @@ export const SKIN_ANALYSIS_MODEL = 'gemini-2.5-flash';
 const SKIN_ANALYSIS_MAX_PX = 1024;
 
 // Gemini SDK has no first-class per-request timeout that we can rely on
-// across versions — wrap with Promise.race instead. 30s is enough headroom
-// for gemini-2.5-flash vision (typical p99 ~5-10s).
-const GEMINI_REQUEST_TIMEOUT_MS = 30_000;
+// across versions — wrap with Promise.race instead. 45s gives Pro enough
+// headroom (typical p99 ~10-20s; Pro long-tails further than Flash).
+const GEMINI_REQUEST_TIMEOUT_MS = 45_000;
 
 // Shopify Admin GraphQL — used to hydrate product cards. 8s is plenty;
 // admin queries normally return in <500ms.
