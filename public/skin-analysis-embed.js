@@ -108,16 +108,16 @@
     + '.gleame-skin-card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:28px;box-shadow:0 1px 2px rgba(15,23,42,.04);}'
     + '.gleame-skin-h{font-size:18px;font-weight:600;margin:0 0 4px;}'
     + '.gleame-skin-sub{font-size:13px;color:#6b7280;margin:0 0 20px;}'
-    + '.gleame-skin-drop{display:block;position:relative;border:2px dashed #cbd5e1;border-radius:12px;padding:36px 16px;text-align:center;cursor:pointer;transition:border-color .15s,background-color .15s;background:#f8fafc;margin:0;}'
+    + '.gleame-skin-drop{display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;border:2px dashed #cbd5e1;border-radius:12px;padding:48px 20px;min-height:300px;text-align:center;cursor:pointer;transition:border-color .15s,background-color .15s;background:#f8fafc;margin:0;}'
     + '.gleame-skin-drop:hover{border-color:#3b82f6;background:#f1f5f9;}'
     + '.gleame-skin-drop.is-dragging{border-color:#3b82f6;background:#eff6ff;}'
     // Bulletproof hide for the file input — themes often override `display:none`
     // on input[type=file]. Move it off-screen with !important so theme CSS
     // can't bring it back.
     + '.gleame-skin-drop input[type="file"]{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;border:0!important;opacity:0!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;pointer-events:none!important;}'
-    + '.gleame-skin-drop-icon{font-size:32px;color:#94a3b8;margin-bottom:8px;}'
-    + '.gleame-skin-drop-title{font-size:15px;font-weight:500;color:#0f172a;}'
-    + '.gleame-skin-drop-hint{font-size:12px;color:#64748b;margin-top:4px;}'
+    + '.gleame-skin-drop-icon{font-size:44px;color:#94a3b8;margin-bottom:12px;line-height:1;}'
+    + '.gleame-skin-drop-title{font-size:17px;font-weight:600;color:#0f172a;}'
+    + '.gleame-skin-drop-hint{font-size:13px;color:#64748b;margin-top:6px;}'
     + '.gleame-skin-thumb{margin-top:12px;border-radius:12px;overflow:hidden;max-height:240px;position:relative;}'
     + '.gleame-skin-thumb img{display:block;width:100%;height:auto;object-fit:cover;}'
     // Scanning bar — appears only while .is-scanning is set on the thumb.
