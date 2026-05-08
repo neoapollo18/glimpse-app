@@ -55,6 +55,14 @@
     if (score < 75) return '#f59e0b';   // amber
     return '#ef4444';                   // red
   }
+  // Two-stop gradient that pairs each severity color with a lighter sibling,
+  // so result bars read as colored, vibrant pills rather than flat slate.
+  function severityGradient(score) {
+    if (score < 25) return 'linear-gradient(90deg,#10b981 0%,#6ee7b7 100%)';
+    if (score < 50) return 'linear-gradient(90deg,#3b82f6 0%,#93c5fd 100%)';
+    if (score < 75) return 'linear-gradient(90deg,#f59e0b 0%,#fcd34d 100%)';
+    return 'linear-gradient(90deg,#ef4444 0%,#fca5a5 100%)';
+  }
   function readableSkinType(t) {
     if (!t) return '';
     return t.charAt(0).toUpperCase() + t.slice(1) + ' skin';
@@ -67,6 +75,25 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
+  }
+
+  // ------------------------------------------------------------
+  // Page-type guard.
+  //
+  // Merchants sometimes paste the embed snippet into a Liquid section that
+  // ends up rendering on every product or collection page (e.g. a footer
+  // section, or product-template.liquid). The widget is not designed for
+  // that — it's a dedicated page experience. Default behavior: refuse to
+  // mount on /products/* or /collections/*. Merchants can override on a
+  // per-instance basis with `data-gleame-allow-anywhere` on the host element.
+  // ------------------------------------------------------------
+  function isBlockedPage() {
+    var tmpl = (window.Shopify && window.Shopify.template) || '';
+    var path = (window.location && window.location.pathname) || '';
+    if (/^product/.test(tmpl) || /^collection/.test(tmpl)) return true;
+    if (path.indexOf('/products/') === 0) return true;
+    if (path.indexOf('/collections/') === 0) return true;
+    return false;
   }
 
   // ------------------------------------------------------------
@@ -91,8 +118,15 @@
     + '.gleame-skin-drop-icon{font-size:32px;color:#94a3b8;margin-bottom:8px;}'
     + '.gleame-skin-drop-title{font-size:15px;font-weight:500;color:#0f172a;}'
     + '.gleame-skin-drop-hint{font-size:12px;color:#64748b;margin-top:4px;}'
-    + '.gleame-skin-thumb{margin-top:12px;border-radius:12px;overflow:hidden;max-height:240px;}'
+    + '.gleame-skin-thumb{margin-top:12px;border-radius:12px;overflow:hidden;max-height:240px;position:relative;}'
     + '.gleame-skin-thumb img{display:block;width:100%;height:auto;object-fit:cover;}'
+    // Scanning bar — appears only while .is-scanning is set on the thumb.
+    // A thin blue line travels top-to-bottom with a soft glow + faint trail,
+    // reading as an "AI scanning" effect.
+    + '.gleame-skin-scanner{position:absolute;left:0;right:0;top:0;height:3px;background:#3b82f6;box-shadow:0 0 14px 3px rgba(59,130,246,.65);pointer-events:none;display:none;}'
+    + '.gleame-skin-scanner:after{content:"";position:absolute;left:0;right:0;top:-44px;height:44px;background:linear-gradient(to bottom,rgba(59,130,246,0) 0%,rgba(59,130,246,.18) 60%,rgba(59,130,246,.4) 100%);}'
+    + '.gleame-skin-thumb.is-scanning .gleame-skin-scanner{display:block;animation:gleame-scan 1.8s ease-in-out infinite;}'
+    + '@keyframes gleame-scan{0%{top:-3px;}50%{top:calc(100% - 3px);}100%{top:-3px;}}'
     + '.gleame-skin-tips{font-size:13px;color:#64748b;margin:16px 0 0;padding:0;list-style:none;}'
     + '.gleame-skin-tips li{padding-left:18px;position:relative;margin-bottom:4px;}'
     + '.gleame-skin-tips li:before{content:"";position:absolute;left:6px;top:9px;width:4px;height:4px;border-radius:50%;background:#94a3b8;}'
@@ -100,18 +134,17 @@
     + '.gleame-skin-cta:hover{opacity:.92;}'
     + '.gleame-skin-cta:active{transform:translateY(1px);}'
     + '.gleame-skin-cta:disabled{opacity:.5;cursor:not-allowed;}'
-    + '.gleame-skin-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:280px;color:#94a3b8;font-size:14px;text-align:center;}'
-    + '.gleame-skin-empty-icon{font-size:36px;margin-bottom:12px;opacity:.5;}'
-    + '.gleame-skin-loading{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:280px;}'
-    + '.gleame-skin-spinner{width:36px;height:36px;border:3px solid #e2e8f0;border-top-color:#0f172a;border-radius:50%;animation:gleame-spin 1s linear infinite;}'
-    + '@keyframes gleame-spin{to{transform:rotate(360deg);}}'
-    + '.gleame-skin-loading-msg{margin-top:16px;font-size:13px;color:#64748b;min-height:18px;}'
+    // Loading status row — replaces the CTA while a scan is in flight.
+    + '.gleame-skin-loading-row{margin-top:20px;display:flex;align-items:center;gap:10px;padding:14px 16px;border-radius:10px;background:#eff6ff;border:1px solid #dbeafe;color:#1e3a8a;font-size:14px;font-weight:500;}'
+    + '.gleame-skin-loading-dot{width:9px;height:9px;border-radius:50%;background:#3b82f6;flex-shrink:0;animation:gleame-pulse 1s ease-in-out infinite;}'
+    + '@keyframes gleame-pulse{0%,100%{opacity:.35;transform:scale(.8);}50%{opacity:1;transform:scale(1.15);}}'
+    + '.gleame-skin-loading-text{flex:1;min-height:18px;}'
     + '.gleame-skin-error{padding:12px 16px;border-radius:10px;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;font-size:13px;margin-bottom:16px;}'
     + '.gleame-skin-radar-wrap{display:flex;justify-content:center;margin:0 -8px 8px;}'
     + '.gleame-skin-radar{width:100%;max-width:360px;height:auto;}'
     + '.gleame-skin-radar-axis{stroke:#e2e8f0;stroke-width:1;fill:none;}'
     + '.gleame-skin-radar-grid{stroke:#e2e8f0;stroke-width:1;fill:none;}'
-    + '.gleame-skin-radar-shape{fill:rgba(59,130,246,.18);stroke:#3b82f6;stroke-width:2;stroke-linejoin:round;animation:gleame-radar-fade .6s ease-out;}'
+    + '.gleame-skin-radar-shape{fill:rgba(59,130,246,.22);stroke:#3b82f6;stroke-width:2.5;stroke-linejoin:round;filter:drop-shadow(0 4px 10px rgba(59,130,246,.25));animation:gleame-radar-fade .6s ease-out;}'
     + '.gleame-skin-radar-dot{fill:#3b82f6;}'
     + '.gleame-skin-radar-label{font-size:11px;fill:#475569;}'
     + '@keyframes gleame-radar-fade{from{opacity:0;transform:scale(.8);}to{opacity:1;transform:scale(1);}}'
@@ -122,15 +155,16 @@
     + '.gleame-skin-bar-head{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;margin-bottom:6px;}'
     + '.gleame-skin-bar-label{color:#334155;font-weight:500;}'
     + '.gleame-skin-bar-value{color:#64748b;font-variant-numeric:tabular-nums;}'
-    + '.gleame-skin-bar-track{height:6px;background:#f1f5f9;border-radius:3px;overflow:hidden;}'
-    + '.gleame-skin-bar-fill{height:100%;border-radius:3px;width:0;transition:width .8s cubic-bezier(.2,.8,.2,1);}'
+    + '.gleame-skin-bar-track{height:8px;background:#f1f5f9;border-radius:4px;overflow:hidden;}'
+    + '.gleame-skin-bar-fill{height:100%;border-radius:4px;width:0;transition:width .9s cubic-bezier(.2,.8,.2,1);}'
     + '.gleame-skin-bar-sev{font-size:11px;color:#94a3b8;margin-top:3px;}'
     + '.gleame-skin-notes{padding:14px 16px;border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0;font-size:13px;color:#334155;line-height:1.55;margin-bottom:20px;}'
     + '.gleame-skin-recs-h{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#64748b;margin:0 0 12px;}'
     + '.gleame-skin-recs{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}'
     + '@media(max-width:540px){.gleame-skin-recs{grid-template-columns:1fr;}}'
-    + '.gleame-skin-rec{display:flex;flex-direction:column;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;text-decoration:none;color:inherit;background:#fff;transition:transform .15s,box-shadow .15s;}'
+    + '.gleame-skin-rec{display:flex;flex-direction:column;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;text-decoration:none;color:inherit;background:#fff;transition:transform .15s,box-shadow .15s;position:relative;}'
     + '.gleame-skin-rec:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(15,23,42,.08);}'
+    + '.gleame-skin-rec-accent{height:3px;background:#3b82f6;}'
     + '.gleame-skin-rec-img{aspect-ratio:1/1;width:100%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;color:#cbd5e1;font-size:24px;}'
     + '.gleame-skin-rec-img img{display:block;width:100%;height:100%;object-fit:cover;}'
     + '.gleame-skin-rec-body{padding:10px 12px 14px;}'
@@ -141,6 +175,25 @@
     + '.gleame-skin-foot a{color:#64748b;text-decoration:underline;cursor:pointer;}'
     + '.gleame-skin-foot a[aria-disabled="true"]{color:#cbd5e1;cursor:default;text-decoration:none;}'
     + '.gleame-skin-disclaimer{margin-top:14px;font-size:11px;color:#94a3b8;line-height:1.5;}'
+    // ----- Placeholder mode -----
+    // Wraps the right pane before any analysis runs (and between runs). It
+    // shows the same shapes the real result will use — radar, bars, recs —
+    // in a muted, dimmed, gently shimmering treatment so the layout never
+    // jumps and the user can see what's coming.
+    + '.gleame-skin-placeholder{position:relative;}'
+    + '.gleame-skin-placeholder .gleame-skin-typebadge{background:#f1f5f9;color:#94a3b8;}'
+    + '.gleame-skin-placeholder .gleame-skin-radar-shape,.gleame-skin-placeholder .gleame-skin-radar-dot{display:none;}'
+    + '.gleame-skin-placeholder .gleame-skin-bar-value{color:#cbd5e1;}'
+    + '.gleame-skin-placeholder .gleame-skin-bar-sev{color:#cbd5e1;}'
+    + '.gleame-skin-placeholder .gleame-skin-bar-fill{background:linear-gradient(90deg,#e2e8f0 0%,#f1f5f9 50%,#e2e8f0 100%)!important;background-size:200% 100%!important;width:35%!important;animation:gleame-shimmer 1.6s ease-in-out infinite;}'
+    + '.gleame-skin-placeholder .gleame-skin-rec{background:#fff;}'
+    + '.gleame-skin-placeholder .gleame-skin-rec-img{background:linear-gradient(90deg,#f1f5f9 0%,#e2e8f0 50%,#f1f5f9 100%);background-size:200% 100%;animation:gleame-shimmer 1.6s ease-in-out infinite;color:transparent;}'
+    + '.gleame-skin-placeholder .gleame-skin-rec-concern,.gleame-skin-placeholder .gleame-skin-rec-title,.gleame-skin-placeholder .gleame-skin-rec-shop{display:block;background:#f1f5f9;color:transparent!important;border-radius:4px;height:10px;}'
+    + '.gleame-skin-placeholder .gleame-skin-rec-concern{width:55%;}'
+    + '.gleame-skin-placeholder .gleame-skin-rec-title{height:14px;width:90%;margin-top:8px;}'
+    + '.gleame-skin-placeholder .gleame-skin-rec-shop{height:9px;width:45%;margin-top:8px;}'
+    + '.gleame-skin-placeholder-hint{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:12px;color:#94a3b8;background:rgba(255,255,255,.85);backdrop-filter:blur(2px);padding:6px 12px;border-radius:999px;border:1px solid #e2e8f0;pointer-events:none;}'
+    + '@keyframes gleame-shimmer{0%,100%{background-position:0% 0;opacity:.7;}50%{background-position:100% 0;opacity:1;}}'
     + '';
 
   function injectCSS() {
@@ -218,7 +271,7 @@
     for (var i = 0; i < METRICS.length; i++) {
       var m = METRICS[i];
       var sc = Math.max(0, Math.min(100, scores[m.key] || 0));
-      var color = severityColor(sc);
+      var grad = severityGradient(sc);
       var sev = severityLabel(sc);
       html += ''
         + '<div class="gleame-skin-bar-row">'
@@ -226,7 +279,7 @@
         +     '<span class="gleame-skin-bar-label">' + escapeHtml(m.label) + '</span>'
         +     '<span class="gleame-skin-bar-value">' + sc + '</span>'
         +   '</div>'
-        +   '<div class="gleame-skin-bar-track"><div class="gleame-skin-bar-fill" data-target="' + sc + '" style="background:' + color + ';"></div></div>'
+        +   '<div class="gleame-skin-bar-track"><div class="gleame-skin-bar-fill" data-target="' + sc + '" style="background:' + grad + ';"></div></div>'
         +   '<div class="gleame-skin-bar-sev">' + sev + '</div>'
         + '</div>';
     }
@@ -256,6 +309,7 @@
     var cards = recs.map(function (r) {
       var label = concernLabels[r.concern] || r.concern;
       var inner = ''
+        + '<div class="gleame-skin-rec-accent"></div>'
         + '<div class="gleame-skin-rec-img">'
         +   (r.imageUrl ? '<img src="' + escapeHtml(r.imageUrl) + '" alt="' + escapeHtml(r.title || '') + '" loading="lazy"/>' : '◯')
         + '</div>'
@@ -272,6 +326,30 @@
     return ''
       + '<h4 class="gleame-skin-recs-h">Recommended for you</h4>'
       + '<div class="gleame-skin-recs">' + cards + '</div>';
+  }
+
+  // ------------------------------------------------------------
+  // Placeholder result — same skeleton as the real result, but with all
+  // empty/zeroed data and a `gleame-skin-placeholder` class on the wrapper
+  // so CSS dims everything and runs the shimmer. Used as the rest state
+  // (before any photo is analyzed) and during loading (right pane stays
+  // calm; the action lives on the left side).
+  // ------------------------------------------------------------
+  function renderPlaceholderResult() {
+    var typeBadge = '<div class="gleame-skin-typebadge">Skin type</div>';
+    // Empty score map → renderRadar draws the grid and axes only; the
+    // .gleame-skin-radar-shape is hidden by the placeholder CSS rule.
+    var radar = '<div class="gleame-skin-radar-wrap">' + renderRadar({}) + '</div>';
+    var bars = renderBars({});
+    var ghostRecs = ''
+      + '<h4 class="gleame-skin-recs-h">Recommended for you</h4>'
+      + '<div class="gleame-skin-recs">'
+      +   '<div class="gleame-skin-rec"><div class="gleame-skin-rec-accent"></div><div class="gleame-skin-rec-img"></div><div class="gleame-skin-rec-body"><div class="gleame-skin-rec-concern">Concern</div><div class="gleame-skin-rec-title">Product title placeholder line two</div><span class="gleame-skin-rec-shop">View product</span></div></div>'
+      +   '<div class="gleame-skin-rec"><div class="gleame-skin-rec-accent"></div><div class="gleame-skin-rec-img"></div><div class="gleame-skin-rec-body"><div class="gleame-skin-rec-concern">Concern</div><div class="gleame-skin-rec-title">Product title placeholder line two</div><span class="gleame-skin-rec-shop">View product</span></div></div>'
+      +   '<div class="gleame-skin-rec"><div class="gleame-skin-rec-accent"></div><div class="gleame-skin-rec-img"></div><div class="gleame-skin-rec-body"><div class="gleame-skin-rec-concern">Concern</div><div class="gleame-skin-rec-title">Product title placeholder line two</div><span class="gleame-skin-rec-shop">View product</span></div></div>'
+      + '</div>';
+    var hint = '<div class="gleame-skin-placeholder-hint">Upload a photo to see your profile</div>';
+    return '<div class="gleame-skin-placeholder">' + typeBadge + radar + bars + ghostRecs + hint + '</div>';
   }
 
   // ------------------------------------------------------------
@@ -318,7 +396,9 @@
       +       '<li>Natural light works best</li>'
       +       '<li>Remove glasses and makeup if possible</li>'
       +     '</ul>'
-      +     '<button class="gleame-skin-cta" data-analyze disabled>Analyze my skin</button>'
+      +     '<div data-cta-slot>'
+      +       '<button class="gleame-skin-cta" data-analyze disabled>Analyze my skin</button>'
+      +     '</div>'
       +     '<p class="gleame-skin-disclaimer">For cosmetic guidance only — not medical advice. Photos are processed in real time and never stored.</p>'
       +     '<div class="gleame-skin-foot">'
       +       '<span>Powered by Gleame</span>'
@@ -326,10 +406,7 @@
       +     '</div>'
       +   '</div>'
       +   '<div class="gleame-skin-card" data-pane="result">'
-      +     '<div class="gleame-skin-empty">'
-      +       '<div class="gleame-skin-empty-icon">◐</div>'
-      +       '<div>Your skin profile will appear here.</div>'
-      +     '</div>'
+      +     renderPlaceholderResult()
       +   '</div>'
       + '</div>';
   }
@@ -340,23 +417,59 @@
     return pane;
   }
 
+  // ------------------------------------------------------------
+  // Loading state — Stage 2 layout.
+  //
+  // The loading affordance lives on the LEFT pane: the photo gets a
+  // scanning-line overlay, and the CTA slot is replaced with a status row
+  // (pulsing dot + rotating message). The right pane stays in placeholder
+  // mode the whole time, so the layout never collapses to a spinner.
+  //
+  // Returns a stop function that the caller invokes when the request
+  // settles (success, error, or rejected).
+  // ------------------------------------------------------------
   function showLoading(container) {
-    var pane = setResultPaneHTML(container, ''
-      + '<div class="gleame-skin-loading" role="status" aria-live="polite">'
-      +   '<div class="gleame-skin-spinner" aria-hidden="true"></div>'
-      +   '<div class="gleame-skin-loading-msg" data-loading-msg></div>'
-      + '</div>');
-    var msgEl = pane.querySelector('[data-loading-msg]');
-    return startLoadingRotator(msgEl);
+    var thumb = container.querySelector('.gleame-skin-thumb');
+    if (thumb) {
+      thumb.classList.add('is-scanning');
+      // Idempotent: only inject the scanner element once per scan cycle.
+      if (!thumb.querySelector('.gleame-skin-scanner')) {
+        var scanner = document.createElement('div');
+        scanner.className = 'gleame-skin-scanner';
+        thumb.appendChild(scanner);
+      }
+    }
+
+    var ctaSlot = container.querySelector('[data-cta-slot]');
+    var ctaPrev = ctaSlot ? ctaSlot.innerHTML : null;
+    if (ctaSlot) {
+      ctaSlot.innerHTML = ''
+        + '<div class="gleame-skin-loading-row" role="status" aria-live="polite">'
+        +   '<div class="gleame-skin-loading-dot" aria-hidden="true"></div>'
+        +   '<div class="gleame-skin-loading-text" data-loading-msg></div>'
+        + '</div>';
+    }
+
+    var msgEl = container.querySelector('[data-loading-msg]');
+    var stopRotator = msgEl ? startLoadingRotator(msgEl) : function () {};
+
+    return function stop() {
+      stopRotator();
+      var t = container.querySelector('.gleame-skin-thumb');
+      if (t) {
+        t.classList.remove('is-scanning');
+        var s = t.querySelector('.gleame-skin-scanner');
+        if (s) s.parentNode.removeChild(s);
+      }
+      var slot = container.querySelector('[data-cta-slot]');
+      if (slot && ctaPrev != null) slot.innerHTML = ctaPrev;
+    };
   }
 
   function showError(container, message) {
     setResultPaneHTML(container, ''
       + '<div class="gleame-skin-error">' + escapeHtml(message) + '</div>'
-      + '<div class="gleame-skin-empty">'
-      +   '<div class="gleame-skin-empty-icon">◌</div>'
-      +   '<div>Try again with a clearer photo.</div>'
-      + '</div>');
+      + renderPlaceholderResult());
   }
 
   function showResult(container, data) {
@@ -385,10 +498,7 @@
             : "We couldn't analyze that photo. Try another one.";
     setResultPaneHTML(container, ''
       + '<div class="gleame-skin-error">' + escapeHtml(msg) + '</div>'
-      + '<div class="gleame-skin-empty">'
-      +   '<div class="gleame-skin-empty-icon">◌</div>'
-      +   '<div>Pick a different photo and try again.</div>'
-      + '</div>');
+      + renderPlaceholderResult());
   }
 
   // ------------------------------------------------------------
@@ -397,6 +507,14 @@
   function initInstance(container) {
     if (container.getAttribute('data-gleame-init') === '1') return;
     container.setAttribute('data-gleame-init', '1');
+
+    // Page-type guard: refuse to render on product/collection pages unless
+    // the merchant has explicitly opted in. Prevents the widget from leaking
+    // onto every product page when the snippet is pasted into a global section.
+    if (isBlockedPage() && container.getAttribute('data-gleame-allow-anywhere') == null) {
+      container.style.display = 'none';
+      return;
+    }
 
     var shopDomain = container.getAttribute('data-shop')
       || (window.Shopify && window.Shopify.shop)
@@ -438,11 +556,7 @@
     }
 
     function resetResultPane() {
-      setResultPaneHTML(container, ''
-        + '<div class="gleame-skin-empty">'
-        +   '<div class="gleame-skin-empty-icon">◐</div>'
-        +   '<div>Your skin profile will appear here.</div>'
-        + '</div>');
+      setResultPaneHTML(container, renderPlaceholderResult());
     }
 
     function setReportEnabled(on) {
@@ -478,10 +592,18 @@
       if (f) setSelected(f);
     });
 
-    analyzeBtn.addEventListener('click', function () {
+    // Click handler is bound to the container (delegated) because the CTA
+    // slot's innerHTML is replaced during loading — the original button node
+    // is destroyed and recreated, so a direct listener on the original would
+    // not survive. Delegation keeps Analyze working across the loading cycle.
+    container.addEventListener('click', function (e) {
+      var btn = e.target.closest && e.target.closest('[data-analyze]');
+      if (!btn) return;
       if (!selectedFile) return;
-      analyzeBtn.disabled = true;
-      var stopRotator = showLoading(container);
+      if (btn.disabled) return;
+      btn.disabled = true;
+
+      var stopLoading = showLoading(container);
 
       var fd = new FormData();
       fd.append('image', selectedFile);
@@ -499,30 +621,35 @@
           return res.json().then(function (body) { return { status: res.status, body: body }; });
         })
         .then(function (out) {
-          stopRotator();
+          stopLoading();
           if (!out) return;
+          // Re-resolve the analyze button — it was destroyed/recreated when
+          // showLoading swapped the CTA slot back in.
+          var freshBtn = container.querySelector('[data-analyze]');
           if (out.status >= 400) {
             showError(container, (out.body && out.body.error) || 'Something went wrong. Please try again.');
-            analyzeBtn.disabled = false;
+            if (freshBtn) freshBtn.disabled = false;
             return;
           }
           var data = out.body;
           if (data.rejected) {
             showRejected(container, data.reason);
-            analyzeBtn.disabled = false;
+            if (freshBtn) freshBtn.disabled = false;
             return;
           }
           showResult(container, data);
           setReportEnabled(true);
-          // Re-enable so the customer can analyze a different photo.
-          analyzeBtn.disabled = false;
-          analyzeBtn.textContent = 'Try another photo';
+          if (freshBtn) {
+            freshBtn.disabled = false;
+            freshBtn.textContent = 'Try another photo';
+          }
         })
         .catch(function (err) {
-          stopRotator();
+          stopLoading();
           console.error('[gleame-skin] request failed:', err);
           showError(container, 'Connection problem. Please try again in a moment.');
-          analyzeBtn.disabled = false;
+          var freshBtn = container.querySelector('[data-analyze]');
+          if (freshBtn) freshBtn.disabled = false;
         });
     });
 
