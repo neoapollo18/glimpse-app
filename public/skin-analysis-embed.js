@@ -155,9 +155,9 @@
     + '.gleame-skin-bar-head{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;margin-bottom:6px;}'
     + '.gleame-skin-bar-label{color:#334155;font-weight:500;}'
     + '.gleame-skin-bar-value{color:#64748b;font-variant-numeric:tabular-nums;}'
-    + '.gleame-skin-bar-track{height:8px;background:#f1f5f9;border-radius:4px;overflow:hidden;}'
-    + '.gleame-skin-bar-fill{height:100%;border-radius:4px;width:0;transition:width .9s cubic-bezier(.2,.8,.2,1);}'
-    + '.gleame-skin-bar-sev{font-size:11px;color:#94a3b8;margin-top:3px;}'
+    + '.gleame-skin-bar-track{height:12px;background:#f1f5f9;border-radius:6px;overflow:hidden;}'
+    + '.gleame-skin-bar-fill{height:100%;border-radius:6px;width:0;min-width:3px;transition:width .9s cubic-bezier(.2,.8,.2,1);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18);}'
+    + '.gleame-skin-bar-sev{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin-top:5px;}'
     + '.gleame-skin-notes{padding:14px 16px;border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0;font-size:13px;color:#334155;line-height:1.55;margin-bottom:20px;}'
     + '.gleame-skin-recs-h{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#64748b;margin:0 0 12px;}'
     + '.gleame-skin-recs{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}'
@@ -271,16 +271,16 @@
     for (var i = 0; i < METRICS.length; i++) {
       var m = METRICS[i];
       var sc = Math.max(0, Math.min(100, scores[m.key] || 0));
-      var grad = severityGradient(sc);
+      var color = severityColor(sc);
       var sev = severityLabel(sc);
       html += ''
         + '<div class="gleame-skin-bar-row">'
         +   '<div class="gleame-skin-bar-head">'
         +     '<span class="gleame-skin-bar-label">' + escapeHtml(m.label) + '</span>'
-        +     '<span class="gleame-skin-bar-value">' + sc + '</span>'
+        +     '<span class="gleame-skin-bar-value" style="color:' + color + ';font-weight:600;">' + sc + '</span>'
         +   '</div>'
-        +   '<div class="gleame-skin-bar-track"><div class="gleame-skin-bar-fill" data-target="' + sc + '" style="background:' + grad + ';"></div></div>'
-        +   '<div class="gleame-skin-bar-sev">' + sev + '</div>'
+        +   '<div class="gleame-skin-bar-track"><div class="gleame-skin-bar-fill" data-target="' + sc + '" style="background:' + color + ';"></div></div>'
+        +   '<div class="gleame-skin-bar-sev" style="color:' + color + ';">' + sev + '</div>'
         + '</div>';
     }
     html += '</div>';
