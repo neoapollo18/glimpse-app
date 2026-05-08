@@ -20,6 +20,9 @@ import {
 } from "../lib/supabase.server";
 import { checkRateLimit, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
 import { safeFetch } from "../lib/safe-fetch.server";
+import prisma from "../db.server";
+
+const SHOPIFY_ADMIN_TIMEOUT_MS = 6_000;
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -27,10 +30,10 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type, X-Requested-With",
 };
 
-// Shopify's default product handle is the slugified title. Merchants can
-// override it in admin, in which case this falls out of sync — but for the
-// default case this produces the correct /products/{handle} URL without a
-// round-trip to Shopify.
+// Best-effort fallback only. Shopify's default product handle is the
+// slugified title, but merchants commonly override it in admin (the
+// "Search engine listing" → URL handle field). Used when the Admin
+// GraphQL handle lookup is unavailable or returns nothing for a GID.
 function slugifyHandle(title: string | null | undefined): string {
   if (!title) return "";
   return title
@@ -45,6 +48,80 @@ function extractNumericId(gid: string | null | undefined): string | null {
   if (!gid) return null;
   const last = gid.split("/").pop() || "";
   return /^\d+$/.test(last) ? last : null;
+}
+
+/**
+ * Look up real Shopify product handles for a list of product GIDs. Single
+ * batched GraphQL call against Admin API; any GID that fails to resolve
+ * is simply absent from the map and the caller falls back to the slugified
+ * product name.
+ *
+ * Why we need this: gleame-chat.js renders the "Shop This" button as
+ * <a href="/products/{handle}">. If that handle disagrees with the real
+ * Shopify handle (because the merchant customized it), the link 404s and
+ * customers can't get to the product page.
+ */
+async function fetchProductHandles(
+  shopDomain: string,
+  productGids: string[],
+): Promise<Map<string, string>> {
+  const handles = new Map<string, string>();
+  if (productGids.length === 0) return handles;
+
+  const session = await prisma.session.findFirst({
+    where: { shop: shopDomain, isOnline: false, accessToken: { not: "" } },
+    orderBy: { id: "desc" },
+  });
+  if (!session?.accessToken) {
+    console.warn(`[chat-recommend] no offline token for ${shopDomain}; falling back to slugified handles`);
+    return handles;
+  }
+
+  const query = `
+    query GetProductHandles($ids: [ID!]!) {
+      nodes(ids: $ids) {
+        ... on Product { id handle }
+      }
+    }
+  `;
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), SHOPIFY_ADMIN_TIMEOUT_MS);
+  try {
+    const res = await fetch(`https://${shopDomain}/admin/api/2025-07/graphql.json`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": session.accessToken,
+      },
+      body: JSON.stringify({ query, variables: { ids: productGids } }),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) {
+      console.error(`[chat-recommend] handle lookup HTTP ${res.status} for ${shopDomain}`);
+      return handles;
+    }
+    const data = (await res.json()) as {
+      data?: { nodes?: Array<{ id: string; handle: string } | null> };
+      errors?: Array<{ message: string }>;
+    };
+    if (data.errors?.length) {
+      console.error(`[chat-recommend] handle lookup GraphQL errors for ${shopDomain}:`, data.errors);
+      return handles;
+    }
+    for (const node of data.data?.nodes ?? []) {
+      if (node && node.id && node.handle) handles.set(node.id, node.handle);
+    }
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      console.error(`[chat-recommend] handle lookup timed out for ${shopDomain}`);
+    } else {
+      console.error(`[chat-recommend] handle lookup threw for ${shopDomain}:`, err);
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+  return handles;
 }
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -334,7 +411,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       );
     }
 
-    const recommendations = successful.slice(0, desiredCount);
+    const finalSuccessful = successful.slice(0, desiredCount);
+
+    // Replace slugified placeholder handles with the real Shopify handles
+    // so the "Shop This" link in gleame-chat.js resolves to /products/{real}.
+    // Single batched call; any GID not in the map keeps its slugified
+    // fallback so behavior never regresses below pre-fix.
+    const realHandles = await fetchProductHandles(
+      verifiedDomain,
+      finalSuccessful.map((r) => r.productId).filter((id): id is string => Boolean(id)),
+    );
+    const recommendations = finalSuccessful.map((r) => {
+      const real = r.productId ? realHandles.get(r.productId) : undefined;
+      return real ? { ...r, productHandle: real } : r;
+    });
 
     return json({ recommendations }, { headers: CORS_HEADERS });
   } catch (err) {

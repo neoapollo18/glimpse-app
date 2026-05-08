@@ -319,7 +319,10 @@
         +   '<span class="gleame-skin-rec-shop">View product →</span>'
         + '</div>';
       if (r.url) {
-        return '<a class="gleame-skin-rec" href="' + escapeHtml(r.url) + '">' + inner + '</a>';
+        // target="_blank" so the click always opens — some merchant themes
+        // bind click listeners on .product-card / [href*="/products/"] etc.
+        // that swallow same-tab navigations. Keeps the analysis open too.
+        return '<a class="gleame-skin-rec" href="' + escapeHtml(r.url) + '" target="_blank" rel="noopener noreferrer">' + inner + '</a>';
       }
       return '<div class="gleame-skin-rec">' + inner + '</div>';
     }).join('');

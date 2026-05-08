@@ -469,7 +469,13 @@ export interface ProductCard {
   productId: string;
   title: string;
   imageUrl: string | null;
-  /** Full storefront URL, e.g. https://shop.myshopify.com/products/some-handle. */
+  /**
+   * Path-only storefront URL, e.g. `/products/some-handle`. Path-only so the
+   * browser resolves it against whatever origin the embed is rendering on
+   * (the merchant's primary domain) — avoids a cross-origin redirect through
+   * `*.myshopify.com` that some merchant themes intercept and that would
+   * lose the customer's cart session.
+   */
   url: string | null;
 }
 
@@ -539,7 +545,7 @@ export async function fetchProductCards(
         productId: node.id,
         title: node.title ?? '',
         imageUrl: shrinkShopifyImage(node.featuredImage?.url ?? null, 400),
-        url: node.handle ? `https://${shopDomain}/products/${node.handle}` : null,
+        url: node.handle ? `/products/${node.handle}` : null,
       });
     }
   } catch (err) {
