@@ -158,7 +158,8 @@
     + '.gleame-skin-bar-label{color:#334155;font-weight:500;}'
     + '.gleame-skin-bar-value{color:#64748b;font-variant-numeric:tabular-nums;}'
     + '.gleame-skin-bar-track{height:12px;background:#f1f5f9;border-radius:6px;overflow:hidden;}'
-    + '.gleame-skin-bar-fill{height:100%;border-radius:6px;width:0;min-width:3px;transition:width .9s cubic-bezier(.2,.8,.2,1);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18);}'
+    + '.gleame-skin-bar-fill{height:100%;border-radius:6px;min-width:3px;animation:gleame-bar-grow .9s cubic-bezier(.2,.8,.2,1);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18);}'
+    + '@keyframes gleame-bar-grow{from{width:0;}}'
     + '.gleame-skin-bar-sev{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin-top:5px;}'
     + '.gleame-skin-notes{padding:14px 16px;border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0;font-size:13px;color:#334155;line-height:1.55;margin-bottom:20px;}'
     + '.gleame-skin-recs-h{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#64748b;margin:0 0 12px;}'
@@ -282,13 +283,18 @@
       var sc = Math.max(0, Math.min(100, scores[m.key] || 0));
       var color = severityColor(sc);
       var sev = severityLabel(sc);
+      // Width is set inline up-front so the bar paints immediately at its
+      // correct percentage. Earlier we relied on a deferred rAF to set
+      // `style.width` after render, which raced against the placeholder→
+      // result swap and sometimes left bars stuck at width:0.
+      var widthPct = Math.max(sc, 4); // 4% floor so even score=0 shows a chip
       html += ''
         + '<div class="gleame-skin-bar-row">'
         +   '<div class="gleame-skin-bar-head">'
         +     '<span class="gleame-skin-bar-label">' + escapeHtml(m.label) + '</span>'
         +     '<span class="gleame-skin-bar-value" style="color:' + color + ';font-weight:600;">' + sc + '</span>'
         +   '</div>'
-        +   '<div class="gleame-skin-bar-track"><div class="gleame-skin-bar-fill" data-target="' + sc + '" style="background:' + color + ';"></div></div>'
+        +   '<div class="gleame-skin-bar-track"><div class="gleame-skin-bar-fill" style="background:' + color + ';width:' + widthPct + '%;"></div></div>'
         +   '<div class="gleame-skin-bar-sev" style="color:' + color + ';">' + sev + '</div>'
         + '</div>';
     }
@@ -296,16 +302,10 @@
     return html;
   }
 
-  function animateBars(rootEl) {
-    // Defer the width set so the transition runs.
-    var fills = rootEl.querySelectorAll('.gleame-skin-bar-fill');
-    requestAnimationFrame(function () {
-      for (var i = 0; i < fills.length; i++) {
-        var t = parseFloat(fills[i].getAttribute('data-target') || '0');
-        fills[i].style.width = t + '%';
-      }
-    });
-  }
+  // Kept as a no-op for callers; bars now render at their final width inline,
+  // and the CSS transition on `.gleame-skin-bar-fill` still gives the grow-in
+  // animation when the element is first inserted into the DOM.
+  function animateBars(_rootEl) {}
 
   // ------------------------------------------------------------
   // Recommendations
@@ -382,7 +382,7 @@
     var timer = setInterval(function () {
       i = (i + 1) % LOADING_MESSAGES.length;
       el.textContent = LOADING_MESSAGES[i];
-    }, 1500);
+    }, 5000);
     return function () { clearInterval(timer); };
   }
 
