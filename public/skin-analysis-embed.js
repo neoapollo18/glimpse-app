@@ -118,8 +118,10 @@
     + '.gleame-skin-drop-icon{font-size:32px;color:#94a3b8;margin-bottom:8px;}'
     + '.gleame-skin-drop-title{font-size:15px;font-weight:500;color:#0f172a;}'
     + '.gleame-skin-drop-hint{font-size:12px;color:#64748b;margin-top:4px;}'
-    + '.gleame-skin-thumb{margin-top:12px;border-radius:12px;overflow:hidden;max-height:240px;position:relative;}'
+    + '.gleame-skin-thumb{border-radius:12px;overflow:hidden;max-height:340px;position:relative;cursor:pointer;}'
     + '.gleame-skin-thumb img{display:block;width:100%;height:auto;object-fit:cover;}'
+    + '.gleame-skin-thumb-swap{position:absolute;top:10px;right:10px;background:rgba(15,23,42,.7);color:#fff;font-size:11px;padding:6px 10px;border-radius:999px;backdrop-filter:blur(4px);opacity:0;transition:opacity .15s;pointer-events:none;}'
+    + '.gleame-skin-thumb:hover .gleame-skin-thumb-swap{opacity:1;}'
     // Scanning bar — appears only while .is-scanning is set on the thumb.
     // A thin blue line travels top-to-bottom with a soft glow + faint trail,
     // reading as an "AI scanning" effect.
@@ -549,13 +551,22 @@
       resetResultPane();
       if (!file) {
         thumbEl.innerHTML = '';
+        // No photo: bring the drop zone back so the user can upload one.
+        dropEl.style.display = '';
         return;
       }
       var reader = new FileReader();
       reader.onload = function (ev) {
-        thumbEl.innerHTML = '<div class="gleame-skin-thumb"><img alt="Your photo preview" src="' + ev.target.result + '"/></div>';
+        thumbEl.innerHTML = ''
+          + '<div class="gleame-skin-thumb" role="button" tabindex="0" aria-label="Replace photo">'
+          +   '<img alt="Your photo preview" src="' + ev.target.result + '"/>'
+          +   '<span class="gleame-skin-thumb-swap">Click to change</span>'
+          + '</div>';
       };
       reader.readAsDataURL(file);
+      // Photo selected: hide the drop zone so only the photo shows. Clicking
+      // the photo (handler below) reopens the file picker for a swap.
+      dropEl.style.display = 'none';
     }
 
     function resetResultPane() {
@@ -575,6 +586,24 @@
     fileInput.addEventListener('change', function (e) {
       var f = (e.target.files && e.target.files[0]) || null;
       setSelected(f);
+    });
+
+    // Click on the photo (after upload) reopens the file picker so the user
+    // can swap photos without us needing the drop zone visible. Ignored
+    // while a scan is in flight so they can't swap mid-analysis.
+    thumbEl.addEventListener('click', function (e) {
+      var thumb = e.target.closest && e.target.closest('.gleame-skin-thumb');
+      if (!thumb) return;
+      if (thumb.classList.contains('is-scanning')) return;
+      fileInput.click();
+    });
+    thumbEl.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      var thumb = e.target.closest && e.target.closest('.gleame-skin-thumb');
+      if (!thumb) return;
+      if (thumb.classList.contains('is-scanning')) return;
+      e.preventDefault();
+      fileInput.click();
     });
 
     // Drag and drop
