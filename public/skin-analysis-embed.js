@@ -108,7 +108,7 @@
     + '.gleame-skin-card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:28px;box-shadow:0 1px 2px rgba(15,23,42,.04);}'
     + '.gleame-skin-h{font-size:18px;font-weight:600;margin:0 0 4px;}'
     + '.gleame-skin-sub{font-size:13px;color:#6b7280;margin:0 0 20px;}'
-    + '.gleame-skin-drop{display:block;position:relative;border:2px dashed #cbd5e1;border-radius:12px;padding:36px 16px;text-align:center;cursor:pointer;transition:border-color .15s,background-color .15s;background:#f8fafc;margin:0;}'
+    + '.gleame-skin-drop{display:block;position:relative;border:2px dashed #cbd5e1;border-radius:12px;padding:64px 20px;text-align:center;cursor:pointer;transition:border-color .15s,background-color .15s;background:#f8fafc;margin:0;}'
     + '.gleame-skin-drop:hover{border-color:#3b82f6;background:#f1f5f9;}'
     + '.gleame-skin-drop.is-dragging{border-color:#3b82f6;background:#eff6ff;}'
     // Bulletproof hide for the file input — themes often override `display:none`
