@@ -143,7 +143,7 @@
     + '.gleame-skin-loading-text{flex:1;min-height:18px;}'
     + '.gleame-skin-error{padding:12px 16px;border-radius:10px;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;font-size:13px;margin-bottom:16px;}'
     + '.gleame-skin-radar-wrap{display:flex;justify-content:center;margin:0 -8px 8px;}'
-    + '.gleame-skin-radar{width:100%;max-width:360px;height:auto;}'
+    + '.gleame-skin-radar{width:100%;max-width:360px;height:auto;overflow:visible;}'
     + '.gleame-skin-radar-axis{stroke:#e2e8f0;stroke-width:1;fill:none;}'
     + '.gleame-skin-radar-grid{stroke:#e2e8f0;stroke-width:1;fill:none;}'
     + '.gleame-skin-radar-shape{fill:rgba(59,130,246,.22);stroke:#3b82f6;stroke-width:2.5;stroke-linejoin:round;filter:drop-shadow(0 4px 10px rgba(59,130,246,.25));animation:gleame-radar-fade .6s ease-out;}'
@@ -185,8 +185,15 @@
     + '.gleame-skin-placeholder{position:relative;}'
     + '.gleame-skin-placeholder .gleame-skin-typebadge{background:#f1f5f9;color:#94a3b8;}'
     + '.gleame-skin-placeholder .gleame-skin-radar-shape,.gleame-skin-placeholder .gleame-skin-radar-dot{display:none;}'
-    + '.gleame-skin-placeholder .gleame-skin-bar-value{color:#cbd5e1;}'
-    + '.gleame-skin-placeholder .gleame-skin-bar-sev{color:#cbd5e1;}'
+    // !important needed because renderBars writes the severity color and
+    // bold weight inline; without !important the inline styles paint the
+    // placeholder values/labels in the result-state green.
+    + '.gleame-skin-placeholder .gleame-skin-bar-value{color:#cbd5e1!important;font-weight:500!important;}'
+    + '.gleame-skin-placeholder .gleame-skin-bar-sev{color:#cbd5e1!important;font-weight:500!important;}'
+    + '.gleame-skin-placeholder .gleame-skin-bar-label{color:#cbd5e1;}'
+    + '.gleame-skin-placeholder .gleame-skin-rec-accent{background:#e2e8f0;}'
+    + '.gleame-skin-placeholder .gleame-skin-radar-label{fill:#cbd5e1;}'
+    + '.gleame-skin-placeholder .gleame-skin-recs-h{color:#cbd5e1;}'
     + '.gleame-skin-placeholder .gleame-skin-bar-fill{background:linear-gradient(90deg,#e2e8f0 0%,#f1f5f9 50%,#e2e8f0 100%)!important;background-size:200% 100%!important;width:35%!important;animation:gleame-shimmer 1.6s ease-in-out infinite;}'
     + '.gleame-skin-placeholder .gleame-skin-rec{background:#fff;}'
     + '.gleame-skin-placeholder .gleame-skin-rec-img{background:linear-gradient(90deg,#f1f5f9 0%,#e2e8f0 50%,#f1f5f9 100%);background-size:200% 100%;animation:gleame-shimmer 1.6s ease-in-out infinite;color:transparent;}'
