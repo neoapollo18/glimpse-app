@@ -17,7 +17,10 @@ export const loader = async (_args: LoaderFunctionArgs) => {
       status: 200,
       headers: {
         "Content-Type": "application/javascript; charset=utf-8",
-        "Cache-Control": "public, max-age=3600",
+        // Short cache while we iterate — bumps to 5 min so a deploy is
+        // visible on a refresh instead of waiting up to an hour. Restore
+        // to 3600 once the widget design is stable.
+        "Cache-Control": "public, max-age=300, must-revalidate",
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type",
