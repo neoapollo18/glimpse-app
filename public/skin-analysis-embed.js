@@ -50,18 +50,14 @@
   // Severity bands. Higher GRADE = better skin.
   // 81-100 minimal (green), 61-80 mild (yellow),
   // 41-60 moderate (orange), 0-40 drastic (red).
-  function severityLabel(grade) {
-    if (grade >= 81) return 'Minimal';
-    if (grade >= 61) return 'Mild';
-    if (grade >= 41) return 'Moderate';
-    return 'Drastic';
+  function severityTier(grade) {
+    if (grade >= 81) return 'minimal';
+    if (grade >= 61) return 'mild';
+    if (grade >= 41) return 'moderate';
+    return 'drastic';
   }
-  function severityColor(grade) {
-    if (grade >= 81) return '#22a06b';   // green — minimal
-    if (grade >= 61) return '#eab308';   // yellow — mild
-    if (grade >= 41) return '#f97316';   // orange — moderate
-    return '#ef4444';                    // red — drastic
-  }
+  var TIER_LABELS = { minimal: 'Minimal', mild: 'Mild', moderate: 'Moderate', drastic: 'Drastic' };
+  var TIER_COLORS = { minimal: '#22a06b', mild: '#eab308', moderate: '#f97316', drastic: '#ef4444' };
   function readableSkinType(t) {
     if (!t) return '';
     return t.charAt(0).toUpperCase() + t.slice(1) + ' skin';
@@ -156,11 +152,21 @@
     + '.gleame-skin-bar-label{color:#334155;font-weight:500;}'
     + '.gleame-skin-bar-value{color:#64748b;font-variant-numeric:tabular-nums;}'
     + '.gleame-skin-bar-track{height:12px;background:#f1f5f9;border-radius:6px;overflow:hidden;}'
-    // No animation, no transition — paint at the inline width on first
-    // frame and never again. We previously had a keyframe `from { width:0 }`
-    // that interpolated to the underlying inline width; under some merchant
-    // themes that left the bar stuck at 0. Static width is bulletproof.
-    + '.gleame-skin-bar-fill{display:block;height:100%;border-radius:6px;min-width:8px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18);}'
+    // Bar fill: color is applied via modifier class (avoids losing the
+    // background-color to the placeholder shimmer rule, whose `background:`
+    // shorthand sets background-image and would mask any background-color
+    // we tried to set inline). Width still varies per bar so it stays inline.
+    // background-image:none here defensively cancels any inherited gradient
+    // from a stale placeholder render race.
+    + '.gleame-skin-bar-fill{display:block;height:100%;border-radius:6px;min-width:8px;background-image:none;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18);}'
+    // Modifier classes use !important so they win against the placeholder
+    // shimmer rule on a render race AND against any merchant-theme rule that
+    // targets div/[class*=fill]. Also explicitly null out background-image
+    // so a stale placeholder gradient can't mask the color.
+    + '.gleame-skin-bar-fill--minimal{background-color:#22a06b!important;background-image:none!important;}'
+    + '.gleame-skin-bar-fill--mild{background-color:#eab308!important;background-image:none!important;}'
+    + '.gleame-skin-bar-fill--moderate{background-color:#f97316!important;background-image:none!important;}'
+    + '.gleame-skin-bar-fill--drastic{background-color:#ef4444!important;background-image:none!important;}'
     + '.gleame-skin-bar-sev{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin-top:5px;}'
     + '.gleame-skin-notes{padding:14px 16px;border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0;font-size:13px;color:#334155;line-height:1.55;margin-bottom:20px;}'
     + '.gleame-skin-recs-h{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#64748b;margin:0 0 12px;}'
@@ -288,22 +294,20 @@
       // passes an empty {} — render at 0 so the shimmer rule paints over it.
       var raw = scores && scores[m.key] != null ? scores[m.key] : 0;
       var grade = hasData ? toGrade(raw) : 0;
-      var color = severityColor(grade);
-      var sev = severityLabel(grade);
+      var tier = severityTier(grade);
+      var color = TIER_COLORS[tier];
+      var sev = TIER_LABELS[tier];
       var widthPct = Math.max(grade, 5); // 5% floor so even grade=0 shows a chip
-      // Inline color is pinned with !important — merchant themes sometimes
-      // ship !important rules for [style*=background] patterns, and we need
-      // it to beat the placeholder rule on a race. fillStyle uses background-color
-      // (not the shorthand `background`) so theme rules targeting the shorthand
-      // can't blow away our color via specificity tie-break.
-      var fillStyle = 'background-color:' + color + '!important;width:' + widthPct + '%!important;';
+      // Color is applied via the modifier class so the placeholder shimmer
+      // rule's `background:` shorthand can't silently mask it via background-image.
+      // Width stays inline because it's per-bar dynamic.
       html += ''
         + '<div class="gleame-skin-bar-row">'
         +   '<div class="gleame-skin-bar-head">'
         +     '<span class="gleame-skin-bar-label">' + escapeHtml(m.label) + '</span>'
         +     '<span class="gleame-skin-bar-value" style="color:' + color + ';font-weight:600;">' + grade + '</span>'
         +   '</div>'
-        +   '<div class="gleame-skin-bar-track"><div class="gleame-skin-bar-fill" style="' + fillStyle + '"></div></div>'
+        +   '<div class="gleame-skin-bar-track"><div class="gleame-skin-bar-fill gleame-skin-bar-fill--' + tier + '" style="width:' + widthPct + '%!important;"></div></div>'
         +   '<div class="gleame-skin-bar-sev" style="color:' + color + ';">' + sev + '</div>'
         + '</div>';
     }
