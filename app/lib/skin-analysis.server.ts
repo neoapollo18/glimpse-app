@@ -155,17 +155,73 @@ INPUT VALIDATION
 - Otherwise rejected=false and all other fields populated.
 
 SCORING (each 0-100, higher = MORE visible / more of a concern)
-- wrinkles: visible fine lines and wrinkles (forehead, crow's feet, nasolabial)
-- sun_damage: visible photoaging — uneven pigmentation, sunspots, dullness from sun
-- firmness: visible loss of firmness or sagging. Higher = more visible looseness.
-- dark_circles: visible darkness or shadowing under the eyes
-- texture: visible roughness, enlarged pores, uneven surface
-- moisture: visible dryness or dehydration. Higher = drier-looking, NOT more hydrated.
-- spots: visible discrete pigmentation (freckles, age spots, post-acne marks)
-- acne: visible active breakouts, papules, pustules
+Use the rubric below to anchor each score to a 5-tier scale:
+- 0-20: minimal
+- 21-40: mild
+- 41-60: moderate
+- 61-80: high
+- 81-100: severe
+
+The rubric is your INTERNAL scoring guide. Do NOT quote or echo this rubric language in the "notes" field — "notes" must follow the LANGUAGE rules below.
+
+wrinkles
+- minimal: Skin appears smooth with no visible fine lines or wrinkles.
+- mild: Early fine lines visible, primarily in high-movement areas like the eyes and forehead.
+- moderate: Noticeable wrinkles present across expression zones, consistent with natural aging.
+- high: Deep wrinkles visible across multiple facial zones, including at rest.
+- severe: Pronounced deep-set wrinkles across the entire face, with significant depth even at rest.
+
+sun_damage
+- minimal: No significant UV-related changes detected across the skin surface.
+- mild: Early signs of UV exposure detected, primarily in high-exposure zones like the nose and cheeks.
+- moderate: Moderate sun-related discoloration and pigmentation changes visible.
+- high: Significant UV damage detected, including uneven tone and hyperpigmentation.
+- severe: Extensive sun damage present, indicating prolonged UV exposure without adequate protection.
+
+firmness (higher = more visible looseness)
+- minimal: Skin appears firm and well-supported with strong elasticity.
+- mild: Slight reduction in skin elasticity detected, common in early aging stages.
+- moderate: Noticeable loss of firmness, particularly along the jawline and cheek areas.
+- high: Significant reduction in skin density and elasticity across multiple zones.
+- severe: Pronounced loss of firmness across the face, with significant sagging along the jawline and cheeks.
+
+dark_circles
+- minimal: Under-eye area appears bright with no significant discoloration detected.
+- mild: Slight darkening detected under the eyes, likely related to circulation or fatigue.
+- moderate: Moderate under-eye discoloration visible, affecting overall radiance.
+- high: Significant under-eye darkness detected, suggesting chronic fatigue or pigmentation.
+- severe: Pronounced under-eye discoloration with deep shadowing across the entire under-eye area.
+
+texture
+- minimal: Skin surface appears smooth and even with consistent tone.
+- mild: Slight surface irregularity detected, likely post-inflammatory or pore-related.
+- moderate: Noticeable texture variations across the skin surface affecting smoothness.
+- high: Significant texture irregularity present across multiple facial zones.
+- severe: Pronounced surface texture disruption with severe roughness and irregularities across the face.
+
+moisture (higher = drier-looking, NOT more hydrated)
+- minimal: Skin appears well-hydrated with a healthy moisture barrier.
+- mild: Slight dehydration detected, surface may appear occasionally tight or dull.
+- moderate: Moderate moisture deficit visible, skin may show early signs of dryness.
+- high: Significant dehydration detected, skin barrier may appear compromised.
+- severe: Severe moisture deficit visible, with extreme dryness and a compromised-looking barrier.
+
+spots
+- minimal: Skin tone appears even with no significant hyperpigmentation detected.
+- mild: Minor spots or uneven pigmentation detected, likely post-inflammatory.
+- moderate: Moderate hyperpigmentation visible, including sun spots or post-acne marks.
+- high: Significant pigmentation irregularities detected across multiple zones.
+- severe: Extensive hyperpigmentation visible across the face, including dense sun spots and post-acne marks.
+
+acne
+- minimal: Skin appears clear with no active breakouts detected.
+- mild: Minor breakouts detected, likely occasional or hormonally triggered.
+- moderate: Active breakouts visible across one or more facial zones.
+- high: Significant active breakouts detected across multiple areas of the face.
+- severe: Extensive active breakouts visible across the face, including dense papules and pustules.
 
 CALIBRATION
-Use the FULL 0-100 range. A young adult with no visible concerns scores 0-15 on every metric. A typical adult scores 30-60 on most metrics. Reserve 80-100 for genuinely severe presentations. Do NOT cluster scores around 50.
+Use the FULL 0-100 range. A young adult with no visible concerns scores 0-15 on every metric. A typical adult scores 30-60 on most metrics. Do NOT cluster scores around 50.
 
 SKIN TYPE
 Pick the single best fit from {oily, dry, combination, normal, sensitive}. If genuinely unclear, default to "combination".`;

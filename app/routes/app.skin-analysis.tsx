@@ -466,12 +466,22 @@ export default function SkinAnalysisAdmin() {
                     )}
                     <BlockStack gap="200">
                       {scoreKeys.map((key) => {
-                        const score = (previewResult.scores as Record<string, number>)[key] ?? 0;
+                        const rawScore = (previewResult.scores as Record<string, number>)[key] ?? 0;
+                        // Flip raw concern-score (high = bad) into a customer-facing
+                        // grade (high = good), mirroring the storefront embed.
+                        const grade = Math.max(0, Math.min(100, 100 - rawScore));
+                        // Traffic-light palette keyed to grade bands; matches the
+                        // severityColor() function in skin-analysis-embed.js.
+                        const barColor =
+                          grade >= 81 ? "#22a06b" :   // green — minimal
+                          grade >= 61 ? "#eab308" :   // yellow — mild
+                          grade >= 41 ? "#f97316" :   // orange — moderate
+                                        "#ef4444";    // red — drastic
                         return (
                           <BlockStack key={key} gap="050">
                             <InlineStack align="space-between">
                               <Text as="span" variant="bodySm">{CONCERN_LABELS[key]}</Text>
-                              <Text as="span" variant="bodySm" tone="subdued">{score}</Text>
+                              <Text as="span" variant="bodySm" tone="subdued">{grade}</Text>
                             </InlineStack>
                             <div style={{
                               width: "100%",
@@ -481,9 +491,9 @@ export default function SkinAnalysisAdmin() {
                               overflow: "hidden",
                             }}>
                               <div style={{
-                                width: `${Math.max(0, Math.min(100, score))}%`,
+                                width: `${grade}%`,
                                 height: "100%",
-                                background: "var(--p-color-bg-fill-info, #2c6ecb)",
+                                background: barColor,
                               }} />
                             </div>
                           </BlockStack>

@@ -42,26 +42,25 @@
     { key: 'acne',         label: 'Acne' },
   ];
 
-  // Severity bands. Higher score = more visible concern.
-  function severityLabel(score) {
-    if (score < 25) return 'Minimal';
-    if (score < 50) return 'Mild';
-    if (score < 75) return 'Moderate';
-    return 'High';
+  // Scores are now grades (higher = better skin). Backend still emits
+  // concern-style scores (higher = more concern), so convert at the boundary.
+  function toGrade(rawScore) {
+    return Math.max(0, Math.min(100, 100 - (rawScore || 0)));
   }
-  function severityColor(score) {
-    if (score < 25) return '#22a06b';   // green
-    if (score < 50) return '#3b82f6';   // blue
-    if (score < 75) return '#f59e0b';   // amber
-    return '#ef4444';                   // red
+  // Severity bands. Higher GRADE = better skin.
+  // 81-100 minimal (green), 61-80 mild (yellow),
+  // 41-60 moderate (orange), 0-40 drastic (red).
+  function severityLabel(grade) {
+    if (grade >= 81) return 'Minimal';
+    if (grade >= 61) return 'Mild';
+    if (grade >= 41) return 'Moderate';
+    return 'Drastic';
   }
-  // Two-stop gradient that pairs each severity color with a lighter sibling,
-  // so result bars read as colored, vibrant pills rather than flat slate.
-  function severityGradient(score) {
-    if (score < 25) return 'linear-gradient(90deg,#10b981 0%,#6ee7b7 100%)';
-    if (score < 50) return 'linear-gradient(90deg,#3b82f6 0%,#93c5fd 100%)';
-    if (score < 75) return 'linear-gradient(90deg,#f59e0b 0%,#fcd34d 100%)';
-    return 'linear-gradient(90deg,#ef4444 0%,#fca5a5 100%)';
+  function severityColor(grade) {
+    if (grade >= 81) return '#22a06b';   // green — minimal
+    if (grade >= 61) return '#eab308';   // yellow — mild
+    if (grade >= 41) return '#f97316';   // orange — moderate
+    return '#ef4444';                    // red — drastic
   }
   function readableSkinType(t) {
     if (!t) return '';
@@ -106,11 +105,10 @@
     + '.gleame-skin-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;}'
     + '@media(max-width:760px){.gleame-skin-grid{grid-template-columns:1fr;}}'
     + '.gleame-skin-card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:28px;box-shadow:0 1px 2px rgba(15,23,42,.04);}'
-    + '.gleame-skin-h{font-size:18px;font-weight:600;margin:0 0 4px;}'
-    + '.gleame-skin-sub{font-size:13px;color:#6b7280;margin:0 0 20px;}'
+    + '.gleame-skin-h{font-size:18px;font-weight:600;margin:0 0 16px;}'
     + '.gleame-skin-drop{display:block;position:relative;border:2px dashed #cbd5e1;border-radius:12px;padding:112px 20px;text-align:center;cursor:pointer;transition:border-color .15s,background-color .15s;background:#f8fafc;margin:0;}'
-    + '.gleame-skin-drop:hover{border-color:#3b82f6;background:#f1f5f9;}'
-    + '.gleame-skin-drop.is-dragging{border-color:#3b82f6;background:#eff6ff;}'
+    + '.gleame-skin-drop:hover{border-color:#22a06b;background:#f1f5f9;}'
+    + '.gleame-skin-drop.is-dragging{border-color:#22a06b;background:#f0fdf4;}'
     // Bulletproof hide for the file input — themes often override `display:none`
     // on input[type=file]. Move it off-screen with !important so theme CSS
     // can't bring it back.
@@ -125,9 +123,9 @@
     // Scanning bar — appears only while .is-scanning is set on the thumb.
     // A thin blue line travels top-to-bottom with a soft glow + faint trail,
     // reading as an "AI scanning" effect.
-    + '.gleame-skin-scanner{position:absolute;left:0;right:0;top:0;height:3px;background:#3b82f6;box-shadow:0 0 14px 3px rgba(59,130,246,.65);pointer-events:none;display:none;}'
-    + '.gleame-skin-scanner:after{content:"";position:absolute;left:0;right:0;top:-44px;height:44px;background:linear-gradient(to bottom,rgba(59,130,246,0) 0%,rgba(59,130,246,.18) 60%,rgba(59,130,246,.4) 100%);}'
-    + '.gleame-skin-thumb.is-scanning .gleame-skin-scanner{display:block;animation:gleame-scan 1.8s ease-in-out infinite;}'
+    + '.gleame-skin-scanner{position:absolute;left:0;right:0;top:0;height:3px;background:#22a06b;box-shadow:0 0 14px 3px rgba(34,160,107,.65);pointer-events:none;display:none;}'
+    + '.gleame-skin-scanner:after{content:"";position:absolute;left:0;right:0;top:-44px;height:44px;background:linear-gradient(to bottom,rgba(34,160,107,0) 0%,rgba(34,160,107,.18) 60%,rgba(34,160,107,.4) 100%);}'
+    + '.gleame-skin-thumb.is-scanning .gleame-skin-scanner{display:block;animation:gleame-scan 4.5s ease-in-out infinite;}'
     + '@keyframes gleame-scan{0%{top:-3px;}50%{top:calc(100% - 3px);}100%{top:-3px;}}'
     + '.gleame-skin-tips{font-size:13px;color:#64748b;margin:16px 0 0;padding:0;list-style:none;}'
     + '.gleame-skin-tips li{padding-left:18px;position:relative;margin-bottom:4px;}'
@@ -137,8 +135,8 @@
     + '.gleame-skin-cta:active{transform:translateY(1px);}'
     + '.gleame-skin-cta:disabled{opacity:.5;cursor:not-allowed;}'
     // Loading status row — replaces the CTA while a scan is in flight.
-    + '.gleame-skin-loading-row{margin-top:20px;display:flex;align-items:center;gap:10px;padding:14px 16px;border-radius:10px;background:#eff6ff;border:1px solid #dbeafe;color:#1e3a8a;font-size:14px;font-weight:500;}'
-    + '.gleame-skin-loading-dot{width:9px;height:9px;border-radius:50%;background:#3b82f6;flex-shrink:0;animation:gleame-pulse 1s ease-in-out infinite;}'
+    + '.gleame-skin-loading-row{margin-top:20px;display:flex;align-items:center;gap:10px;padding:14px 16px;border-radius:10px;background:#f0fdf4;border:1px solid #bbf7d0;color:#14532d;font-size:14px;font-weight:500;}'
+    + '.gleame-skin-loading-dot{width:9px;height:9px;border-radius:50%;background:#22a06b;flex-shrink:0;animation:gleame-pulse 1s ease-in-out infinite;}'
     + '@keyframes gleame-pulse{0%,100%{opacity:.35;transform:scale(.8);}50%{opacity:1;transform:scale(1.15);}}'
     + '.gleame-skin-loading-text{flex:1;min-height:18px;}'
     + '.gleame-skin-error{padding:12px 16px;border-radius:10px;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;font-size:13px;margin-bottom:16px;}'
@@ -146,11 +144,11 @@
     + '.gleame-skin-radar{width:100%;max-width:360px;height:auto;overflow:visible;}'
     + '.gleame-skin-radar-axis{stroke:#e2e8f0;stroke-width:1;fill:none;}'
     + '.gleame-skin-radar-grid{stroke:#e2e8f0;stroke-width:1;fill:none;}'
-    + '.gleame-skin-radar-shape{fill:rgba(59,130,246,.22);stroke:#3b82f6;stroke-width:2.5;stroke-linejoin:round;filter:drop-shadow(0 4px 10px rgba(59,130,246,.25));animation:gleame-radar-fade .6s ease-out;}'
-    + '.gleame-skin-radar-dot{fill:#3b82f6;}'
+    + '.gleame-skin-radar-shape{fill:rgba(34,160,107,.22);stroke:#22a06b;stroke-width:2.5;stroke-linejoin:round;filter:drop-shadow(0 4px 10px rgba(34,160,107,.25));animation:gleame-radar-fade .6s ease-out;}'
+    + '.gleame-skin-radar-dot{fill:#22a06b;}'
     + '.gleame-skin-radar-label{font-size:11px;fill:#475569;}'
     + '@keyframes gleame-radar-fade{from{opacity:0;transform:scale(.8);}to{opacity:1;transform:scale(1);}}'
-    + '.gleame-skin-typebadge{display:inline-block;padding:4px 12px;border-radius:999px;background:#eff6ff;color:#1e40af;font-size:12px;font-weight:500;margin-bottom:16px;}'
+    + '.gleame-skin-typebadge{display:inline-block;padding:4px 12px;border-radius:999px;background:#f0fdf4;color:#14532d;font-size:12px;font-weight:500;margin-bottom:16px;}'
     + '.gleame-skin-bars{display:grid;grid-template-columns:1fr 1fr;gap:14px 24px;margin-bottom:20px;}'
     + '@media(max-width:540px){.gleame-skin-bars{grid-template-columns:1fr;}}'
     + '.gleame-skin-bar-row{}'
@@ -170,11 +168,11 @@
     + '@media(max-width:540px){.gleame-skin-recs{grid-template-columns:1fr;}}'
     + '.gleame-skin-rec{display:flex;flex-direction:column;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;text-decoration:none;color:inherit;background:#fff;transition:transform .15s,box-shadow .15s;position:relative;}'
     + '.gleame-skin-rec:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(15,23,42,.08);}'
-    + '.gleame-skin-rec-accent{height:3px;background:#3b82f6;}'
+    + '.gleame-skin-rec-accent{height:3px;background:#22a06b;}'
     + '.gleame-skin-rec-img{aspect-ratio:1/1;width:100%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;color:#cbd5e1;font-size:24px;}'
     + '.gleame-skin-rec-img img{display:block;width:100%;height:100%;object-fit:cover;}'
     + '.gleame-skin-rec-body{padding:10px 12px 14px;}'
-    + '.gleame-skin-rec-concern{font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:#3b82f6;font-weight:600;}'
+    + '.gleame-skin-rec-concern{font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:#22a06b;font-weight:600;}'
     + '.gleame-skin-rec-title{font-size:13px;color:#0f172a;margin-top:4px;font-weight:500;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}'
     + '.gleame-skin-rec-shop{margin-top:8px;display:inline-block;font-size:11px;color:#64748b;}'
     + '.gleame-skin-foot{margin-top:18px;font-size:11px;color:#94a3b8;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}'
@@ -261,12 +259,14 @@
       parts.push('<text class="gleame-skin-radar-label" x="' + labelP.x.toFixed(1) + '" y="' + labelP.y.toFixed(1) + '" text-anchor="' + anchor + '" dy="' + dy + '">' + escapeHtml(RADAR_AXES[j].label) + '</text>');
     }
 
-    // Score polygon.
+    // Score polygon. Convert raw concern-score → grade (high = good) so the
+    // polygon fills OUTWARD when the customer's skin looks great.
     var shapePts = [];
     var dots = [];
     for (var k = 0; k < n; k++) {
-      var sc = Math.max(0, Math.min(100, scores[RADAR_AXES[k].key] || 0));
-      var pt = pointOnAxis(cx, cy, (rMax * sc) / 100, k, n);
+      var raw = scores[RADAR_AXES[k].key];
+      var grade = raw != null ? toGrade(raw) : 0;
+      var pt = pointOnAxis(cx, cy, (rMax * grade) / 100, k, n);
       shapePts.push(pt.x.toFixed(1) + ',' + pt.y.toFixed(1));
       dots.push('<circle class="gleame-skin-radar-dot" cx="' + pt.x.toFixed(1) + '" cy="' + pt.y.toFixed(1) + '" r="3"/>');
     }
@@ -281,24 +281,29 @@
   // ------------------------------------------------------------
   function renderBars(scores) {
     var html = '<div class="gleame-skin-bars">';
+    var hasData = scores && Object.keys(scores).length > 0;
     for (var i = 0; i < METRICS.length; i++) {
       var m = METRICS[i];
-      var sc = Math.max(0, Math.min(100, scores[m.key] || 0));
-      var color = severityColor(sc);
-      var sev = severityLabel(sc);
-      // Width is pinned with !important inline because (a) we want it to
-      // win over the placeholder rule's `width:35%!important` if the
-      // placeholder ancestor is somehow still in scope during a render
-      // race, and (b) merchant themes occasionally ship !important rules
-      // for `[style*=width]` patterns. Same reasoning for background.
-      var widthPct = Math.max(sc, 5); // 5% floor so even score=0 shows a chip
+      // Convert raw concern-score → grade (high = good). Placeholder mode
+      // passes an empty {} — render at 0 so the shimmer rule paints over it.
+      var raw = scores && scores[m.key] != null ? scores[m.key] : 0;
+      var grade = hasData ? toGrade(raw) : 0;
+      var color = severityColor(grade);
+      var sev = severityLabel(grade);
+      var widthPct = Math.max(grade, 5); // 5% floor so even grade=0 shows a chip
+      // Inline color is pinned with !important — merchant themes sometimes
+      // ship !important rules for [style*=background] patterns, and we need
+      // it to beat the placeholder rule on a race. fillStyle uses background-color
+      // (not the shorthand `background`) so theme rules targeting the shorthand
+      // can't blow away our color via specificity tie-break.
+      var fillStyle = 'background-color:' + color + '!important;width:' + widthPct + '%!important;';
       html += ''
         + '<div class="gleame-skin-bar-row">'
         +   '<div class="gleame-skin-bar-head">'
         +     '<span class="gleame-skin-bar-label">' + escapeHtml(m.label) + '</span>'
-        +     '<span class="gleame-skin-bar-value" style="color:' + color + ';font-weight:600;">' + sc + '</span>'
+        +     '<span class="gleame-skin-bar-value" style="color:' + color + ';font-weight:600;">' + grade + '</span>'
         +   '</div>'
-        +   '<div class="gleame-skin-bar-track"><div class="gleame-skin-bar-fill" style="background:' + color + '!important;width:' + widthPct + '%!important;"></div></div>'
+        +   '<div class="gleame-skin-bar-track"><div class="gleame-skin-bar-fill" style="' + fillStyle + '"></div></div>'
         +   '<div class="gleame-skin-bar-sev" style="color:' + color + ';">' + sev + '</div>'
         + '</div>';
     }
@@ -399,7 +404,6 @@
       + '<div class="gleame-skin-grid">'
       +   '<div class="gleame-skin-card" data-pane="upload">'
       +     '<h3 class="gleame-skin-h">Your skin analysis</h3>'
-      +     '<p class="gleame-skin-sub">Upload a clear, well-lit selfie. Photos are analyzed in real time and never stored.</p>'
       +     '<label class="gleame-skin-drop" data-drop>'
       +       '<div class="gleame-skin-drop-icon">↑</div>'
       +       '<div class="gleame-skin-drop-title">Tap or drop a photo</div>'
@@ -408,14 +412,13 @@
       +     '</label>'
       +     '<div data-thumb></div>'
       +     '<ul class="gleame-skin-tips">'
-      +       '<li>Face the camera, no filters</li>'
-      +       '<li>Natural light works best</li>'
-      +       '<li>Remove glasses and makeup if possible</li>'
+      +       '<li>Face the camera in natural light</li>'
+      +       '<li>Remove glasses and heavy makeup</li>'
       +     '</ul>'
       +     '<div data-cta-slot>'
       +       '<button class="gleame-skin-cta" data-analyze disabled>Analyze my skin</button>'
       +     '</div>'
-      +     '<p class="gleame-skin-disclaimer">For cosmetic guidance only — not medical advice. Photos are processed in real time and never stored.</p>'
+      +     '<p class="gleame-skin-disclaimer">Cosmetic guidance only — photos are never stored.</p>'
       +     '<div class="gleame-skin-foot">'
       +       '<span>Powered by Gleame</span>'
       +       '<a data-report-link href="#" aria-disabled="true" tabindex="-1">Report a bad analysis</a>'
