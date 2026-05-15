@@ -167,6 +167,11 @@
     + '.gleame-skin-bar-label{color:#334155;font-weight:500;}'
     + '.gleame-skin-bar-value{color:#64748b;font-variant-numeric:tabular-nums;}'
     + '.gleame-skin-bar-track{height:12px;background:#f1f5f9;border-radius:6px;overflow:hidden;}'
+    // SVG-based bar (result mode). Rendered inline so merchant themes can't
+    // collapse it the way they sometimes do with empty divs. Explicit
+    // dimensions + `display:block` so it always takes its own line and
+    // doesn't get treated as inline content.
+    + '.gleame-skin-bar-svg{display:block;width:100%;height:12px;}'
     // Bar fill: color is applied via modifier class (avoids losing the
     // background-color to the placeholder shimmer rule, whose `background:`
     // shorthand sets background-image and would mask any background-color
@@ -348,33 +353,28 @@
   // ------------------------------------------------------------
   // Bars — 8 metrics, each tinted by severity tier.
   //
-  // STRATEGY (after several rounds of merchant-theme cascade fights):
-  // The colored portion is painted as a LINEAR GRADIENT on the bar TRACK
-  // itself, with a hard color stop at the grade percentage. This eliminates
-  // the inner-fill-div approach entirely in result mode — no width to
-  // override, no inner element for the placeholder shimmer rule to fight
-  // with, no !important wrestling. One element, one inline `background`
-  // declaration, done.
+  // STRATEGY (after MANY rounds of merchant-theme cascade fights):
+  // We render the bar as an inline SVG with two <rect> elements — a gray
+  // background rect and a colored foreground rect sized to the grade.
+  // SVG `fill` attributes are HARD for merchant themes to override —
+  // they're not typical CSS targets, and the SVG is self-contained.
+  // Empty <div>s were being collapsed/hidden by some themes, even with
+  // explicit `height: 12px`. SVG <rect> elements always render.
   //
-  // PLACEHOLDER mode (scores = {} / null): we still emit an inner fill div
-  // (without inline style) so the `.gleame-skin-placeholder .gleame-skin-
-  // bar-fill` shimmer rule can attach to it and animate. The track in
-  // placeholder mode has no inline background and falls back to the
-  // baseline `.gleame-skin-bar-track` rule (light gray).
+  // PLACEHOLDER mode (scores = {} / null): we keep the old div+fill
+  // structure so the shimmer animation rule still attaches.
   // ------------------------------------------------------------
   function renderBars(scores) {
     var html = '<div class="gleame-skin-bars">';
     var hasData = scores && Object.keys(scores).length > 0;
     // Debug — visible in DevTools so we can verify scores actually flow
-    // through. Logs once per render. Safe to leave in: storefronts that
-    // grep their console will see only an info line.
+    // through. Logs once per render.
     try { console.log('[gleame-skin] renderBars', { hasData: hasData, scores: scores }); } catch (e) {}
     for (var i = 0; i < METRICS.length; i++) {
       var m = METRICS[i];
       // Convert raw concern-score (high = more concern, what the LLM emits)
-      // → grade (high = better skin, what the customer sees). This mapping
-      // is the entire reason the bars are colorful: a high LLM score on
-      // wrinkles → low grade → red tier, etc.
+      // → grade (high = better skin, what the customer sees). A high LLM
+      // score on wrinkles → low grade → red tier.
       var raw = scores && scores[m.key] != null ? Number(scores[m.key]) : 0;
       if (!isFinite(raw)) raw = 0;
       var grade = hasData ? toGrade(raw) : 0;
@@ -384,25 +384,28 @@
       var widthPct = Math.max(grade, 5); // 5% floor so even grade=0 shows a chip
 
       if (hasData) {
-        // Result mode: paint the colored portion + the unfilled portion as
-        // a hard-stop gradient ON THE TRACK. Inner div is replaced by an
-        // empty marker so the bar height is preserved. data-* attributes
-        // are stamped so applyBarFills() can also set styles via JS as a
-        // belt-and-suspenders pass (some merchant CSPs strip style attrs).
+        // viewBox 100x12 → 1 unit = 1% of bar width. preserveAspectRatio
+        // "none" lets the SVG stretch to fill its container exactly.
+        // The colored <rect> has its own rounded corners (rx=6) so its
+        // right edge ends in a soft cap, matching the visual style.
+        var bar = ''
+          + '<svg class="gleame-skin-bar-svg" viewBox="0 0 100 12" preserveAspectRatio="none" aria-hidden="true" data-fill-color="' + color + '" data-fill-pct="' + widthPct + '">'
+          +   '<rect x="0" y="0" width="100" height="12" rx="6" ry="6" fill="#f1f5f9"></rect>'
+          +   '<rect x="0" y="0" width="' + widthPct + '" height="12" rx="6" ry="6" fill="' + color + '"></rect>'
+          + '</svg>';
         html += ''
           + '<div class="gleame-skin-bar-row">'
           +   '<div class="gleame-skin-bar-head">'
           +     '<span class="gleame-skin-bar-label">' + escapeHtml(m.label) + '</span>'
           +     '<span class="gleame-skin-bar-value" style="color:' + color + ';font-weight:600;">' + grade + '</span>'
           +   '</div>'
-          +   '<div class="gleame-skin-bar-track gleame-skin-bar-track--filled"'
-          +     ' data-fill-color="' + color + '" data-fill-pct="' + widthPct + '"'
-          +     ' style="background:linear-gradient(to right,' + color + ' 0%,' + color + ' ' + widthPct + '%,#f1f5f9 ' + widthPct + '%,#f1f5f9 100%) !important;">'
-          +   '</div>'
+          +   bar
           +   '<div class="gleame-skin-bar-sev" style="color:' + color + ';">' + sev + '</div>'
           + '</div>';
       } else {
-        // Placeholder mode: inner fill div so the shimmer rule can target it.
+        // Placeholder mode: keep the div+fill structure so the shimmer
+        // animation rule (.gleame-skin-placeholder .gleame-skin-bar-fill)
+        // can target it.
         html += ''
           + '<div class="gleame-skin-bar-row">'
           +   '<div class="gleame-skin-bar-head">'
@@ -418,28 +421,26 @@
     return html;
   }
 
-  // Post-render safety pass: walk every filled bar track and set its
-  // background via setProperty('important'). This is redundant with the
-  // inline `style="..."` we already emit, but covers two failure modes:
-  //   (1) some merchant CSPs strip inline style attributes;
-  //   (2) some merchant stylesheets use very high-specificity !important
-  //       rules that race the inline declaration on first paint.
-  // setProperty(prop, val, 'important') is the highest-priority origin in
-  // the CSS cascade and nothing in any stylesheet can override it.
+  // Post-render safety pass: confirm SVG bars are actually in the DOM and
+  // log their fill attribute (visible in DevTools). With SVG <rect fill>
+  // we don't actually need to apply any inline JS-set styles — the fill
+  // attribute is a presentation attribute that can't be stripped — but
+  // this gives us diagnostic visibility if something's still wrong.
   function applyBarFills(rootEl) {
     if (!rootEl) return;
-    var tracks = rootEl.querySelectorAll('.gleame-skin-bar-track--filled[data-fill-color]');
-    try { console.log('[gleame-skin] applyBarFills tracks=', tracks.length); } catch (e) {}
-    for (var i = 0; i < tracks.length; i++) {
-      var el = tracks[i];
-      var color = el.getAttribute('data-fill-color');
-      var pct = el.getAttribute('data-fill-pct');
-      if (color && pct) {
-        var grad = 'linear-gradient(to right,' + color + ' 0%,' + color + ' ' + pct + '%,#f1f5f9 ' + pct + '%,#f1f5f9 100%)';
-        el.style.setProperty('background', grad, 'important');
-        el.style.setProperty('background-image', grad, 'important');
+    var bars = rootEl.querySelectorAll('.gleame-skin-bar-svg[data-fill-color]');
+    try {
+      var info = [];
+      for (var j = 0; j < bars.length; j++) {
+        info.push({
+          color: bars[j].getAttribute('data-fill-color'),
+          pct: bars[j].getAttribute('data-fill-pct'),
+          w: bars[j].clientWidth,
+          h: bars[j].clientHeight,
+        });
       }
-    }
+      console.log('[gleame-skin] applyBarFills bars=', bars.length, info);
+    } catch (e) {}
   }
 
   // ------------------------------------------------------------
