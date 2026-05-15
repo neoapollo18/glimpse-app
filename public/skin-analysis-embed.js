@@ -19,6 +19,21 @@
   // Same host as widget-embed.js. If the app moves, update both.
   var APP_URL = 'https://glimpse-app-charles.onrender.com';
 
+  // Camera modal icons — mirrors the theme widget's gleame-camera.js.
+  var CAM_CLOSE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
+  var CAM_OFF_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m2 2 20 20"/><path d="M7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2"/><path d="M14.5 4h-5L7 7"/><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5H20a2 2 0 0 1 2 2v7.5"/></svg>';
+  var CAM_ICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>';
+
+  // Mobile UAs get the native file picker (with capture hint) instead of the
+  // desktop webcam modal — mirrors gleame-camera.js's isMobile gate.
+  function camIsMobile() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+      || (navigator.maxTouchPoints && navigator.maxTouchPoints > 2);
+  }
+  function camHasGetUserMedia() {
+    return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  }
+
   // 6 of the 8 metrics shown on the radar (texture + acne are bar-only —
   // they're noisier signals and a 6-axis hexagon reads cleaner than 8).
   var RADAR_AXES = [
@@ -209,8 +224,52 @@
     + '.gleame-skin-placeholder .gleame-skin-rec-concern{width:55%;}'
     + '.gleame-skin-placeholder .gleame-skin-rec-title{height:14px;width:90%;margin-top:8px;}'
     + '.gleame-skin-placeholder .gleame-skin-rec-shop{height:9px;width:45%;margin-top:8px;}'
-    + '.gleame-skin-placeholder-hint{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:12px;color:#94a3b8;background:rgba(255,255,255,.85);backdrop-filter:blur(2px);padding:6px 12px;border-radius:999px;border:1px solid #e2e8f0;pointer-events:none;}'
+    + '.gleame-skin-placeholder-hint{position:absolute;top:12px;right:12px;font-size:12px;color:#94a3b8;background:rgba(255,255,255,.85);backdrop-filter:blur(2px);padding:6px 12px;border-radius:999px;border:1px solid #e2e8f0;pointer-events:none;z-index:2;}'
     + '@keyframes gleame-shimmer{0%,100%{background-position:0% 0;opacity:.7;}50%{background-position:100% 0;opacity:1;}}'
+    // ----- Take-a-photo section (below the upload zone) -----
+    // The "or" divider visually separates upload from camera capture so it
+    // reads as two distinct options rather than a single ambiguous control.
+    + '.gleame-skin-or{display:flex;align-items:center;gap:10px;margin:14px 0;color:#94a3b8;font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;}'
+    + '.gleame-skin-or:before,.gleame-skin-or:after{content:"";flex:1;height:1px;background:#e2e8f0;}'
+    + '.gleame-skin-camera-btn{width:100%;padding:14px 16px;border:1px dashed #cbd5e1;border-radius:12px;background:#f8fafc;color:#0f172a;font-size:14px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:border-color .15s,background-color .15s;}'
+    + '.gleame-skin-camera-btn:hover{border-color:#22a06b;background:#f0fdf4;}'
+    + '.gleame-skin-camera-btn svg{flex-shrink:0;}'
+    // Modal lives at document.body (outside .gleame-skin) so it needs its own
+    // font stack. Mirrors the theme widget's gleame-camera.css.
+    + '.gleame-skin-cam-overlay{position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:2147483000;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;animation:gleame-cam-fade .2s ease;}'
+    + '@keyframes gleame-cam-fade{from{opacity:0;}to{opacity:1;}}'
+    + '.gleame-skin-cam-modal{background:#fff;border-radius:14px;width:640px;max-width:92vw;max-height:85vh;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.25);display:flex;}'
+    + '.gleame-skin-cam-view-wrap{flex:1;min-width:0;background:#0a0a0a;position:relative;display:flex;align-items:center;justify-content:center;}'
+    + '.gleame-skin-cam-view{width:100%;aspect-ratio:4/5;overflow:hidden;position:relative;}'
+    + '.gleame-skin-cam-view video,.gleame-skin-cam-view img{width:100%;height:100%;object-fit:cover;display:block;}'
+    + '.gleame-skin-cam-view video{transform:scaleX(-1);}'
+    + '.gleame-skin-cam-flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;animation:gleame-cam-flash .3s ease-out;}'
+    + '@keyframes gleame-cam-flash{0%{opacity:.8;}100%{opacity:0;}}'
+    + '.gleame-skin-cam-loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:rgba(255,255,255,.8);font-size:13px;text-align:center;}'
+    + '.gleame-skin-cam-spinner{width:20px;height:20px;border:2px solid rgba(255,255,255,.2);border-top-color:rgba(255,255,255,.8);border-radius:50%;animation:gleame-cam-spin .7s linear infinite;margin:0 auto 10px;}'
+    + '@keyframes gleame-cam-spin{to{transform:rotate(360deg);}}'
+    + '.gleame-skin-cam-controls{width:220px;display:flex;flex-direction:column;border-left:1px solid #e5e7eb;}'
+    + '.gleame-skin-cam-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #e5e7eb;}'
+    + '.gleame-skin-cam-head h3{margin:0;font-size:13px;font-weight:600;color:#111;text-transform:uppercase;letter-spacing:.02em;}'
+    + '.gleame-skin-cam-close{background:none;border:none;cursor:pointer;padding:2px;color:#9ca3af;line-height:1;}'
+    + '.gleame-skin-cam-close:hover{color:#111;}'
+    + '.gleame-skin-cam-body{flex:1;padding:24px 20px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:16px;}'
+    + '.gleame-skin-cam-hint{font-size:12px;color:#9ca3af;text-align:center;line-height:1.5;margin:0;}'
+    + '.gleame-skin-cam-actions{display:flex;flex-direction:column;align-items:center;gap:10px;width:100%;}'
+    + '.gleame-skin-cam-shutter{width:56px;height:56px;border-radius:50%;border:3px solid #0f172a;background:transparent;cursor:pointer;position:relative;padding:0;}'
+    + '.gleame-skin-cam-shutter:after{content:"";position:absolute;top:3px;left:3px;right:3px;bottom:3px;background:#0f172a;border-radius:50%;transition:transform .15s;}'
+    + '.gleame-skin-cam-shutter:hover:after{transform:scale(.9);}'
+    + '.gleame-skin-cam-shutter-label{font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;font-weight:500;}'
+    + '.gleame-skin-cam-use{width:100%;padding:10px 16px;border-radius:8px;border:0;background:#0f172a;color:#fff;font-size:13px;font-weight:500;cursor:pointer;}'
+    + '.gleame-skin-cam-use:hover{opacity:.92;}'
+    + '.gleame-skin-cam-retake{width:100%;padding:10px 16px;border-radius:8px;border:1px solid #d1d5db;background:#fff;color:#374151;font-size:13px;font-weight:500;cursor:pointer;}'
+    + '.gleame-skin-cam-retake:hover{border-color:#9ca3af;background:#f9fafb;}'
+    + '.gleame-skin-cam-foot{padding:14px 20px;border-top:1px solid #e5e7eb;}'
+    + '.gleame-skin-cam-upload{width:100%;padding:9px 16px;border-radius:8px;border:1px solid #d1d5db;background:#fff;color:#374151;font-size:12px;font-weight:500;cursor:pointer;}'
+    + '.gleame-skin-cam-upload:hover{border-color:#9ca3af;background:#f9fafb;}'
+    + '.gleame-skin-cam-error{text-align:center;padding:40px 20px;color:#6b7280;font-size:13px;line-height:1.5;}'
+    + '.gleame-skin-cam-error svg{margin-bottom:12px;color:#d1d5db;}'
+    + '@media(max-width:580px){.gleame-skin-cam-modal{flex-direction:column;width:380px;}.gleame-skin-cam-controls{width:100%;border-left:none;border-top:1px solid #e5e7eb;}.gleame-skin-cam-view{aspect-ratio:1;}}'
     + '';
 
   function injectCSS() {
@@ -283,42 +342,58 @@
   }
 
   // ------------------------------------------------------------
-  // Bars — 8 metrics with animated fills.
+  // Bars — 8 metrics, each tinted by severity tier.
+  //
+  // The bar fill's color + width are baked directly into the inline style
+  // attribute with !important so they're applied the instant the HTML is
+  // parsed into the DOM. No post-render JS step, no timing race, no
+  // dependency on a modifier class winning the cascade. Inline !important
+  // is the single highest-priority origin in the CSS cascade and cannot be
+  // overridden by any stylesheet — not the placeholder shimmer rule, not a
+  // merchant-theme reset, nothing.
+  //
+  // PLACEHOLDER mode (scores = {} / null): we intentionally emit NO inline
+  // style on the fill so the .gleame-skin-placeholder .gleame-skin-bar-fill
+  // shimmer rule wins by default. That keeps the empty/pre-result state
+  // gently animated instead of painted with a real severity color.
   // ------------------------------------------------------------
   function renderBars(scores) {
     var html = '<div class="gleame-skin-bars">';
     var hasData = scores && Object.keys(scores).length > 0;
     for (var i = 0; i < METRICS.length; i++) {
       var m = METRICS[i];
-      // Convert raw concern-score → grade (high = good). Placeholder mode
-      // passes an empty {} — render at 0 so the shimmer rule paints over it.
-      var raw = scores && scores[m.key] != null ? scores[m.key] : 0;
+      // Convert raw concern-score (high = more concern, what the LLM emits)
+      // → grade (high = better skin, what the customer sees). This mapping
+      // is the entire reason the bars are colorful: a high LLM score on
+      // wrinkles → low grade → red tier, etc.
+      var raw = scores && scores[m.key] != null ? Number(scores[m.key]) : 0;
+      if (!isFinite(raw)) raw = 0;
       var grade = hasData ? toGrade(raw) : 0;
       var tier = severityTier(grade);
       var color = TIER_COLORS[tier];
       var sev = TIER_LABELS[tier];
       var widthPct = Math.max(grade, 5); // 5% floor so even grade=0 shows a chip
-      // Color is applied via the modifier class so the placeholder shimmer
-      // rule's `background:` shorthand can't silently mask it via background-image.
-      // Width stays inline because it's per-bar dynamic.
+
+      // Result mode: bake inline !important style so nothing can mask it.
+      // Placeholder mode: empty string → fill renders without color/width
+      // and the shimmer CSS rule paints it.
+      var fillStyle = hasData
+        ? ' style="background-color:' + color + ' !important;background-image:none !important;width:' + widthPct + '% !important;"'
+        : '';
+
       html += ''
         + '<div class="gleame-skin-bar-row">'
         +   '<div class="gleame-skin-bar-head">'
         +     '<span class="gleame-skin-bar-label">' + escapeHtml(m.label) + '</span>'
         +     '<span class="gleame-skin-bar-value" style="color:' + color + ';font-weight:600;">' + grade + '</span>'
         +   '</div>'
-        +   '<div class="gleame-skin-bar-track"><div class="gleame-skin-bar-fill gleame-skin-bar-fill--' + tier + '" style="width:' + widthPct + '%!important;"></div></div>'
+        +   '<div class="gleame-skin-bar-track"><div class="gleame-skin-bar-fill gleame-skin-bar-fill--' + tier + '"' + fillStyle + '></div></div>'
         +   '<div class="gleame-skin-bar-sev" style="color:' + color + ';">' + sev + '</div>'
         + '</div>';
     }
     html += '</div>';
     return html;
   }
-
-  // Kept as a no-op for callers; bars now render at their final width inline,
-  // and the CSS transition on `.gleame-skin-bar-fill` still gives the grow-in
-  // animation when the element is first inserted into the DOM.
-  function animateBars(_rootEl) {}
 
   // ------------------------------------------------------------
   // Recommendations
@@ -400,6 +475,173 @@
   }
 
   // ------------------------------------------------------------
+  // Camera capture — desktop webcam modal.
+  //
+  // Same viewfinder → capture → review (Use / Retake) flow as the theme
+  // widget's gleame-camera.js. Self-contained here because the skin-analysis
+  // embed is a standalone script and can't assume the theme extension's
+  // gleame-camera.js asset is on the page.
+  //
+  // `onCapture(file)` receives a JPEG File. `onUploadFallback()` fires if the
+  // user clicks "Upload a file instead". Caller decides mobile gating before
+  // calling this (mobile UAs use the native picker).
+  // ------------------------------------------------------------
+  function openSkinCamera(onCapture, onUploadFallback) {
+    var stream = null;
+    var capturedDataUrl = null;
+
+    var overlay = document.createElement('div');
+    overlay.className = 'gleame-skin-cam-overlay';
+    overlay.innerHTML = ''
+      + '<div class="gleame-skin-cam-modal">'
+      +   '<div class="gleame-skin-cam-view-wrap">'
+      +     '<div class="gleame-skin-cam-view" data-cam-view></div>'
+      +   '</div>'
+      +   '<div class="gleame-skin-cam-controls">'
+      +     '<div class="gleame-skin-cam-head"><h3>Camera</h3>'
+      +       '<button class="gleame-skin-cam-close" data-cam-close aria-label="Close">' + CAM_CLOSE_SVG + '</button>'
+      +     '</div>'
+      +     '<div class="gleame-skin-cam-body">'
+      +       '<p class="gleame-skin-cam-hint" data-cam-hint>Position your face in the frame</p>'
+      +       '<div class="gleame-skin-cam-actions" data-cam-actions></div>'
+      +     '</div>'
+      +     '<div class="gleame-skin-cam-foot" data-cam-foot>'
+      +       '<button class="gleame-skin-cam-upload" data-cam-upload>Upload a file instead</button>'
+      +     '</div>'
+      +   '</div>'
+      + '</div>';
+    document.body.appendChild(overlay);
+
+    var viewEl = overlay.querySelector('[data-cam-view]');
+    var hintEl = overlay.querySelector('[data-cam-hint]');
+    var actionsEl = overlay.querySelector('[data-cam-actions]');
+    var footEl = overlay.querySelector('[data-cam-foot]');
+
+    function stopStream() {
+      if (stream) {
+        stream.getTracks().forEach(function (t) { t.stop(); });
+        stream = null;
+      }
+    }
+    function close() {
+      stopStream();
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      document.removeEventListener('keydown', onKey);
+    }
+    function onKey(e) { if (e.key === 'Escape') close(); }
+
+    function showCaptureUI() {
+      actionsEl.innerHTML = ''
+        + '<button class="gleame-skin-cam-shutter" data-cam-shoot title="Take photo"></button>'
+        + '<span class="gleame-skin-cam-shutter-label">Capture</span>';
+      actionsEl.querySelector('[data-cam-shoot]').addEventListener('click', capture);
+      footEl.style.display = '';
+      hintEl.textContent = 'Position your face in the frame';
+    }
+    function showReviewUI() {
+      actionsEl.innerHTML = ''
+        + '<button class="gleame-skin-cam-use" data-cam-use>Use photo</button>'
+        + '<button class="gleame-skin-cam-retake" data-cam-retake>Retake</button>';
+      actionsEl.querySelector('[data-cam-use]').addEventListener('click', use);
+      actionsEl.querySelector('[data-cam-retake]').addEventListener('click', retake);
+      footEl.style.display = 'none';
+      hintEl.textContent = 'Looking good?';
+    }
+    function showError(msg) {
+      viewEl.innerHTML = '<div class="gleame-skin-cam-error">' + CAM_OFF_SVG + '<p>' + msg + '</p></div>';
+      actionsEl.innerHTML = '';
+      hintEl.textContent = '';
+    }
+
+    function capture() {
+      var video = viewEl.querySelector('video');
+      if (!video) return;
+      var flash = document.createElement('div');
+      flash.className = 'gleame-skin-cam-flash';
+      viewEl.appendChild(flash);
+
+      var canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      var ctx = canvas.getContext('2d');
+      // Un-mirror: the viewfinder is flipped for a natural selfie, but the
+      // saved frame should match real-world orientation.
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, 0, 0);
+      capturedDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+
+      setTimeout(function () {
+        stopStream();
+        var img = document.createElement('img');
+        img.src = capturedDataUrl;
+        viewEl.innerHTML = '';
+        viewEl.appendChild(img);
+        showReviewUI();
+      }, 150);
+    }
+    function retake() {
+      capturedDataUrl = null;
+      start();
+      showCaptureUI();
+    }
+    function use() {
+      if (!capturedDataUrl) return;
+      var arr = capturedDataUrl.split(',');
+      var mime = (arr[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
+      var bstr = atob(arr[1]);
+      var n = bstr.length;
+      var u8 = new Uint8Array(n);
+      while (n--) u8[n] = bstr.charCodeAt(n);
+      var file = new File([u8], 'webcam-selfie.jpg', { type: mime });
+      close();
+      if (onCapture) onCapture(file);
+    }
+    function start() {
+      hintEl.textContent = 'Allow camera access when prompted';
+      viewEl.innerHTML = ''
+        + '<div class="gleame-skin-cam-loading">'
+        +   '<div class="gleame-skin-cam-spinner"></div><div>Starting camera…</div>'
+        + '</div>';
+      navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 720 }, height: { ideal: 720 } },
+        audio: false,
+      }).then(function (s) {
+        stream = s;
+        if (!overlay.parentNode) { stopStream(); return; }
+        var video = document.createElement('video');
+        video.setAttribute('autoplay', '');
+        video.setAttribute('playsinline', '');
+        video.muted = true;
+        video.srcObject = stream;
+        viewEl.innerHTML = '';
+        viewEl.appendChild(video);
+        video.play().catch(function () {});
+        hintEl.textContent = 'Position your face in the frame';
+      }).catch(function (err) {
+        if (err && err.name === 'NotAllowedError') {
+          showError('Camera access was denied.<br>Allow it in your browser settings, or upload a file.');
+        } else if (err && err.name === 'NotFoundError') {
+          showError('No camera found on this device.');
+        } else {
+          showError('Could not start the camera.<br>Please upload a file instead.');
+        }
+      });
+    }
+
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+    overlay.querySelector('[data-cam-close]').addEventListener('click', close);
+    overlay.querySelector('[data-cam-upload]').addEventListener('click', function () {
+      close();
+      if (onUploadFallback) onUploadFallback();
+    });
+    document.addEventListener('keydown', onKey);
+
+    showCaptureUI();
+    start();
+  }
+
+  // ------------------------------------------------------------
   // Initial render of one widget instance.
   // ------------------------------------------------------------
   function renderShell(container, shopDomain) {
@@ -414,6 +656,13 @@
       +       '<div class="gleame-skin-drop-hint">JPG, PNG, or HEIC — up to 5 MB</div>'
       +       '<input type="file" accept="image/*" data-file-input/>'
       +     '</label>'
+      // "Or take a photo" section — visually a peer of the upload zone, not
+      // a tiny secondary button. The divider makes the two paths feel equal.
+      +     '<div class="gleame-skin-or" data-or-divider>or</div>'
+      +     '<button class="gleame-skin-camera-btn" data-camera type="button">' + CAM_ICON_SVG + 'Take a photo</button>'
+      // Hidden input used as the mobile fallback for "Take a photo" — the
+      // capture="user" hint asks mobile browsers to open the front camera.
+      +     '<input type="file" accept="image/*" capture="user" data-camera-input style="display:none"/>'
       +     '<div data-thumb></div>'
       +     '<ul class="gleame-skin-tips">'
       +       '<li>Face the camera in natural light</li>'
@@ -503,8 +752,7 @@
     var bars = renderBars(data.scores || {});
     var notes = data.notes ? '<div class="gleame-skin-notes">' + escapeHtml(data.notes) + '</div>' : '';
     var recs = renderRecommendations(data.recommendations || []);
-    var pane = setResultPaneHTML(container, typeBadge + radar + bars + notes + recs);
-    if (pane) animateBars(pane);
+    setResultPaneHTML(container, typeBadge + radar + bars + notes + recs);
     // Stash result for the report-bad link.
     container.__gleameLastResult = data;
   }
@@ -556,6 +804,9 @@
     var thumbEl = container.querySelector('[data-thumb]');
     var analyzeBtn = container.querySelector('[data-analyze]');
     var reportLink = container.querySelector('[data-report-link]');
+    var cameraBtn = container.querySelector('[data-camera]');
+    var cameraInput = container.querySelector('[data-camera-input]');
+    var orDivider = container.querySelector('[data-or-divider]');
     var selectedFile = null;
 
     function setSelected(file) {
@@ -569,8 +820,10 @@
       resetResultPane();
       if (!file) {
         thumbEl.innerHTML = '';
-        // No photo: bring the drop zone back so the user can upload one.
+        // No photo: bring the drop zone + camera button back.
         dropEl.style.display = '';
+        if (cameraBtn) cameraBtn.style.display = '';
+        if (orDivider) orDivider.style.display = '';
         return;
       }
       var reader = new FileReader();
@@ -582,9 +835,11 @@
           + '</div>';
       };
       reader.readAsDataURL(file);
-      // Photo selected: hide the drop zone so only the photo shows. Clicking
-      // the photo (handler below) reopens the file picker for a swap.
+      // Photo selected: hide the drop zone + camera button so only the photo
+      // shows. Clicking the photo (handler below) reopens the file picker.
       dropEl.style.display = 'none';
+      if (cameraBtn) cameraBtn.style.display = 'none';
+      if (orDivider) orDivider.style.display = 'none';
     }
 
     function resetResultPane() {
@@ -605,6 +860,27 @@
       var f = (e.target.files && e.target.files[0]) || null;
       setSelected(f);
     });
+
+    // "Take a photo": desktop opens the webcam modal; mobile / no-getUserMedia
+    // falls through to the native capture-hinted file input.
+    if (cameraBtn) {
+      cameraBtn.addEventListener('click', function () {
+        if (camIsMobile() || !camHasGetUserMedia()) {
+          if (cameraInput) cameraInput.click();
+          return;
+        }
+        openSkinCamera(
+          function (file) { setSelected(file); },
+          function () { fileInput.click(); }
+        );
+      });
+    }
+    if (cameraInput) {
+      cameraInput.addEventListener('change', function (e) {
+        var f = (e.target.files && e.target.files[0]) || null;
+        if (f) setSelected(f);
+      });
+    }
 
     // Click on the photo (after upload) reopens the file picker so the user
     // can swap photos without us needing the drop zone visible. Ignored
