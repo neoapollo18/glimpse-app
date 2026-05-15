@@ -224,7 +224,11 @@
     + '.gleame-skin-placeholder .gleame-skin-rec-concern{width:55%;}'
     + '.gleame-skin-placeholder .gleame-skin-rec-title{height:14px;width:90%;margin-top:8px;}'
     + '.gleame-skin-placeholder .gleame-skin-rec-shop{height:9px;width:45%;margin-top:8px;}'
-    + '.gleame-skin-placeholder-hint{position:absolute;top:12px;right:12px;font-size:12px;color:#94a3b8;background:rgba(255,255,255,.85);backdrop-filter:blur(2px);padding:6px 12px;border-radius:999px;border:1px solid #e2e8f0;pointer-events:none;z-index:2;}'
+    // Hint position: aligned vertically with the "Skin type" badge in the
+    // top-left. The badge uses `padding:4px 12px` and is in normal flow at
+    // the very top of the placeholder; matching the hint's padding + a
+    // `top:0` puts both at exactly the same y-baseline.
+    + '.gleame-skin-placeholder-hint{position:absolute;top:0;right:0;font-size:12px;color:#94a3b8;background:rgba(255,255,255,.85);backdrop-filter:blur(2px);padding:4px 12px;border-radius:999px;border:1px solid #e2e8f0;pointer-events:none;z-index:2;}'
     + '@keyframes gleame-shimmer{0%,100%{background-position:0% 0;opacity:.7;}50%{background-position:100% 0;opacity:1;}}'
     // ----- Take-a-photo section (below the upload zone) -----
     // The "or" divider visually separates upload from camera capture so it
@@ -344,22 +348,27 @@
   // ------------------------------------------------------------
   // Bars — 8 metrics, each tinted by severity tier.
   //
-  // The bar fill's color + width are baked directly into the inline style
-  // attribute with !important so they're applied the instant the HTML is
-  // parsed into the DOM. No post-render JS step, no timing race, no
-  // dependency on a modifier class winning the cascade. Inline !important
-  // is the single highest-priority origin in the CSS cascade and cannot be
-  // overridden by any stylesheet — not the placeholder shimmer rule, not a
-  // merchant-theme reset, nothing.
+  // STRATEGY (after several rounds of merchant-theme cascade fights):
+  // The colored portion is painted as a LINEAR GRADIENT on the bar TRACK
+  // itself, with a hard color stop at the grade percentage. This eliminates
+  // the inner-fill-div approach entirely in result mode — no width to
+  // override, no inner element for the placeholder shimmer rule to fight
+  // with, no !important wrestling. One element, one inline `background`
+  // declaration, done.
   //
-  // PLACEHOLDER mode (scores = {} / null): we intentionally emit NO inline
-  // style on the fill so the .gleame-skin-placeholder .gleame-skin-bar-fill
-  // shimmer rule wins by default. That keeps the empty/pre-result state
-  // gently animated instead of painted with a real severity color.
+  // PLACEHOLDER mode (scores = {} / null): we still emit an inner fill div
+  // (without inline style) so the `.gleame-skin-placeholder .gleame-skin-
+  // bar-fill` shimmer rule can attach to it and animate. The track in
+  // placeholder mode has no inline background and falls back to the
+  // baseline `.gleame-skin-bar-track` rule (light gray).
   // ------------------------------------------------------------
   function renderBars(scores) {
     var html = '<div class="gleame-skin-bars">';
     var hasData = scores && Object.keys(scores).length > 0;
+    // Debug — visible in DevTools so we can verify scores actually flow
+    // through. Logs once per render. Safe to leave in: storefronts that
+    // grep their console will see only an info line.
+    try { console.log('[gleame-skin] renderBars', { hasData: hasData, scores: scores }); } catch (e) {}
     for (var i = 0; i < METRICS.length; i++) {
       var m = METRICS[i];
       // Convert raw concern-score (high = more concern, what the LLM emits)
@@ -374,25 +383,63 @@
       var sev = TIER_LABELS[tier];
       var widthPct = Math.max(grade, 5); // 5% floor so even grade=0 shows a chip
 
-      // Result mode: bake inline !important style so nothing can mask it.
-      // Placeholder mode: empty string → fill renders without color/width
-      // and the shimmer CSS rule paints it.
-      var fillStyle = hasData
-        ? ' style="background-color:' + color + ' !important;background-image:none !important;width:' + widthPct + '% !important;"'
-        : '';
-
-      html += ''
-        + '<div class="gleame-skin-bar-row">'
-        +   '<div class="gleame-skin-bar-head">'
-        +     '<span class="gleame-skin-bar-label">' + escapeHtml(m.label) + '</span>'
-        +     '<span class="gleame-skin-bar-value" style="color:' + color + ';font-weight:600;">' + grade + '</span>'
-        +   '</div>'
-        +   '<div class="gleame-skin-bar-track"><div class="gleame-skin-bar-fill gleame-skin-bar-fill--' + tier + '"' + fillStyle + '></div></div>'
-        +   '<div class="gleame-skin-bar-sev" style="color:' + color + ';">' + sev + '</div>'
-        + '</div>';
+      if (hasData) {
+        // Result mode: paint the colored portion + the unfilled portion as
+        // a hard-stop gradient ON THE TRACK. Inner div is replaced by an
+        // empty marker so the bar height is preserved. data-* attributes
+        // are stamped so applyBarFills() can also set styles via JS as a
+        // belt-and-suspenders pass (some merchant CSPs strip style attrs).
+        html += ''
+          + '<div class="gleame-skin-bar-row">'
+          +   '<div class="gleame-skin-bar-head">'
+          +     '<span class="gleame-skin-bar-label">' + escapeHtml(m.label) + '</span>'
+          +     '<span class="gleame-skin-bar-value" style="color:' + color + ';font-weight:600;">' + grade + '</span>'
+          +   '</div>'
+          +   '<div class="gleame-skin-bar-track gleame-skin-bar-track--filled"'
+          +     ' data-fill-color="' + color + '" data-fill-pct="' + widthPct + '"'
+          +     ' style="background:linear-gradient(to right,' + color + ' 0%,' + color + ' ' + widthPct + '%,#f1f5f9 ' + widthPct + '%,#f1f5f9 100%) !important;">'
+          +   '</div>'
+          +   '<div class="gleame-skin-bar-sev" style="color:' + color + ';">' + sev + '</div>'
+          + '</div>';
+      } else {
+        // Placeholder mode: inner fill div so the shimmer rule can target it.
+        html += ''
+          + '<div class="gleame-skin-bar-row">'
+          +   '<div class="gleame-skin-bar-head">'
+          +     '<span class="gleame-skin-bar-label">' + escapeHtml(m.label) + '</span>'
+          +     '<span class="gleame-skin-bar-value">' + grade + '</span>'
+          +   '</div>'
+          +   '<div class="gleame-skin-bar-track"><div class="gleame-skin-bar-fill"></div></div>'
+          +   '<div class="gleame-skin-bar-sev">' + sev + '</div>'
+          + '</div>';
+      }
     }
     html += '</div>';
     return html;
+  }
+
+  // Post-render safety pass: walk every filled bar track and set its
+  // background via setProperty('important'). This is redundant with the
+  // inline `style="..."` we already emit, but covers two failure modes:
+  //   (1) some merchant CSPs strip inline style attributes;
+  //   (2) some merchant stylesheets use very high-specificity !important
+  //       rules that race the inline declaration on first paint.
+  // setProperty(prop, val, 'important') is the highest-priority origin in
+  // the CSS cascade and nothing in any stylesheet can override it.
+  function applyBarFills(rootEl) {
+    if (!rootEl) return;
+    var tracks = rootEl.querySelectorAll('.gleame-skin-bar-track--filled[data-fill-color]');
+    try { console.log('[gleame-skin] applyBarFills tracks=', tracks.length); } catch (e) {}
+    for (var i = 0; i < tracks.length; i++) {
+      var el = tracks[i];
+      var color = el.getAttribute('data-fill-color');
+      var pct = el.getAttribute('data-fill-pct');
+      if (color && pct) {
+        var grad = 'linear-gradient(to right,' + color + ' 0%,' + color + ' ' + pct + '%,#f1f5f9 ' + pct + '%,#f1f5f9 100%)';
+        el.style.setProperty('background', grad, 'important');
+        el.style.setProperty('background-image', grad, 'important');
+      }
+    }
   }
 
   // ------------------------------------------------------------
@@ -745,6 +792,7 @@
   }
 
   function showResult(container, data) {
+    try { console.log('[gleame-skin] showResult', { skin_type: data.skin_type, scores: data.scores, hasNotes: !!data.notes, recs: (data.recommendations || []).length }); } catch (e) {}
     var typeBadge = data.skin_type
       ? '<div class="gleame-skin-typebadge">' + escapeHtml(readableSkinType(data.skin_type)) + '</div>'
       : '';
@@ -752,7 +800,9 @@
     var bars = renderBars(data.scores || {});
     var notes = data.notes ? '<div class="gleame-skin-notes">' + escapeHtml(data.notes) + '</div>' : '';
     var recs = renderRecommendations(data.recommendations || []);
-    setResultPaneHTML(container, typeBadge + radar + bars + notes + recs);
+    var pane = setResultPaneHTML(container, typeBadge + radar + bars + notes + recs);
+    // Post-render style application — see applyBarFills comment for rationale.
+    if (pane) applyBarFills(pane);
     // Stash result for the report-bad link.
     container.__gleameLastResult = data;
   }
