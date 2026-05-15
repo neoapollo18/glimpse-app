@@ -240,7 +240,7 @@
     // reads as two distinct options rather than a single ambiguous control.
     + '.gleame-skin-or{display:flex;align-items:center;gap:10px;margin:14px 0;color:#94a3b8;font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;}'
     + '.gleame-skin-or:before,.gleame-skin-or:after{content:"";flex:1;height:1px;background:#e2e8f0;}'
-    + '.gleame-skin-camera-btn{width:100%;padding:48px 20px;border:1px dashed #cbd5e1;border-radius:12px;background:#f8fafc;color:#0f172a;font-size:15px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:border-color .15s,background-color .15s;}'
+    + '.gleame-skin-camera-btn{width:100%;padding:48px 20px;border:1px dashed #cbd5e1;border-radius:12px;background:#f8fafc;color:#0f172a;font-family:inherit;font-size:15px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:border-color .15s,background-color .15s;}'
     + '.gleame-skin-camera-btn:hover{border-color:#22a06b;background:#f0fdf4;}'
     + '.gleame-skin-camera-btn svg{flex-shrink:0;}'
     // Modal lives at document.body (outside .gleame-skin) so it needs its own
