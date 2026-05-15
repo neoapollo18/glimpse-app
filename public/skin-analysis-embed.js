@@ -385,14 +385,19 @@
 
       if (hasData) {
         // viewBox 100x12 → 1 unit = 1% of bar width. preserveAspectRatio
-        // "none" lets the SVG stretch to fill its container exactly.
-        // The colored <rect> has its own rounded corners (rx=6) so its
-        // right edge ends in a soft cap, matching the visual style.
+        // "none" stretches the SVG to fill horizontally. Rects have NO
+        // rx/ry — the outer rounded corners come from the wrapping
+        // .gleame-skin-bar-track div (border-radius:6px; overflow:hidden),
+        // which gives a single continuous pill instead of two stacked
+        // rounded pills. Track is non-empty (contains the SVG) so theme
+        // `:empty` collapse rules don't fire on it.
         var bar = ''
-          + '<svg class="gleame-skin-bar-svg" viewBox="0 0 100 12" preserveAspectRatio="none" aria-hidden="true" data-fill-color="' + color + '" data-fill-pct="' + widthPct + '">'
-          +   '<rect x="0" y="0" width="100" height="12" rx="6" ry="6" fill="#f1f5f9"></rect>'
-          +   '<rect x="0" y="0" width="' + widthPct + '" height="12" rx="6" ry="6" fill="' + color + '"></rect>'
-          + '</svg>';
+          + '<div class="gleame-skin-bar-track">'
+          +   '<svg class="gleame-skin-bar-svg" viewBox="0 0 100 12" preserveAspectRatio="none" aria-hidden="true" data-fill-color="' + color + '" data-fill-pct="' + widthPct + '">'
+          +     '<rect x="0" y="0" width="100" height="12" fill="#f1f5f9"></rect>'
+          +     '<rect x="0" y="0" width="' + widthPct + '" height="12" fill="' + color + '"></rect>'
+          +   '</svg>'
+          + '</div>';
         html += ''
           + '<div class="gleame-skin-bar-row">'
           +   '<div class="gleame-skin-bar-head">'
