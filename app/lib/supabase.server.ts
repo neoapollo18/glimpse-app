@@ -1804,6 +1804,48 @@ export async function uploadAvatarImage(
   return urlData.publicUrl;
 }
 
+/**
+ * Persist a skincare-analysis selfie to the PRIVATE `skin-analysis-photos`
+ * bucket and record it in `skin_analysis_uploads`.
+ *
+ * Best-effort by contract: callers must not fail the customer-facing
+ * analysis request if this throws. Unlike `reference-images`, this bucket is
+ * private — there is no public URL; retrieve photos via a signed URL or the
+ * Supabase dashboard. Returns the storage path on success.
+ */
+export async function saveSkinAnalysisPhoto(
+  shopId: string,
+  shopDomain: string,
+  fileBuffer: Buffer,
+  fileName: string,
+  contentType: string
+): Promise<string> {
+  const sanitizedShop = shopDomain.replace(/[^a-zA-Z0-9.-]/g, '_');
+  const ext = (fileName.split('.').pop() || 'jpg').toLowerCase();
+  const rand = Math.random().toString(36).slice(2, 10);
+  const storagePath = `${sanitizedShop}/${Date.now()}-${rand}.${ext}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('skin-analysis-photos')
+    .upload(storagePath, fileBuffer, { contentType, upsert: false });
+
+  if (uploadError) {
+    throw new Error(`Failed to upload skin-analysis photo: ${uploadError.message}`);
+  }
+
+  const { error: insertError } = await supabase
+    .from('skin_analysis_uploads')
+    .insert({ shop_id: shopId, storage_path: storagePath });
+
+  if (insertError) {
+    // The image bytes are already in storage — log the index-row failure
+    // but still return the path so the caller can log it.
+    console.error('[saveSkinAnalysisPhoto] uploads row insert failed:', insertError);
+  }
+
+  return storagePath;
+}
+
 // Re-export for server routes that already import from supabase.server
 export { MAX_REFERENCE_IMAGES, parseReferenceImageUrls };
 

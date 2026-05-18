@@ -8,15 +8,16 @@ import {
   fetchProductCards,
   type ScoreKey,
 } from "../lib/skin-analysis.server";
-import { findShopByDomain, shopHasValidAccess } from "../lib/supabase.server";
+import { findShopByDomain, shopHasValidAccess, saveSkinAnalysisPhoto } from "../lib/supabase.server";
 import { checkRateLimit, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
 
 /**
  * Storefront API: POST a selfie + shopDomain, get back skin scores and product
  * recommendations. Modeled on api.storefront.transform-image.ts (auth, rate
  * limit, CORS) but:
- *   - No persistence of the input photo or the analysis result (per
- *     legal/PRIVACY_POLICY.md §5.2).
+ *   - The input selfie IS persisted to the private skin-analysis-photos
+ *     bucket (best-effort, see migration 028). The analysis result itself
+ *     is still not stored — no analytics tie-in for this feature.
  *   - No analytics_events writes (skin analysis is intentionally outside
  *     the existing attribution pipeline).
  *   - Gated behind shops.is_skin_analysis_enabled — returns 404 if off.
@@ -174,7 +175,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const config = await getSkinAnalysisConfigByShopId(verifiedShopId);
 
     const arrayBuffer = await imageFile.arrayBuffer();
-    const base64Image = Buffer.from(arrayBuffer).toString("base64");
+    const inputBuffer = Buffer.from(arrayBuffer);
+    const base64Image = inputBuffer.toString("base64");
+
+    // Persist the uploaded selfie to Supabase Storage (private bucket).
+    // Best-effort and runs in parallel with the analysis — a storage
+    // failure must never break the customer-facing result.
+    const savePhoto = saveSkinAnalysisPhoto(
+      verifiedShopId,
+      verifiedShopDomain,
+      inputBuffer,
+      imageFile.name || "selfie.jpg",
+      imageFile.type || "application/octet-stream"
+    ).catch((err) => {
+      console.error("[analyze-skin] failed to save photo:", err);
+      return null;
+    });
 
     const analysis = await analyzeSkin({
       inputImage: base64Image,
@@ -182,6 +198,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       systemPromptOverride: config.system_prompt,
       emphasisConcerns: config.emphasis_concerns as ScoreKey[],
     });
+
+    const savedPhotoPath = await savePhoto;
+    if (savedPhotoPath) {
+      console.log(`[analyze-skin] ${verifiedShopDomain} photo saved: ${savedPhotoPath}`);
+    }
 
     if (!analysis.success || !analysis.result) {
       return json(
