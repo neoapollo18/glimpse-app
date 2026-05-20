@@ -284,13 +284,17 @@ Every facial feature occupies the same exact pixel position and shape as in the 
 
 One single clean photograph. No before/after, no split, no arrows, no labels, no captions, no watermark.`;
 
-export const DEFAULT_PROJECTION_WITH_TREATMENT_PROMPT = `Generate a photorealistic projection of this person 5 years from now after a consistent daily skincare routine with sunscreen, gentle cleansing, and targeted serums. Show the protective effect:
-- smooth, even-toned skin with no new sun spots
-- well-hydrated texture, soft and luminous
-- fine lines around the eyes softened, not exaggerated
-- firmness and elasticity well-preserved along the cheeks and jawline
+export const DEFAULT_PROJECTION_WITH_TREATMENT_PROMPT = `Show this person's skin with reduced sun damage, as it would look after six months of consistent sun protection (daily SPF) and sun-damage-targeting skincare (vitamin C serum, brightening treatments). Same person, same face shape, same features, same hair, same expression, same accessories, same clothing, same framing, same background, same lighting, same skin finish.
 
-CRITICAL: Preserve identity exactly — same face shape, bone structure, eyes, nose, mouth, hair, skin tone, ethnicity, and apparent age progression of only 5 years. Keep the SAME pose, SAME framing, SAME background, and SAME lighting as the input photo. Only the skin condition changes. No stylization, no filters — photorealistic.`;
+The only changes from the input are reductions in sun damage signs: existing sun spots and hyperpigmentation appear lighter and more faded; uneven skin tone becomes slightly more unified; redness and ruddiness in sun-exposed areas (cheeks, nose) is calmer; fine lines from sun damage appear slightly softened. The skin tone overall is the same depth and warmth as the input, just with less damage variance. Render these reductions in whatever form is realistic for this person's skin tone and starting condition.
+
+Everything else about the skin is unchanged from the input — the same level of hydration, the same texture, the same matte or natural finish, the same pore visibility, the same overall appearance. Do not add glow, shine, dewiness, highlighting, or any new finish quality to the skin. Do not make the skin look wet, reflective, or freshly moisturized. The input photo's existing skin finish is preserved exactly.
+
+Existing acne, active blemishes, pimples, scars, moles, beauty marks, freckles, and any non-sun-related skin features remain fully present at the same intensity in the same locations. Vitamin C and SPF do not clear acne or change non-sun-related features.
+
+Skin texture stays real — pores, fine lines, natural skin features remain present. The output is not airbrushed, plastic, or filtered. Every facial feature occupies the same exact position and shape as in the input. Do not warp, reshape, or restructure any feature. Do not change facial volume, bone structure, jaw, chin, or weight. Ethnicity, age range, and gender appearance are unchanged.
+
+One single clean photograph. No before/after, no split, no arrows, no labels, no captions, no watermarks.`;
 
 // ---------------------------------------------------------------------------
 // Gemini client (lazy — only constructed when called, so import-time errors
