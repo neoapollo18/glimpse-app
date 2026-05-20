@@ -942,7 +942,9 @@
     var dropEl = container.querySelector('[data-drop]');
     var thumbEl = container.querySelector('[data-thumb]');
     var projectionsEl = container.querySelector('[data-projections]');
-    var analyzeBtn = container.querySelector('[data-analyze]');
+    // No cached `analyzeBtn` reference — showLoading replaces the CTA slot
+    // innerHTML on every analysis, destroying the node. All call sites
+    // re-resolve via container.querySelector('[data-analyze]') instead.
     var reportLink = container.querySelector('[data-report-link]');
     var cameraBtn = container.querySelector('[data-camera]');
     var cameraInput = container.querySelector('[data-camera-input]');
@@ -960,10 +962,18 @@
 
     function setSelected(file) {
       selectedFile = file;
-      analyzeBtn.disabled = !file;
-      // Reset CTA copy whenever the user picks a fresh photo so the button
-      // never says "Try another photo" while pointing at a brand-new file.
-      analyzeBtn.textContent = 'Analyze my skin';
+      // Re-resolve the analyze button — showLoading replaces the CTA slot
+      // innerHTML, which destroys the original node, so the closure var
+      // can be stale after the first analysis cycle.
+      var btn = container.querySelector('[data-analyze]');
+      if (btn) {
+        btn.disabled = !file;
+        // Reset CTA copy + clear the "reset" mode flag whenever the user
+        // picks a fresh photo so the button never says "Try another photo"
+        // while pointing at a brand-new file.
+        btn.textContent = 'Analyze my skin';
+        btn.removeAttribute('data-mode');
+      }
       // Clear stale results — avoids showing the previous person's skin
       // profile while the new analysis is running.
       resetResultPane();
@@ -1078,6 +1088,13 @@
     container.addEventListener('click', function (e) {
       var btn = e.target.closest && e.target.closest('[data-analyze]');
       if (!btn) return;
+      // "Try another photo" mode: reset the widget back to the upload state
+      // instead of re-analyzing the same file. Set when analysis succeeds
+      // (see analyze .then handler below); cleared by setSelected.
+      if (btn.getAttribute('data-mode') === 'reset') {
+        setSelected(null);
+        return;
+      }
       if (!selectedFile) return;
       if (btn.disabled) return;
       btn.disabled = true;
@@ -1162,6 +1179,9 @@
           if (freshBtn) {
             freshBtn.disabled = false;
             freshBtn.textContent = 'Try another photo';
+            // Flip the button into reset mode so the next click clears the
+            // widget instead of re-analyzing the same selfie.
+            freshBtn.setAttribute('data-mode', 'reset');
           }
         })
         .catch(function (err) {

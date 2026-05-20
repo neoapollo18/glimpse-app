@@ -11,7 +11,7 @@
  */
 
 import { GoogleGenAI } from '@google/genai';
-import { compressImage, transformImage, GEMINI_MODEL_FLASH } from './ai.server';
+import { compressImage, transformImage, GEMINI_MODEL_FLASH_31 } from './ai.server';
 import { supabase, findShopByDomain } from './supabase.server';
 import prisma from '../db.server';
 
@@ -481,15 +481,19 @@ export function pickRecommendations(
 //
 // Image-edit projections of the customer's selfie 5 years from now: one
 // without protection, one with a daily skincare routine. Owns model choice
-// (gemini-2.5-flash-image) and the compress-once optimization — both
-// generations share the same input bytes, so we run compressImage exactly
-// once and hand the pre-compressed buffer to two parallel transformImage
-// calls. Saves one HEIC convert + Sharp resize per click on phone uploads.
+// (gemini-3.1-flash-image-preview) and the compress-once optimization —
+// both generations share the same input bytes, so we run compressImage
+// exactly once and hand the pre-compressed buffer to two parallel
+// transformImage calls. Saves one HEIC convert + Sharp resize per click
+// on phone uploads.
 // ---------------------------------------------------------------------------
 
-// Same max-px as analyzeSkin: face fidelity matters more than token cost
-// when the output is going to be displayed back to the customer at ~400px.
-const PROJECTION_MAX_PX = 1024;
+// 2048px to match GEMINI_MODEL_FLASH_31's 2K input ceiling. The projection
+// prompt is strict about pixel-position preservation, so feeding the model
+// more spatial detail helps it keep identity stable across the transform.
+// The output is rendered at ~400px in the widget — the resolution win is on
+// the *input* side, not the display side.
+const PROJECTION_MAX_PX = 2048;
 
 export interface ProjectSkinRequest {
   /** base64-encoded image bytes (no data: prefix). */
@@ -531,14 +535,14 @@ export async function projectSkin(req: ProjectSkinRequest): Promise<ProjectSkinR
       inputImage: compressedBase64,
       transformationPrompt: req.withoutTreatmentPrompt,
       mimeType: compressedMimeType,
-      model: GEMINI_MODEL_FLASH,
+      model: GEMINI_MODEL_FLASH_31,
       preCompressed: true,
     }),
     transformImage({
       inputImage: compressedBase64,
       transformationPrompt: req.withTreatmentPrompt,
       mimeType: compressedMimeType,
-      model: GEMINI_MODEL_FLASH,
+      model: GEMINI_MODEL_FLASH_31,
       preCompressed: true,
     }),
   ]);
