@@ -10,6 +10,7 @@ import {
 } from "../lib/skin-analysis.server";
 import { findShopByDomain, shopHasValidAccess, saveSkinAnalysisPhoto } from "../lib/supabase.server";
 import { checkRateLimit, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
+import { CORS_HEADERS, isValidImageFile } from "../lib/storefront-api.server";
 
 /**
  * Storefront API: POST a selfie + shopDomain, get back skin scores and product
@@ -22,24 +23,6 @@ import { checkRateLimit, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.se
  *     the existing attribution pipeline).
  *   - Gated behind shops.is_skin_analysis_enabled — returns 404 if off.
  */
-
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, X-Requested-With",
-};
-
-function isValidImageFile(file: File): boolean {
-  if (file.type.startsWith("image/")) return true;
-  const heicMimeTypes = ["image/heic", "image/heif", "image/heic-sequence", "image/heif-sequence"];
-  if (heicMimeTypes.includes(file.type.toLowerCase())) return true;
-  if (!file.type || file.type === "" || file.type === "application/octet-stream") {
-    const ext = file.name?.toLowerCase().split(".").pop();
-    const validExtensions = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif", "avif"];
-    return validExtensions.includes(ext || "");
-  }
-  return false;
-}
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   try {
@@ -80,23 +63,27 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const verifiedShopId = verifiedShop.id;
 
     // ============================================
-    // STEP 3: Subscription gate
+    // STEPS 3+4+7: Subscription, feature flag, and config fan-out
+    // All three are independent queries against the same shop_id; running
+    // them in parallel collapses three sequential Supabase RTTs into one.
+    // Cost of speculatively fetching config when access is denied is one
+    // wasted SELECT — negligible vs. the 40-80ms RTT save per request.
     // ============================================
-    const hasAccess = await shopHasValidAccess(verifiedShopDomain);
+    const [hasAccess, isEnabled, config] = await Promise.all([
+      shopHasValidAccess(verifiedShopDomain),
+      isSkinAnalysisEnabledByShopId(verifiedShopId),
+      getSkinAnalysisConfigByShopId(verifiedShopId),
+    ]);
+
     if (!hasAccess) {
       return json(
         { error: "This store's subscription is inactive. Please contact the store administrator." },
         { status: 403, headers: CORS_HEADERS }
       );
     }
-
-    // ============================================
-    // STEP 4: Feature flag gate
     // Default OFF for every shop — only flipped manually from /admin. Same
     // 404 response as unknown-shop above so the two cases are
     // indistinguishable to a probe.
-    // ============================================
-    const isEnabled = await isSkinAnalysisEnabledByShopId(verifiedShopId);
     if (!isEnabled) {
       return json({ error: "Not found" }, { status: 404, headers: CORS_HEADERS });
     }
@@ -170,10 +157,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     // ============================================
-    // STEP 7: Read merchant config + run analysis
+    // STEP 7: Run analysis (config was prefetched above with the gates)
     // ============================================
-    const config = await getSkinAnalysisConfigByShopId(verifiedShopId);
-
     const arrayBuffer = await imageFile.arrayBuffer();
     const inputBuffer = Buffer.from(arrayBuffer);
     const base64Image = inputBuffer.toString("base64");

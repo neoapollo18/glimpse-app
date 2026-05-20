@@ -25,6 +25,8 @@ import {
   getSkinAnalysisConfig,
   saveSkinAnalysisConfig,
   DEFAULT_SYSTEM_PROMPT,
+  DEFAULT_PROJECTION_WITHOUT_TREATMENT_PROMPT,
+  DEFAULT_PROJECTION_WITH_TREATMENT_PROMPT,
   SCORE_KEYS,
   type ScoreKey,
   type SkinAnalysisConfig,
@@ -73,6 +75,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       product_name: p.product_name,
     })) as ConfiguredProduct[],
     defaultSystemPrompt: DEFAULT_SYSTEM_PROMPT,
+    defaultProjectionWithoutTreatmentPrompt: DEFAULT_PROJECTION_WITHOUT_TREATMENT_PROMPT,
+    defaultProjectionWithTreatmentPrompt: DEFAULT_PROJECTION_WITH_TREATMENT_PROMPT,
     scoreKeys: SCORE_KEYS as readonly ScoreKey[],
   });
 };
@@ -101,13 +105,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const intent = formData.get("intent") as string;
 
   if (intent === "save") {
-    const systemPromptRaw = formData.get("system_prompt");
     // Empty string clears the override (use built-in default). Null/missing
     // means "don't change" — but we don't differentiate here; UI always
-    // submits the field.
-    const systemPrompt = typeof systemPromptRaw === "string" && systemPromptRaw.trim() !== ""
-      ? systemPromptRaw
-      : null;
+    // submits every field.
+    function readPromptField(name: string): string | null {
+      const raw = formData.get(name);
+      return typeof raw === "string" && raw.trim() !== "" ? raw : null;
+    }
+    const systemPrompt = readPromptField("system_prompt");
 
     const emphasisRaw = formData.get("emphasis_concerns");
     let emphasisConcerns: ScoreKey[] = [];
@@ -138,10 +143,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       // ignore — empty defaults
     }
 
+    const projectionWithoutTreatmentPrompt = readPromptField("projection_without_treatment_prompt");
+    const projectionWithTreatmentPrompt = readPromptField("projection_with_treatment_prompt");
+
     const result = await saveSkinAnalysisConfig(shopDomain, {
       system_prompt: systemPrompt,
       emphasis_concerns: emphasisConcerns,
       concern_product_map: concernProductMap,
+      projection_without_treatment_prompt: projectionWithoutTreatmentPrompt,
+      projection_with_treatment_prompt: projectionWithTreatmentPrompt,
     });
     return json(result);
   }
@@ -150,7 +160,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function SkinAnalysisAdmin() {
-  const { shopDomain, config, products, defaultSystemPrompt, scoreKeys } = useLoaderData<typeof loader>();
+  const {
+    shopDomain,
+    config,
+    products,
+    defaultSystemPrompt,
+    defaultProjectionWithoutTreatmentPrompt,
+    defaultProjectionWithTreatmentPrompt,
+    scoreKeys,
+  } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<{ success?: boolean; error?: string }>();
   const isSaving = fetcher.state !== "idle";
 
@@ -162,6 +180,12 @@ export default function SkinAnalysisAdmin() {
   );
   const [concernProductMap, setConcernProductMap] = useState<Record<string, string[]>>(
     (config?.concern_product_map ?? {}) as Record<string, string[]>
+  );
+  const [projectionWithoutTreatmentPrompt, setProjectionNoTreatmentPrompt] = useState<string>(
+    config?.projection_without_treatment_prompt ?? ""
+  );
+  const [projectionWithTreatmentPrompt, setProjectionWithTreatmentPrompt] = useState<string>(
+    config?.projection_with_treatment_prompt ?? ""
   );
 
   // Preview state
@@ -192,8 +216,17 @@ export default function SkinAnalysisAdmin() {
     formData.append("system_prompt", systemPrompt);
     formData.append("emphasis_concerns", JSON.stringify(emphasisConcerns));
     formData.append("concern_product_map", JSON.stringify(concernProductMap));
+    formData.append("projection_without_treatment_prompt", projectionWithoutTreatmentPrompt);
+    formData.append("projection_with_treatment_prompt", projectionWithTreatmentPrompt);
     fetcher.submit(formData, { method: "POST" });
-  }, [fetcher, systemPrompt, emphasisConcerns, concernProductMap]);
+  }, [
+    fetcher,
+    systemPrompt,
+    emphasisConcerns,
+    concernProductMap,
+    projectionWithoutTreatmentPrompt,
+    projectionWithTreatmentPrompt,
+  ]);
 
   const handlePreview = useCallback(async () => {
     if (!previewFile) return;
@@ -330,6 +363,66 @@ export default function SkinAnalysisAdmin() {
                       })}
                     </BlockStack>
                   )}
+                </BlockStack>
+              </Card>
+
+              {/* Sun-damage projections */}
+              <Card>
+                <BlockStack gap="300">
+                  <BlockStack gap="100">
+                    <Text as="h2" variant="headingMd">Sun damage projections</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Two AI-generated images shown alongside the analysis: the
+                      customer's face in 5 years without treatment, and with
+                      consistent skincare. Leave a field empty to use the
+                      built-in default. Identity, pose, and lighting are pinned
+                      in the defaults — only the skin shifts.
+                    </Text>
+                  </BlockStack>
+
+                  <BlockStack gap="200">
+                    <Text as="h3" variant="headingSm">Without treatment (top image)</Text>
+                    <TextField
+                      label="Without-treatment projection prompt"
+                      labelHidden
+                      multiline={8}
+                      autoComplete="off"
+                      value={projectionWithoutTreatmentPrompt}
+                      onChange={setProjectionNoTreatmentPrompt}
+                      placeholder={defaultProjectionWithoutTreatmentPrompt}
+                    />
+                    <InlineStack gap="200">
+                      <Button onClick={() => setProjectionNoTreatmentPrompt("")}>
+                        Reset to default
+                      </Button>
+                      <Button onClick={() => setProjectionNoTreatmentPrompt(defaultProjectionWithoutTreatmentPrompt)}>
+                        Insert default
+                      </Button>
+                    </InlineStack>
+                  </BlockStack>
+
+                  <Divider />
+
+                  <BlockStack gap="200">
+                    <Text as="h3" variant="headingSm">With treatment (bottom image)</Text>
+                    <TextField
+                      label="With-treatment projection prompt"
+                      labelHidden
+                      multiline={8}
+                      autoComplete="off"
+                      value={projectionWithTreatmentPrompt}
+                      onChange={setProjectionWithTreatmentPrompt}
+                      placeholder={defaultProjectionWithTreatmentPrompt}
+                    />
+                    <InlineStack gap="200">
+                      <Button onClick={() => setProjectionWithTreatmentPrompt("")}>
+                        Reset to default
+                      </Button>
+                      <Button onClick={() => setProjectionWithTreatmentPrompt(defaultProjectionWithTreatmentPrompt)}>
+                        Insert default
+                      </Button>
+                    </InlineStack>
+                  </BlockStack>
                 </BlockStack>
               </Card>
 

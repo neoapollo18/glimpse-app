@@ -172,6 +172,21 @@ export const RATE_LIMITS = {
     limit: 200,
     windowMs: 60 * 60 * 1000,
   },
+  // Project-skin API — runs 2× Gemini image generations per call (one per
+  // projection), so each request costs roughly 2× a try-on transform. Same
+  // gating chain as analyze-skin but tighter ceilings to keep cost bounded.
+  PROJECT_SKIN_PER_IP_MINUTE: {
+    limit: 3,
+    windowMs: 60 * 1000,
+  },
+  PROJECT_SKIN_PER_IP_HOUR: {
+    limit: 10,
+    windowMs: 60 * 60 * 1000,
+  },
+  PROJECT_SKIN_PER_SHOP_HOUR: {
+    limit: 100,
+    windowMs: 60 * 60 * 1000,
+  },
 } as const;
 
 // ============================================

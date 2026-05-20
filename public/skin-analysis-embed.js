@@ -19,6 +19,10 @@
   // Same host as widget-embed.js. If the app moves, update both.
   var APP_URL = 'https://glimpse-app-charles.onrender.com';
 
+  // Production toggle: hide the "Recommended for you" cards under the bars.
+  // Flip back to true when the merchant's product mapping is wired up.
+  var SHOW_RECOMMENDATIONS = false;
+
   // Camera modal icons — mirrors the theme widget's gleame-camera.js.
   var CAM_CLOSE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
   var CAM_OFF_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m2 2 20 20"/><path d="M7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2"/><path d="M14.5 4h-5L7 7"/><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5H20a2 2 0 0 1 2 2v7.5"/></svg>';
@@ -205,6 +209,27 @@
     + '.gleame-skin-foot a{color:#64748b;text-decoration:underline;cursor:pointer;}'
     + '.gleame-skin-foot a[aria-disabled="true"]{color:#cbd5e1;cursor:default;text-decoration:none;}'
     + '.gleame-skin-disclaimer{margin-top:14px;font-size:11px;color:#94a3b8;line-height:1.5;}'
+    // ----- Sun-damage projections (replaces the photo slot post-analysis) -----
+    // Two stacked image panels — without treatment on top, with treatment
+    // on bottom. Same border-radius family as .gleame-skin-thumb so the swap
+    // doesn''t feel like a different component. Each slot has a label chip
+    // overlaying the bottom-left corner so the customer always knows which
+    // future they''re looking at.
+    + '.gleame-skin-projections{display:flex;flex-direction:column;gap:12px;}'
+    + '.gleame-skin-proj{position:relative;border-radius:12px;overflow:hidden;background:#0f172a;aspect-ratio:4/5;}'
+    + '.gleame-skin-proj img{display:block;width:100%;height:100%;object-fit:cover;}'
+    + '.gleame-skin-proj-label{position:absolute;top:10px;left:10px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:5px 10px;border-radius:999px;color:#fff;backdrop-filter:blur(4px);}'
+    + '.gleame-skin-proj-label--bad{background:rgba(239,68,68,.85);}'
+    + '.gleame-skin-proj-label--good{background:rgba(34,160,107,.85);}'
+    + '.gleame-skin-proj-sub{position:absolute;bottom:10px;left:10px;font-size:11px;color:#fff;background:rgba(15,23,42,.55);padding:4px 9px;border-radius:6px;backdrop-filter:blur(4px);}'
+    // Loading skeleton: dark base + traveling shimmer so it reads as "AI
+    // rendering" rather than "broken image".
+    + '.gleame-skin-proj.is-loading{background:linear-gradient(90deg,#1e293b 0%,#334155 50%,#1e293b 100%);background-size:200% 100%;animation:gleame-shimmer 1.6s ease-in-out infinite;}'
+    + '.gleame-skin-proj.is-loading .gleame-skin-proj-label,.gleame-skin-proj.is-loading .gleame-skin-proj-sub{background:rgba(255,255,255,.18);color:rgba(255,255,255,.85);}'
+    // Error state: subtle gray panel rather than red, so a single-side failure
+    // (one of the two generations failed) reads as soft rather than alarming.
+    + '.gleame-skin-proj.is-error{background:#f1f5f9;}'
+    + '.gleame-skin-proj.is-error .gleame-skin-proj-fallback{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:12px;text-align:center;padding:20px;}'
     // ----- Placeholder mode -----
     // Wraps the right pane before any analysis runs (and between runs). It
     // shows the same shapes the real result will use — radar, bars, recs —
@@ -446,6 +471,58 @@
       }
       console.log('[gleame-skin] applyBarFills bars=', bars.length, info);
     } catch (e) {}
+  }
+
+  // ------------------------------------------------------------
+  // Sun-damage projections (left pane, replaces photo post-analysis).
+  //
+  // Three rendering states per slot:
+  //   - 'loading'  : shimmer placeholder, project-skin request in flight
+  //   - 'image'    : base64-encoded image data URL from the API
+  //   - 'error'    : muted fallback panel (one or both generations failed)
+  //
+  // Without-treatment is rendered first (top); with-treatment second (bottom).
+  // ------------------------------------------------------------
+  function renderProjectionSlot(opts) {
+    // opts: { state: 'loading'|'image'|'error', kind: 'bad'|'good', label, sub, dataB64 }
+    var classes = 'gleame-skin-proj';
+    if (opts.state === 'loading') classes += ' is-loading';
+    if (opts.state === 'error') classes += ' is-error';
+    var labelClass = 'gleame-skin-proj-label gleame-skin-proj-label--' + opts.kind;
+    var inner = '';
+    if (opts.state === 'image' && opts.dataB64) {
+      // Gemini may emit PNG bytes, but browsers sniff the magic bytes so
+      // image/jpeg is fine and matches the convention used elsewhere in the
+      // codebase (try-on widgets all hardcode jpeg).
+      inner = '<img alt="' + escapeHtml(opts.label) + '" src="data:image/jpeg;base64,' + opts.dataB64 + '"/>';
+    } else if (opts.state === 'error') {
+      inner = '<div class="gleame-skin-proj-fallback">Could not generate this projection.</div>';
+    }
+    return ''
+      + '<div class="' + classes + '" data-proj-slot="' + opts.kind + '">'
+      +   inner
+      +   '<div class="' + labelClass + '">' + escapeHtml(opts.label) + '</div>'
+      +   (opts.sub ? '<div class="gleame-skin-proj-sub">' + escapeHtml(opts.sub) + '</div>' : '')
+      + '</div>';
+  }
+  function renderProjections(state) {
+    // state: { withoutTreatment, withTreatment } where each is one of
+    // 'loading' (sentinel), a base64 string, or null (error/missing).
+    // Key names match the project-skin API wire format so we never re-key.
+    function slotFor(value, kind, label, sub) {
+      if (value === 'loading') {
+        return renderProjectionSlot({ state: 'loading', kind: kind, label: label, sub: sub });
+      }
+      if (typeof value === 'string' && value) {
+        return renderProjectionSlot({ state: 'image', kind: kind, label: label, sub: sub, dataB64: value });
+      }
+      return renderProjectionSlot({ state: 'error', kind: kind, label: label, sub: sub });
+    }
+    return ''
+      + '<div class="gleame-skin-projections">'
+      +   slotFor(state.withoutTreatment, 'bad', 'In 5 years — without treatment', 'Continued sun exposure')
+      +   slotFor(state.withTreatment, 'good', 'In 5 years — with treatment', 'Daily SPF + routine')
+      + '</div>';
   }
 
   // ------------------------------------------------------------
@@ -717,6 +794,9 @@
       // capture="user" hint asks mobile browsers to open the front camera.
       +     '<input type="file" accept="image/*" capture="user" data-camera-input style="display:none"/>'
       +     '<div data-thumb></div>'
+      // Sun-damage projections: hidden until analyze succeeds, at which
+      // point the thumb is hidden and this slot takes over.
+      +     '<div data-projections style="display:none"></div>'
       +     '<ul class="gleame-skin-tips">'
       +       '<li>Face the camera in natural light</li>'
       +       '<li>Remove glasses and heavy makeup</li>'
@@ -805,7 +885,10 @@
     var radar = '<div class="gleame-skin-radar-wrap">' + renderRadar(data.scores || {}) + '</div>';
     var bars = renderBars(data.scores || {});
     var notes = data.notes ? '<div class="gleame-skin-notes">' + escapeHtml(data.notes) + '</div>' : '';
-    var recs = renderRecommendations(data.recommendations || []);
+    // Recommendations are gated by SHOW_RECOMMENDATIONS while the merchant's
+    // concern→product mapping is still being set up. Flip the flag at the
+    // top of this file to re-enable.
+    var recs = SHOW_RECOMMENDATIONS ? renderRecommendations(data.recommendations || []) : '';
     var pane = setResultPaneHTML(container, typeBadge + radar + bars + notes + recs);
     // Post-render style application — see applyBarFills comment for rationale.
     if (pane) applyBarFills(pane);
@@ -858,12 +941,22 @@
     var fileInput = container.querySelector('[data-file-input]');
     var dropEl = container.querySelector('[data-drop]');
     var thumbEl = container.querySelector('[data-thumb]');
+    var projectionsEl = container.querySelector('[data-projections]');
     var analyzeBtn = container.querySelector('[data-analyze]');
     var reportLink = container.querySelector('[data-report-link]');
     var cameraBtn = container.querySelector('[data-camera]');
     var cameraInput = container.querySelector('[data-camera-input]');
     var orDivider = container.querySelector('[data-or-divider]');
     var selectedFile = null;
+
+    function setProjectionsVisible(on) {
+      if (!projectionsEl) return;
+      projectionsEl.style.display = on ? '' : 'none';
+    }
+    function writeProjections(state) {
+      if (!projectionsEl) return;
+      projectionsEl.innerHTML = renderProjections(state);
+    }
 
     function setSelected(file) {
       selectedFile = file;
@@ -874,6 +967,10 @@
       // Clear stale results — avoids showing the previous person's skin
       // profile while the new analysis is running.
       resetResultPane();
+      // Clear stale projections too; the photo comes back into view.
+      setProjectionsVisible(false);
+      if (projectionsEl) projectionsEl.innerHTML = '';
+      thumbEl.style.display = '';
       if (!file) {
         thumbEl.innerHTML = '';
         // No photo: bring the drop zone + camera button back.
@@ -987,11 +1084,44 @@
 
       var stopLoading = showLoading(container);
 
-      var fd = new FormData();
-      fd.append('image', selectedFile);
-      fd.append('shopDomain', shopDomain);
+      // The projection slots are the source of truth — both fetches write
+      // into the same DOM target. We pre-render them as loading so the
+      // project-skin .then handler can update in place unconditionally,
+      // whether the analyze handler has revealed them yet or not.
+      writeProjections({ withoutTreatment: 'loading', withTreatment: 'loading' });
 
-      fetch(APP_URL + '/api/storefront/analyze-skin', { method: 'POST', body: fd })
+      var analyzeFd = new FormData();
+      analyzeFd.append('image', selectedFile);
+      analyzeFd.append('shopDomain', shopDomain);
+
+      var projectFd = new FormData();
+      projectFd.append('image', selectedFile);
+      projectFd.append('shopDomain', shopDomain);
+
+      fetch(APP_URL + '/api/storefront/project-skin', { method: 'POST', body: projectFd })
+        .then(function (res) {
+          // Non-200 → both slots get the error fallback. The body of a
+          // failed response isn't read; the widget treats project-skin as
+          // best-effort and degrades silently.
+          if (!res.ok) return null;
+          return res.json();
+        })
+        .then(function (body) {
+          if (body && body.success) {
+            writeProjections({
+              withoutTreatment: body.withoutTreatment || null,
+              withTreatment: body.withTreatment || null,
+            });
+          } else {
+            writeProjections({ withoutTreatment: null, withTreatment: null });
+          }
+        })
+        .catch(function (err) {
+          console.error('[gleame-skin] project-skin failed:', err);
+          writeProjections({ withoutTreatment: null, withTreatment: null });
+        });
+
+      fetch(APP_URL + '/api/storefront/analyze-skin', { method: 'POST', body: analyzeFd })
         .then(function (res) {
           // 404 means feature not enabled. Hide the widget silently — the
           // merchant pasted the snippet on a non-allowlisted shop, no point
@@ -1021,6 +1151,14 @@
           }
           showResult(container, data);
           setReportEnabled(true);
+
+          // Swap the left pane: hide the original selfie and reveal the
+          // projection slots (already populated by writeProjections above —
+          // either still showing the loading shimmer or already filled if
+          // project-skin came back first).
+          thumbEl.style.display = 'none';
+          setProjectionsVisible(true);
+
           if (freshBtn) {
             freshBtn.disabled = false;
             freshBtn.textContent = 'Try another photo';

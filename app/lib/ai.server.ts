@@ -56,6 +56,14 @@ interface ImageTransformationRequest {
   /** @deprecated use referenceImages */
   referenceImage?: string;
   referenceImageMimeType?: string;
+  /**
+   * Skip the internal compressImage call when the caller has already
+   * compressed `inputImage` (e.g. projectSkin runs two generations off the
+   * same selfie and pre-compresses once to save 2× HEIC convert + Sharp
+   * resize). When true, `inputImage` is sent to Gemini verbatim with
+   * `mimeType` as the inline-data mime.
+   */
+  preCompressed?: boolean;
 }
 
 function resolveReferenceParts(request: ImageTransformationRequest): ReferenceImagePart[] {
@@ -219,11 +227,18 @@ export async function transformImage(
   try {
     const modelToUse = request.model || GEMINI_MODEL_FLASH;
     const maxPx = MODEL_MAX_PX[modelToUse] ?? 720;
-    const {
-      compressedBase64,
-      compressedMimeType,
-    } = await compressImage(request.inputImage, request.mimeType, maxPx);
-    console.log(`Image compressed to max ${maxPx}px for model ${modelToUse}`);
+    let compressedBase64: string;
+    let compressedMimeType: string;
+    if (request.preCompressed) {
+      // Caller asserts inputImage is already at an acceptable size + format.
+      compressedBase64 = request.inputImage;
+      compressedMimeType = request.mimeType;
+    } else {
+      const out = await compressImage(request.inputImage, request.mimeType, maxPx);
+      compressedBase64 = out.compressedBase64;
+      compressedMimeType = out.compressedMimeType;
+      console.log(`Image compressed to max ${maxPx}px for model ${modelToUse}`);
+    }
     
     const prompt: any[] = [];
 

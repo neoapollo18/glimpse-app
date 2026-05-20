@@ -11,7 +11,7 @@
  */
 
 import { GoogleGenAI } from '@google/genai';
-import { compressImage } from './ai.server';
+import { compressImage, transformImage, GEMINI_MODEL_FLASH } from './ai.server';
 import { supabase, findShopByDomain } from './supabase.server';
 import prisma from '../db.server';
 
@@ -256,6 +256,31 @@ export function buildSystemPrompt(
 }
 
 // ---------------------------------------------------------------------------
+// Sun-damage projection prompts
+//
+// Used by /api/storefront/project-skin to generate two image-edit projections
+// of the customer's selfie: 5 years from now without sun protection / with a
+// consistent skincare + SPF routine. Identity, pose, lighting, and framing
+// are pinned so only the skin shifts — otherwise the model drifts into
+// "different person" territory and the before/after stops being credible.
+// ---------------------------------------------------------------------------
+export const DEFAULT_PROJECTION_WITHOUT_TREATMENT_PROMPT = `Generate a photorealistic projection of this person 5 years from now after continued unprotected sun exposure and no daily skincare routine. Show the cumulative effect of UV damage:
+- deeper fine lines around the eyes and forehead
+- noticeably more sun spots and uneven pigmentation, especially on the cheeks and nose
+- drier, rougher-looking surface texture
+- slight loss of firmness along the cheeks and jawline
+
+CRITICAL: Preserve identity exactly — same face shape, bone structure, eyes, nose, mouth, hair, skin tone, ethnicity, and apparent age progression of only 5 years. Keep the SAME pose, SAME framing, SAME background, and SAME lighting as the input photo. Only the skin condition changes. No stylization, no filters — photorealistic.`;
+
+export const DEFAULT_PROJECTION_WITH_TREATMENT_PROMPT = `Generate a photorealistic projection of this person 5 years from now after a consistent daily skincare routine with sunscreen, gentle cleansing, and targeted serums. Show the protective effect:
+- smooth, even-toned skin with no new sun spots
+- well-hydrated texture, soft and luminous
+- fine lines around the eyes softened, not exaggerated
+- firmness and elasticity well-preserved along the cheeks and jawline
+
+CRITICAL: Preserve identity exactly — same face shape, bone structure, eyes, nose, mouth, hair, skin tone, ethnicity, and apparent age progression of only 5 years. Keep the SAME pose, SAME framing, SAME background, and SAME lighting as the input photo. Only the skin condition changes. No stylization, no filters — photorealistic.`;
+
+// ---------------------------------------------------------------------------
 // Gemini client (lazy — only constructed when called, so import-time errors
 // don't fire if the env var is missing in non-storefront contexts)
 // ---------------------------------------------------------------------------
@@ -440,6 +465,91 @@ export function pickRecommendations(
 }
 
 // ---------------------------------------------------------------------------
+// Sun-damage projections
+//
+// Image-edit projections of the customer's selfie 5 years from now: one
+// without protection, one with a daily skincare routine. Owns model choice
+// (gemini-2.5-flash-image) and the compress-once optimization — both
+// generations share the same input bytes, so we run compressImage exactly
+// once and hand the pre-compressed buffer to two parallel transformImage
+// calls. Saves one HEIC convert + Sharp resize per click on phone uploads.
+// ---------------------------------------------------------------------------
+
+// Same max-px as analyzeSkin: face fidelity matters more than token cost
+// when the output is going to be displayed back to the customer at ~400px.
+const PROJECTION_MAX_PX = 1024;
+
+export interface ProjectSkinRequest {
+  /** base64-encoded image bytes (no data: prefix). */
+  inputImage: string;
+  mimeType: string;
+  /** Merchant-edited prompts (with code defaults if null). */
+  withoutTreatmentPrompt: string;
+  withTreatmentPrompt: string;
+}
+
+export interface ProjectSkinResponse {
+  /** base64 of the without-treatment projection, or null on failure. */
+  withoutTreatment: string | null;
+  /** base64 of the with-treatment projection, or null on failure. */
+  withTreatment: string | null;
+  latencyMs: number;
+}
+
+export async function projectSkin(req: ProjectSkinRequest): Promise<ProjectSkinResponse> {
+  const t0 = Date.now();
+
+  // Compress once. Both transforms share the same processed bytes.
+  let compressedBase64: string;
+  let compressedMimeType: string;
+  try {
+    const out = await compressImage(req.inputImage, req.mimeType, PROJECTION_MAX_PX);
+    compressedBase64 = out.compressedBase64;
+    compressedMimeType = out.compressedMimeType;
+  } catch (err) {
+    console.error('[project-skin] compress threw:', err);
+    return { withoutTreatment: null, withTreatment: null, latencyMs: Date.now() - t0 };
+  }
+
+  // Both generations are independent — Promise.allSettled so a single
+  // failure doesn't kill the other slot. `preCompressed: true` tells
+  // transformImage to send the bytes verbatim (no redundant compress).
+  const [withoutSettled, withSettled] = await Promise.allSettled([
+    transformImage({
+      inputImage: compressedBase64,
+      transformationPrompt: req.withoutTreatmentPrompt,
+      mimeType: compressedMimeType,
+      model: GEMINI_MODEL_FLASH,
+      preCompressed: true,
+    }),
+    transformImage({
+      inputImage: compressedBase64,
+      transformationPrompt: req.withTreatmentPrompt,
+      mimeType: compressedMimeType,
+      model: GEMINI_MODEL_FLASH,
+      preCompressed: true,
+    }),
+  ]);
+
+  function pick(r: PromiseSettledResult<{ success: boolean; generatedImage?: string }>): string | null {
+    // transformImage normally returns {success:false} on error rather than
+    // rejecting (see ai.server.ts), but allSettled keeps us defensive.
+    if (r.status !== 'fulfilled') {
+      console.error('[project-skin] generation rejected:', r.reason);
+      return null;
+    }
+    if (!r.value.success || !r.value.generatedImage) return null;
+    return r.value.generatedImage;
+  }
+
+  return {
+    withoutTreatment: pick(withoutSettled),
+    withTreatment: pick(withSettled),
+    latencyMs: Date.now() - t0,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Feature-flag + per-shop config (DB)
 // ---------------------------------------------------------------------------
 
@@ -449,6 +559,10 @@ export interface SkinAnalysisConfig {
   emphasis_concerns: ScoreKey[];
   /** Map of concern key → list of Shopify product GIDs. */
   concern_product_map: Record<string, string[]>;
+  /** Override for the WITHOUT-treatment projection prompt. NULL = use default. */
+  projection_without_treatment_prompt: string | null;
+  /** Override for the WITH-treatment projection prompt. NULL = use default. */
+  projection_with_treatment_prompt: string | null;
   updated_at: string;
 }
 
@@ -485,6 +599,8 @@ function emptyConfig(shopId: string): SkinAnalysisConfig {
     system_prompt: null,
     emphasis_concerns: [],
     concern_product_map: {},
+    projection_without_treatment_prompt: null,
+    projection_with_treatment_prompt: null,
     updated_at: new Date(0).toISOString(),
   };
 }
@@ -499,7 +615,7 @@ export async function getSkinAnalysisConfigByShopId(
 ): Promise<SkinAnalysisConfig> {
   const { data, error } = await supabase
     .from('skin_analysis_config')
-    .select('shop_id, system_prompt, emphasis_concerns, concern_product_map, updated_at')
+    .select('shop_id, system_prompt, emphasis_concerns, concern_product_map, projection_without_treatment_prompt, projection_with_treatment_prompt, updated_at')
     .eq('shop_id', shopId)
     .maybeSingle();
 
@@ -633,6 +749,13 @@ export async function saveSkinAnalysisConfig(
   if ('system_prompt' in patch) row.system_prompt = patch.system_prompt ?? null;
   if (patch.emphasis_concerns !== undefined) row.emphasis_concerns = patch.emphasis_concerns;
   if (patch.concern_product_map !== undefined) row.concern_product_map = patch.concern_product_map;
+  // Like system_prompt: empty string clears, null clears, anything else stored verbatim.
+  if ('projection_without_treatment_prompt' in patch) {
+    row.projection_without_treatment_prompt = patch.projection_without_treatment_prompt ?? null;
+  }
+  if ('projection_with_treatment_prompt' in patch) {
+    row.projection_with_treatment_prompt = patch.projection_with_treatment_prompt ?? null;
+  }
 
   const { error } = await supabase
     .from('skin_analysis_config')
