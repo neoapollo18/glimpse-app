@@ -264,13 +264,25 @@ export function buildSystemPrompt(
 // are pinned so only the skin shifts — otherwise the model drifts into
 // "different person" territory and the before/after stops being credible.
 // ---------------------------------------------------------------------------
-export const DEFAULT_PROJECTION_WITHOUT_TREATMENT_PROMPT = `Generate a photorealistic projection of this person 5 years from now after continued unprotected sun exposure and no daily skincare routine. Show the cumulative effect of UV damage:
-- deeper fine lines around the eyes and forehead
-- noticeably more sun spots and uneven pigmentation, especially on the cheeks and nose
-- drier, rougher-looking surface texture
-- slight loss of firmness along the cheeks and jawline
+export const DEFAULT_PROJECTION_WITHOUT_TREATMENT_PROMPT = `Show this person's skin as it would realistically look after five years of inconsistent sun protection — visible but not dramatic sun damage from accumulated UV exposure. Same person, same face shape, same eye shape, same nose shape, same lip shape, same jawline, same eyebrows, same hair, same overall skin tone, same expression, same accessories, same clothing, same framing, same background, same lighting.
 
-CRITICAL: Preserve identity exactly — same face shape, bone structure, eyes, nose, mouth, hair, skin tone, ethnicity, and apparent age progression of only 5 years. Keep the SAME pose, SAME framing, SAME background, and SAME lighting as the input photo. Only the skin condition changes. No stylization, no filters — photorealistic.`;
+Across the face, introduce or deepen the following signs of sun damage depending on what is already present in the input:
+
+Hyperpigmentation: a few small sun spots and patches of uneven pigmentation appear on the cheeks, temples, and the bridge of the nose. Existing freckles and any natural pigmentation become slightly darker and more defined. The overall skin tone is the same, but with more visible pigmentation variance across the face.
+
+Fine lines and wrinkles: fine lines around the outer corners of the eyes (crow's feet), across the forehead, and around the mouth become slightly more visible. If fine lines are not present in the input, introduce subtle ones in these areas. The lines are fine and natural, not deep.
+
+Texture and dehydration: the skin looks slightly less moisturized, slightly less plump, and slightly rougher in texture than the input. Pores appear marginally more visible. The skin has less of a fresh, hydrated glow.
+
+Elasticity: the skin looks slightly less firm overall, with very mild softening along the jawline and around the mouth. This is a surface-level skin quality change only.
+
+Redness: a faint amount of redness or ruddiness appears on the cheeks, nose, and any sun-exposed areas, suggesting accumulated sun exposure.
+
+Critically, preserve all natural skin texture and features: existing pores, moles, beauty marks, and identifying features remain present. The face must not look airbrushed, plastic, or filtered — the changes are added to real-looking skin, not painted over a smoothed surface. The person remains clearly recognizable as the same individual.
+
+Every facial feature occupies the same exact pixel position and shape as in the input. Do not warp, distort, reshape, narrow, or widen any feature. Do not change the bone structure, do not hollow the cheeks, do not change the jaw or chin shape, and do not change facial volume or weight. The person's overall skin tone (warm/cool/depth) is unchanged — only pigmentation variance increases. Ethnicity, age range, and gender appearance are unchanged from the input.
+
+One single clean photograph. No before/after, no split, no arrows, no labels, no captions, no watermark.`;
 
 export const DEFAULT_PROJECTION_WITH_TREATMENT_PROMPT = `Generate a photorealistic projection of this person 5 years from now after a consistent daily skincare routine with sunscreen, gentle cleansing, and targeted serums. Show the protective effect:
 - smooth, even-toned skin with no new sun spots
