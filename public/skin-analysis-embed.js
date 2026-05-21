@@ -209,13 +209,15 @@
     + '.gleame-skin-foot a{color:#64748b;text-decoration:underline;cursor:pointer;}'
     + '.gleame-skin-foot a[aria-disabled="true"]{color:#cbd5e1;cursor:default;text-decoration:none;}'
     + '.gleame-skin-disclaimer{margin-top:14px;font-size:11px;color:#94a3b8;line-height:1.5;}'
-    // ----- Sun-damage projections (replaces the photo slot post-analysis) -----
-    // Two stacked image panels — without treatment on top, with treatment
-    // on bottom. Same border-radius family as .gleame-skin-thumb so the swap
-    // doesn''t feel like a different component. Each slot has a label chip
-    // overlaying the bottom-left corner so the customer always knows which
-    // future they''re looking at.
-    + '.gleame-skin-projections{display:flex;flex-direction:column;gap:12px;}'
+    // ----- Sun-damage projections (full-width row beneath the main grid) -----
+    // Two side-by-side panels — without-treatment on the left, with-treatment
+    // on the right. Rendered in their own card below the photo/analysis grid
+    // so the customer's original selfie stays visible top-left while the two
+    // future projections occupy the bottom row.
+    + '.gleame-skin-projections-card{margin-top:24px;padding:28px;background:#fff;border:1px solid #e5e7eb;border-radius:16px;box-shadow:0 1px 2px rgba(15,23,42,.04);}'
+    + '.gleame-skin-projections-h{font-size:18px;font-weight:600;margin:0 0 16px;}'
+    + '.gleame-skin-projections{display:grid;grid-template-columns:1fr 1fr;gap:16px;}'
+    + '@media(max-width:600px){.gleame-skin-projections{grid-template-columns:1fr;}}'
     + '.gleame-skin-proj{position:relative;border-radius:12px;overflow:hidden;background:#0f172a;aspect-ratio:4/5;}'
     + '.gleame-skin-proj img{display:block;width:100%;height:100%;object-fit:cover;}'
     + '.gleame-skin-proj-label{position:absolute;top:10px;left:10px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:5px 10px;border-radius:999px;color:#fff;backdrop-filter:blur(4px);}'
@@ -520,7 +522,7 @@
     }
     return ''
       + '<div class="gleame-skin-projections">'
-      +   slotFor(state.withoutTreatment, 'bad', 'In 5 years — without treatment', 'Continued sun exposure')
+      +   slotFor(state.withoutTreatment, 'bad', 'In 5 years — with Heavy Sun Exposure', 'Continued sun exposure')
       +   slotFor(state.withTreatment, 'good', 'In 5 years — with treatment', 'Daily SPF + routine')
       + '</div>';
   }
@@ -794,9 +796,6 @@
       // capture="user" hint asks mobile browsers to open the front camera.
       +     '<input type="file" accept="image/*" capture="user" data-camera-input style="display:none"/>'
       +     '<div data-thumb></div>'
-      // Sun-damage projections: hidden until analyze succeeds, at which
-      // point the thumb is hidden and this slot takes over.
-      +     '<div data-projections style="display:none"></div>'
       +     '<ul class="gleame-skin-tips">'
       +       '<li>Face the camera in natural light</li>'
       +       '<li>Remove glasses and heavy makeup</li>'
@@ -813,6 +812,13 @@
       +   '<div class="gleame-skin-card" data-pane="result">'
       +     renderPlaceholderResult()
       +   '</div>'
+      + '</div>'
+      // Sun-damage projections row — full-width card below the main grid,
+      // hidden until analyze succeeds. The original selfie in the top-left
+      // stays visible while the two projections sit side-by-side here.
+      + '<div class="gleame-skin-projections-card" data-projections-card style="display:none">'
+      +   '<h4 class="gleame-skin-projections-h">In 5 years</h4>'
+      +   '<div data-projections></div>'
       + '</div>';
   }
 
@@ -942,6 +948,7 @@
     var dropEl = container.querySelector('[data-drop]');
     var thumbEl = container.querySelector('[data-thumb]');
     var projectionsEl = container.querySelector('[data-projections]');
+    var projectionsCard = container.querySelector('[data-projections-card]');
     // No cached `analyzeBtn` reference — showLoading replaces the CTA slot
     // innerHTML on every analysis, destroying the node. All call sites
     // re-resolve via container.querySelector('[data-analyze]') instead.
@@ -952,8 +959,11 @@
     var selectedFile = null;
 
     function setProjectionsVisible(on) {
-      if (!projectionsEl) return;
-      projectionsEl.style.display = on ? '' : 'none';
+      // Toggle the outer card so the section header ("In 5 years") hides
+      // along with the slots — otherwise we'd show the heading over an
+      // empty area during the pre-analysis rest state.
+      if (!projectionsCard) return;
+      projectionsCard.style.display = on ? '' : 'none';
     }
     function writeProjections(state) {
       if (!projectionsEl) return;
@@ -977,10 +987,10 @@
       // Clear stale results — avoids showing the previous person's skin
       // profile while the new analysis is running.
       resetResultPane();
-      // Clear stale projections too; the photo comes back into view.
+      // Clear stale projections too. The original photo always stays in
+      // the top-left card now; only the bottom-row projections card hides.
       setProjectionsVisible(false);
       if (projectionsEl) projectionsEl.innerHTML = '';
-      thumbEl.style.display = '';
       if (!file) {
         thumbEl.innerHTML = '';
         // No photo: bring the drop zone + camera button back.
@@ -1169,11 +1179,11 @@
           showResult(container, data);
           setReportEnabled(true);
 
-          // Swap the left pane: hide the original selfie and reveal the
-          // projection slots (already populated by writeProjections above —
-          // either still showing the loading shimmer or already filled if
-          // project-skin came back first).
-          thumbEl.style.display = 'none';
+          // Reveal the projection slots row beneath the main grid. The
+          // original selfie stays visible in the top-left card; projections
+          // sit in their own full-width row below (already populated by
+          // writeProjections above — either still showing the loading
+          // shimmer or already filled if project-skin came back first).
           setProjectionsVisible(true);
 
           if (freshBtn) {
