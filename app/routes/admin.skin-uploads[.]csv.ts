@@ -15,9 +15,14 @@ import { supabase } from "../lib/supabase.server";
  * ?shop=<allowlisted myshopify domain> AND that shop must have a real Prisma
  * session. Same posture as the rest of the founders admin.
  *
+ * By default only rows WITH a visitor name are exported (the conference
+ * pairings) — the older nameless uploads are skipped as noise. Pass
+ * includeUnnamed=1 to get everything.
+ *
  * Usage (open in a browser while signed into an allowlisted store):
  *   /admin/skin-uploads.csv?shop=hx5hqt-na.myshopify.com
- *   /admin/skin-uploads.csv?shop=hx5hqt-na.myshopify.com&dataShop=pursuitbeauty.myshopify.com
+ *   ...&dataShop=pursuitbeauty.myshopify.com   → only that store's rows
+ *   ...&includeUnnamed=1                        → include nameless uploads too
  * `dataShop` is optional — omit it to export every shop's uploads.
  */
 
@@ -54,11 +59,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   const dataShop = url.searchParams.get("dataShop");
+  const includeUnnamed = url.searchParams.get("includeUnnamed") === "1";
 
-  const { data: uploads, error } = await supabase
+  let query = supabase
     .from("skin_analysis_uploads")
     .select("visitor_name, storage_path, created_at, shop_id")
     .order("created_at", { ascending: false });
+
+  // Default: only the named conference pairings. The older nameless uploads
+  // are useless for this purpose, so skip them unless explicitly requested.
+  if (!includeUnnamed) {
+    query = query.not("visitor_name", "is", null);
+  }
+
+  const { data: uploads, error } = await query;
 
   if (error) {
     return new Response(`Query failed: ${error.message}`, { status: 500 });
