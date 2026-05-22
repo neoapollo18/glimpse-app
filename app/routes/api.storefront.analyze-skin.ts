@@ -39,6 +39,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const formData = await request.formData();
     const imageFile = formData.get("image") as File;
     const shopDomain = formData.get("shopDomain") as string;
+    // Optional visitor name for conference name↔face pairing. Trimmed and
+    // length-capped here; persisted (best-effort) alongside the photo below.
+    const visitorNameRaw = (formData.get("name") as string) || "";
+    const visitorName = visitorNameRaw.replace(/[\x00-\x1F\x7F]/g, "").trim().slice(0, 100) || null;
 
     if (!imageFile || !shopDomain) {
       return json(
@@ -171,7 +175,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       verifiedShopDomain,
       inputBuffer,
       imageFile.name || "selfie.jpg",
-      imageFile.type || "application/octet-stream"
+      imageFile.type || "application/octet-stream",
+      visitorName
     ).catch((err) => {
       console.error("[analyze-skin] failed to save photo:", err);
       return null;

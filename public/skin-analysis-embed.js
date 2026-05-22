@@ -10,8 +10,10 @@
  * silently — merchants who paste the snippet onto a non-allowlisted shop
  * see no UI at all (rather than a broken upload prompt).
  *
- * Photos are processed in memory only and never stored, per
- * legal/PRIVACY_POLICY.md §5.2.
+ * Photos ARE persisted: the analyze-skin route saves the selfie to the
+ * private skin-analysis-photos bucket, and (for the conference flow) the
+ * visitor's name is stored alongside it in skin_analysis_uploads. The
+ * widget disclaimer reflects this. Keep legal/PRIVACY_POLICY.md in sync.
  */
 (function () {
   'use strict';
@@ -121,6 +123,9 @@
     + '@media(max-width:760px){.gleame-skin-grid{grid-template-columns:1fr;}}'
     + '.gleame-skin-card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:28px;box-shadow:0 1px 2px rgba(15,23,42,.04);}'
     + '.gleame-skin-h{font-size:18px;font-weight:600;margin:0 0 16px;}'
+    + '.gleame-skin-name{display:block;width:100%;box-sizing:border-box;padding:14px 16px;margin:0 0 16px;border:1px solid #cbd5e1;border-radius:12px;font-family:inherit;font-size:15px;color:#1a1a1a;background:#fff;transition:border-color .15s,box-shadow .15s;}'
+    + '.gleame-skin-name::placeholder{color:#94a3b8;}'
+    + '.gleame-skin-name:focus{outline:none;border-color:#22a06b;box-shadow:0 0 0 3px rgba(34,160,107,.15);}'
     + '.gleame-skin-drop{display:block;position:relative;border:2px dashed #cbd5e1;border-radius:12px;padding:112px 20px;text-align:center;cursor:pointer;transition:border-color .15s,background-color .15s;background:#f8fafc;margin:0;}'
     + '.gleame-skin-drop:hover{border-color:#22a06b;background:#f1f5f9;}'
     + '.gleame-skin-drop.is-dragging{border-color:#22a06b;background:#f0fdf4;}'
@@ -782,6 +787,9 @@
       + '<div class="gleame-skin-grid">'
       +   '<div class="gleame-skin-card" data-pane="upload">'
       +     '<h3 class="gleame-skin-h">Your skin analysis</h3>'
+      // Visitor name — required before Analyze enables. Captured for the
+      // conference name↔face pairing and sent with the analyze request.
+      +     '<input type="text" class="gleame-skin-name" data-visitor-name maxlength="100" placeholder="Your name" aria-label="Your name" autocomplete="name" />'
       +     '<label class="gleame-skin-drop" data-drop>'
       +       '<div class="gleame-skin-drop-icon">↑</div>'
       +       '<div class="gleame-skin-drop-title">Tap or drop a photo</div>'
@@ -803,7 +811,7 @@
       +     '<div data-cta-slot>'
       +       '<button class="gleame-skin-cta" data-analyze disabled>Analyze my skin</button>'
       +     '</div>'
-      +     '<p class="gleame-skin-disclaimer">Cosmetic guidance only — photos are never stored.</p>'
+      +     '<p class="gleame-skin-disclaimer">Cosmetic guidance only. By continuing, you agree that your name and photo are saved for this event.</p>'
       +     '<div class="gleame-skin-foot">'
       +       '<span>Powered by Gleame</span>'
       +       '<a data-report-link href="#" aria-disabled="true" tabindex="-1">Report a bad analysis</a>'
@@ -956,7 +964,22 @@
     var cameraBtn = container.querySelector('[data-camera]');
     var cameraInput = container.querySelector('[data-camera-input]');
     var orDivider = container.querySelector('[data-or-divider]');
+    var nameInput = container.querySelector('[data-visitor-name]');
     var selectedFile = null;
+
+    // Analyze stays disabled until BOTH a name and a photo are present —
+    // the conference flow needs every face paired with a name.
+    function hasName() {
+      return !!(nameInput && nameInput.value.trim());
+    }
+    function refreshAnalyzeEnabled() {
+      var btn = container.querySelector('[data-analyze]');
+      // Don't touch the button while it's in "Try another photo" reset mode.
+      if (btn && btn.getAttribute('data-mode') !== 'reset') {
+        btn.disabled = !(selectedFile && hasName());
+      }
+    }
+    if (nameInput) nameInput.addEventListener('input', refreshAnalyzeEnabled);
 
     function setProjectionsVisible(on) {
       // Toggle the outer card so the section header ("In 5 years") hides
@@ -977,7 +1000,7 @@
       // can be stale after the first analysis cycle.
       var btn = container.querySelector('[data-analyze]');
       if (btn) {
-        btn.disabled = !file;
+        btn.disabled = !(file && hasName());
         // Reset CTA copy + clear the "reset" mode flag whenever the user
         // picks a fresh photo so the button never says "Try another photo"
         // while pointing at a brand-new file.
@@ -1103,9 +1126,17 @@
       // (see analyze .then handler below); cleared by setSelected.
       if (btn.getAttribute('data-mode') === 'reset') {
         setSelected(null);
+        // Clear the name too so the next visitor at the kiosk can't be
+        // saved under the previous person's name. Forces fresh re-entry.
+        if (nameInput) nameInput.value = '';
+        refreshAnalyzeEnabled();
         return;
       }
       if (!selectedFile) return;
+      // Name is required for the conference pairing — bail and focus the
+      // field if it's empty (belt-and-suspenders; the button is also disabled).
+      var visitorName = nameInput ? nameInput.value.trim() : '';
+      if (!visitorName) { if (nameInput) nameInput.focus(); return; }
       if (btn.disabled) return;
       btn.disabled = true;
 
@@ -1120,6 +1151,7 @@
       var analyzeFd = new FormData();
       analyzeFd.append('image', selectedFile);
       analyzeFd.append('shopDomain', shopDomain);
+      analyzeFd.append('name', visitorName);
 
       var projectFd = new FormData();
       projectFd.append('image', selectedFile);

@@ -1818,7 +1818,8 @@ export async function saveSkinAnalysisPhoto(
   shopDomain: string,
   fileBuffer: Buffer,
   fileName: string,
-  contentType: string
+  contentType: string,
+  visitorName?: string | null
 ): Promise<string> {
   const sanitizedShop = shopDomain.replace(/[^a-zA-Z0-9.-]/g, '_');
   const ext = (fileName.split('.').pop() || 'jpg').toLowerCase();
@@ -1835,7 +1836,15 @@ export async function saveSkinAnalysisPhoto(
 
   const { error: insertError } = await supabase
     .from('skin_analysis_uploads')
-    .insert({ shop_id: shopId, storage_path: storagePath });
+    .insert({
+      shop_id: shopId,
+      storage_path: storagePath,
+      // Conference name↔face pairing. Requires the visitor_name column
+      // (migration: ALTER TABLE skin_analysis_uploads ADD COLUMN visitor_name text).
+      // Best-effort like the rest of this insert — a missing column logs
+      // below but never breaks the customer-facing analysis.
+      visitor_name: visitorName?.trim() || null,
+    });
 
   if (insertError) {
     // The image bytes are already in storage — log the index-row failure

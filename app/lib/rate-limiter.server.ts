@@ -160,31 +160,38 @@ export const RATE_LIMITS = {
   // Analyze-skin API - vision LLM call, more expensive than transform per call
   // but feature is gated to allowlisted shops so volume is bounded. Stricter
   // per-IP limits to discourage casual abuse on the public endpoint.
+  // NOTE: limits raised for conference booth use. At a venue, every attendee
+  // shares one public IP (NAT) — or a single kiosk device is the only client —
+  // so the original per-IP caps (5/min, 20/hr) locked out the whole booth.
+  // Revert to 5 / 20 / 200 after the event if cost becomes a concern.
   ANALYZE_SKIN_PER_IP_MINUTE: {
-    limit: 5,
+    limit: 60,
     windowMs: 60 * 1000,
   },
   ANALYZE_SKIN_PER_IP_HOUR: {
-    limit: 20,
+    limit: 1000,
     windowMs: 60 * 60 * 1000,
   },
   ANALYZE_SKIN_PER_SHOP_HOUR: {
-    limit: 200,
+    limit: 3000,
     windowMs: 60 * 60 * 1000,
   },
   // Project-skin API — runs 2× Gemini image generations per call (one per
   // projection), so each request costs roughly 2× a try-on transform. Same
   // gating chain as analyze-skin but tighter ceilings to keep cost bounded.
+  // Also raised for the conference (shared IP / kiosk). Kept lower than
+  // analyze-skin because each call = 2× Gemini image generations ($$). If
+  // cost runs hot at the booth, drop these or disable the projections row.
   PROJECT_SKIN_PER_IP_MINUTE: {
-    limit: 3,
+    limit: 40,
     windowMs: 60 * 1000,
   },
   PROJECT_SKIN_PER_IP_HOUR: {
-    limit: 10,
+    limit: 500,
     windowMs: 60 * 60 * 1000,
   },
   PROJECT_SKIN_PER_SHOP_HOUR: {
-    limit: 100,
+    limit: 1500,
     windowMs: 60 * 60 * 1000,
   },
 } as const;
