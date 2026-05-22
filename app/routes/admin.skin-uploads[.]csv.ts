@@ -30,7 +30,11 @@ const ALLOWED_SHOPS = [
 const SIGNED_URL_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
 function csvCell(value: unknown): string {
-  const s = value == null ? "" : String(value);
+  let s = value == null ? "" : String(value);
+  // Neutralize spreadsheet formula injection: a cell starting with = + - @
+  // (or tab/CR) is run as a formula by Excel/Sheets. A visitor controls their
+  // own name field, so prefix those with a single quote to defuse it.
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 

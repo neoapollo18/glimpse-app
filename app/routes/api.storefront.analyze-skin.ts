@@ -41,7 +41,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const shopDomain = formData.get("shopDomain") as string;
     // Optional visitor name for conference name↔face pairing. Trimmed and
     // length-capped here; persisted (best-effort) alongside the photo below.
-    const visitorNameRaw = (formData.get("name") as string) || "";
+    // formData.get can return a File; only treat real text as a name so a
+    // malformed/malicious file part named "name" can't crash .replace().
+    const nameField = formData.get("name");
+    const visitorNameRaw = typeof nameField === "string" ? nameField : "";
     const visitorName = visitorNameRaw.replace(/[\x00-\x1F\x7F]/g, "").trim().slice(0, 100) || null;
 
     if (!imageFile || !shopDomain) {
