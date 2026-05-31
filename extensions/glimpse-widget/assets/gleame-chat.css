@@ -40,8 +40,8 @@
 /* ---- Bubble (pill when closed, circle when open) ---- */
 .gleame-chat-bubble {
   position: fixed !important;
-  bottom: 20px !important;
-  right: 20px !important;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px)) !important;
+  right: calc(20px + env(safe-area-inset-right, 0px)) !important;
   height: 52px !important;
   min-width: 52px !important;
   padding: 0 22px 0 18px !important;
@@ -62,6 +62,7 @@
   font-family: inherit !important;
   white-space: nowrap !important;
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 .gleame-chat-bubble:hover {
@@ -103,8 +104,8 @@
 /* ---- Greeting notification ---- */
 .gleame-chat-greeting {
   position: fixed !important;
-  bottom: 90px !important;
-  right: 20px !important;
+  bottom: calc(90px + env(safe-area-inset-bottom, 0px)) !important;
+  right: calc(20px + env(safe-area-inset-right, 0px)) !important;
   max-width: 280px !important;
   background: #ffffff !important;
   border-radius: 18px 18px 4px 18px !important;
@@ -155,8 +156,8 @@
 /* ---- Chat Panel ---- */
 .gleame-chat-panel {
   position: fixed !important;
-  bottom: 90px !important;
-  right: 20px !important;
+  bottom: calc(90px + env(safe-area-inset-bottom, 0px)) !important;
+  right: calc(20px + env(safe-area-inset-right, 0px)) !important;
   width: 380px !important;
   min-height: 480px !important;
   max-height: 560px !important;
@@ -257,6 +258,8 @@
   transition: color 0.15s;
   flex-shrink: 0;
   padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 .gleame-chat-header-expand:hover,
@@ -277,6 +280,9 @@
   color: #ffffff;
   transition: background 0.15s;
   flex-shrink: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 .gleame-chat-header-close:hover {
@@ -287,6 +293,8 @@
 .gleame-chat-messages {
   flex: 1 !important;
   overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior: contain !important;
   padding: 16px !important;
   display: flex !important;
   flex-direction: column !important;
@@ -360,6 +368,14 @@
   text-align: center !important;
   transition: background 0.15s, color 0.15s;
   margin: 0 !important;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  min-height: 44px;
+}
+
+.gleame-chat-btn:active {
+  background: var(--gleame-chat-accent-color, #8b5cf6) !important;
+  color: #ffffff !important;
 }
 
 .gleame-chat-btn:hover {
@@ -532,6 +548,15 @@
   font-weight: 500;
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s, color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  min-height: 48px;
+}
+
+.gleame-chat-upload-btn:active {
+  border-color: var(--gleame-chat-accent-color, #8b5cf6);
+  background: #f5f3ff;
+  color: var(--gleame-chat-accent-color, #8b5cf6);
 }
 
 .gleame-chat-upload-btn:hover {
@@ -603,6 +628,10 @@
   text-align: center;
   text-decoration: none;
   transition: opacity 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  min-height: 40px;
+  line-height: 1.4;
 }
 
 .gleame-chat-product-shop-btn:hover {
@@ -836,10 +865,11 @@
 }
 
 /* ---- Mobile ---- */
-@media (max-width: 480px) {
+@media (max-width: 600px) {
   .gleame-chat-panel,
   .gleame-chat-panel.gleame-chat-expanded {
     bottom: 0 !important;
+    top: 0 !important;
     right: 0 !important;
     left: 0 !important;
     width: 100% !important;
@@ -847,26 +877,87 @@
     max-height: 100dvh !important;
     height: 100dvh !important;
     border-radius: 0 !important;
+    /* Slide up from bottom, no scale — fullscreen sheet feel */
+    transform: translateY(100%) !important;
+    transition: transform 0.3s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.25s ease !important;
   }
 
   .gleame-chat-panel.gleame-chat-visible {
-    transform: translateY(0) scale(1);
+    transform: translateY(0) !important;
+  }
+
+  /* Header — respect iOS notch / status bar */
+  .gleame-chat-header {
+    padding-top: calc(16px + env(safe-area-inset-top, 0px)) !important;
+    padding-left: calc(18px + env(safe-area-inset-left, 0px)) !important;
+    padding-right: calc(18px + env(safe-area-inset-right, 0px)) !important;
   }
 
   .gleame-chat-header-expand {
     display: none !important;
   }
 
+  /* Bigger tap target for close on mobile */
+  .gleame-chat-header-close {
+    width: 40px;
+    height: 40px;
+  }
+
   .gleame-chat-messages {
     max-height: none !important;
     flex: 1 !important;
+    padding-left: calc(16px + env(safe-area-inset-left, 0px)) !important;
+    padding-right: calc(16px + env(safe-area-inset-right, 0px)) !important;
   }
 
-  .gleame-chat-greeting {
-    right: 16px;
-    left: 80px;
-    max-width: none;
+  /* Bottom-most element gets safe-area-inset-bottom so iOS home indicator
+     doesn't sit on top of the disclaimer / shop buttons. */
+  .gleame-chat-disclaimer {
+    padding-bottom: calc(9px + env(safe-area-inset-bottom, 0px)) !important;
+    padding-left: calc(14px + env(safe-area-inset-left, 0px)) !important;
+    padding-right: calc(14px + env(safe-area-inset-right, 0px)) !important;
+    font-size: 10px !important;
   }
+
+  /* Greeting — full width with comfortable margins, no awkward left-offset */
+  .gleame-chat-greeting {
+    right: calc(16px + env(safe-area-inset-right, 0px)) !important;
+    left: calc(16px + env(safe-area-inset-left, 0px)) !important;
+    max-width: none !important;
+  }
+
+  /* Bubble — keep label short via min-width, ensure visible above home bar */
+  .gleame-chat-bubble {
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
+    right: calc(16px + env(safe-area-inset-right, 0px)) !important;
+  }
+
+  /* Product card — cap image height so users still see card title + CTA
+     without scrolling each card individually on smaller screens */
+  .gleame-chat-product-image,
+  .gleame-chat-skeleton-image {
+    max-height: 60vh !important;
+    aspect-ratio: 3 / 4 !important;
+    object-position: center top !important;
+  }
+}
+
+/* Disable body scroll when chat panel is open in fullscreen mode.
+   JS adds .gleame-chat-no-scroll to <html>+<body> and sets body.style.top
+   to the negative current scrollY so iOS Safari doesn't rubber-band reveal
+   the page underneath. position:fixed (not relative) is required for the
+   negative-top trick to actually pin the body. */
+html.gleame-chat-no-scroll {
+  overflow: hidden !important;
+  height: 100% !important;
+}
+
+body.gleame-chat-no-scroll {
+  overflow: hidden !important;
+  position: fixed !important;
+  width: 100% !important;
+  left: 0 !important;
+  right: 0 !important;
 }
 
 /* ---- Hidden utility ---- */

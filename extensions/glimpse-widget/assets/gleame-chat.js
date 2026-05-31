@@ -23,6 +23,34 @@ console.log('Gleame Chat Assistant v1.0 loaded');
            (navigator.maxTouchPoints && navigator.maxTouchPoints > 2 && /Mobi/.test(navigator.userAgent));
   }
 
+  // The chat panel goes fullscreen at <= 600px wide; we lock body scroll only
+  // when the panel actually covers the viewport. Using a viewport check (not
+  // the UA) keeps narrow desktop windows behaving like phones.
+  function isPanelFullscreen() {
+    return window.matchMedia && window.matchMedia('(max-width: 600px)').matches;
+  }
+
+  function lockBodyScroll() {
+    if (!isPanelFullscreen()) return;
+    if (document.documentElement.classList.contains('gleame-chat-no-scroll')) return;
+    // Remember the scroll position so we can restore it after unlocking.
+    var scrollY = window.scrollY || window.pageYOffset || 0;
+    document.body.setAttribute('data-gleame-chat-scroll-y', String(scrollY));
+    document.body.style.top = '-' + scrollY + 'px';
+    document.documentElement.classList.add('gleame-chat-no-scroll');
+    document.body.classList.add('gleame-chat-no-scroll');
+  }
+
+  function unlockBodyScroll() {
+    if (!document.documentElement.classList.contains('gleame-chat-no-scroll')) return;
+    document.documentElement.classList.remove('gleame-chat-no-scroll');
+    document.body.classList.remove('gleame-chat-no-scroll');
+    var saved = parseInt(document.body.getAttribute('data-gleame-chat-scroll-y') || '0', 10);
+    document.body.style.top = '';
+    document.body.removeAttribute('data-gleame-chat-scroll-y');
+    if (saved) window.scrollTo(0, saved);
+  }
+
   // ---- Persisted state ----
   // messages: array of { type, ...payload }
   //   bot-text       { type, text }
@@ -191,6 +219,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       isOpen = true;
       panel.classList.add('gleame-chat-visible');
       updateBubbleIcon(true);
+      lockBodyScroll();
     }
 
     trackEvent('widget_view');
@@ -299,6 +328,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     if (!panel) buildPanel();
     panel.classList.add('gleame-chat-visible');
     updateBubbleIcon(true);
+    lockBodyScroll();
 
     // Start conversation only if there's nothing to restore. A finished flow
     // (conversationEnded === true) is preserved so reopening shows prior
@@ -342,6 +372,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       }
     }
     updateBubbleIcon(false);
+    unlockBodyScroll();
     saveState();
   }
 
@@ -749,23 +780,22 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     var btnGroup = document.createElement('div');
     btnGroup.className = 'gleame-chat-upload';
 
-    var uploadBtn = document.createElement('button');
-    uploadBtn.className = 'gleame-chat-upload-btn';
-    uploadBtn.innerHTML =
-      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>' +
-      '<span>Upload a Photo</span>';
-
+    // File input for "Upload a Photo" (gallery picker, no capture)
     var fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = 'image/*';
     fileInput.style.display = 'none';
 
-    uploadBtn.onclick = function() {
-      if (msgRecord.consumed) return;
-      fileInput.click();
-    };
-    fileInput.onchange = function(e) {
-      var file = e.target.files && e.target.files[0];
+    // Separate file input for mobile "Take a Photo" — uses capture="user"
+    // to open the front camera directly. We keep this distinct from the
+    // gallery picker so toggling between them doesn't fight each other.
+    var captureInput = document.createElement('input');
+    captureInput.type = 'file';
+    captureInput.accept = 'image/*';
+    captureInput.setAttribute('capture', 'user');
+    captureInput.style.display = 'none';
+
+    function validateAndSubmit(file) {
       if (!file) return;
       if (!file.type.startsWith('image/') && !file.name.match(/\.(heic|heif)$/i)) {
         pushMessage({ type: 'bot-text', text: 'Please upload an image file (JPG, PNG, etc.).' });
@@ -777,16 +807,30 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       }
       if (uploadWrap.parentNode) uploadWrap.parentNode.removeChild(uploadWrap);
       handlePhotoUpload(file, msgRecord);
+    }
+
+    fileInput.onchange = function(e) {
+      validateAndSubmit(e.target.files && e.target.files[0]);
+    };
+    captureInput.onchange = function(e) {
+      validateAndSubmit(e.target.files && e.target.files[0]);
     };
 
+    var mobile = isMobile();
+
+    // Camera / capture button — comes first on mobile (primary action)
     var cameraBtn = document.createElement('button');
     cameraBtn.className = 'gleame-chat-upload-btn';
     cameraBtn.innerHTML =
       '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>' +
       '<span>Take a Photo</span>';
-
     cameraBtn.onclick = function() {
       if (msgRecord.consumed) return;
+      if (mobile) {
+        // Native camera on mobile — opens the front-facing camera directly
+        captureInput.click();
+        return;
+      }
       if (window.gleameCamera) {
         window.gleameCamera.open(
           function(file) {
@@ -796,17 +840,32 @@ console.log('Gleame Chat Assistant v1.0 loaded');
           function() { fileInput.click(); }
         );
       } else {
-        fileInput.setAttribute('capture', 'user');
-        fileInput.click();
-        fileInput.removeAttribute('capture');
+        captureInput.click();
       }
     };
 
-    btnGroup.appendChild(uploadBtn);
-    if (!isMobile()) {
+    // Gallery / upload button — secondary on mobile, primary on desktop
+    var uploadBtn = document.createElement('button');
+    uploadBtn.className = 'gleame-chat-upload-btn';
+    uploadBtn.innerHTML =
+      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>' +
+      '<span>' + (mobile ? 'Choose from Library' : 'Upload a Photo') + '</span>';
+    uploadBtn.onclick = function() {
+      if (msgRecord.consumed) return;
+      fileInput.click();
+    };
+
+    if (mobile) {
+      // On mobile we want "Take a Photo" as the primary action — both are shown.
+      btnGroup.appendChild(cameraBtn);
+      btnGroup.appendChild(uploadBtn);
+    } else {
+      // Desktop: upload-from-disk primary, camera modal secondary.
+      btnGroup.appendChild(uploadBtn);
       btnGroup.appendChild(cameraBtn);
     }
     btnGroup.appendChild(fileInput);
+    btnGroup.appendChild(captureInput);
     uploadWrap.appendChild(btnGroup);
     messagesContainer.appendChild(uploadWrap);
   }
@@ -917,6 +976,16 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       }).catch(function() {});
     } catch (e) {}
   }
+
+  // Keep scroll lock state in sync with viewport size — e.g. rotating from
+  // landscape to portrait can flip the panel between docked and fullscreen.
+  function handleViewportChange() {
+    if (!isOpen) return;
+    if (isPanelFullscreen()) lockBodyScroll();
+    else unlockBodyScroll();
+  }
+  window.addEventListener('resize', handleViewportChange);
+  window.addEventListener('orientationchange', handleViewportChange);
 
   // Expose minimal API for debugging / external triggers
   window.gleameChat.clearState = clearState;
