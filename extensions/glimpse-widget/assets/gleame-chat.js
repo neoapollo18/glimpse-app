@@ -1090,10 +1090,22 @@ console.log('Gleame Chat Assistant v1.0 loaded');
         var introText = introTemplate.replace(/\{count\}/g, String(data.recommendations.length));
         pushMessage({ type: 'bot-text', text: introText });
         pushMessage({ type: 'bot-cards', recommendations: data.recommendations });
-        // bot-end-actions replaces the single "Start a new search" pill —
-        // gives the shopper "Save these" + "Try another look" + the
-        // curated-by footer line below.
-        pushMessage({ type: 'bot-end-actions', recommendations: data.recommendations });
+        // bot-end-actions stores only what renderEndActions actually uses:
+        // a flat list of numeric variant ids (for save) + count (for the
+        // {count} token). Storing the full recommendations array would
+        // duplicate hundreds of KB of base64 tryOnPreview already present
+        // in bot-cards — silently blowing past sessionStorage quota on
+        // longer conversations.
+        var endVariantIds = [];
+        for (var i = 0; i < data.recommendations.length; i++) {
+          var vid = data.recommendations[i].variantNumericId;
+          if (vid) endVariantIds.push(vid);
+        }
+        pushMessage({
+          type: 'bot-end-actions',
+          variantIds: endVariantIds,
+          count: data.recommendations.length,
+        });
         trackEvent('chat_recommendation_shown');
         conversationEnded = true;
         saveState();
@@ -1164,7 +1176,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
         renderProductCards(m.recommendations || []);
         break;
       case 'bot-end-actions':
-        renderEndActions(m.recommendations || []);
+        renderEndActions(m);
         break;
     }
     if (anchorCandidate) {
@@ -1384,24 +1396,28 @@ console.log('Gleame Chat Assistant v1.0 loaded');
         imgWrap.appendChild(badge);
       }
 
-      // Heart save toggle — visual state driven by localStorage. A variant
-      // with no shopify id can't be saved meaningfully, so we hide the
-      // heart in that case.
-      if (rec.variantNumericId || rec.variantId) {
+      // Heart save toggle — visual state driven by localStorage. Requires
+      // a numeric variant id so saved-variants stays in a single canonical
+      // format (see SAVED_VARIANTS_KEY comment). When the variant id is
+      // missing or non-numeric, the heart is omitted entirely.
+      if (rec.variantNumericId && /^\d+$/.test(String(rec.variantNumericId))) {
+        var savedId = String(rec.variantNumericId);
         var heartBtn = document.createElement('button');
         heartBtn.type = 'button';
         heartBtn.className = 'gleame-chat-product-heart';
-        var isSaved = saved.indexOf(rec.variantNumericId || rec.variantId) >= 0;
+        var isSaved = saved.indexOf(savedId) >= 0;
         if (isSaved) heartBtn.classList.add('gleame-chat-product-heart-on');
         heartBtn.setAttribute('aria-label', isSaved ? 'Remove from saved' : 'Save this');
+        heartBtn.setAttribute('aria-pressed', isSaved ? 'true' : 'false');
         heartBtn.innerHTML = heartIconSvg(isSaved);
         heartBtn.onclick = function(e) {
           e.preventDefault();
           e.stopPropagation();
-          var nowSaved = toggleSavedVariant(rec.variantNumericId || rec.variantId);
+          var nowSaved = toggleSavedVariant(savedId);
           heartBtn.classList.toggle('gleame-chat-product-heart-on', nowSaved);
           heartBtn.innerHTML = heartIconSvg(nowSaved);
           heartBtn.setAttribute('aria-label', nowSaved ? 'Remove from saved' : 'Save this');
+          heartBtn.setAttribute('aria-pressed', nowSaved ? 'true' : 'false');
         };
         imgWrap.appendChild(heartBtn);
       }
@@ -1521,15 +1537,20 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   }
 
   // End-of-flow actions: "Save these" + "Try another look" + curated
-  // footer line. Both action labels and the footer come from config.
-  function renderEndActions(recommendations) {
+  // footer line. Driven by the minimal payload pushed in sendRecommendation
+  // (variantIds + count) — does NOT need the full recommendations array,
+  // which is what the bot-cards message already carries.
+  function renderEndActions(msg) {
+    var variantIds = Array.isArray(msg.variantIds) ? msg.variantIds : [];
+    var count = (typeof msg.count === 'number') ? msg.count : variantIds.length;
+
     var wrap = document.createElement('div');
     wrap.className = 'gleame-chat-msg gleame-chat-msg-bot gleame-chat-msg-bot-action gleame-chat-end-actions';
 
     var saveLabel = (config && config.endSaveLabel) || 'Save these';
     var restartLabel = (config && config.endRestartLabel) || 'Try another look';
     var footerTemplate = (config && config.endFooter) || '';
-    var footer = footerTemplate.replace(/\{count\}/g, String(recommendations.length || 0));
+    var footer = footerTemplate.replace(/\{count\}/g, String(count));
 
     var row = document.createElement('div');
     row.className = 'gleame-chat-end-actions-row';
@@ -1541,10 +1562,14 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>' +
       '<span>' + escapeHtml(saveLabel) + '</span>';
     saveBtn.onclick = function() {
-      saveAllRecommendations(recommendations);
-      saveBtn.classList.add('gleame-chat-end-action-btn-on');
+      var added = saveVariantIds(variantIds);
       var labelSpan = saveBtn.querySelector('span');
-      if (labelSpan) labelSpan.textContent = 'Saved ✓';
+      // Only flip to "Saved ✓" when something was actually added; otherwise
+      // show "Already saved" so the affordance reflects reality. (Returning
+      // 0 also happens when there are no variant ids at all — same UX.)
+      var msgText = added > 0 ? 'Saved ✓' : 'Already saved';
+      saveBtn.classList.add('gleame-chat-end-action-btn-on');
+      if (labelSpan) labelSpan.textContent = msgText;
       trackEvent('chat_save_recommendations');
       setTimeout(function() {
         saveBtn.classList.remove('gleame-chat-end-action-btn-on');
@@ -1579,6 +1604,16 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   }
 
   // ---- Cart + saved-variants storage ----
+  //
+  // Saved variants are stored as a flat array of NUMERIC Shopify variant
+  // ids (strings like "12345"). We deliberately don't store the full GID
+  // form ("gid://shopify/ProductVariant/12345") — keeping the storage
+  // format consistent means any future "show saved" feature can query
+  // without having to handle two shapes.
+  //
+  // Variants that lack a numeric id (rare — Admin GraphQL gid extraction
+  // failed) are silently not saveable. The heart icon already hides when
+  // there's no variant id, so this is consistent UX.
 
   var SAVED_VARIANTS_KEY = 'gleame-saved-variants-v1';
 
@@ -1595,27 +1630,35 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     try { localStorage.setItem(SAVED_VARIANTS_KEY, JSON.stringify(list)); } catch (e) {}
   }
 
+  // Accepts a single numeric variant id. Returns the new saved state
+  // (true = now saved, false = now unsaved). No-op + false when id is
+  // falsy or non-numeric.
   function toggleSavedVariant(id) {
-    if (!id) return false;
+    if (!id || !/^\d+$/.test(String(id))) return false;
     var saved = loadSavedVariants();
-    var idx = saved.indexOf(id);
+    var idx = saved.indexOf(String(id));
     if (idx >= 0) {
       saved.splice(idx, 1);
       persistSavedVariants(saved);
       return false;
     }
-    saved.push(id);
+    saved.push(String(id));
     persistSavedVariants(saved);
     return true;
   }
 
-  function saveAllRecommendations(recs) {
+  // Adds every numeric variant id in `ids` that isn't already saved.
+  // Returns the count of newly-added ids — caller uses this to decide
+  // whether to show "Saved ✓" or "Already saved".
+  function saveVariantIds(ids) {
+    if (!Array.isArray(ids) || ids.length === 0) return 0;
     var saved = loadSavedVariants();
     var added = 0;
-    for (var i = 0; i < recs.length; i++) {
-      var id = recs[i].variantNumericId || recs[i].variantId;
-      if (id && saved.indexOf(id) < 0) {
-        saved.push(id);
+    for (var i = 0; i < ids.length; i++) {
+      var id = ids[i];
+      if (!id || !/^\d+$/.test(String(id))) continue;
+      if (saved.indexOf(String(id)) < 0) {
+        saved.push(String(id));
         added++;
       }
     }
@@ -1624,8 +1667,19 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   }
 
   // Shopify AJAX cart. Posted to /cart/add.js relative to the storefront
-  // domain — same origin as the widget, so no CORS. Returns the JSON of
-  // the added line item; we just need success/fail.
+  // domain — same origin as the widget, so no CORS.
+  //
+  // Note on Shopify's response shape: success returns the added line item
+  // (has product_id / variant_id / title); SOFT failures (out of stock,
+  // sell-with restriction, exceeded max-quantity) return HTTP 200 with a
+  // body like `{status: 422, message: "...", description: "..."}`. So
+  // res.ok is necessary but not sufficient — we also inspect the body.
+  //
+  // On success we dispatch theme cart-update events so the storefront's
+  // cart icon refreshes its count badge without a full page reload.
+  // Dawn-class themes listen for cart:updated; older / custom themes
+  // commonly listen for cart:refresh — dispatching both is the
+  // belt-and-braces version.
   function addToBag(variantId, quantity) {
     var formData = new FormData();
     formData.append('id', String(variantId));
@@ -1635,8 +1689,23 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       headers: { 'Accept': 'application/json' },
       body: formData,
     }).then(function(res) {
-      if (!res.ok) throw new Error('cart add failed: ' + res.status);
-      return res.json();
+      return res.json().then(function(body) {
+        if (!res.ok) {
+          var msg = (body && (body.description || body.message)) || ('cart add failed: ' + res.status);
+          throw new Error(msg);
+        }
+        // Soft-failure: HTTP 200 with an error body. Shopify's convention
+        // is a `status` field set to the HTTP-equivalent error code.
+        if (body && typeof body.status === 'number' && body.status >= 400) {
+          throw new Error(body.description || body.message || ('cart add soft-failure: ' + body.status));
+        }
+        // Success — let the theme update its cart UI.
+        try {
+          document.dispatchEvent(new CustomEvent('cart:updated', { detail: { source: 'gleame-chat' } }));
+          document.dispatchEvent(new CustomEvent('cart:refresh', { detail: { source: 'gleame-chat' } }));
+        } catch (e) { /* old browsers without CustomEvent — ignore */ }
+        return body;
+      });
     });
   }
 

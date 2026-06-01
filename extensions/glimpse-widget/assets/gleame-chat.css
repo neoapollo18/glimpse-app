@@ -782,10 +782,14 @@
 }
 
 /* Image area is now relative so the overlaid badge + heart can absolute-
-   position against it. */
+   position against it. aspect-ratio on the wrap (not just the img inside)
+   keeps the placeholder area sized correctly even when the image fails to
+   load and the inner <img> is display:none — otherwise the badge + heart
+   would float over a collapsed 0-height container. */
 .gleame-chat-product-image-wrap {
   position: relative;
   width: 100%;
+  aspect-ratio: 3/4;
   background: #f3f4f6;
 }
 
