@@ -1012,14 +1012,16 @@ body.gleame-chat-no-scroll {
   transform: translateY(0) scale(1);
 }
 
-/* Top section — tinted accent-colored panel with eyebrow + headline */
+/* Top section — tinted accent-colored panel with eyebrow + headline.
+   Bumped saturation so the tint reads as a deliberate brand band, not
+   a wash. The mockup uses a much stronger pink tint than my original. */
 .gleame-hero-top {
   position: relative !important;
-  padding: 22px 24px 24px !important;
+  padding: 26px 26px 28px !important;
   background:
     linear-gradient(135deg,
-      color-mix(in srgb, var(--gleame-chat-accent-color, #8b5cf6) 12%, #ffffff) 0%,
-      color-mix(in srgb, var(--gleame-chat-accent-color, #8b5cf6) 6%, #ffffff) 100%) !important;
+      color-mix(in srgb, var(--gleame-chat-accent-color, #8b5cf6) 22%, #ffffff) 0%,
+      color-mix(in srgb, var(--gleame-chat-accent-color, #8b5cf6) 12%, #ffffff) 100%) !important;
 }
 
 /* Fallback for browsers without color-mix (older Safari) */
@@ -1029,24 +1031,33 @@ body.gleame-chat-no-scroll {
   }
 }
 
-.gleame-hero-eyebrow {
-  font-size: 11px !important;
+/* The widget's global reset sets text-transform:none, letter-spacing:normal,
+   font-family:system, line-height:normal — all with !important and ID
+   specificity. We re-assert with #gleame-chat-root prefix so the hero's
+   typography (uppercase tracked eyebrow, serif headline, etc.) actually
+   wins the cascade instead of silently falling back to system defaults. */
+#gleame-chat-root .gleame-hero-eyebrow {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  font-size: 12px !important;
   font-weight: 600 !important;
-  letter-spacing: 0.12em !important;
+  letter-spacing: 0.14em !important;
   text-transform: uppercase !important;
   color: var(--gleame-chat-accent-color, #8b5cf6) !important;
-  margin: 0 0 10px 0 !important;
+  margin: 0 0 14px 0 !important;
   line-height: 1.3 !important;
 }
 
-.gleame-hero-headline {
+#gleame-chat-root .gleame-hero-headline {
   font-family: Georgia, 'Times New Roman', serif !important;
-  font-size: 24px !important;
+  /* Size bumped so a headline like "Three shades, made for you." breaks
+     naturally to two lines on a 380px card — same elegant shape as the
+     mockup. Single-line headlines still look fine at this size. */
+  font-size: 28px !important;
   font-weight: 700 !important;
-  line-height: 1.18 !important;
+  line-height: 1.15 !important;
   color: #111827 !important;
   margin: 0 !important;
-  letter-spacing: -0.01em !important;
+  letter-spacing: -0.015em !important;
 }
 
 .gleame-hero-close {
@@ -1082,13 +1093,15 @@ body.gleame-chat-no-scroll {
   background: #ffffff !important;
 }
 
-.gleame-hero-sample-label {
+/* Sample-label: same re-assertion pattern for uppercase + tracking */
+#gleame-chat-root .gleame-hero-sample-label {
   font-size: 11px !important;
   font-weight: 600 !important;
-  letter-spacing: 0.08em !important;
+  letter-spacing: 0.1em !important;
   text-transform: uppercase !important;
   color: #6b7280 !important;
   margin: 0 0 10px 0 !important;
+  line-height: 1.3 !important;
 }
 
 .gleame-hero-samples {
@@ -1108,16 +1121,16 @@ body.gleame-chat-no-scroll {
   box-shadow: inset 0 -16px 24px rgba(0, 0, 0, 0.05) !important;
 }
 
-.gleame-hero-sample-label-text {
+#gleame-chat-root .gleame-hero-sample-label-text {
   position: absolute !important;
-  left: 8px !important;
+  left: 10px !important;
   bottom: 8px !important;
-  right: 8px !important;
-  font-size: 10px !important;
+  right: 10px !important;
+  font-size: 11px !important;
   font-weight: 600 !important;
   color: #ffffff !important;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45) !important;
-  line-height: 1.2 !important;
+  line-height: 1.25 !important;
   letter-spacing: 0.01em !important;
   text-align: left !important;
   overflow: hidden !important;
@@ -1125,39 +1138,43 @@ body.gleame-chat-no-scroll {
   white-space: nowrap !important;
 }
 
-.gleame-hero-copy {
+#gleame-chat-root .gleame-hero-copy {
   font-size: 14px !important;
   line-height: 1.5 !important;
   color: #374151 !important;
-  margin: 0 0 14px 0 !important;
-}
-
-.gleame-hero-trust {
-  display: flex !important;
-  align-items: center !important;
-  flex-wrap: wrap !important;
-  gap: 4px 10px !important;
-  font-size: 11px !important;
-  color: #6b7280 !important;
   margin: 0 0 16px 0 !important;
 }
 
-.gleame-hero-trust-item {
+#gleame-chat-root .gleame-hero-trust {
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  gap: 4px 12px !important;
+  font-size: 12px !important;
+  color: #6b7280 !important;
+  margin: 0 0 18px 0 !important;
+  line-height: 1.4 !important;
+}
+
+#gleame-chat-root .gleame-hero-trust-item {
   display: inline-flex !important;
   align-items: center !important;
   gap: 5px !important;
-  line-height: 1.3 !important;
+  line-height: 1.4 !important;
 }
 
 .gleame-hero-trust-dot {
-  width: 3px !important;
-  height: 3px !important;
+  width: 4px !important;
+  height: 4px !important;
   border-radius: 50% !important;
   background: #9ca3af !important;
   display: inline-block !important;
+  flex-shrink: 0 !important;
 }
 
-.gleame-hero-cta {
+/* CTA: re-asserted under #gleame-chat-root so letter-spacing/text-transform
+   beat the reset (see eyebrow comment above). */
+#gleame-chat-root .gleame-hero-cta {
   display: block !important;
   width: 100% !important;
   padding: 16px !important;
@@ -1165,17 +1182,18 @@ body.gleame-chat-no-scroll {
   color: #ffffff !important;
   border: none !important;
   border-radius: 999px !important;
-  font-size: 14px !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  font-size: 13px !important;
   font-weight: 600 !important;
-  letter-spacing: 0.05em !important;
+  letter-spacing: 0.12em !important;
   text-transform: uppercase !important;
   cursor: pointer !important;
   transition: transform 0.15s, box-shadow 0.15s !important;
   margin: 0 !important;
-  font-family: inherit !important;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
-  min-height: 48px;
+  min-height: 50px;
+  line-height: 1 !important;
 }
 
 /* Lift on hover only when the device actually has hover capability — on
@@ -1192,13 +1210,14 @@ body.gleame-chat-no-scroll {
   transform: translateY(0);
 }
 
-.gleame-hero-footer {
+#gleame-chat-root .gleame-hero-footer {
   text-align: center !important;
   font-size: 12px !important;
   color: #9ca3af !important;
-  margin: 12px 0 2px 0 !important;
+  margin: 14px 0 2px 0 !important;
   line-height: 1.3 !important;
   font-style: normal !important;
+  letter-spacing: 0.01em !important;
 }
 
 /* ---- Mobile hero — bottom sheet at ~78dvh ---- */
