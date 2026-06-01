@@ -746,12 +746,16 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     messagesContainer = document.createElement('div');
     messagesContainer.className = 'gleame-chat-messages';
 
-    // Disclaimer — privacy notice with link
+    // Disclaimer — compact privacy reassurance, lock icon + short copy.
+    // The full privacy policy link is still reachable but lives behind the
+    // small "·" link so the footer doesn't read like a EULA.
     var disclaimer = document.createElement('div');
     disclaimer.className = 'gleame-chat-disclaimer';
     disclaimer.innerHTML =
-      'This assistant is powered by Gleame AI. Any photos you submit are processed in real time to generate personalized recommendations and are not stored. For more information, see our ' +
-      '<a class="gleame-chat-disclaimer-link" href="https://www.gleame.ai/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.';
+      '<svg class="gleame-chat-disclaimer-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>' +
+      '<span>Processed instantly · never stored</span>' +
+      '<span class="gleame-chat-disclaimer-sep" aria-hidden="true"> · </span>' +
+      '<a class="gleame-chat-disclaimer-link" href="https://www.gleame.ai/privacy" target="_blank" rel="noopener noreferrer">Privacy</a>';
 
     panel.appendChild(header);
     panel.appendChild(messagesContainer);
@@ -1179,8 +1183,37 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   function renderTextBubble(text, role) {
     var msg = document.createElement('div');
     msg.className = 'gleame-chat-msg gleame-chat-msg-' + role;
-    msg.innerHTML = '<div class="gleame-chat-msg-bubble">' + escapeHtml(text) + '</div>';
+    if (role === 'bot') {
+      // Bot text rows get the inline avatar — adds personality and matches
+      // the design mockup. Button groups / upload widgets / cards don't
+      // get one (avatar would feel redundant on action-only rows).
+      msg.classList.add('gleame-chat-msg-bot-text-row');
+      msg.innerHTML =
+        buildMessageAvatarHtml() +
+        '<div class="gleame-chat-msg-bubble">' + escapeHtml(text) + '</div>';
+    } else {
+      msg.innerHTML = '<div class="gleame-chat-msg-bubble">' + escapeHtml(text) + '</div>';
+    }
     messagesContainer.appendChild(msg);
+  }
+
+  // Small circular avatar shown inline with each bot text bubble. Uses the
+  // uploaded avatar URL when set, otherwise renders an initial-letter chip
+  // with the same accent tint as the header avatar.
+  function buildMessageAvatarHtml() {
+    if (config && config.avatarUrl) {
+      return '<div class="gleame-chat-msg-avatar">' +
+        '<img src="' + escapeHtml(config.avatarUrl) + '" alt="">' +
+      '</div>';
+    }
+    var initial = '·';
+    if (config && config.assistantName) {
+      var trimmed = String(config.assistantName).trim();
+      if (trimmed.length > 0) initial = trimmed.charAt(0).toUpperCase();
+    }
+    return '<div class="gleame-chat-msg-avatar">' +
+      '<span class="gleame-chat-msg-avatar-letter">' + escapeHtml(initial) + '</span>' +
+    '</div>';
   }
 
   function renderImagePreview() {
@@ -1266,16 +1299,18 @@ console.log('Gleame Chat Assistant v1.0 loaded');
 
     var mobile = isMobile();
 
-    // Camera / capture button — comes first on mobile (primary action)
+    // "Take a photo" — primary (dark filled pill). On mobile, opens the
+    // native front-facing camera directly. On desktop, opens the in-app
+    // camera modal (gleame-camera) which falls back to a file picker if
+    // the browser denies getUserMedia.
     var cameraBtn = document.createElement('button');
-    cameraBtn.className = 'gleame-chat-upload-btn';
+    cameraBtn.className = 'gleame-chat-upload-btn gleame-chat-upload-btn-primary';
     cameraBtn.innerHTML =
-      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>' +
-      '<span>Take a Photo</span>';
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>' +
+      '<span>Take a photo</span>';
     cameraBtn.onclick = function() {
       if (msgRecord.consumed) return;
       if (mobile) {
-        // Native camera on mobile — opens the front-facing camera directly
         captureInput.click();
         return;
       }
@@ -1292,26 +1327,21 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       }
     };
 
-    // Gallery / upload button — secondary on mobile, primary on desktop
+    // "Upload from gallery" — secondary (outlined pill).
     var uploadBtn = document.createElement('button');
-    uploadBtn.className = 'gleame-chat-upload-btn';
+    uploadBtn.className = 'gleame-chat-upload-btn gleame-chat-upload-btn-secondary';
     uploadBtn.innerHTML =
-      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>' +
-      '<span>' + (mobile ? 'Choose from Library' : 'Upload a Photo') + '</span>';
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>' +
+      '<span>Upload from gallery</span>';
     uploadBtn.onclick = function() {
       if (msgRecord.consumed) return;
       fileInput.click();
     };
 
-    if (mobile) {
-      // On mobile we want "Take a Photo" as the primary action — both are shown.
-      btnGroup.appendChild(cameraBtn);
-      btnGroup.appendChild(uploadBtn);
-    } else {
-      // Desktop: upload-from-disk primary, camera modal secondary.
-      btnGroup.appendChild(uploadBtn);
-      btnGroup.appendChild(cameraBtn);
-    }
+    // Primary action ("Take a photo") always comes first — same order on
+    // desktop and mobile so the visual hierarchy matches across devices.
+    btnGroup.appendChild(cameraBtn);
+    btnGroup.appendChild(uploadBtn);
     btnGroup.appendChild(fileInput);
     btnGroup.appendChild(captureInput);
     uploadWrap.appendChild(btnGroup);
