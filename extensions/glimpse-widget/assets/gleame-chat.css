@@ -189,6 +189,13 @@
   max-height: 80vh !important;
 }
 
+/* When expanded, the messages container needs to grow to fill the panel —
+   the default 380px max-height leaves ~200px of dead space between the
+   last message and the disclaimer footer at the bottom of the panel. */
+.gleame-chat-panel.gleame-chat-expanded .gleame-chat-messages {
+  max-height: none !important;
+}
+
 /* Header — Phase 2 refresh.
    Mockup shows a soft tinted band (accent color at low alpha) with dark
    text instead of the old "solid accent + white text" style. Reads as
@@ -400,6 +407,16 @@
 
 .gleame-chat-msg-bot-text-row .gleame-chat-msg-bubble {
   max-width: 100% !important;
+}
+
+/* Action rows (upload widget, question-option button groups, "Try again"
+   / "Start a new search" buttons) take the full messages-container width
+   so the pill buttons inside reach edge-to-edge instead of being capped
+   at the 85% bubble width. */
+.gleame-chat-msg-bot-action {
+  max-width: 100% !important;
+  width: 100% !important;
+  align-self: stretch !important;
 }
 
 .gleame-chat-msg-avatar {

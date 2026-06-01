@@ -1203,7 +1203,11 @@ console.log('Gleame Chat Assistant v1.0 loaded');
 
   function renderButtons(msgRecord) {
     var wrap = document.createElement('div');
-    wrap.className = 'gleame-chat-msg gleame-chat-msg-bot';
+    // Action rows (question options, "Try again", "Start a new search")
+    // want the same full-width treatment as the upload widget so the pill
+    // buttons inside reach the messages-container edges instead of being
+    // capped at 85% via the bubble rule.
+    wrap.className = 'gleame-chat-msg gleame-chat-msg-bot gleame-chat-msg-bot-action';
 
     var btnGroup = document.createElement('div');
     btnGroup.className = 'gleame-chat-buttons';
@@ -1226,7 +1230,10 @@ console.log('Gleame Chat Assistant v1.0 loaded');
 
   function renderUpload(msgRecord) {
     var uploadWrap = document.createElement('div');
-    uploadWrap.className = 'gleame-chat-msg gleame-chat-msg-bot';
+    // gleame-chat-msg-bot-action lets the upload widget take the full
+    // messages-container width instead of inheriting the 85% bubble cap.
+    // The pill buttons inside need the room.
+    uploadWrap.className = 'gleame-chat-msg gleame-chat-msg-bot gleame-chat-msg-bot-action';
 
     var btnGroup = document.createElement('div');
     btnGroup.className = 'gleame-chat-upload';
