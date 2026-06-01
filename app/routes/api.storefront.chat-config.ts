@@ -1,6 +1,11 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { findShopByDomain, shopHasValidAccess, getChatAssistantConfig } from "../lib/supabase.server";
+import {
+  findShopByDomain,
+  shopHasValidAccess,
+  getChatAssistantConfig,
+  getHeroSwatches,
+} from "../lib/supabase.server";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -34,6 +39,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const config = await getChatAssistantConfig(verifiedShop.shop_domain);
 
+  // Only fetch swatches if the hero is actually going to render — saves a
+  // round-trip per page load for the (currently) majority of shops with
+  // hero_enabled=false. Pass the resolved shop_id (and recommendation scope)
+  // so the swatch helper doesn't re-resolve the domain and doesn't preview
+  // variants that wouldn't appear in the actual recommendation pool.
+  const heroSwatches = config.hero_enabled
+    ? await getHeroSwatches(verifiedShop.id, config.hero_sample_count, {
+        productScope: config.product_scope,
+        selectedProductIds: config.selected_product_ids,
+      })
+    : [];
+
+  // Token-replace {assistant_name} in user-editable hero copy so the widget
+  // gets a render-ready string and doesn't have to know about the token.
+  const renderTokens = (s: string) =>
+    s.replace(/\{assistant_name\}/g, config.assistant_name);
+
   return json(
     {
       enabled: config.enabled,
@@ -49,6 +71,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       preferenceOptions: config.preference_options,
       photoUploadMessage: config.photo_upload_message,
       numRecommendations: config.num_recommendations,
+      hero: {
+        enabled: config.hero_enabled,
+        eyebrow: renderTokens(config.hero_eyebrow),
+        headline: renderTokens(config.hero_headline),
+        body: renderTokens(config.hero_body),
+        ctaLabel: renderTokens(config.hero_cta_label),
+        footer: renderTokens(config.hero_footer),
+        sampleLabel: renderTokens(config.hero_sample_label),
+        positionDesktop: config.hero_position_desktop,
+        trustItems: config.hero_trust_items,
+        showDelaySeconds: config.hero_show_delay_seconds,
+        swatches: heroSwatches,
+      },
     },
     {
       headers: {

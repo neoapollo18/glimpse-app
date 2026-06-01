@@ -74,6 +74,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       num_recommendations: parseInt(formData.get("num_recommendations") as string, 10),
       product_scope: formData.get("product_scope") as string,
       selected_product_ids: JSON.parse(formData.get("selected_product_ids") as string || "[]"),
+      hero_enabled: formData.get("hero_enabled") === "true",
+      hero_eyebrow: formData.get("hero_eyebrow") as string,
+      hero_headline: formData.get("hero_headline") as string,
+      hero_body: formData.get("hero_body") as string,
+      hero_cta_label: formData.get("hero_cta_label") as string,
+      hero_footer: formData.get("hero_footer") as string,
+      hero_sample_label: formData.get("hero_sample_label") as string,
+      hero_position_desktop: formData.get("hero_position_desktop") as
+        | "top_right"
+        | "top_left"
+        | "bottom_right"
+        | "bottom_left",
+      hero_trust_items: JSON.parse(formData.get("hero_trust_items") as string),
+      hero_show_delay_seconds: parseInt(formData.get("hero_show_delay_seconds") as string, 10),
+      hero_sample_count: parseInt(formData.get("hero_sample_count") as string, 10),
     };
 
     await saveChatAssistantConfig(shopDomain, config);
@@ -107,6 +122,19 @@ export default function AssistantConfig() {
   const [newOption, setNewOption] = useState("");
   const [uploading, setUploading] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  // Hero popup state
+  const [heroEnabled, setHeroEnabled] = useState(config.hero_enabled);
+  const [heroEyebrow, setHeroEyebrow] = useState(config.hero_eyebrow);
+  const [heroHeadline, setHeroHeadline] = useState(config.hero_headline);
+  const [heroBody, setHeroBody] = useState(config.hero_body);
+  const [heroCtaLabel, setHeroCtaLabel] = useState(config.hero_cta_label);
+  const [heroFooter, setHeroFooter] = useState(config.hero_footer);
+  const [heroSampleLabel, setHeroSampleLabel] = useState(config.hero_sample_label);
+  const [heroPosition, setHeroPosition] = useState<string>(config.hero_position_desktop);
+  const [heroTrustItems, setHeroTrustItems] = useState<string[]>(config.hero_trust_items);
+  const [heroShowDelay, setHeroShowDelay] = useState(config.hero_show_delay_seconds);
+  const [heroSampleCount, setHeroSampleCount] = useState(config.hero_sample_count);
+  const [newTrustItem, setNewTrustItem] = useState("");
 
   const handleAvatarUpload = useCallback(async (file: File) => {
     setUploading(true);
@@ -143,12 +171,37 @@ export default function AssistantConfig() {
     formData.append("num_recommendations", String(numRecommendations));
     formData.append("product_scope", productScope);
     formData.append("selected_product_ids", JSON.stringify(selectedProductIds));
+    formData.append("hero_enabled", String(heroEnabled));
+    formData.append("hero_eyebrow", heroEyebrow);
+    formData.append("hero_headline", heroHeadline);
+    formData.append("hero_body", heroBody);
+    formData.append("hero_cta_label", heroCtaLabel);
+    formData.append("hero_footer", heroFooter);
+    formData.append("hero_sample_label", heroSampleLabel);
+    formData.append("hero_position_desktop", heroPosition);
+    formData.append("hero_trust_items", JSON.stringify(heroTrustItems));
+    formData.append("hero_show_delay_seconds", String(heroShowDelay));
+    formData.append("hero_sample_count", String(heroSampleCount));
     fetcher.submit(formData, { method: "POST" });
   }, [
     fetcher, enabled, assistantName, avatarUrl, bubbleColor, bubbleText, accentColor,
     greetingMessage, greetingDelay, recommendButtonText, preferenceQuestion,
     preferenceOptions, photoUploadMessage, numRecommendations, productScope, selectedProductIds,
+    heroEnabled, heroEyebrow, heroHeadline, heroBody, heroCtaLabel, heroFooter,
+    heroSampleLabel, heroPosition, heroTrustItems, heroShowDelay, heroSampleCount,
   ]);
+
+  const addTrustItem = useCallback(() => {
+    const trimmed = newTrustItem.trim();
+    if (trimmed && !heroTrustItems.includes(trimmed) && heroTrustItems.length < 4) {
+      setHeroTrustItems([...heroTrustItems, trimmed]);
+      setNewTrustItem("");
+    }
+  }, [newTrustItem, heroTrustItems]);
+
+  const removeTrustItem = useCallback((item: string) => {
+    setHeroTrustItems(heroTrustItems.filter((t) => t !== item));
+  }, [heroTrustItems]);
 
   const addOption = useCallback(() => {
     const trimmed = newOption.trim();
@@ -365,6 +418,151 @@ export default function AssistantConfig() {
                   onChange={(val) => setGreetingDelay(val as number)}
                   output
                 />
+              </BlockStack>
+            </Card>
+
+            {/* Hero Popup */}
+            <Card>
+              <BlockStack gap="400">
+                <InlineStack align="space-between" blockAlign="start" gap="500">
+                  <BlockStack gap="100">
+                    <Text as="h2" variant="headingMd">
+                      Hero Popup
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      A larger entry point that previews what shoppers get before they click. Appears top-corner on desktop, as a bottom sheet on mobile. When dismissed, the pill bubble takes over.
+                    </Text>
+                  </BlockStack>
+                  <div style={{ flexShrink: 0 }}>
+                    <Button
+                      role="switch"
+                      ariaChecked={heroEnabled ? "true" : "false"}
+                      onClick={() => setHeroEnabled(!heroEnabled)}
+                      variant={heroEnabled ? "primary" : undefined}
+                      size="slim"
+                    >
+                      {heroEnabled ? "Enabled" : "Disabled"}
+                    </Button>
+                  </div>
+                </InlineStack>
+
+                {heroEnabled && (
+                  <BlockStack gap="400">
+                    <Banner tone="info">
+                      The sample preview row pulls automatically from your configured product variants that have a color set. If none of your variants have colors configured, the hero will silently fall back to the small greeting toast — set <code>display_color</code> on at least 2 variants in the Products page to surface the swatch preview.
+                    </Banner>
+                    <TextField
+                      label="Eyebrow"
+                      value={heroEyebrow}
+                      onChange={setHeroEyebrow}
+                      autoComplete="off"
+                      maxLength={40}
+                      showCharacterCount
+                      helpText="Small uppercase label above the headline"
+                    />
+                    <TextField
+                      label="Headline"
+                      value={heroHeadline}
+                      onChange={setHeroHeadline}
+                      autoComplete="off"
+                      maxLength={60}
+                      showCharacterCount
+                      helpText="The hero's main attention-grabber"
+                    />
+                    <TextField
+                      label="Body"
+                      value={heroBody}
+                      onChange={setHeroBody}
+                      autoComplete="off"
+                      multiline={3}
+                      helpText="Sentence below the sample preview explaining the value"
+                    />
+                    <TextField
+                      label="CTA Label"
+                      value={heroCtaLabel}
+                      onChange={setHeroCtaLabel}
+                      autoComplete="off"
+                      maxLength={40}
+                      helpText="Big button that opens the chat"
+                    />
+                    <TextField
+                      label="Footer Line"
+                      value={heroFooter}
+                      onChange={setHeroFooter}
+                      autoComplete="off"
+                      helpText="Use {assistant_name} to insert the configured name"
+                    />
+                    <TextField
+                      label="Sample Preview Label"
+                      value={heroSampleLabel}
+                      onChange={setHeroSampleLabel}
+                      autoComplete="off"
+                      maxLength={40}
+                      helpText='Small label above the swatch row (e.g. "Sample result preview")'
+                    />
+                    <Select
+                      label="Desktop position"
+                      options={[
+                        { label: "Top right", value: "top_right" },
+                        { label: "Top left", value: "top_left" },
+                        { label: "Bottom right", value: "bottom_right" },
+                        { label: "Bottom left", value: "bottom_left" },
+                      ]}
+                      value={heroPosition}
+                      onChange={setHeroPosition}
+                    />
+                    <BlockStack gap="200">
+                      <Text as="p" variant="bodySm" fontWeight="semibold">
+                        Trust Row Items
+                      </Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Up to 4 short reassurance phrases shown dot-separated below the body
+                      </Text>
+                      <InlineStack gap="200" wrap>
+                        {heroTrustItems.map((item) => (
+                          <Tag key={item} onRemove={() => removeTrustItem(item)}>
+                            {item}
+                          </Tag>
+                        ))}
+                      </InlineStack>
+                      <InlineStack gap="200">
+                        <div style={{ flex: 1 }}>
+                          <TextField
+                            label=""
+                            labelHidden
+                            value={newTrustItem}
+                            onChange={setNewTrustItem}
+                            autoComplete="off"
+                            placeholder="Add a trust phrase..."
+                            disabled={heroTrustItems.length >= 4}
+                          />
+                        </div>
+                        <Button onClick={addTrustItem} size="slim" disabled={heroTrustItems.length >= 4}>
+                          Add
+                        </Button>
+                      </InlineStack>
+                    </BlockStack>
+                    <RangeSlider
+                      label={`Show delay: ${heroShowDelay} second${heroShowDelay !== 1 ? "s" : ""}`}
+                      value={heroShowDelay}
+                      min={0}
+                      max={15}
+                      step={1}
+                      onChange={(val) => setHeroShowDelay(val as number)}
+                      output
+                    />
+                    <RangeSlider
+                      label={`Sample swatches: ${heroSampleCount}`}
+                      value={heroSampleCount}
+                      min={2}
+                      max={4}
+                      step={1}
+                      onChange={(val) => setHeroSampleCount(val as number)}
+                      output
+                      helpText="Auto-sourced from your configured variants with a color set. Hidden if none available."
+                    />
+                  </BlockStack>
+                )}
               </BlockStack>
             </Card>
 

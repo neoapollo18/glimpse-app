@@ -2114,6 +2114,8 @@ export async function completeOnboarding(shopDomain: string): Promise<void> {
 // Chat Assistant Config
 // ============================================================
 
+export type HeroPosition = 'top_right' | 'top_left' | 'bottom_right' | 'bottom_left';
+
 export interface ChatAssistantConfig {
   enabled: boolean;
   assistant_name: string;
@@ -2130,6 +2132,18 @@ export interface ChatAssistantConfig {
   num_recommendations: number;
   product_scope: string;
   selected_product_ids: string[];
+  // Hero popup — see migration 031.
+  hero_enabled: boolean;
+  hero_eyebrow: string;
+  hero_headline: string;
+  hero_body: string;
+  hero_cta_label: string;
+  hero_footer: string;
+  hero_sample_label: string;
+  hero_position_desktop: HeroPosition;
+  hero_trust_items: string[];
+  hero_show_delay_seconds: number;
+  hero_sample_count: number;
 }
 
 const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
@@ -2148,6 +2162,17 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   num_recommendations: 3,
   product_scope: 'all_configured',
   selected_product_ids: [],
+  hero_enabled: false,
+  hero_eyebrow: 'Personal consultation',
+  hero_headline: 'Three shades, made for you.',
+  hero_body: "Take a photo and I'll match shades to your skin tone — and show you exactly how each looks.",
+  hero_cta_label: 'Start your consultation',
+  hero_footer: '— {assistant_name}, your AI shade advisor —',
+  hero_sample_label: 'Sample result preview',
+  hero_position_desktop: 'top_right',
+  hero_trust_items: ['60 sec', 'Processed instantly', 'Never stored'],
+  hero_show_delay_seconds: 1,
+  hero_sample_count: 3,
 };
 
 export async function getChatAssistantConfig(shopDomain: string): Promise<ChatAssistantConfig> {
@@ -2177,6 +2202,18 @@ export async function getChatAssistantConfig(shopDomain: string): Promise<ChatAs
     num_recommendations: data.num_recommendations ?? CHAT_ASSISTANT_DEFAULTS.num_recommendations,
     product_scope: data.product_scope ?? CHAT_ASSISTANT_DEFAULTS.product_scope,
     selected_product_ids: data.selected_product_ids ?? CHAT_ASSISTANT_DEFAULTS.selected_product_ids,
+    hero_enabled: data.hero_enabled ?? CHAT_ASSISTANT_DEFAULTS.hero_enabled,
+    hero_eyebrow: data.hero_eyebrow ?? CHAT_ASSISTANT_DEFAULTS.hero_eyebrow,
+    hero_headline: data.hero_headline ?? CHAT_ASSISTANT_DEFAULTS.hero_headline,
+    hero_body: data.hero_body ?? CHAT_ASSISTANT_DEFAULTS.hero_body,
+    hero_cta_label: data.hero_cta_label ?? CHAT_ASSISTANT_DEFAULTS.hero_cta_label,
+    hero_footer: data.hero_footer ?? CHAT_ASSISTANT_DEFAULTS.hero_footer,
+    hero_sample_label: data.hero_sample_label ?? CHAT_ASSISTANT_DEFAULTS.hero_sample_label,
+    hero_position_desktop:
+      (data.hero_position_desktop as HeroPosition | undefined) ?? CHAT_ASSISTANT_DEFAULTS.hero_position_desktop,
+    hero_trust_items: data.hero_trust_items ?? CHAT_ASSISTANT_DEFAULTS.hero_trust_items,
+    hero_show_delay_seconds: data.hero_show_delay_seconds ?? CHAT_ASSISTANT_DEFAULTS.hero_show_delay_seconds,
+    hero_sample_count: data.hero_sample_count ?? CHAT_ASSISTANT_DEFAULTS.hero_sample_count,
   };
 }
 
@@ -2229,6 +2266,91 @@ export async function getAllChatAssistantConfigs(): Promise<
     num_recommendations: row.num_recommendations ?? CHAT_ASSISTANT_DEFAULTS.num_recommendations,
     product_scope: row.product_scope ?? CHAT_ASSISTANT_DEFAULTS.product_scope,
     selected_product_ids: row.selected_product_ids ?? [],
+    hero_enabled: row.hero_enabled ?? CHAT_ASSISTANT_DEFAULTS.hero_enabled,
+    hero_eyebrow: row.hero_eyebrow ?? CHAT_ASSISTANT_DEFAULTS.hero_eyebrow,
+    hero_headline: row.hero_headline ?? CHAT_ASSISTANT_DEFAULTS.hero_headline,
+    hero_body: row.hero_body ?? CHAT_ASSISTANT_DEFAULTS.hero_body,
+    hero_cta_label: row.hero_cta_label ?? CHAT_ASSISTANT_DEFAULTS.hero_cta_label,
+    hero_footer: row.hero_footer ?? CHAT_ASSISTANT_DEFAULTS.hero_footer,
+    hero_sample_label: row.hero_sample_label ?? CHAT_ASSISTANT_DEFAULTS.hero_sample_label,
+    hero_position_desktop:
+      (row.hero_position_desktop as HeroPosition | undefined) ?? CHAT_ASSISTANT_DEFAULTS.hero_position_desktop,
+    hero_trust_items: row.hero_trust_items ?? CHAT_ASSISTANT_DEFAULTS.hero_trust_items,
+    hero_show_delay_seconds: row.hero_show_delay_seconds ?? CHAT_ASSISTANT_DEFAULTS.hero_show_delay_seconds,
+    hero_sample_count: row.hero_sample_count ?? CHAT_ASSISTANT_DEFAULTS.hero_sample_count,
+  }));
+}
+
+/**
+ * Returns a small, deterministic-per-day sample of variants to render as
+ * "look at what you'd get" swatches in the hero popup. Sources from the
+ * shop's configured product_variants — limited to ones that have a
+ * display_color set (those render cleanly as solid color tiles).
+ *
+ * If the shop's chat config restricts recommendations to a specific product
+ * set (product_scope='selected'), we honor that here so the hero preview
+ * doesn't tease a swatch that would never actually appear in the
+ * recommendation flow.
+ *
+ * Why deterministic per day: stable swatches across page loads feel more
+ * intentional than a different random trio every navigation, but rotating
+ * daily keeps the hero from looking stale and lets merchants implicitly
+ * showcase more of their catalog over time.
+ *
+ * Pass `shopId` directly (the resolved internal id from findShopByDomain)
+ * to avoid a second domain-lookup round-trip when the caller already did
+ * the auth check.
+ */
+export async function getHeroSwatches(
+  shopId: string,
+  limit: number,
+  options?: {
+    productScope?: string;
+    selectedProductIds?: string[];
+  },
+): Promise<Array<{ label: string; color: string | null; productHandle: string | null }>> {
+  const safeLimit = Math.max(2, Math.min(4, Math.floor(limit) || 3));
+
+  let query = supabase
+    .from('product_variants')
+    .select(`
+      variant_title,
+      display_color,
+      products!inner ( shop_id, product_name )
+    `)
+    .eq('products.shop_id', shopId)
+    .not('display_color', 'is', null)
+    .order('created_at', { ascending: true })
+    .limit(40);
+
+  if (options?.productScope === 'selected' && Array.isArray(options.selectedProductIds)) {
+    if (options.selectedProductIds.length === 0) {
+      // No selected products → recommendations would return nothing, so the
+      // hero shouldn't tease swatches that can't be delivered.
+      return [];
+    }
+    query = query.in('product_id', options.selectedProductIds);
+  }
+
+  const { data, error } = await query;
+
+  if (error || !data || data.length === 0) {
+    return [];
+  }
+
+  // Daily rotation: shift the window by absolute day-index so a single shop
+  // with >limit variants shows different ones across days but the same ones
+  // to any visitor on a given day. Using UTC day-index (not "day of year")
+  // so the rotation flips at the same moment globally instead of drifting
+  // by the server's local timezone.
+  const dayIndex = Math.floor(Date.now() / 86_400_000);
+  const offset = data.length > safeLimit ? dayIndex % data.length : 0;
+  const rotated = data.slice(offset).concat(data.slice(0, offset));
+
+  return rotated.slice(0, safeLimit).map((v: any) => ({
+    label: (v.variant_title as string) || (v.products?.product_name as string) || '',
+    color: (v.display_color as string | null) ?? null,
+    productHandle: null,
   }));
 }
 

@@ -66,11 +66,14 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   var conversationEnded = false;
   var preference = null;
   var pendingRequest = false;
+  var heroDismissed = false;
 
   // ---- Session-only state ----
   var config = null;
   var greetingShown = false;
   var inFlightRequest = null;
+  var heroEl = null;
+  var heroShown = false;
   // When recommendations are shown, anchor the scroll to the message right
   // before the cards (the "Here's what I found" bot-text) so the user lands
   // on the FIRST product and scrolls top → bottom, not bottom → top.
@@ -102,6 +105,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
         conversationEnded: conversationEnded,
         preference: preference,
         pendingRequest: pendingRequest,
+        heroDismissed: heroDismissed,
       };
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (e) {
@@ -137,6 +141,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
           conversationEnded: conversationEnded,
           preference: preference,
           pendingRequest: pendingRequest,
+          heroDismissed: heroDismissed,
         }));
       } catch (e2) {
         // Give up silently
@@ -172,10 +177,21 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       renderBubble();
 
       var saved = loadState();
+      // Restore dismiss flags before deciding what to show, regardless of
+      // whether a conversation is in flight. Previously these were only
+      // restored inside restoreFromState() (the messages-exist branch),
+      // which meant a shopper who dismissed the hero or greeting and then
+      // navigated to a new page would see it again on every page load —
+      // breaking the "X → just the pill" promise.
+      if (saved) {
+        if (saved.heroDismissed) heroDismissed = true;
+        if (saved.greetingDismissed) greetingDismissed = true;
+      }
+
       if (saved && Array.isArray(saved.messages) && saved.messages.length > 0) {
         restoreFromState(saved);
       } else {
-        scheduleGreeting();
+        scheduleEntryPoint();
         trackEvent('widget_view');
       }
     })
@@ -184,9 +200,38 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     });
   }
 
+  // Choose the first-visit entry point: hero takes precedence when enabled
+  // and has the data it needs to deliver its value pitch. Once the hero has
+  // been dismissed (this session), we do NOT fall back to the greeting toast
+  // — the shopper explicitly opted out and a second nudge would be noise.
+  // The pill bubble remains visible either way.
+  function scheduleEntryPoint() {
+    var heroCfg = config && config.hero;
+    if (heroCfg && heroCfg.enabled) {
+      if (heroDismissed) return; // already dismissed this session — pill only
+      if (heroHasMinimumContent(heroCfg)) {
+        scheduleHero();
+        return;
+      }
+      // Hero is enabled but missing the swatch preview that's its whole
+      // value pitch. Don't show a half-baked hero — fall back to the
+      // smaller greeting toast so the shop still gets some nudge.
+    }
+    scheduleGreeting();
+  }
+
+  // Hero needs at least its swatch row OR a headline to be worth showing.
+  // Swatches are the value preview; without them the hero is just text and
+  // the greeting toast is a better fit.
+  function heroHasMinimumContent(heroCfg) {
+    var swatches = Array.isArray(heroCfg.swatches) ? heroCfg.swatches : [];
+    return swatches.length >= 2;
+  }
+
   function restoreFromState(saved) {
     messages = saved.messages || [];
     greetingDismissed = !!saved.greetingDismissed;
+    heroDismissed = !!saved.heroDismissed;
     conversationEnded = !!saved.conversationEnded;
     preference = saved.preference || null;
     panelExpanded = !!saved.panelExpanded;
@@ -314,6 +359,178 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     }
   }
 
+  // ---- Hero popup ----
+  // Configurable value-preview card. Same lifecycle shape as the greeting
+  // (schedule → show → dismiss) so they're interchangeable as entry points.
+  function scheduleHero() {
+    var heroCfg = config.hero || {};
+    var raw = Number(heroCfg.showDelaySeconds);
+    var seconds = isFinite(raw) && raw >= 0 ? raw : 1;
+    var delay = Math.min(seconds, 30) * 1000;
+    setTimeout(function() {
+      if (isOpen || heroDismissed) return;
+      showHero();
+    }, delay);
+  }
+
+  // Module-level so the Escape handler can be torn down on dismiss.
+  var heroEscHandler = null;
+
+  function showHero() {
+    if (heroShown) return;
+    var heroCfg = (config && config.hero) || null;
+    if (!heroCfg) return;
+    heroShown = true;
+
+    heroEl = document.createElement('div');
+    heroEl.className = 'gleame-hero gleame-hero-' + (heroCfg.positionDesktop || 'top_right').replace(/_/g, '-');
+    heroEl.setAttribute('role', 'dialog');
+    // The mobile sheet covers ~78dvh which is effectively modal; the desktop
+    // corner card is more of a notification. aria-modal=true everywhere is
+    // the safer default for screen readers — they'll know the rest of the
+    // page is implicitly blocked while the hero is up.
+    heroEl.setAttribute('aria-modal', 'true');
+    // Prefer aria-labelledby pointing at a visible headline. If the headline
+    // is empty we fall back to aria-label using the eyebrow or a default —
+    // screen readers skip display:none elements even via aria-labelledby,
+    // which would leave the dialog effectively unlabeled.
+    if (heroCfg.headline) {
+      heroEl.setAttribute('aria-labelledby', 'gleame-hero-headline');
+    } else {
+      heroEl.setAttribute('aria-label', heroCfg.eyebrow || heroCfg.ctaLabel || 'Personal consultation');
+    }
+
+    var swatchesHtml = '';
+    // Cap client-side as a defense in depth against any future API drift
+    // (server already caps at 4). Without this, an unexpected 10-tile
+    // payload would scrunch the CSS grid.
+    var swatches = Array.isArray(heroCfg.swatches) ? heroCfg.swatches.slice(0, 4) : [];
+    if (swatches.length >= 2) {
+      var swatchTiles = swatches.map(function(s) {
+        var color = (s && s.color) ? s.color : '#e5e7eb';
+        // Inline style is necessary because the color comes from data, not CSS.
+        // escapeHtml on the label; raw `color` is restricted to the hex set
+        // we get from display_color in Supabase (validated server-side).
+        return (
+          '<div class="gleame-hero-sample" style="background:' + sanitizeColor(color) + '">' +
+            (s && s.label ? '<span class="gleame-hero-sample-label-text">' + escapeHtml(s.label) + '</span>' : '') +
+          '</div>'
+        );
+      }).join('');
+      swatchesHtml =
+        (heroCfg.sampleLabel ? '<div class="gleame-hero-sample-label">' + escapeHtml(heroCfg.sampleLabel) + '</div>' : '') +
+        '<div class="gleame-hero-samples">' + swatchTiles + '</div>';
+    }
+
+    var trustItems = Array.isArray(heroCfg.trustItems) ? heroCfg.trustItems.slice(0, 4) : [];
+    var trustHtml = '';
+    if (trustItems.length > 0) {
+      trustHtml = '<div class="gleame-hero-trust">' +
+        trustItems.map(function(item, i) {
+          return (i > 0 ? '<span class="gleame-hero-trust-dot" aria-hidden="true"></span>' : '') +
+            '<span class="gleame-hero-trust-item">' + escapeHtml(item) + '</span>';
+        }).join('') +
+        '</div>';
+    }
+
+    // Headline omitted entirely when empty — aria-labelledby was already
+    // swapped for aria-label above in this case, so no orphan reference.
+    var headlineHtml = heroCfg.headline
+      ? '<h2 id="gleame-hero-headline" class="gleame-hero-headline">' + escapeHtml(heroCfg.headline) + '</h2>'
+      : '';
+
+    heroEl.innerHTML =
+      '<div class="gleame-hero-top">' +
+        (heroCfg.eyebrow ? '<div class="gleame-hero-eyebrow">' + escapeHtml(heroCfg.eyebrow) + '</div>' : '') +
+        headlineHtml +
+        '<button class="gleame-hero-close" aria-label="Dismiss">' +
+          '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+        '</button>' +
+      '</div>' +
+      '<div class="gleame-hero-body">' +
+        swatchesHtml +
+        (heroCfg.body ? '<p class="gleame-hero-copy">' + escapeHtml(heroCfg.body) + '</p>' : '') +
+        trustHtml +
+        '<button class="gleame-hero-cta" type="button">' + escapeHtml(heroCfg.ctaLabel || 'Start') + '</button>' +
+        (heroCfg.footer ? '<div class="gleame-hero-footer">' + escapeHtml(heroCfg.footer) + '</div>' : '') +
+      '</div>';
+
+    heroEl.querySelector('.gleame-hero-close').onclick = function(e) {
+      e.stopPropagation();
+      dismissHero();
+      trackEvent('hero_dismiss');
+    };
+    heroEl.querySelector('.gleame-hero-cta').onclick = function() {
+      trackEvent('hero_cta_click');
+      // skipPersist: openChatFromHero saves state itself.
+      // keepLock: the chat panel will hold the body lock — don't unlock
+      // here only for openChatFromHero to immediately re-lock.
+      dismissHero(/* skipPersist */ true, /* keepLock */ true);
+      openChatFromHero();
+    };
+
+    // Escape dismisses on desktop. Mobile usually doesn't have a physical
+    // Esc key but the handler is cheap and harmless there. Defensively
+    // tear down any prior handler before binding a new one — heroShown
+    // already prevents double-show, but a stale listener would be silent
+    // and hard to debug.
+    if (heroEscHandler) document.removeEventListener('keydown', heroEscHandler);
+    heroEscHandler = function(e) {
+      if (e.key === 'Escape' || e.keyCode === 27) {
+        dismissHero();
+        trackEvent('hero_dismiss');
+      }
+    };
+    document.addEventListener('keydown', heroEscHandler);
+
+    root.appendChild(heroEl);
+    trackEvent('hero_view');
+
+    // Lock body scroll on mobile so the 78dvh sheet behaves like a real
+    // modal — without this, accidental touches scroll the page underneath
+    // while the user is trying to interact with the sheet.
+    lockBodyScroll();
+
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        if (heroEl) heroEl.classList.add('gleame-hero-visible');
+      });
+    });
+  }
+
+  function dismissHero(skipPersist, keepLock) {
+    if (heroDismissed && !heroEl) return;
+    heroDismissed = true;
+    if (!skipPersist) saveState();
+    if (heroEscHandler) {
+      document.removeEventListener('keydown', heroEscHandler);
+      heroEscHandler = null;
+    }
+    // Release the body lock unless the caller will hand off to another
+    // component that also wants the lock (i.e. the chat panel via the
+    // hero CTA). Also skip if a chat panel is already open for any other
+    // reason — closing the hero shouldn't unlock under the open chat.
+    if (!keepLock && !isOpen) unlockBodyScroll();
+    if (heroEl) {
+      heroEl.classList.remove('gleame-hero-visible');
+      var el = heroEl;
+      heroEl = null;
+      setTimeout(function() {
+        if (el && el.parentNode) el.parentNode.removeChild(el);
+      }, 360);
+    }
+  }
+
+  // Restricts the inline-style color we write into the swatch background.
+  // display_color is a hex string from Supabase but we still want a hard
+  // guard against any future code path that might inject untrusted input.
+  function sanitizeColor(c) {
+    if (typeof c !== 'string') return '#e5e7eb';
+    var trimmed = c.trim();
+    if (/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(trimmed)) return trimmed;
+    return '#e5e7eb';
+  }
+
   // ---- Chat panel ----
   function toggleChat() {
     if (isOpen) closeChat();
@@ -324,6 +541,9 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     if (isOpen) return;
     isOpen = true;
     dismissGreeting();
+    // keepLock: we're about to lock for the chat ourselves; passing
+    // keepLock=true avoids the unlock-then-relock churn from dismissHero.
+    dismissHero(/* skipPersist */ false, /* keepLock */ true);
 
     if (!panel) buildPanel();
     panel.classList.add('gleame-chat-visible');
@@ -337,6 +557,31 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     if (messages.length === 0) {
       resetConversation();
       startConversation();
+    }
+
+    saveState();
+    trackEvent('chat_open');
+  }
+
+  // Open path from the hero CTA. The hero already delivered the value pitch
+  // and the explicit "start" action, so skip the chat's intro greeting +
+  // "Find my perfect shade" button and jump straight to the preference
+  // question. Only fires for fresh sessions — the init() flow short-circuits
+  // to restoreFromState when there are saved messages, so this is never
+  // reached mid-conversation.
+  function openChatFromHero() {
+    if (isOpen) return;
+    isOpen = true;
+    dismissGreeting();
+
+    if (!panel) buildPanel();
+    panel.classList.add('gleame-chat-visible');
+    updateBubbleIcon(true);
+    lockBodyScroll();
+
+    if (messages.length === 0) {
+      resetConversation();
+      startConversationFromHero();
     }
 
     saveState();
@@ -485,6 +730,26 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       buttons: [{ label: config.recommendButtonText || 'Find my perfect shade', action: 'recommend' }],
       consumed: false,
     });
+  }
+
+  // Entry point when the user came in through the hero CTA. Jumps straight
+  // to the preference question — the hero already played the role of intro
+  // greeting + "start" button, so repeating either feels redundant.
+  function startConversationFromHero() {
+    trackEvent('chat_recommend_start');
+    conversationEnded = false;
+    pushMessage({
+      type: 'bot-text',
+      text: config.preferenceQuestion || 'What kind of look are you going for?',
+    });
+    var configured = config.preferenceOptions;
+    var options = (Array.isArray(configured) && configured.length > 0)
+      ? configured
+      : ['Natural', 'Bold', 'Glossy', 'Surprise me'];
+    var buttons = options.map(function(opt) {
+      return { label: opt, action: 'preference:' + opt };
+    });
+    pushMessage({ type: 'bot-buttons', buttons: buttons, consumed: false });
   }
 
   function handleButtonClick(action, label, sourceMsg) {
@@ -917,6 +1182,15 @@ console.log('Gleame Chat Assistant v1.0 loaded');
         shopLink.href = '/search?type=product&q=' + encodeURIComponent(searchQuery);
       }
       shopLink.textContent = 'Shop This';
+      // Mark chat as closed before navigating — otherwise the saved state
+      // (isOpen: true) auto-reopens the fullscreen panel on the destination
+      // page and covers the product the user just tapped to see.
+      shopLink.addEventListener('click', function() {
+        isOpen = false;
+        pendingRequest = false;
+        unlockBodyScroll();
+        saveState();
+      });
       info.appendChild(shopLink);
 
       cardInner.appendChild(info);
