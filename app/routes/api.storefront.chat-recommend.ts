@@ -17,6 +17,7 @@ import {
   getChatAssistantConfig,
   trackTransformationEvent,
   getVariantsForProducts,
+  pickVariantsByCriteria,
 } from "../lib/supabase.server";
 import { checkRateLimit, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
 import { safeFetch } from "../lib/safe-fetch.server";
@@ -140,6 +141,33 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // preference is accepted as a form field for future category-based filtering;
     // currently not used to avoid rejecting requests when the field is empty.
 
+    // criteria is a JSON object of axis_key → axis_value, e.g.
+    // {"undertone":"warm"} or {"undertone":"warm","depth":"fair"}. The
+    // widget sends this for shops with a recommendation matrix configured.
+    // We parse defensively — malformed criteria just falls through to the
+    // legacy AI-pick path instead of erroring the whole request.
+    let criteria: Record<string, string> = {};
+    try {
+      const raw = formData.get("criteria");
+      if (typeof raw === "string" && raw.length > 0) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          // Both keys and values must match the same identifier shape used
+          // in the schema's CHECK constraints (lower snake_case). Anything
+          // else is dropped — a malformed payload becomes empty criteria,
+          // which silently falls through to the legacy AI-pick path.
+          const ID_RE = /^[a-z_][a-z0-9_]*$/;
+          for (const [k, v] of Object.entries(parsed)) {
+            if (typeof v === "string" && ID_RE.test(k) && ID_RE.test(v)) {
+              criteria[k] = v;
+            }
+          }
+        }
+      }
+    } catch {
+      // Malformed criteria — ignore, fall through to AI fallback.
+    }
+
     if (!imageFile || !shopDomain) {
       return json(
         { error: "Missing required fields: image, shopDomain" },
@@ -227,7 +255,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       reference_image_urls?: string[];
     };
 
-    type Candidate = { product: Product; variant: Variant | null };
+    // matrixRank is the merchant's authored rank when this candidate came
+    // from a matrix rule (1 = top match). Undefined for AI-pick candidates.
+    // We surface it on the response so the widget's "Top Match" badge
+    // tracks the merchant's intent rather than the response array index —
+    // important when rank-1 fails to transform and rank-2 takes its place
+    // in the response, but the merchant still wanted their rank-1 badged
+    // (or in this case, just preserves whichever merchant rank actually
+    // succeeded).
+    type Candidate = { product: Product; variant: Variant | null; matrixRank?: number };
 
     // Build a flat candidate pool: one entry per configured variant, plus one
     // entry for any product without variants. This lets the assistant recommend
@@ -260,29 +296,70 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       );
     }
 
-    // Uniform Fisher-Yates shuffle
-    const shuffled = [...candidates];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    // -----------------------------------------------------------------
+    // Matrix path: if the merchant has a recommendation matrix and the
+    // criteria matches a rule, the variants are pre-selected and pre-
+    // ordered by rank. We honor that exactly — no shuffle, no diversity
+    // pass — so the merchant's curated picks come through unchanged.
+    //
+    // If the matrix doesn't apply (criteria empty, no matching rule, or
+    // matched variants aren't in the eligible candidate pool), we fall
+    // through to the legacy AI-pick path below.
+    // -----------------------------------------------------------------
+    let ordered: Candidate[];
+    let matrixApplied = false;
+
+    if (Object.keys(criteria).length > 0) {
+      const matrixHits = await pickVariantsByCriteria(verifiedShop.id, criteria);
+      if (matrixHits && matrixHits.length > 0) {
+        const variantById = new Map<string, Variant>();
+        for (const v of variants) variantById.set(v.id, v);
+        const productById = new Map<string, Product>();
+        for (const p of productList) productById.set(p.id, p);
+
+        const matched: Candidate[] = [];
+        for (const hit of matrixHits) {
+          const v = variantById.get(hit.variantInternalId);
+          if (!v) continue; // rule references a variant not in scope; skip
+          const p = productById.get(v.product_id);
+          if (!p) continue;
+          matched.push({ product: p, variant: v, matrixRank: hit.rank });
+        }
+
+        if (matched.length > 0) {
+          ordered = matched;
+          matrixApplied = true;
+        } else {
+          ordered = candidates;
+        }
+      } else {
+        ordered = candidates;
+      }
+    } else {
+      ordered = candidates;
     }
 
-    // Diversity pass: prefer one variant per product so a shop with one
-    // multi-variant product can't fill every recommendation slot with shades
-    // of the same item. Repeats from the same product are kept as a tail
-    // fallback for catalogs smaller than `desiredCount`.
-    const seenProducts = new Set<string>();
-    const uniquePassFirst: Candidate[] = [];
-    const uniquePassRest: Candidate[] = [];
-    for (const c of shuffled) {
-      if (seenProducts.has(c.product.id)) {
-        uniquePassRest.push(c);
-      } else {
-        seenProducts.add(c.product.id);
-        uniquePassFirst.push(c);
+    // Legacy AI-pick path: only when the matrix didn't deliver. Uniform
+    // shuffle + diversity-by-product pass, same as before.
+    if (!matrixApplied) {
+      const shuffled = [...candidates];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
       }
+      const seenProducts = new Set<string>();
+      const uniquePassFirst: Candidate[] = [];
+      const uniquePassRest: Candidate[] = [];
+      for (const c of shuffled) {
+        if (seenProducts.has(c.product.id)) {
+          uniquePassRest.push(c);
+        } else {
+          seenProducts.add(c.product.id);
+          uniquePassFirst.push(c);
+        }
+      }
+      ordered = uniquePassFirst.concat(uniquePassRest);
     }
-    const ordered = uniquePassFirst.concat(uniquePassRest);
 
     // Convert image to base64 once
     const arrayBuffer = await imageFile.arrayBuffer();
@@ -376,6 +453,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           variantTitle,
           tryOnPreview: result.generatedImage ?? null,
           error: result.success ? null : (result.error || "Transform failed"),
+          matrixRank: candidate.matrixRank,
         };
       } catch (err) {
         console.error(`Chat recommend transform error for ${product.id}${variant ? `/${variant.id}` : ""}:`, err);
@@ -389,6 +467,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           variantTitle,
           tryOnPreview: null,
           error: "Transform failed",
+          matrixRank: candidate.matrixRank,
         };
       }
     };
@@ -421,12 +500,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       verifiedDomain,
       finalSuccessful.map((r) => r.productId).filter((id): id is string => Boolean(id)),
     );
-    const recommendations = finalSuccessful.map((r) => {
+    // Annotate each recommendation with rank for the widget's "Top Match"
+    // badge. For matrix-applied responses we preserve the merchant's
+    // authored rank (so the badge follows their curated intent, not the
+    // response array index). For AI-pick responses, rank is just the
+    // position in the response. matrixApplied tells the widget which
+    // semantics are in play.
+    const recommendations = finalSuccessful.map((r, idx) => {
+      const effectiveRank = (typeof r.matrixRank === "number" && r.matrixRank > 0)
+        ? r.matrixRank
+        : idx + 1;
+      // Strip matrixRank from the wire — widget only needs `rank`.
+      const { matrixRank: _matrixRank, ...rest } = r;
+      const withRank = { ...rest, rank: effectiveRank };
       const real = r.productId ? realHandles.get(r.productId) : undefined;
-      return real ? { ...r, productHandle: real } : r;
+      return real ? { ...withRank, productHandle: real } : withRank;
     });
 
-    return json({ recommendations }, { headers: CORS_HEADERS });
+    return json({ recommendations, matrixApplied }, { headers: CORS_HEADERS });
   } catch (err) {
     console.error("Chat recommend error:", err);
     return json(

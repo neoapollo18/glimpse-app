@@ -71,6 +71,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       preferenceOptions: config.preference_options,
       photoUploadMessage: config.photo_upload_message,
       numRecommendations: config.num_recommendations,
+      // Header subtitle copy. {count} in done-status is replaced client-side
+      // when the recommendation count is known.
+      headerIdleStatus: renderTokens(config.header_idle_status),
+      headerWorkingStatus: renderTokens(config.header_working_status),
+      headerDoneStatus: renderTokens(config.header_done_status),
+      // Loading hero copy.
+      loadingCaption: renderTokens(config.loading_caption),
+      loadingSteps: Array.isArray(config.loading_steps)
+        ? config.loading_steps.map((s) => renderTokens(s))
+        : [],
       hero: {
         enabled: config.hero_enabled,
         eyebrow: renderTokens(config.hero_eyebrow),

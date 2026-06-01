@@ -189,29 +189,44 @@
   max-height: 80vh !important;
 }
 
-/* Header */
+/* Header — Phase 2 refresh.
+   Mockup shows a soft tinted band (accent color at low alpha) with dark
+   text instead of the old "solid accent + white text" style. Reads as
+   editorial / brand rather than chatbot, and the contrast against the
+   white message area below is calmer. */
 .gleame-chat-header {
   display: flex !important;
   align-items: center !important;
   gap: 12px !important;
   padding: 16px 18px !important;
-  background: var(--gleame-chat-accent-color, #8b5cf6) !important;
-  color: #ffffff !important;
+  background:
+    linear-gradient(135deg,
+      color-mix(in srgb, var(--gleame-chat-accent-color, #8b5cf6) 18%, #ffffff) 0%,
+      color-mix(in srgb, var(--gleame-chat-accent-color, #8b5cf6) 10%, #ffffff) 100%) !important;
+  color: #1f2937 !important;
   flex-shrink: 0 !important;
   margin: 0 !important;
   border: none !important;
+}
+
+/* color-mix fallback */
+@supports not (background: color-mix(in srgb, red 50%, white)) {
+  .gleame-chat-header {
+    background: #fbeaff !important;
+  }
 }
 
 .gleame-chat-header-avatar {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
+  background: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   flex-shrink: 0;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
 
 .gleame-chat-header-avatar img {
@@ -221,19 +236,62 @@
   border-radius: 50%;
 }
 
+/* Initial-letter avatar: white circle, accent-colored letter. Only
+   applied when no uploaded avatar exists. */
+.gleame-chat-header-avatar-initial .gleame-chat-header-avatar-letter {
+  font-family: Georgia, 'Times New Roman', serif !important;
+  font-weight: 700 !important;
+  font-size: 20px !important;
+  color: var(--gleame-chat-accent-color, #8b5cf6) !important;
+  line-height: 1 !important;
+}
+
 .gleame-chat-header-info {
   flex: 1;
+  min-width: 0;
 }
 
-.gleame-chat-header-name {
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 1.2;
+#gleame-chat-root .gleame-chat-header-name-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  line-height: 1.2 !important;
 }
 
-.gleame-chat-header-status {
-  font-size: 12px;
-  opacity: 0.8;
+#gleame-chat-root .gleame-chat-header-name {
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  line-height: 1.2 !important;
+  color: #111827 !important;
+  letter-spacing: -0.005em !important;
+}
+
+/* Online / working presence dot. Green = idle, accent-color throbbing
+   when working — easy visual signal that the request is in flight. */
+.gleame-chat-header-presence-dot {
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 50% !important;
+  background: #22c55e !important;
+  flex-shrink: 0 !important;
+}
+
+.gleame-chat-header-presence-dot.gleame-chat-header-presence-working {
+  background: var(--gleame-chat-accent-color, #8b5cf6) !important;
+  animation: gleame-chat-presence-pulse 1.2s ease-in-out infinite !important;
+}
+
+@keyframes gleame-chat-presence-pulse {
+  0%, 100% { opacity: 0.45; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+#gleame-chat-root .gleame-chat-header-status {
+  font-size: 12px !important;
+  color: var(--gleame-chat-accent-color, #8b5cf6) !important;
+  line-height: 1.3 !important;
+  opacity: 0.95 !important;
+  margin-top: 2px !important;
 }
 
 .gleame-chat-header-actions {
@@ -254,8 +312,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.7);
-  transition: color 0.15s;
+  color: rgba(31, 41, 55, 0.55);
+  transition: color 0.15s, background 0.15s;
   flex-shrink: 0;
   padding: 0;
   -webkit-tap-highlight-color: transparent;
@@ -264,21 +322,22 @@
 
 .gleame-chat-header-expand:hover,
 .gleame-chat-header-reset:hover {
-  color: #ffffff;
+  color: #111827;
+  background: rgba(0, 0, 0, 0.04);
 }
 
 .gleame-chat-header-close {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.7);
+  color: #6b7280;
   border: none;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #ffffff;
-  transition: background 0.15s;
+  transition: background 0.15s, color 0.15s;
   flex-shrink: 0;
   padding: 0;
   -webkit-tap-highlight-color: transparent;
@@ -286,7 +345,8 @@
 }
 
 .gleame-chat-header-close:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: #ffffff;
+  color: #111827;
 }
 
 /* Messages area */
@@ -413,29 +473,11 @@
   to { transform: rotate(360deg); }
 }
 
-/* Loading row (no bubble) — shown while photos generate.
-   Mirrors Claude's "thinking" treatment: bare row, logo shimmer, cycling text. */
-.gleame-chat-loading-row {
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 6px !important;
-  padding: 6px 2px !important;
-  background: transparent !important;
-  color: #111827 !important;
-  font-size: 14px !important;
-  line-height: 1.45 !important;
-}
-
-.gleame-chat-loading-logo-wrap {
-  width: 22px !important;
-  height: 22px !important;
-  flex-shrink: 0 !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  animation: gleame-chat-loading-breathe 1.6s ease-in-out infinite !important;
-}
-
+/* Inner SVG animations used by buildGleameLoadingLogoSVG() — still active
+   inside the new loading hero's logo wrap. The outer wrap rules from the
+   old loading-row treatment (.gleame-chat-loading-row, -logo-wrap, -text,
+   -wipe-in and their keyframes) were removed when the loading hero
+   replaced the loading row in Phase 2. */
 .gleame-chat-loading-logo {
   width: 100% !important;
   height: 100% !important;
@@ -450,25 +492,6 @@
   animation: gleame-chat-loading-p2 1.4s ease-in-out infinite !important;
 }
 
-.gleame-chat-loading-text {
-  display: inline-block !important;
-  color: #111827 !important;
-  font-weight: 400 !important;
-}
-
-.gleame-chat-loading-text::after {
-  content: '...';
-  display: inline-block;
-  width: 1em;
-  overflow: hidden;
-  vertical-align: bottom;
-  animation: gleame-chat-loading-ellipsis 1.4s steps(4, end) infinite;
-}
-
-.gleame-chat-wipe-in {
-  animation: gleame-chat-wipe-in 300ms cubic-bezier(0.22, 0.61, 0.36, 1) !important;
-}
-
 @keyframes gleame-chat-loading-p1 {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.25; }
@@ -479,19 +502,139 @@
   50% { opacity: 1; }
 }
 
-@keyframes gleame-chat-loading-breathe {
-  0%, 100% { transform: scale(0.94); }
-  50% { transform: scale(1); }
+/* ---- Loading hero (Phase 2): caption + halo + 3-step checklist ----
+   Replaces the old small loading-row when generating recommendations.
+   Mockup uses an accent-color halo around a sparkle icon + a checklist
+   that ticks off cosmetically on a 2.5s-per-step timer. The last step
+   stays in "active" state until the API responds. */
+#gleame-chat-root .gleame-chat-loading-hero {
+  max-width: 100% !important;
+  align-self: stretch !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 14px !important;
+  padding: 18px 8px 22px !important;
 }
 
-@keyframes gleame-chat-wipe-in {
-  from { clip-path: inset(0 100% 0 0); opacity: 0.3; }
-  to { clip-path: inset(0 0 0 0); opacity: 1; }
+#gleame-chat-root .gleame-chat-loading-hero-caption {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  font-size: 14px !important;
+  color: #374151 !important;
+  line-height: 1.4 !important;
+  align-self: flex-start !important;
 }
 
-@keyframes gleame-chat-loading-ellipsis {
-  0% { width: 0; }
-  100% { width: 1em; }
+#gleame-chat-root .gleame-chat-loading-hero-caption-text {
+  font-weight: 500 !important;
+}
+
+#gleame-chat-root .gleame-chat-loading-hero-logo-wrap {
+  width: 22px !important;
+  height: 22px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+}
+
+#gleame-chat-root .gleame-chat-loading-hero-halo {
+  width: 92px !important;
+  height: 92px !important;
+  border-radius: 50% !important;
+  border: 5px solid var(--gleame-chat-accent-color, #8b5cf6) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: var(--gleame-chat-accent-color, #8b5cf6) !important;
+  margin: 6px 0 !important;
+  position: relative !important;
+  animation: gleame-chat-loading-hero-pulse 1.6s ease-in-out infinite !important;
+}
+
+#gleame-chat-root .gleame-chat-loading-hero-halo svg {
+  width: 36px !important;
+  height: 36px !important;
+}
+
+/* Halo pulse uses transform + opacity only (no color-bound box-shadow) so
+   the animation tracks any accent color the merchant has set, not just a
+   hardcoded purple. The accent shows through via the static `border` and
+   `color` properties above. */
+@keyframes gleame-chat-loading-hero-pulse {
+  0%, 100% { transform: scale(0.96); opacity: 0.85; }
+  50% { transform: scale(1); opacity: 1; }
+}
+
+#gleame-chat-root .gleame-chat-loading-hero-steps {
+  list-style: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  align-self: stretch !important;
+}
+
+#gleame-chat-root .gleame-chat-loading-hero-step {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  font-size: 14px !important;
+  color: #9ca3af !important;
+  line-height: 1.4 !important;
+  transition: color 0.3s ease !important;
+}
+
+#gleame-chat-root .gleame-chat-loading-hero-step.gleame-chat-loading-hero-step-active {
+  color: var(--gleame-chat-accent-color, #8b5cf6) !important;
+}
+
+#gleame-chat-root .gleame-chat-loading-hero-step.gleame-chat-loading-hero-step-done {
+  color: #374151 !important;
+}
+
+#gleame-chat-root .gleame-chat-loading-hero-step-mark {
+  width: 18px !important;
+  height: 18px !important;
+  border-radius: 50% !important;
+  border: 1.5px solid #d1d5db !important;
+  position: relative !important;
+  flex-shrink: 0 !important;
+  background: transparent !important;
+  transition: border-color 0.3s, background 0.3s !important;
+}
+
+/* Active state: spinning ring in accent color */
+.gleame-chat-loading-hero-step-active .gleame-chat-loading-hero-step-mark {
+  border-color: var(--gleame-chat-accent-color, #8b5cf6) !important;
+  border-top-color: transparent !important;
+  animation: gleame-chat-loading-hero-step-spin 0.9s linear infinite !important;
+}
+
+@keyframes gleame-chat-loading-hero-step-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Done state: filled check mark */
+.gleame-chat-loading-hero-step-done .gleame-chat-loading-hero-step-mark {
+  border-color: #22c55e !important;
+  background: transparent !important;
+  animation: none !important;
+}
+
+.gleame-chat-loading-hero-step-done .gleame-chat-loading-hero-step-mark::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 6px;
+  height: 10px;
+  border: solid #22c55e;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
 }
 
 /* Typing indicator */
@@ -808,24 +951,29 @@
   .gleame-chat-card-enter,
   .gleame-chat-msg,
   .gleame-chat-loading-dots i,
-  .gleame-chat-loading-logo-wrap,
   .gleame-chat-loading-logo-p1,
   .gleame-chat-loading-logo-p2,
-  .gleame-chat-loading-text,
-  .gleame-chat-loading-text::after,
-  .gleame-chat-wipe-in,
   .gleame-chat-skeleton-image,
   .gleame-chat-skeleton-line,
   .gleame-chat-skeleton-btn,
   .gleame-chat-bubble,
   .gleame-hero,
-  .gleame-hero-cta {
+  .gleame-hero-cta,
+  .gleame-chat-loading-hero-halo,
+  .gleame-chat-loading-hero-step-mark,
+  .gleame-chat-loading-hero-step-active .gleame-chat-loading-hero-step-mark,
+  .gleame-chat-header-presence-dot {
     animation: none !important;
     transition: none !important;
   }
   .gleame-chat-image-reveal { opacity: 1 !important; filter: none !important; transform: none !important; }
   /* Hero shouldn't slide in for motion-sensitive users — render in place */
   .gleame-hero { transform: none !important; opacity: 1 !important; }
+  /* Active loading step keeps its accent ring but doesn't spin; checkmarks
+     still fade in cosmetically via the JS class toggle. */
+  .gleame-chat-loading-hero-step-active .gleame-chat-loading-hero-step-mark {
+    border-top-color: var(--gleame-chat-accent-color, #8b5cf6) !important;
+  }
 }
 
 /* Disclaimer (minimal footer) */

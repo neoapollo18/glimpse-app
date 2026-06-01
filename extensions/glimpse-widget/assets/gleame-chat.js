@@ -67,9 +67,17 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   var preference = null;
   var pendingRequest = false;
   var heroDismissed = false;
+  // Multi-question matrix flow: criteria builds up as user answers, sent
+  // with the photo to /chat-recommend so the server can do a matrix lookup
+  // instead of having the LLM pick variants.
+  var criteria = {};
+  // Index into recommendationFlow.questions for the next question to ask.
+  // Restored from session to survive page nav mid-conversation.
+  var questionIndex = 0;
 
   // ---- Session-only state ----
   var config = null;
+  var recommendationFlow = null; // { questions, photoAxes, configured }
   var greetingShown = false;
   var inFlightRequest = null;
   var heroEl = null;
@@ -106,6 +114,8 @@ console.log('Gleame Chat Assistant v1.0 loaded');
         preference: preference,
         pendingRequest: pendingRequest,
         heroDismissed: heroDismissed,
+        criteria: criteria,
+        questionIndex: questionIndex,
       };
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (e) {
@@ -142,6 +152,8 @@ console.log('Gleame Chat Assistant v1.0 loaded');
           preference: preference,
           pendingRequest: pendingRequest,
           heroDismissed: heroDismissed,
+          criteria: criteria,
+          questionIndex: questionIndex,
         }));
       } catch (e2) {
         // Give up silently
@@ -166,12 +178,24 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   }
 
   // ---- Init ----
+  // Fetches both endpoints in parallel: chat-config controls the widget
+  // itself, recommendation-config drives the multi-question matrix flow.
+  // The widget works even if recommendation-config is empty — falls back
+  // to the legacy single-preference flow from chatConfig.
   function init() {
-    fetch(SHOPIFY_APP_URL + '/api/storefront/chat-config?shopDomain=' + encodeURIComponent(shopDomain))
-    .then(function(res) { return res.json(); })
-    .then(function(data) {
-      if (!data.enabled) return;
+    Promise.all([
+      fetch(SHOPIFY_APP_URL + '/api/storefront/chat-config?shopDomain=' + encodeURIComponent(shopDomain))
+        .then(function(res) { return res.json(); }),
+      fetch(SHOPIFY_APP_URL + '/api/storefront/recommendation-config?shopDomain=' + encodeURIComponent(shopDomain))
+        .then(function(res) { return res.ok ? res.json() : null; })
+        .catch(function() { return null; }),
+    ])
+    .then(function(results) {
+      var data = results[0];
+      var flow = results[1];
+      if (!data || !data.enabled) return;
       config = data;
+      recommendationFlow = (flow && flow.configured) ? flow : null;
       root.style.display = '';
       applyColors();
       renderBubble();
@@ -228,6 +252,8 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     conversationEnded = !!saved.conversationEnded;
     preference = saved.preference || null;
     panelExpanded = !!saved.panelExpanded;
+    criteria = (saved.criteria && typeof saved.criteria === 'object') ? saved.criteria : {};
+    questionIndex = typeof saved.questionIndex === 'number' ? saved.questionIndex : 0;
 
     // Build the panel and re-render the persisted conversation
     if (!panel) buildPanel();
@@ -259,6 +285,12 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       updateBubbleIcon(true);
       lockBodyScroll();
     }
+
+    // Reflect the most-likely status given saved state: done if results
+    // already arrived, idle otherwise. Working state isn't preserved (the
+    // restoreFromState path injects a "request cancelled" message instead).
+    var hasResults = messages.some(function(m) { return m.type === 'bot-cards'; });
+    setHeaderStatus(hasResults ? 'done' : 'idle');
 
     trackEvent('widget_view');
   }
@@ -588,11 +620,14 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     isOpen = false;
 
     // Abort any pending recommendation request and leave a recovery point
-    // so reopening doesn't strand the user mid-loading.
+    // so reopening doesn't strand the user mid-loading. Header status
+    // returns to idle so the next open doesn't show "Working on it…" for
+    // a request that's no longer running.
     if (inFlightRequest) {
       try { inFlightRequest.abort(); } catch (e) {}
       inFlightRequest = null;
       removeLoadingMsg();
+      setHeaderStatus('idle');
       pushMessage({ type: 'bot-text', text: "Your request was cancelled." });
       pushMessage({ type: 'bot-buttons', buttons: [{ label: 'Try again', action: 'recommend' }], consumed: false });
       conversationEnded = true;
@@ -621,12 +656,15 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     conversationEnded = false;
     preference = null;
     pendingRequest = false;
+    criteria = {};
+    questionIndex = 0;
     cardsAnchorEl = null;
     if (messagesContainer) {
       while (messagesContainer.firstChild) {
         messagesContainer.removeChild(messagesContainer.firstChild);
       }
     }
+    setHeaderStatus('idle');
   }
 
   function updateBubbleIcon(showClose) {
@@ -659,14 +697,21 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     if (config.avatarUrl) {
       avatarWrap.innerHTML = '<img src="' + escapeHtml(config.avatarUrl) + '" alt="">';
     } else {
-      avatarWrap.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+      // Initial-letter fallback — feels deliberate and on-brand vs the
+      // generic person silhouette. Letter inherits header text color.
+      var initial = (config.assistantName || '').trim().charAt(0).toUpperCase() || '·';
+      avatarWrap.classList.add('gleame-chat-header-avatar-initial');
+      avatarWrap.innerHTML = '<span class="gleame-chat-header-avatar-letter">' + escapeHtml(initial) + '</span>';
     }
 
     var info = document.createElement('div');
     info.className = 'gleame-chat-header-info';
     info.innerHTML =
-      '<div class="gleame-chat-header-name">' + escapeHtml(config.assistantName) + '</div>' +
-      '<div class="gleame-chat-header-status">Online</div>';
+      '<div class="gleame-chat-header-name-row">' +
+        '<span class="gleame-chat-header-name">' + escapeHtml(config.assistantName) + '</span>' +
+        '<span class="gleame-chat-header-presence-dot" aria-hidden="true"></span>' +
+      '</div>' +
+      '<div class="gleame-chat-header-status">' + escapeHtml(headerStatusText('idle')) + '</div>';
 
     expandSvgStr = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
     shrinkSvgStr = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
@@ -714,6 +759,47 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     root.appendChild(panel);
   }
 
+  // ---- Header status ----
+  // Single-source state machine for the line under the assistant's name.
+  // Three states: idle (advisor tagline), working (during /chat-recommend),
+  // done (recommendation count) after results arrive. All strings come from
+  // the server-rendered config so merchants can re-skin the chat without
+  // touching the bundle.
+  function headerStatusText(state, count) {
+    if (!config) return '';
+    if (state === 'working') return config.headerWorkingStatus || 'Working on it…';
+    if (state === 'done') {
+      // Count fallback: if not passed in, look at saved messages for a
+      // bot-cards entry — supports restoreFromState which doesn't know the
+      // count at call time. Written defensively (no optional chaining) to
+      // stay in the same ES5-style as the rest of the widget.
+      var n = (typeof count === 'number' && count > 0) ? count : 0;
+      if (n === 0) {
+        for (var i = 0; i < messages.length; i++) {
+          var m = messages[i];
+          if (m && m.type === 'bot-cards' && m.recommendations && m.recommendations.length) {
+            n = m.recommendations.length;
+            break;
+          }
+        }
+      }
+      var template = config.headerDoneStatus || 'Your {count} perfect picks';
+      return template.replace(/\{count\}/g, String(n || 0));
+    }
+    return config.headerIdleStatus || '';
+  }
+
+  function setHeaderStatus(state, count) {
+    if (!panel) return;
+    var el = panel.querySelector('.gleame-chat-header-status');
+    if (el) el.textContent = headerStatusText(state, count);
+    var dot = panel.querySelector('.gleame-chat-header-presence-dot');
+    if (dot) {
+      dot.classList.remove('gleame-chat-header-presence-working');
+      if (state === 'working') dot.classList.add('gleame-chat-header-presence-working');
+    }
+  }
+
   // ---- Conversation ----
   // Note: messages within a single conversation step are pushed synchronously
   // (no setTimeout between pushMessage calls). Otherwise navigating mid-delay
@@ -727,24 +813,15 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     });
   }
 
-  // Entry point when the user came in through the hero CTA. Jumps straight
-  // to the preference question — the hero already played the role of intro
-  // greeting + "start" button, so repeating either feels redundant.
+  // Entry point when the user came in through the hero CTA. Skips the
+  // chat's intro greeting + "Find my perfect shade" button (the hero
+  // already played that role) and starts the recommendation flow directly.
   function startConversationFromHero() {
     trackEvent('chat_recommend_start');
     conversationEnded = false;
-    pushMessage({
-      type: 'bot-text',
-      text: config.preferenceQuestion || 'What kind of look are you going for?',
-    });
-    var configured = config.preferenceOptions;
-    var options = (Array.isArray(configured) && configured.length > 0)
-      ? configured
-      : ['Natural', 'Bold', 'Glossy', 'Surprise me'];
-    var buttons = options.map(function(opt) {
-      return { label: opt, action: 'preference:' + opt };
-    });
-    pushMessage({ type: 'bot-buttons', buttons: buttons, consumed: false });
+    criteria = {};
+    questionIndex = 0;
+    startRecommendFlow();
   }
 
   function handleButtonClick(action, label, sourceMsg) {
@@ -756,29 +833,104 @@ console.log('Gleame Chat Assistant v1.0 loaded');
 
     if (action === 'recommend') {
       trackEvent('chat_recommend_start');
-      // If we're restarting after a finished flow, allow further messages
       conversationEnded = false;
-
-      pushMessage({ type: 'bot-text', text: config.preferenceQuestion || 'What kind of look are you going for?' });
-      var configured = config.preferenceOptions;
-      var options = (Array.isArray(configured) && configured.length > 0)
-        ? configured
-        : ['Natural', 'Bold', 'Glossy', 'Surprise me'];
-      var buttons = options.map(function(opt) {
-        return { label: opt, action: 'preference:' + opt };
-      });
-      pushMessage({ type: 'bot-buttons', buttons: buttons, consumed: false });
+      criteria = {};
+      questionIndex = 0;
+      startRecommendFlow();
       return;
     }
 
+    // Question-answer action from the new matrix flow:
+    // "qa:<axisKey>:<axisValue>" — record the criteria value, push the
+    // configured bot response if any, then either ask the next question
+    // or move to photo upload.
+    if (action.indexOf('qa:') === 0) {
+      handleQuestionAnswer(action.slice(3));
+      return;
+    }
+
+    // Legacy single-preference action — used when no recommendation matrix
+    // is configured. preference: prefix preserved for backward compat.
     if (action.indexOf('preference:') === 0) {
       preference = action.replace('preference:', '');
-
-      var photoMsg = config.photoUploadMessage
-        || "Take a photo or upload one and I'll show you what looks best on you!";
-      pushMessage({ type: 'bot-text', text: photoMsg });
-      pushMessage({ type: 'bot-upload', consumed: false });
+      askForPhoto();
     }
+  }
+
+  // Starts the recommend flow. Three paths:
+  //   1. Matrix with user questions → ask them, collect criteria, then photo
+  //   2. Matrix with only photo axes → skip straight to photo upload (the
+  //      server will fill in photo-derived criteria); the legacy preference
+  //      question would just record an unused "preference" string here
+  //   3. No matrix configured → legacy single preference prompt
+  function startRecommendFlow() {
+    if (recommendationFlow && recommendationFlow.questions.length > 0) {
+      askNextQuestion();
+      return;
+    }
+    if (recommendationFlow) {
+      // Matrix is configured (configured===true on the server only when
+      // there's at least one user-question OR photo axis) but it has only
+      // photo axes — no user questions to ask. Go straight to photo.
+      askForPhoto();
+      return;
+    }
+    pushMessage({
+      type: 'bot-text',
+      text: config.preferenceQuestion || 'What kind of look are you going for?',
+    });
+    var configured = config.preferenceOptions;
+    var opts = (Array.isArray(configured) && configured.length > 0)
+      ? configured
+      : ['Natural', 'Bold', 'Glossy', 'Surprise me'];
+    var buttons = opts.map(function(opt) {
+      return { label: opt, action: 'preference:' + opt };
+    });
+    pushMessage({ type: 'bot-buttons', buttons: buttons, consumed: false });
+  }
+
+  function askNextQuestion() {
+    var q = recommendationFlow.questions[questionIndex];
+    if (!q) {
+      askForPhoto();
+      return;
+    }
+    pushMessage({ type: 'bot-text', text: q.prompt });
+    var buttons = (q.options || []).map(function(opt) {
+      return { label: opt.label, action: 'qa:' + q.axisKey + ':' + opt.axisValue };
+    });
+    pushMessage({ type: 'bot-buttons', buttons: buttons, consumed: false });
+  }
+
+  // Action payload after the "qa:" prefix is stripped: "<axisKey>:<axisValue>".
+  // Records the criteria, plays back the merchant-configured bot personality
+  // response for the chosen option, then advances.
+  function handleQuestionAnswer(payload) {
+    var firstColon = payload.indexOf(':');
+    if (firstColon < 0) return;
+    var axisKey = payload.slice(0, firstColon);
+    var axisValue = payload.slice(firstColon + 1);
+    criteria[axisKey] = axisValue;
+
+    var q = recommendationFlow && recommendationFlow.questions[questionIndex];
+    var chosen = q && (q.options || []).find(function(o) { return o.axisValue === axisValue; });
+    if (chosen && chosen.botResponse) {
+      pushMessage({ type: 'bot-text', text: chosen.botResponse });
+    }
+
+    questionIndex++;
+    if (recommendationFlow && questionIndex < recommendationFlow.questions.length) {
+      askNextQuestion();
+    } else {
+      askForPhoto();
+    }
+  }
+
+  function askForPhoto() {
+    var photoMsg = config.photoUploadMessage
+      || "Take a photo or upload one and I'll show you what looks best on you!";
+    pushMessage({ type: 'bot-text', text: photoMsg });
+    pushMessage({ type: 'bot-upload', consumed: false });
   }
 
   function handlePhotoUpload(file, uploadMsg) {
@@ -807,13 +959,18 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     }, 600);
   }
 
-  var LOADING_PHRASES = [
-    'Analyzing characteristics',
+  // Loading caption + 3-step checklist both come from chat-config so
+  // merchants can re-skin without code changes. Each step "completes"
+  // cosmetically on a fixed 2.5s timer — purely visual, doesn't reflect
+  // real backend progress. The last step keeps spinning until
+  // removeLoadingMsg fires when the API returns.
+  var LOADING_STEPS_FALLBACK = [
+    'Analyzing your photo',
     'Personalizing results',
-    'Applying to your photo',
-    'Finishing touches',
+    'Visualizing your picks',
   ];
-  var loadingPhraseInterval = null;
+  var LOADING_CAPTION_FALLBACK = 'Working on your recommendations…';
+  var loadingStepInterval = null;
 
   var gleameLoadingLogoCounter = 0;
   function buildGleameLoadingLogoSVG() {
@@ -839,45 +996,68 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     );
   }
 
+  // Renders the big loading state from the Phase 2 mockups: caption row,
+  // accent-color halo with sparkle, and a 3-step checklist that ticks off
+  // on a cosmetic timer (no real backend progress signal). Replaces the
+  // old single-line loading row.
   function renderLoadingSpinner() {
     var wrap = document.createElement('div');
     wrap.id = 'gleame-chat-loading-msg';
-    wrap.className = 'gleame-chat-msg gleame-chat-msg-bot gleame-chat-loading-row';
+    wrap.className = 'gleame-chat-msg gleame-chat-msg-bot gleame-chat-loading-hero';
     wrap.setAttribute('role', 'status');
     wrap.setAttribute('aria-live', 'polite');
 
-    var logo = document.createElement('span');
-    logo.className = 'gleame-chat-loading-logo-wrap';
-    logo.setAttribute('aria-hidden', 'true');
-    logo.innerHTML = buildGleameLoadingLogoSVG();
+    var configSteps = (config && Array.isArray(config.loadingSteps) && config.loadingSteps.length > 0)
+      ? config.loadingSteps
+      : LOADING_STEPS_FALLBACK;
+    // Clamp to 3 — CSS layout assumes ≤3 rows; merchants entering more
+    // would distort the hero.
+    var steps = configSteps.slice(0, 3);
+    var caption = (config && config.loadingCaption) || LOADING_CAPTION_FALLBACK;
 
-    var text = document.createElement('span');
-    text.className = 'gleame-chat-loading-text';
-    text.textContent = LOADING_PHRASES[0];
+    var stepsHtml = steps.map(function(label, i) {
+      return (
+        '<li class="gleame-chat-loading-hero-step" data-step="' + i + '">' +
+          '<span class="gleame-chat-loading-hero-step-mark" aria-hidden="true"></span>' +
+          '<span class="gleame-chat-loading-hero-step-label">' + escapeHtml(label) + '</span>' +
+        '</li>'
+      );
+    }).join('');
 
-    wrap.appendChild(logo);
-    wrap.appendChild(text);
+    wrap.innerHTML =
+      '<div class="gleame-chat-loading-hero-caption">' +
+        '<span class="gleame-chat-loading-hero-logo-wrap" aria-hidden="true">' + buildGleameLoadingLogoSVG() + '</span>' +
+        '<span class="gleame-chat-loading-hero-caption-text">' + escapeHtml(caption) + '</span>' +
+      '</div>' +
+      '<div class="gleame-chat-loading-hero-halo" aria-hidden="true">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' +
+          '<path d="M12 3.5l1.3 3.8L17 8.5l-3.7 1.3L12 13.5l-1.3-3.7L7 8.5l3.7-1.2z"/>' +
+          '<path d="M18.5 14.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" opacity=".7"/>' +
+        '</svg>' +
+      '</div>' +
+      '<ul class="gleame-chat-loading-hero-steps">' + stepsHtml + '</ul>';
+
+    // First step starts active; the rest are pending.
+    var stepEls = wrap.querySelectorAll('.gleame-chat-loading-hero-step');
+    if (stepEls.length > 0) stepEls[0].classList.add('gleame-chat-loading-hero-step-active');
+
     messagesContainer.appendChild(wrap);
     scrollToBottom();
-    playWipe(text);
 
-    var idx = 0;
-    loadingPhraseInterval = setInterval(function() {
-      if (idx >= LOADING_PHRASES.length - 1) {
-        clearInterval(loadingPhraseInterval);
-        loadingPhraseInterval = null;
+    // Tick through the steps cosmetically: 2.5s per step except the last
+    // (which stays active until removeLoadingMsg cleans up on response).
+    var current = 0;
+    loadingStepInterval = setInterval(function() {
+      if (current >= stepEls.length - 1) {
+        clearInterval(loadingStepInterval);
+        loadingStepInterval = null;
         return;
       }
-      idx++;
-      text.textContent = LOADING_PHRASES[idx];
-      playWipe(text);
-    }, 6000);
-  }
-
-  function playWipe(el) {
-    el.classList.remove('gleame-chat-wipe-in');
-    void el.offsetWidth;
-    el.classList.add('gleame-chat-wipe-in');
+      stepEls[current].classList.remove('gleame-chat-loading-hero-step-active');
+      stepEls[current].classList.add('gleame-chat-loading-hero-step-done');
+      current++;
+      stepEls[current].classList.add('gleame-chat-loading-hero-step-active');
+    }, 2500);
   }
 
   function sendRecommendation(file) {
@@ -885,6 +1065,10 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     formData.append('image', file);
     formData.append('shopDomain', shopDomain);
     formData.append('preference', preference || '');
+    // Criteria JSON is the matrix-flow payload — the server uses it to look
+    // up curated variants. Empty object is fine; server falls back to AI
+    // pick when no criteria match a rule.
+    formData.append('criteria', JSON.stringify(criteria || {}));
 
     if (inFlightRequest) {
       try { inFlightRequest.abort(); } catch (e) {}
@@ -892,6 +1076,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     var controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
     inFlightRequest = controller;
     pendingRequest = true;
+    setHeaderStatus('working');
     saveState();
 
     fetch(SHOPIFY_APP_URL + '/api/storefront/chat-recommend', {
@@ -907,6 +1092,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       if (!isOpen) { saveState(); return; }
       removeLoadingMsg();
       if (data.recommendations && data.recommendations.length > 0) {
+        setHeaderStatus('done', data.recommendations.length);
         pushMessage({ type: 'bot-text', text: "Here's what I found for you! ✨" });
         pushMessage({ type: 'bot-cards', recommendations: data.recommendations });
         pushMessage({ type: 'bot-buttons', buttons: [{ label: 'Start a new search', action: 'recommend' }], consumed: false });
@@ -914,6 +1100,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
         conversationEnded = true;
         saveState();
       } else {
+        setHeaderStatus('idle');
         pushMessage({ type: 'bot-text', text: "Sorry, I couldn't find a match right now." });
         pushMessage({ type: 'bot-buttons', buttons: [{ label: 'Try again', action: 'recommend' }], consumed: false });
         conversationEnded = true;
@@ -927,6 +1114,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       pendingRequest = false;
       if (!isOpen) { saveState(); return; }
       removeLoadingMsg();
+      setHeaderStatus('idle');
       console.error('Gleame Chat: recommend error', err);
       pushMessage({ type: 'bot-text', text: "Something went wrong. Please try again!" });
       pushMessage({ type: 'bot-buttons', buttons: [{ label: 'Try again', action: 'recommend' }], consumed: false });
@@ -1195,9 +1383,9 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   }
 
   function removeLoadingMsg() {
-    if (loadingPhraseInterval) {
-      clearInterval(loadingPhraseInterval);
-      loadingPhraseInterval = null;
+    if (loadingStepInterval) {
+      clearInterval(loadingStepInterval);
+      loadingStepInterval = null;
     }
     var el = document.getElementById('gleame-chat-loading-msg');
     if (el && el.parentNode) el.parentNode.removeChild(el);

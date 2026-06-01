@@ -2144,6 +2144,16 @@ export interface ChatAssistantConfig {
   hero_trust_items: string[];
   hero_show_delay_seconds: number;
   hero_sample_count: number;
+  // Header status state-machine copy (migration 033). header_done_status
+  // supports the {count} token, replaced at render time with the number
+  // of recommendations returned.
+  header_idle_status: string;
+  header_working_status: string;
+  header_done_status: string;
+  // Loading-hero copy (migration 033). loading_steps must be an array of
+  // 3 short strings; the widget ticks through them on a 2.5s timer.
+  loading_caption: string;
+  loading_steps: string[];
 }
 
 const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
@@ -2173,6 +2183,11 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   hero_trust_items: ['60 sec', 'Processed instantly', 'Never stored'],
   hero_show_delay_seconds: 1,
   hero_sample_count: 3,
+  header_idle_status: 'Your AI assistant',
+  header_working_status: 'Working on it…',
+  header_done_status: 'Your {count} perfect picks',
+  loading_caption: 'Working on your recommendations…',
+  loading_steps: ['Analyzing your photo', 'Personalizing results', 'Visualizing your picks'],
 };
 
 export async function getChatAssistantConfig(shopDomain: string): Promise<ChatAssistantConfig> {
@@ -2214,6 +2229,11 @@ export async function getChatAssistantConfig(shopDomain: string): Promise<ChatAs
     hero_trust_items: data.hero_trust_items ?? CHAT_ASSISTANT_DEFAULTS.hero_trust_items,
     hero_show_delay_seconds: data.hero_show_delay_seconds ?? CHAT_ASSISTANT_DEFAULTS.hero_show_delay_seconds,
     hero_sample_count: data.hero_sample_count ?? CHAT_ASSISTANT_DEFAULTS.hero_sample_count,
+    header_idle_status: data.header_idle_status ?? CHAT_ASSISTANT_DEFAULTS.header_idle_status,
+    header_working_status: data.header_working_status ?? CHAT_ASSISTANT_DEFAULTS.header_working_status,
+    header_done_status: data.header_done_status ?? CHAT_ASSISTANT_DEFAULTS.header_done_status,
+    loading_caption: data.loading_caption ?? CHAT_ASSISTANT_DEFAULTS.loading_caption,
+    loading_steps: Array.isArray(data.loading_steps) ? data.loading_steps : CHAT_ASSISTANT_DEFAULTS.loading_steps,
   };
 }
 
@@ -2278,6 +2298,11 @@ export async function getAllChatAssistantConfigs(): Promise<
     hero_trust_items: row.hero_trust_items ?? CHAT_ASSISTANT_DEFAULTS.hero_trust_items,
     hero_show_delay_seconds: row.hero_show_delay_seconds ?? CHAT_ASSISTANT_DEFAULTS.hero_show_delay_seconds,
     hero_sample_count: row.hero_sample_count ?? CHAT_ASSISTANT_DEFAULTS.hero_sample_count,
+    header_idle_status: row.header_idle_status ?? CHAT_ASSISTANT_DEFAULTS.header_idle_status,
+    header_working_status: row.header_working_status ?? CHAT_ASSISTANT_DEFAULTS.header_working_status,
+    header_done_status: row.header_done_status ?? CHAT_ASSISTANT_DEFAULTS.header_done_status,
+    loading_caption: row.loading_caption ?? CHAT_ASSISTANT_DEFAULTS.loading_caption,
+    loading_steps: Array.isArray(row.loading_steps) ? row.loading_steps : CHAT_ASSISTANT_DEFAULTS.loading_steps,
   }));
 }
 
@@ -2351,6 +2376,146 @@ export async function getHeroSwatches(
     label: (v.variant_title as string) || (v.products?.product_name as string) || '',
     color: (v.display_color as string | null) ?? null,
     productHandle: null,
+  }));
+}
+
+// =====================================================================
+// RECOMMENDATION MATRIX (migration 032)
+// =====================================================================
+
+/**
+ * Shape returned to the chat widget so it can drive the multi-question flow.
+ * Only includes axes the shopper interacts with directly (user_question);
+ * photo-sourced axes are filled in server-side during recommendation lookup.
+ */
+export interface RecommendationFlow {
+  questions: Array<{
+    axisKey: string;
+    prompt: string;
+    options: Array<{
+      label: string;
+      axisValue: string;
+      botResponse: string | null;
+    }>;
+  }>;
+  photoAxes: string[];
+  configured: boolean;
+}
+
+export async function getRecommendationFlow(shopId: string): Promise<RecommendationFlow> {
+  // Single query fetches axes + their values + (for user_question axes)
+  // the question prompt + its options. Postgres handles the joins; we
+  // shape the response in code.
+  const { data: axes, error } = await supabase
+    .from('recommendation_axes')
+    .select(`
+      id,
+      key,
+      label,
+      source,
+      position,
+      created_at,
+      recommendation_axis_values ( id, value, label, position ),
+      recommendation_questions (
+        id,
+        prompt,
+        position,
+        recommendation_question_options (
+          id,
+          label,
+          axis_value_id,
+          bot_response,
+          position
+        )
+      )
+    `)
+    .eq('shop_id', shopId)
+    // created_at as a secondary tiebreaker keeps ordering deterministic
+    // even when two axes share the same `position` value (which the
+    // schema doesn't prevent).
+    .order('position', { ascending: true })
+    .order('created_at', { ascending: true });
+
+  if (error || !axes) {
+    return { questions: [], photoAxes: [], configured: false };
+  }
+
+  // Build a value-id → axis-key.value map so options can echo back the
+  // axis value the widget should record.
+  const valueIdToKey = new Map<string, string>();
+  for (const axis of axes) {
+    for (const v of (axis.recommendation_axis_values || [])) {
+      valueIdToKey.set(v.id as string, v.value as string);
+    }
+  }
+
+  const questions = axes
+    .filter((a: any) => a.source === 'user_question' && a.recommendation_questions)
+    .flatMap((a: any) => {
+      const q = Array.isArray(a.recommendation_questions)
+        ? a.recommendation_questions[0]
+        : a.recommendation_questions;
+      if (!q) return [];
+      const options = (q.recommendation_question_options || [])
+        .slice()
+        .sort((x: any, y: any) => (x.position ?? 0) - (y.position ?? 0))
+        .map((opt: any) => ({
+          label: opt.label as string,
+          axisValue: valueIdToKey.get(opt.axis_value_id as string) ?? '',
+          botResponse: (opt.bot_response as string | null) ?? null,
+        }))
+        .filter((opt: any) => opt.axisValue);
+      // Drop questions whose options were all invalidated by deleted axis
+      // values — the widget would otherwise render the prompt with no
+      // buttons and the shopper would be stranded.
+      if (options.length === 0) return [];
+      return [{
+        axisKey: a.key as string,
+        prompt: q.prompt as string,
+        options,
+      }];
+    });
+
+  const photoAxes = axes
+    .filter((a: any) => a.source === 'photo')
+    .map((a: any) => a.key as string);
+
+  return {
+    questions,
+    photoAxes,
+    configured: axes.length > 0 && (questions.length > 0 || photoAxes.length > 0),
+  };
+}
+
+/**
+ * Strict matrix lookup. Returns the variants assigned to a criteria
+ * combination in rank order, or null when the matrix is sparse (no rule
+ * for this combination). Callers fall back to AI-pick on null.
+ *
+ * `criteria` should already be normalized (axis_key → axis_value), e.g.
+ * { depth: 'fair', undertone: 'warm' }. JSONB equality matches the
+ * stored criteria column.
+ */
+export async function pickVariantsByCriteria(
+  shopId: string,
+  criteria: Record<string, string>,
+): Promise<Array<{ variantInternalId: string; rank: number }> | null> {
+  if (Object.keys(criteria).length === 0) return null;
+
+  // JSONB equality in Postgres is order-independent — passing the criteria
+  // object straight through is correct; no need to sort keys client-side.
+  const { data, error } = await supabase
+    .from('recommendation_rules')
+    .select('variant_id, rank')
+    .eq('shop_id', shopId)
+    .eq('criteria', criteria as any)
+    .order('rank', { ascending: true });
+
+  if (error || !data || data.length === 0) return null;
+
+  return data.map((r: any) => ({
+    variantInternalId: r.variant_id as string,
+    rank: r.rank as number,
   }));
 }
 
