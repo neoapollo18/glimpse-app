@@ -449,7 +449,7 @@ export default function AssistantConfig() {
                 {heroEnabled && (
                   <BlockStack gap="400">
                     <Banner tone="info">
-                      The sample preview row pulls automatically from your configured product variants that have a color set. If none of your variants have colors configured, the hero will silently fall back to the small greeting toast — set <code>display_color</code> on at least 2 variants in the Products page to surface the swatch preview.
+                      The sample preview row pulls automatically from your configured product variants that have a color set. If you have fewer than 2 variants with <code>display_color</code> configured, the hero still appears — the swatch row is just hidden. Set <code>display_color</code> on at least 2 variants in the Products page to surface the value-preview tiles.
                     </Banner>
                     <TextField
                       label="Eyebrow"

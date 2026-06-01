@@ -200,32 +200,25 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     });
   }
 
-  // Choose the first-visit entry point: hero takes precedence when enabled
-  // and has the data it needs to deliver its value pitch. Once the hero has
-  // been dismissed (this session), we do NOT fall back to the greeting toast
-  // — the shopper explicitly opted out and a second nudge would be noise.
-  // The pill bubble remains visible either way.
+  // Choose the first-visit entry point: hero takes precedence whenever
+  // the merchant has enabled it — they explicitly opted in with custom
+  // copy, so silently swapping to a generic greeting because some
+  // optional data is missing would hide their work.
+  //
+  // The swatch row is rendered when it has data and quietly omitted when
+  // it doesn't (see showHero) — but the hero itself still renders.
+  //
+  // Once the hero has been dismissed (this session), we do NOT fall back
+  // to the greeting toast either — the shopper explicitly opted out and
+  // a second nudge would be noise. The pill bubble remains visible.
   function scheduleEntryPoint() {
     var heroCfg = config && config.hero;
     if (heroCfg && heroCfg.enabled) {
       if (heroDismissed) return; // already dismissed this session — pill only
-      if (heroHasMinimumContent(heroCfg)) {
-        scheduleHero();
-        return;
-      }
-      // Hero is enabled but missing the swatch preview that's its whole
-      // value pitch. Don't show a half-baked hero — fall back to the
-      // smaller greeting toast so the shop still gets some nudge.
+      scheduleHero();
+      return;
     }
     scheduleGreeting();
-  }
-
-  // Hero needs at least its swatch row OR a headline to be worth showing.
-  // Swatches are the value preview; without them the hero is just text and
-  // the greeting toast is a better fit.
-  function heroHasMinimumContent(heroCfg) {
-    var swatches = Array.isArray(heroCfg.swatches) ? heroCfg.swatches : [];
-    return swatches.length >= 2;
   }
 
   function restoreFromState(saved) {
