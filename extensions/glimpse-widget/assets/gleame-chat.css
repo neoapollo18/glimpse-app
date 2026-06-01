@@ -409,11 +409,9 @@
   max-width: 100% !important;
 }
 
-/* Photo-upload row only — takes the full messages-container width so the
-   "Take a photo" / "Upload from gallery" pill buttons reach edge-to-edge.
-   Other action rows (question options, "Start a new search", "Try again")
-   keep the 85% bubble cap so they read as conversational button choices
-   rather than primary CTAs. */
+/* Action rows (photo-upload pair + question-option buttons + restart CTAs)
+   take the full messages-container width so the pill buttons reach
+   edge-to-edge instead of being capped at the 85% bubble width. */
 .gleame-chat-msg-bot-action {
   max-width: 100% !important;
   width: 100% !important;
@@ -484,14 +482,18 @@
   margin-top: 8px;
 }
 
+/* Question-option / restart pill buttons. Compact pill with a thin dark
+   outline — reads as a quiet button choice, not a primary CTA. The
+   primary CTAs (photo upload "Take a photo") are the filled-dark pills
+   in .gleame-chat-upload-btn-primary instead. */
 .gleame-chat-btn {
   display: block !important;
   width: 100% !important;
-  padding: 12px 16px !important;
-  border: 1.5px solid var(--gleame-chat-accent-color, #8b5cf6) !important;
-  border-radius: 12px !important;
+  padding: 11px 18px !important;
+  border: 1.5px solid #111827 !important;
+  border-radius: 999px !important;
   background: #ffffff !important;
-  color: var(--gleame-chat-accent-color, #8b5cf6) !important;
+  color: #111827 !important;
   font-size: 14px !important;
   font-weight: 500 !important;
   cursor: pointer !important;
@@ -500,11 +502,18 @@
   margin: 0 !important;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
-  min-height: 44px;
+  min-height: 42px;
+}
+
+@media (hover: hover) {
+  .gleame-chat-btn:hover {
+    background: #111827 !important;
+    color: #ffffff !important;
+  }
 }
 
 .gleame-chat-btn:active {
-  background: var(--gleame-chat-accent-color, #8b5cf6) !important;
+  background: #111827 !important;
   color: #ffffff !important;
 }
 

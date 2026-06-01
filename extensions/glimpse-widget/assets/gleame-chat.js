@@ -967,19 +967,34 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   // without code changes. Each step "completes" cosmetically on a fixed
   // 2.5s timer — purely visual, doesn't reflect real backend progress.
   // The last step keeps spinning until removeLoadingMsg fires when the
-  // API returns. (The standalone "Working on your recommendations…"
-  // caption row + Gleame logo were removed — redundant with the header
-  // status line which already shows "Working on it…".)
+  // API returns.
   var LOADING_STEPS_FALLBACK = [
     'Analyzing your photo',
     'Personalizing results',
     'Visualizing your picks',
   ];
+  var LOADING_CAPTION_FALLBACK = 'Reading your skin tone and matching shades…';
   var loadingStepInterval = null;
 
-  // Renders the loading state: accent-color halo with sparkle + 3-step
-  // checklist that ticks off on a cosmetic timer.
+  // Renders the loading state in two parts that get cleaned up together:
+  //   1. A transient bot text bubble with the loading caption ("Reading
+  //      your skin tone and matching shades…"). Looks like a normal
+  //      bot-text bubble (avatar + gray bubble) but isn't persisted to
+  //      the messages array — removed in removeLoadingMsg.
+  //   2. The accent-color halo with sparkle + 3-step checklist below it.
   function renderLoadingSpinner() {
+    // 1. Transient text bubble — matches the regular bot-text rendering
+    //    so the visual style is identical, including the inline avatar.
+    var caption = (config && config.loadingCaption) || LOADING_CAPTION_FALLBACK;
+    var textMsg = document.createElement('div');
+    textMsg.id = 'gleame-chat-loading-text-msg';
+    textMsg.className = 'gleame-chat-msg gleame-chat-msg-bot gleame-chat-msg-bot-text-row';
+    textMsg.innerHTML =
+      buildMessageAvatarHtml() +
+      '<div class="gleame-chat-msg-bubble">' + escapeHtml(caption) + '</div>';
+    messagesContainer.appendChild(textMsg);
+
+    // 2. Halo + checklist
     var wrap = document.createElement('div');
     wrap.id = 'gleame-chat-loading-msg';
     wrap.className = 'gleame-chat-msg gleame-chat-msg-bot gleame-chat-loading-hero';
@@ -1203,7 +1218,9 @@ console.log('Gleame Chat Assistant v1.0 loaded');
 
   function renderButtons(msgRecord) {
     var wrap = document.createElement('div');
-    wrap.className = 'gleame-chat-msg gleame-chat-msg-bot';
+    // Full-width action row — same treatment as the upload widget so the
+    // pill buttons reach the messages-container edges.
+    wrap.className = 'gleame-chat-msg gleame-chat-msg-bot gleame-chat-msg-bot-action';
 
     var btnGroup = document.createElement('div');
     btnGroup.className = 'gleame-chat-buttons';
@@ -1390,6 +1407,8 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       clearInterval(loadingStepInterval);
       loadingStepInterval = null;
     }
+    var textEl = document.getElementById('gleame-chat-loading-text-msg');
+    if (textEl && textEl.parentNode) textEl.parentNode.removeChild(textEl);
     var el = document.getElementById('gleame-chat-loading-msg');
     if (el && el.parentNode) el.parentNode.removeChild(el);
   }
