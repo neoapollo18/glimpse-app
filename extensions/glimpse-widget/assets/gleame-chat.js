@@ -376,7 +376,9 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     heroShown = true;
 
     heroEl = document.createElement('div');
-    heroEl.className = 'gleame-hero gleame-hero-' + (heroCfg.positionDesktop || 'top_right').replace(/_/g, '-');
+    // The hero is always anchored directly above the pill (bottom-right);
+    // CSS handles all the positioning. No per-instance corner class.
+    heroEl.className = 'gleame-hero';
     heroEl.setAttribute('role', 'dialog');
     // The mobile sheet covers ~78dvh which is effectively modal; the desktop
     // corner card is more of a notification. aria-modal=true everywhere is

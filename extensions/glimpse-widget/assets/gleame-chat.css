@@ -978,7 +978,17 @@ body.gleame-chat-no-scroll {
 
 .gleame-hero {
   position: fixed !important;
-  z-index: 999998 !important;
+  /* Same tier as the pill (999999); DOM append order places the hero on top
+     since it's added after the pill. */
+  z-index: 999999 !important;
+  /* Anchored directly above the pill: pill sits at bottom:20px height:52px
+     (top edge ~72px), so bottom:90px gives the hero ~18px breathing room
+     above the pill — same offset the greeting toast uses. The hero and
+     pill always share the bottom-right corner; merchants don't choose. */
+  bottom: calc(90px + env(safe-area-inset-bottom, 0px)) !important;
+  right: calc(20px + env(safe-area-inset-right, 0px)) !important;
+  top: auto !important;
+  left: auto !important;
   width: 380px !important;
   max-width: calc(100vw - 32px) !important;
   background: #ffffff !important;
@@ -987,7 +997,9 @@ body.gleame-chat-no-scroll {
   overflow: hidden !important;
   pointer-events: auto !important;
   opacity: 0;
-  transform: translateY(-12px) scale(0.97);
+  /* Slide up from below: anchored at the bottom, so the natural reveal is
+     upward (toward the rest of the page) rather than downward. */
+  transform: translateY(12px) scale(0.97);
   transition: opacity 0.32s ease, transform 0.32s cubic-bezier(0.22, 0.61, 0.36, 1) !important;
   margin: 0 !important;
   padding: 0 !important;
@@ -997,40 +1009,6 @@ body.gleame-chat-no-scroll {
 
 .gleame-hero.gleame-hero-visible {
   opacity: 1;
-  transform: translateY(0) scale(1);
-}
-
-/* Desktop corner positions. Mobile overrides reset these. */
-.gleame-hero-top-right {
-  top: calc(20px + env(safe-area-inset-top, 0px)) !important;
-  right: calc(20px + env(safe-area-inset-right, 0px)) !important;
-  bottom: auto !important;
-  left: auto !important;
-}
-.gleame-hero-top-left {
-  top: calc(20px + env(safe-area-inset-top, 0px)) !important;
-  left: calc(20px + env(safe-area-inset-left, 0px)) !important;
-  bottom: auto !important;
-  right: auto !important;
-}
-.gleame-hero-bottom-right {
-  bottom: calc(20px + env(safe-area-inset-bottom, 0px)) !important;
-  right: calc(20px + env(safe-area-inset-right, 0px)) !important;
-  top: auto !important;
-  left: auto !important;
-  transform: translateY(12px) scale(0.97);
-}
-.gleame-hero-bottom-right.gleame-hero-visible {
-  transform: translateY(0) scale(1);
-}
-.gleame-hero-bottom-left {
-  bottom: calc(20px + env(safe-area-inset-bottom, 0px)) !important;
-  left: calc(20px + env(safe-area-inset-left, 0px)) !important;
-  top: auto !important;
-  right: auto !important;
-  transform: translateY(12px) scale(0.97);
-}
-.gleame-hero-bottom-left.gleame-hero-visible {
   transform: translateY(0) scale(1);
 }
 

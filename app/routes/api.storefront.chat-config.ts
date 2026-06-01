@@ -79,7 +79,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         ctaLabel: renderTokens(config.hero_cta_label),
         footer: renderTokens(config.hero_footer),
         sampleLabel: renderTokens(config.hero_sample_label),
-        positionDesktop: config.hero_position_desktop,
         trustItems: config.hero_trust_items,
         showDelaySeconds: config.hero_show_delay_seconds,
         swatches: heroSwatches,

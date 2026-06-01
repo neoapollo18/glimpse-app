@@ -130,7 +130,6 @@ export default function AssistantConfig() {
   const [heroCtaLabel, setHeroCtaLabel] = useState(config.hero_cta_label);
   const [heroFooter, setHeroFooter] = useState(config.hero_footer);
   const [heroSampleLabel, setHeroSampleLabel] = useState(config.hero_sample_label);
-  const [heroPosition, setHeroPosition] = useState<string>(config.hero_position_desktop);
   const [heroTrustItems, setHeroTrustItems] = useState<string[]>(config.hero_trust_items);
   const [heroShowDelay, setHeroShowDelay] = useState(config.hero_show_delay_seconds);
   const [heroSampleCount, setHeroSampleCount] = useState(config.hero_sample_count);
@@ -178,7 +177,10 @@ export default function AssistantConfig() {
     formData.append("hero_cta_label", heroCtaLabel);
     formData.append("hero_footer", heroFooter);
     formData.append("hero_sample_label", heroSampleLabel);
-    formData.append("hero_position_desktop", heroPosition);
+    // Position is no longer merchant-configurable — hero is always pinned
+    // directly above the pill. We still write a valid value to satisfy the
+    // existing NOT NULL + CHECK constraint on the column.
+    formData.append("hero_position_desktop", "bottom_right");
     formData.append("hero_trust_items", JSON.stringify(heroTrustItems));
     formData.append("hero_show_delay_seconds", String(heroShowDelay));
     formData.append("hero_sample_count", String(heroSampleCount));
@@ -188,7 +190,7 @@ export default function AssistantConfig() {
     greetingMessage, greetingDelay, recommendButtonText, preferenceQuestion,
     preferenceOptions, photoUploadMessage, numRecommendations, productScope, selectedProductIds,
     heroEnabled, heroEyebrow, heroHeadline, heroBody, heroCtaLabel, heroFooter,
-    heroSampleLabel, heroPosition, heroTrustItems, heroShowDelay, heroSampleCount,
+    heroSampleLabel, heroTrustItems, heroShowDelay, heroSampleCount,
   ]);
 
   const addTrustItem = useCallback(() => {
@@ -430,7 +432,7 @@ export default function AssistantConfig() {
                       Hero Popup
                     </Text>
                     <Text as="p" variant="bodySm" tone="subdued">
-                      A larger entry point that previews what shoppers get before they click. Appears top-corner on desktop, as a bottom sheet on mobile. When dismissed, the pill bubble takes over.
+                      A larger entry point that previews what shoppers get before they click. Appears directly above the chat pill on desktop, as a bottom sheet on mobile. When dismissed, the pill bubble takes over.
                     </Text>
                   </BlockStack>
                   <div style={{ flexShrink: 0 }}>
@@ -499,17 +501,6 @@ export default function AssistantConfig() {
                       autoComplete="off"
                       maxLength={40}
                       helpText='Small label above the swatch row (e.g. "Sample result preview")'
-                    />
-                    <Select
-                      label="Desktop position"
-                      options={[
-                        { label: "Top right", value: "top_right" },
-                        { label: "Top left", value: "top_left" },
-                        { label: "Bottom right", value: "bottom_right" },
-                        { label: "Bottom left", value: "bottom_left" },
-                      ]}
-                      value={heroPosition}
-                      onChange={setHeroPosition}
                     />
                     <BlockStack gap="200">
                       <Text as="p" variant="bodySm" fontWeight="semibold">
