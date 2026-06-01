@@ -409,10 +409,11 @@
   max-width: 100% !important;
 }
 
-/* Action rows (upload widget, question-option button groups, "Try again"
-   / "Start a new search" buttons) take the full messages-container width
-   so the pill buttons inside reach edge-to-edge instead of being capped
-   at the 85% bubble width. */
+/* Photo-upload row only — takes the full messages-container width so the
+   "Take a photo" / "Upload from gallery" pill buttons reach edge-to-edge.
+   Other action rows (question options, "Start a new search", "Try again")
+   keep the 85% bubble cap so they read as conversational button choices
+   rather than primary CTAs. */
 .gleame-chat-msg-bot-action {
   max-width: 100% !important;
   width: 100% !important;
