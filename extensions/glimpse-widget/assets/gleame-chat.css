@@ -525,40 +525,12 @@
   to { transform: rotate(360deg); }
 }
 
-/* Inner SVG animations used by buildGleameLoadingLogoSVG() — still active
-   inside the new loading hero's logo wrap. The outer wrap rules from the
-   old loading-row treatment (.gleame-chat-loading-row, -logo-wrap, -text,
-   -wipe-in and their keyframes) were removed when the loading hero
-   replaced the loading row in Phase 2. */
-.gleame-chat-loading-logo {
-  width: 100% !important;
-  height: 100% !important;
-  display: block !important;
-}
-
-.gleame-chat-loading-logo-p1 {
-  animation: gleame-chat-loading-p1 1.4s ease-in-out infinite !important;
-}
-
-.gleame-chat-loading-logo-p2 {
-  animation: gleame-chat-loading-p2 1.4s ease-in-out infinite !important;
-}
-
-@keyframes gleame-chat-loading-p1 {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.25; }
-}
-
-@keyframes gleame-chat-loading-p2 {
-  0%, 100% { opacity: 0.3; }
-  50% { opacity: 1; }
-}
-
-/* ---- Loading hero (Phase 2): caption + halo + 3-step checklist ----
-   Replaces the old small loading-row when generating recommendations.
-   Mockup uses an accent-color halo around a sparkle icon + a checklist
-   that ticks off cosmetically on a 2.5s-per-step timer. The last step
-   stays in "active" state until the API responds. */
+/* ---- Loading hero (Phase 2): halo + 3-step checklist ----
+   Accent-color halo around a sparkle icon + a checklist that ticks off
+   cosmetically on a 2.5s-per-step timer. The last step stays in "active"
+   state until the API responds. (The Gleame logo + caption row that used
+   to sit above the halo was removed — the header status line already
+   communicates "Working on it…", and the duplicate felt cluttered.) */
 #gleame-chat-root .gleame-chat-loading-hero {
   max-width: 100% !important;
   align-self: stretch !important;
@@ -567,29 +539,6 @@
   align-items: center !important;
   gap: 14px !important;
   padding: 18px 8px 22px !important;
-}
-
-#gleame-chat-root .gleame-chat-loading-hero-caption {
-  display: flex !important;
-  align-items: center !important;
-  gap: 8px !important;
-  font-size: 14px !important;
-  color: #374151 !important;
-  line-height: 1.4 !important;
-  align-self: flex-start !important;
-}
-
-#gleame-chat-root .gleame-chat-loading-hero-caption-text {
-  font-weight: 500 !important;
-}
-
-#gleame-chat-root .gleame-chat-loading-hero-logo-wrap {
-  width: 22px !important;
-  height: 22px !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  flex-shrink: 0 !important;
 }
 
 #gleame-chat-root .gleame-chat-loading-hero-halo {
@@ -1027,8 +976,6 @@
   .gleame-chat-card-enter,
   .gleame-chat-msg,
   .gleame-chat-loading-dots i,
-  .gleame-chat-loading-logo-p1,
-  .gleame-chat-loading-logo-p2,
   .gleame-chat-skeleton-image,
   .gleame-chat-skeleton-line,
   .gleame-chat-skeleton-btn,
