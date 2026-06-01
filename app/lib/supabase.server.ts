@@ -2154,6 +2154,13 @@ export interface ChatAssistantConfig {
   // 3 short strings; the widget ticks through them on a 2.5s timer.
   loading_caption: string;
   loading_steps: string[];
+  // End-of-flow copy (migration 034). intro is the bot message above the
+  // cards; save/restart are the two footer buttons; footer is the small
+  // "Curated by …" line. All support {count} + {assistant_name} tokens.
+  recommendations_intro: string;
+  end_save_label: string;
+  end_restart_label: string;
+  end_footer: string;
 }
 
 const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
@@ -2188,6 +2195,10 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   header_done_status: 'Your {count} perfect picks',
   loading_caption: 'Working on your recommendations…',
   loading_steps: ['Analyzing your photo', 'Personalizing results', 'Visualizing your picks'],
+  recommendations_intro: 'Here are your {count} perfect picks:',
+  end_save_label: 'Save these',
+  end_restart_label: 'Try another look',
+  end_footer: '— Curated by {assistant_name}, your AI shade advisor —',
 };
 
 export async function getChatAssistantConfig(shopDomain: string): Promise<ChatAssistantConfig> {
@@ -2234,6 +2245,10 @@ export async function getChatAssistantConfig(shopDomain: string): Promise<ChatAs
     header_done_status: data.header_done_status ?? CHAT_ASSISTANT_DEFAULTS.header_done_status,
     loading_caption: data.loading_caption ?? CHAT_ASSISTANT_DEFAULTS.loading_caption,
     loading_steps: Array.isArray(data.loading_steps) ? data.loading_steps : CHAT_ASSISTANT_DEFAULTS.loading_steps,
+    recommendations_intro: data.recommendations_intro ?? CHAT_ASSISTANT_DEFAULTS.recommendations_intro,
+    end_save_label: data.end_save_label ?? CHAT_ASSISTANT_DEFAULTS.end_save_label,
+    end_restart_label: data.end_restart_label ?? CHAT_ASSISTANT_DEFAULTS.end_restart_label,
+    end_footer: data.end_footer ?? CHAT_ASSISTANT_DEFAULTS.end_footer,
   };
 }
 
@@ -2303,6 +2318,10 @@ export async function getAllChatAssistantConfigs(): Promise<
     header_done_status: row.header_done_status ?? CHAT_ASSISTANT_DEFAULTS.header_done_status,
     loading_caption: row.loading_caption ?? CHAT_ASSISTANT_DEFAULTS.loading_caption,
     loading_steps: Array.isArray(row.loading_steps) ? row.loading_steps : CHAT_ASSISTANT_DEFAULTS.loading_steps,
+    recommendations_intro: row.recommendations_intro ?? CHAT_ASSISTANT_DEFAULTS.recommendations_intro,
+    end_save_label: row.end_save_label ?? CHAT_ASSISTANT_DEFAULTS.end_save_label,
+    end_restart_label: row.end_restart_label ?? CHAT_ASSISTANT_DEFAULTS.end_restart_label,
+    end_footer: row.end_footer ?? CHAT_ASSISTANT_DEFAULTS.end_footer,
   }));
 }
 

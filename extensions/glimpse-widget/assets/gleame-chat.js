@@ -1082,9 +1082,18 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       removeLoadingMsg();
       if (data.recommendations && data.recommendations.length > 0) {
         setHeaderStatus('done', data.recommendations.length);
-        pushMessage({ type: 'bot-text', text: "Here's what I found for you! ✨" });
+        // Intro line above the cards. {count} token swapped here so the
+        // widget owns the runtime value (server doesn't know how many
+        // recommendations succeeded after backfill).
+        var introTemplate = (config && config.recommendationsIntro) ||
+          'Here are your {count} perfect picks:';
+        var introText = introTemplate.replace(/\{count\}/g, String(data.recommendations.length));
+        pushMessage({ type: 'bot-text', text: introText });
         pushMessage({ type: 'bot-cards', recommendations: data.recommendations });
-        pushMessage({ type: 'bot-buttons', buttons: [{ label: 'Start a new search', action: 'recommend' }], consumed: false });
+        // bot-end-actions replaces the single "Start a new search" pill —
+        // gives the shopper "Save these" + "Try another look" + the
+        // curated-by footer line below.
+        pushMessage({ type: 'bot-end-actions', recommendations: data.recommendations });
         trackEvent('chat_recommendation_shown');
         conversationEnded = true;
         saveState();
@@ -1153,6 +1162,9 @@ console.log('Gleame Chat Assistant v1.0 loaded');
         // top of the scroll viewport.
         anchorCandidate = messagesContainer.lastElementChild;
         renderProductCards(m.recommendations || []);
+        break;
+      case 'bot-end-actions':
+        renderEndActions(m.recommendations || []);
         break;
     }
     if (anchorCandidate) {
@@ -1338,7 +1350,20 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     messagesContainer.appendChild(uploadWrap);
   }
 
+  // Stage 3 redesigned product card. Layout:
+  //   [TOP MATCH badge]   [♡ save heart]
+  //   [tryOnPreview image]
+  //   [title]
+  //   [variantTitle subtitle]
+  //   [italic tagline (optional)]
+  //   [Add to bag / Shop This button]
+  //
+  // "Top Match" badge surfaces on rec.rank === 1 (already preserved from
+  // matrix rank — see chat-recommend backend). Heart toggles a localStorage
+  // entry. Add to bag posts to Shopify's AJAX cart and falls back to a
+  // PDP nav when no variant id is available.
   function renderProductCards(recommendations) {
+    var saved = loadSavedVariants();
     recommendations.forEach(function(rec, idx) {
       var card = document.createElement('div');
       card.className = 'gleame-chat-msg gleame-chat-msg-bot gleame-chat-card-enter';
@@ -1347,6 +1372,40 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       var cardInner = document.createElement('div');
       cardInner.className = 'gleame-chat-product-card';
 
+      // Image area (with overlaid badge + heart)
+      var imgWrap = document.createElement('div');
+      imgWrap.className = 'gleame-chat-product-image-wrap';
+
+      var isTop = rec.rank === 1;
+      if (isTop) {
+        var badge = document.createElement('span');
+        badge.className = 'gleame-chat-product-badge';
+        badge.textContent = 'TOP MATCH';
+        imgWrap.appendChild(badge);
+      }
+
+      // Heart save toggle — visual state driven by localStorage. A variant
+      // with no shopify id can't be saved meaningfully, so we hide the
+      // heart in that case.
+      if (rec.variantNumericId || rec.variantId) {
+        var heartBtn = document.createElement('button');
+        heartBtn.type = 'button';
+        heartBtn.className = 'gleame-chat-product-heart';
+        var isSaved = saved.indexOf(rec.variantNumericId || rec.variantId) >= 0;
+        if (isSaved) heartBtn.classList.add('gleame-chat-product-heart-on');
+        heartBtn.setAttribute('aria-label', isSaved ? 'Remove from saved' : 'Save this');
+        heartBtn.innerHTML = heartIconSvg(isSaved);
+        heartBtn.onclick = function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          var nowSaved = toggleSavedVariant(rec.variantNumericId || rec.variantId);
+          heartBtn.classList.toggle('gleame-chat-product-heart-on', nowSaved);
+          heartBtn.innerHTML = heartIconSvg(nowSaved);
+          heartBtn.setAttribute('aria-label', nowSaved ? 'Remove from saved' : 'Save this');
+        };
+        imgWrap.appendChild(heartBtn);
+      }
+
       if (rec.tryOnPreview) {
         var previewImg = document.createElement('img');
         previewImg.className = 'gleame-chat-product-image gleame-chat-image-reveal';
@@ -1354,8 +1413,10 @@ console.log('Gleame Chat Assistant v1.0 loaded');
         previewImg.src = 'data:image/jpeg;base64,' + rec.tryOnPreview;
         previewImg.alt = rec.title || '';
         previewImg.onerror = function() { previewImg.style.display = 'none'; };
-        cardInner.appendChild(previewImg);
+        imgWrap.appendChild(previewImg);
       }
+
+      cardInner.appendChild(imgWrap);
 
       var info = document.createElement('div');
       info.className = 'gleame-chat-product-info';
@@ -1372,6 +1433,29 @@ console.log('Gleame Chat Assistant v1.0 loaded');
         info.appendChild(variantEl);
       }
 
+      if (rec.tagline) {
+        var taglineEl = document.createElement('div');
+        taglineEl.className = 'gleame-chat-product-tagline';
+        // Wrap in curly quotes to match the mockup's italic-quote style.
+        taglineEl.textContent = '“' + rec.tagline + '”';
+        info.appendChild(taglineEl);
+      }
+
+      info.appendChild(buildCardCta(rec));
+
+      cardInner.appendChild(info);
+      card.appendChild(cardInner);
+      messagesContainer.appendChild(card);
+    });
+  }
+
+  // Card CTA: "Add to bag" when we have a numeric variant id (so the AJAX
+  // cart call has something to push); falls back to a "Shop This" link
+  // navigating to the PDP otherwise. The Add-to-bag button cycles through
+  // its own visual states (idle → adding → added → idle) on click.
+  function buildCardCta(rec) {
+    var hasVariant = !!rec.variantNumericId;
+    if (!hasVariant) {
       var shopLink = document.createElement('a');
       shopLink.className = 'gleame-chat-product-shop-btn';
       shopLink.target = '_top';
@@ -1384,21 +1468,175 @@ console.log('Gleame Chat Assistant v1.0 loaded');
         var searchQuery = rec.productName || rec.title || '';
         shopLink.href = '/search?type=product&q=' + encodeURIComponent(searchQuery);
       }
-      shopLink.textContent = 'Shop This';
-      // Mark chat as closed before navigating — otherwise the saved state
-      // (isOpen: true) auto-reopens the fullscreen panel on the destination
-      // page and covers the product the user just tapped to see.
+      shopLink.textContent = 'Shop this';
+      // Mark chat as closed before navigating — same nav-safety as before.
       shopLink.addEventListener('click', function() {
         isOpen = false;
         pendingRequest = false;
         unlockBodyScroll();
         saveState();
       });
-      info.appendChild(shopLink);
+      return shopLink;
+    }
+    var addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'gleame-chat-product-add-btn';
+    addBtn.textContent = 'Add to bag';
+    addBtn.onclick = function() {
+      if (addBtn.disabled) return;
+      addBtn.disabled = true;
+      addBtn.classList.add('gleame-chat-product-add-btn-loading');
+      addBtn.textContent = 'Adding…';
+      addToBag(rec.variantNumericId, 1)
+        .then(function() {
+          addBtn.classList.remove('gleame-chat-product-add-btn-loading');
+          addBtn.classList.add('gleame-chat-product-add-btn-added');
+          addBtn.textContent = 'Added ✓';
+          trackEvent('chat_add_to_bag');
+          setTimeout(function() {
+            addBtn.classList.remove('gleame-chat-product-add-btn-added');
+            addBtn.textContent = 'Add to bag';
+            addBtn.disabled = false;
+          }, 2000);
+        })
+        .catch(function(err) {
+          console.error('Gleame Chat: add to bag failed', err);
+          addBtn.classList.remove('gleame-chat-product-add-btn-loading');
+          addBtn.textContent = 'Try again';
+          setTimeout(function() {
+            addBtn.textContent = 'Add to bag';
+            addBtn.disabled = false;
+          }, 1800);
+        });
+    };
+    return addBtn;
+  }
 
-      cardInner.appendChild(info);
-      card.appendChild(cardInner);
-      messagesContainer.appendChild(card);
+  // Heart icon — outline when unsaved, filled when saved.
+  function heartIconSvg(filled) {
+    if (filled) {
+      return '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>';
+    }
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>';
+  }
+
+  // End-of-flow actions: "Save these" + "Try another look" + curated
+  // footer line. Both action labels and the footer come from config.
+  function renderEndActions(recommendations) {
+    var wrap = document.createElement('div');
+    wrap.className = 'gleame-chat-msg gleame-chat-msg-bot gleame-chat-msg-bot-action gleame-chat-end-actions';
+
+    var saveLabel = (config && config.endSaveLabel) || 'Save these';
+    var restartLabel = (config && config.endRestartLabel) || 'Try another look';
+    var footerTemplate = (config && config.endFooter) || '';
+    var footer = footerTemplate.replace(/\{count\}/g, String(recommendations.length || 0));
+
+    var row = document.createElement('div');
+    row.className = 'gleame-chat-end-actions-row';
+
+    var saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'gleame-chat-end-action-btn';
+    saveBtn.innerHTML =
+      '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>' +
+      '<span>' + escapeHtml(saveLabel) + '</span>';
+    saveBtn.onclick = function() {
+      saveAllRecommendations(recommendations);
+      saveBtn.classList.add('gleame-chat-end-action-btn-on');
+      var labelSpan = saveBtn.querySelector('span');
+      if (labelSpan) labelSpan.textContent = 'Saved ✓';
+      trackEvent('chat_save_recommendations');
+      setTimeout(function() {
+        saveBtn.classList.remove('gleame-chat-end-action-btn-on');
+        if (labelSpan) labelSpan.textContent = saveLabel;
+      }, 1800);
+    };
+
+    var restartBtn = document.createElement('button');
+    restartBtn.type = 'button';
+    restartBtn.className = 'gleame-chat-end-action-btn';
+    restartBtn.innerHTML =
+      '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>' +
+      '<span>' + escapeHtml(restartLabel) + '</span>';
+    restartBtn.onclick = function() {
+      // Equivalent to clicking "Start a new search" — restarts the
+      // recommend flow from the top.
+      handleButtonClick('recommend', restartLabel, null);
+    };
+
+    row.appendChild(saveBtn);
+    row.appendChild(restartBtn);
+    wrap.appendChild(row);
+
+    if (footer) {
+      var footerEl = document.createElement('div');
+      footerEl.className = 'gleame-chat-end-footer';
+      footerEl.textContent = footer;
+      wrap.appendChild(footerEl);
+    }
+
+    messagesContainer.appendChild(wrap);
+  }
+
+  // ---- Cart + saved-variants storage ----
+
+  var SAVED_VARIANTS_KEY = 'gleame-saved-variants-v1';
+
+  function loadSavedVariants() {
+    try {
+      var raw = localStorage.getItem(SAVED_VARIANTS_KEY);
+      if (!raw) return [];
+      var parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) { return []; }
+  }
+
+  function persistSavedVariants(list) {
+    try { localStorage.setItem(SAVED_VARIANTS_KEY, JSON.stringify(list)); } catch (e) {}
+  }
+
+  function toggleSavedVariant(id) {
+    if (!id) return false;
+    var saved = loadSavedVariants();
+    var idx = saved.indexOf(id);
+    if (idx >= 0) {
+      saved.splice(idx, 1);
+      persistSavedVariants(saved);
+      return false;
+    }
+    saved.push(id);
+    persistSavedVariants(saved);
+    return true;
+  }
+
+  function saveAllRecommendations(recs) {
+    var saved = loadSavedVariants();
+    var added = 0;
+    for (var i = 0; i < recs.length; i++) {
+      var id = recs[i].variantNumericId || recs[i].variantId;
+      if (id && saved.indexOf(id) < 0) {
+        saved.push(id);
+        added++;
+      }
+    }
+    if (added > 0) persistSavedVariants(saved);
+    return added;
+  }
+
+  // Shopify AJAX cart. Posted to /cart/add.js relative to the storefront
+  // domain — same origin as the widget, so no CORS. Returns the JSON of
+  // the added line item; we just need success/fail.
+  function addToBag(variantId, quantity) {
+    var formData = new FormData();
+    formData.append('id', String(variantId));
+    formData.append('quantity', String(quantity || 1));
+    return fetch('/cart/add.js', {
+      method: 'POST',
+      headers: { 'Accept': 'application/json' },
+      body: formData,
+    }).then(function(res) {
+      if (!res.ok) throw new Error('cart add failed: ' + res.status);
+      return res.json();
     });
   }
 

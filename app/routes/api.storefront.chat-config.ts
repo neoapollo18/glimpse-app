@@ -81,6 +81,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       loadingSteps: Array.isArray(config.loading_steps)
         ? config.loading_steps.map((s) => renderTokens(s))
         : [],
+      // End-of-flow copy. {assistant_name} is replaced now; {count} stays
+      // as a token because the widget knows the runtime count.
+      recommendationsIntro: renderTokens(config.recommendations_intro),
+      endSaveLabel: renderTokens(config.end_save_label),
+      endRestartLabel: renderTokens(config.end_restart_label),
+      endFooter: renderTokens(config.end_footer),
       hero: {
         enabled: config.hero_enabled,
         eyebrow: renderTokens(config.hero_eyebrow),

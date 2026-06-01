@@ -767,13 +767,26 @@
   display: block;
 }
 
-/* Product cards */
+/* Product cards (Stage 3 redesign).
+   Larger card, taller image with TOP MATCH badge + heart save overlay,
+   italic tagline below variant subtitle, full-width dark "Add to bag"
+   CTA. Cards take the message-bot width (85%) by default so they read
+   as conversational. */
 .gleame-chat-product-card {
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 14px;
+  border-radius: 16px;
   overflow: hidden;
   margin-top: 4px;
+  width: 100%;
+}
+
+/* Image area is now relative so the overlaid badge + heart can absolute-
+   position against it. */
+.gleame-chat-product-image-wrap {
+  position: relative;
+  width: 100%;
+  background: #f3f4f6;
 }
 
 .gleame-chat-product-image {
@@ -783,54 +796,202 @@
   display: block;
 }
 
+/* TOP MATCH badge — small white pill in the top-left of the image area. */
+#gleame-chat-root .gleame-chat-product-badge {
+  position: absolute !important;
+  top: 12px !important;
+  left: 12px !important;
+  background: #ffffff !important;
+  color: #111827 !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.1em !important;
+  text-transform: uppercase !important;
+  padding: 5px 10px !important;
+  border-radius: 999px !important;
+  line-height: 1 !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06) !important;
+  z-index: 2 !important;
+}
+
+/* Heart save toggle — circular grey backdrop in the top-right of the
+   image area. Filled state uses accent color. */
+.gleame-chat-product-heart {
+  position: absolute !important;
+  top: 12px !important;
+  right: 12px !important;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 50% !important;
+  background: rgba(255, 255, 255, 0.85) !important;
+  border: none !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: #6b7280 !important;
+  padding: 0 !important;
+  z-index: 2 !important;
+  transition: background 0.15s, color 0.15s, transform 0.05s !important;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.gleame-chat-product-heart svg {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+@media (hover: hover) {
+  .gleame-chat-product-heart:hover {
+    background: #ffffff !important;
+    color: #111827 !important;
+  }
+}
+
+.gleame-chat-product-heart:active {
+  transform: scale(0.92);
+}
+
+.gleame-chat-product-heart.gleame-chat-product-heart-on {
+  color: var(--gleame-chat-accent-color, #8b5cf6) !important;
+}
+
 .gleame-chat-product-info {
-  padding: 12px 14px;
+  padding: 14px 16px 16px;
 }
 
 .gleame-chat-product-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #1f2937;
+  font-size: 15px;
+  font-weight: 700;
+  color: #111827;
   margin-bottom: 4px;
-  line-height: 1.3;
+  line-height: 1.25;
+  letter-spacing: -0.005em;
 }
 
 .gleame-chat-product-variant {
   font-size: 12px;
   font-weight: 500;
   color: #6b7280;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
   line-height: 1.3;
 }
 
-.gleame-chat-product-price {
-  font-size: 13px;
-  color: #6b7280;
-  margin-bottom: 10px;
+/* Italic copy line — the per-shade description ("A warm red with subtle
+   shimmer — your undertones will make this glow"). Quotes are added in
+   the JS so the visual style is consistent regardless of merchant input. */
+#gleame-chat-root .gleame-chat-product-tagline {
+  font-size: 13px !important;
+  font-style: italic !important;
+  color: #6b7280 !important;
+  line-height: 1.4 !important;
+  margin-bottom: 12px !important;
 }
 
+/* Primary Add-to-bag CTA — dark filled pill, full width of the card. */
+.gleame-chat-product-add-btn,
 .gleame-chat-product-shop-btn {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
-  padding: 10px;
-  background: var(--gleame-chat-accent-color, #8b5cf6);
+  padding: 12px 16px;
+  background: #111827;
   color: #ffffff;
   border: none;
-  border-radius: 8px;
+  border-radius: 999px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   text-align: center;
   text-decoration: none;
-  transition: opacity 0.15s;
+  transition: background 0.15s, transform 0.05s;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  min-height: 44px;
+  line-height: 1.2;
+}
+
+@media (hover: hover) {
+  .gleame-chat-product-add-btn:hover,
+  .gleame-chat-product-shop-btn:hover {
+    background: #000000;
+  }
+}
+
+.gleame-chat-product-add-btn:active,
+.gleame-chat-product-shop-btn:active {
+  transform: scale(0.99);
+}
+
+/* Loading state during cart POST — slightly dimmed, no clicks. */
+.gleame-chat-product-add-btn-loading {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+/* Success state — accent color flash, brief. */
+.gleame-chat-product-add-btn-added {
+  background: #22c55e !important;
+}
+
+/* ---- End-of-flow actions (Stage 3) ----
+   Sits after the last product card. Two outlined pills (Save these /
+   Try another look) side by side, with a small italic-style footer below. */
+.gleame-chat-end-actions {
+  /* Adds breathing room above so the action row reads as a discrete
+     wrap-up section, not stuck to the last card. */
+  margin-top: 6px !important;
+}
+
+.gleame-chat-end-actions-row {
+  display: flex !important;
+  gap: 10px !important;
+  width: 100% !important;
+}
+
+.gleame-chat-end-action-btn {
+  flex: 1 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 7px !important;
+  padding: 10px 14px !important;
+  background: #ffffff !important;
+  color: #1f2937 !important;
+  border: 1px solid #d1d5db !important;
+  border-radius: 999px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  text-align: center !important;
+  transition: background 0.15s, color 0.15s, border-color 0.15s !important;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
   min-height: 40px;
-  line-height: 1.4;
+  line-height: 1.2;
 }
 
-.gleame-chat-product-shop-btn:hover {
-  opacity: 0.9;
+@media (hover: hover) {
+  .gleame-chat-end-action-btn:hover {
+    border-color: #111827 !important;
+    background: #f9fafb !important;
+  }
+}
+
+.gleame-chat-end-action-btn.gleame-chat-end-action-btn-on {
+  background: #111827 !important;
+  color: #ffffff !important;
+  border-color: #111827 !important;
+}
+
+#gleame-chat-root .gleame-chat-end-footer {
+  text-align: center !important;
+  font-size: 12px !important;
+  color: #9ca3af !important;
+  margin-top: 12px !important;
+  line-height: 1.3 !important;
 }
 
 /* Input area */

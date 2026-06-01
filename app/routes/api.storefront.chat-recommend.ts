@@ -253,6 +253,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       ai_model?: string | null;
       reference_image_url?: string | null;
       reference_image_urls?: string[];
+      // Optional italic copy line shown beneath the variant title on the
+      // chat product card. Migration 032 added the column; widget reads it
+      // as `tagline` on each recommendation.
+      tagline?: string | null;
     };
 
     // matrixRank is the merchant's authored rank when this candidate came
@@ -451,6 +455,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           title: displayTitle,
           productName,
           variantTitle,
+          tagline: variant?.tagline ?? null,
           tryOnPreview: result.generatedImage ?? null,
           error: result.success ? null : (result.error || "Transform failed"),
           matrixRank: candidate.matrixRank,
@@ -465,6 +470,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           title: displayTitle,
           productName,
           variantTitle,
+          tagline: variant?.tagline ?? null,
           tryOnPreview: null,
           error: "Transform failed",
           matrixRank: candidate.matrixRank,
