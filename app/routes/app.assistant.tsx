@@ -557,6 +557,28 @@ export default function AssistantConfig() {
               </BlockStack>
             </Card>
 
+            {/* Recommendation Logic — link to dedicated sub-page */}
+            <Card>
+              <BlockStack gap="300">
+                <InlineStack align="space-between" blockAlign="start" gap="400">
+                  <BlockStack gap="100">
+                    <Text as="h2" variant="headingMd">
+                      Recommendation Logic
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Configure the multi-step question flow and the variant matrix the
+                      assistant uses to pick recommendations. Replaces the single
+                      preference question below when configured — the legacy fields stay
+                      as a fallback for shoppers who hit an unmatched combination.
+                    </Text>
+                  </BlockStack>
+                  <Button url="/app/assistant/recommendations" variant="primary">
+                    Edit recommendation logic
+                  </Button>
+                </InlineStack>
+              </BlockStack>
+            </Card>
+
             {/* Conversation Flow */}
             <Card>
               <BlockStack gap="400">
