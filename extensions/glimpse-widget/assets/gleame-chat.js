@@ -306,8 +306,18 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     root.style.setProperty('--gleame-chat-title-font', titleFont);
     // Hero tint — its own configurable accent, resolved server-side to fall
     // back to the chat accent when the merchant hasn't set a hero color.
-    var heroAccent = (config.hero && config.hero.accentColor) || config.accentColor || '#8b5cf6';
+    var heroCfg = config.hero || {};
+    var heroAccent = heroCfg.accentColor || config.accentColor || '#8b5cf6';
     root.style.setProperty('--gleame-hero-accent', heroAccent);
+    // Explicit panel colors win over the accent-derived defaults. Only set
+    // when configured — the CSS var() fallbacks carry the accent tint /
+    // default dark headline otherwise.
+    if (heroCfg.backgroundColor) {
+      root.style.setProperty('--gleame-hero-bg', heroCfg.backgroundColor);
+    }
+    if (heroCfg.textColor) {
+      root.style.setProperty('--gleame-hero-text', heroCfg.textColor);
+    }
   }
 
   // ---- Bubble ----
@@ -841,12 +851,17 @@ console.log('Gleame Chat Assistant v1.0 loaded');
 
   // Entry point when the user came in through the hero CTA. Skips the
   // chat's intro greeting + "Find my perfect shade" button (the hero
-  // already played that role) and starts the recommendation flow directly.
+  // already played that role) and starts the recommendation flow directly,
+  // optionally led by the merchant's opening message. No reply is expected
+  // between the opening message and the first question.
   function startConversationFromHero() {
     trackEvent('chat_recommend_start');
     conversationEnded = false;
     criteria = {};
     questionIndex = 0;
+    if (config.openingMessage) {
+      pushMessage({ type: 'bot-text', text: config.openingMessage });
+    }
     startRecommendFlow();
   }
 
@@ -1394,7 +1409,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   //   [title ........... price]
   //   [variantTitle subtitle]
   //   [italic tagline (optional)]
-  //   [Add to bag button — full width]
+  //   [View page button — full width]
   //
   // "Top Match" badge surfaces on rec.rank === 1 (preserved from matrix rank
   // — see chat-recommend backend). Price is pulled per-card from the
@@ -1475,8 +1490,8 @@ console.log('Gleame Chat Assistant v1.0 loaded');
 
       // One storefront lookup per card: fill the price and, for product-level
       // recs that have no specific variant id, resolve the product's default
-      // variant so "Add to bag" still works (the curated 9-product configs
-      // come through as product-level recs).
+      // variant so "View page" can deep-link the matched shade via ?variant=
+      // (the curated 9-product configs come through as product-level recs).
       var handle = (rec.productHandle || '').trim();
       if (handle) {
         fetchProductJson(handle).then(function(pj) {
@@ -1492,12 +1507,12 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     });
   }
 
-  // Card CTA: a single "Add to bag" pill. When we already have a numeric
-  // variant id it adds immediately; for product-level recs the variant id is
-  // resolved lazily from /products/{handle}.js (set via setVariantId after
-  // the card's price lookup, or fetched on click as a fallback). If no
-  // variant can be resolved at all, the click navigates to the product page
-  // so the shopper is never stranded. Returns { el, setVariantId }.
+  // Card CTA: a single "View page" pill that navigates to the product page.
+  // When a numeric variant id is known (directly, or resolved lazily via
+  // setVariantId after the card's price lookup) the URL deep-links the
+  // matched shade with ?variant=; with no handle at all it falls back to a
+  // product search so the shopper is never stranded. Returns
+  // { el, setVariantId }.
   function buildCardCta(rec) {
     var resolvedId = (rec.variantNumericId && /^\d+$/.test(String(rec.variantNumericId)))
       ? String(rec.variantNumericId) : null;
@@ -1506,7 +1521,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'gleame-chat-product-add-btn';
-    btn.textContent = 'Add to bag';
+    btn.textContent = 'View page';
 
     function pdpUrl() {
       if (handle) {
@@ -1517,54 +1532,16 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       return '/search?type=product&q=' + encodeURIComponent(rec.productName || rec.title || '');
     }
 
-    function ensureVariantId() {
-      if (resolvedId) return Promise.resolve(resolvedId);
-      if (!handle) return Promise.resolve(null);
-      return fetchProductJson(handle).then(function(pj) {
-        if (pj && Array.isArray(pj.variants) && pj.variants.length > 0) {
-          resolvedId = String(pj.variants[0].id);
-        }
-        return resolvedId;
-      });
-    }
-
     btn.onclick = function() {
-      if (btn.disabled) return;
-      btn.disabled = true;
-      btn.classList.add('gleame-chat-product-add-btn-loading');
-      btn.textContent = 'Adding…';
-      ensureVariantId()
-        .then(function(vid) {
-          if (!vid) {
-            // No variant resolvable — fall back to the product page.
-            isOpen = false;
-            pendingRequest = false;
-            unlockBodyScroll();
-            saveState();
-            window.location.href = pdpUrl();
-            return;
-          }
-          return addToBag(vid, 1).then(function() {
-            btn.classList.remove('gleame-chat-product-add-btn-loading');
-            btn.classList.add('gleame-chat-product-add-btn-added');
-            btn.textContent = 'Added ✓';
-            trackEvent('chat_add_to_bag');
-            setTimeout(function() {
-              btn.classList.remove('gleame-chat-product-add-btn-added');
-              btn.textContent = 'Add to bag';
-              btn.disabled = false;
-            }, 2000);
-          });
-        })
-        .catch(function(err) {
-          console.error('Gleame Chat: add to bag failed', err);
-          btn.classList.remove('gleame-chat-product-add-btn-loading');
-          btn.textContent = 'Try again';
-          setTimeout(function() {
-            btn.textContent = 'Add to bag';
-            btn.disabled = false;
-          }, 1800);
-        });
+      trackEvent('chat_view_product');
+      // Persist a closed-panel state before navigating so the conversation
+      // restores quietly (pill only) on the product page instead of
+      // reopening over it.
+      isOpen = false;
+      pendingRequest = false;
+      unlockBodyScroll();
+      saveState();
+      window.location.href = pdpUrl();
     };
 
     return {
@@ -1586,7 +1563,6 @@ console.log('Gleame Chat Assistant v1.0 loaded');
 
     // Bundle card ("Love all N?") is disabled for now. To re-enable, uncomment
     // these three lines (buildBundleCard + addItemsToBag are kept intact below).
-    // The per-product "Add to bag" on each card is a separate path, unaffected.
     //   var bundle = Array.isArray(msg.bundle) ? msg.bundle : [];
     //   var bundleEl = buildBundleCard(bundle);
     //   if (bundleEl) wrap.appendChild(bundleEl);
@@ -1625,8 +1601,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
 
   // DISABLED FOR NOW: renderEndActions does not call buildBundleCard, so the
   // bundle card never renders. Kept here (with addItemsToBag below) so it can
-  // be re-enabled by restoring the commented call in renderEndActions. The
-  // per-product "Add to bag" (buildCardCta/addToBag) is a separate, active path.
+  // be re-enabled by restoring the commented call in renderEndActions.
   //
   // "Love all N?" bundle card. Resolves each item's price + variant id from
   // the storefront, then shows a single "Add all N to bag · $total" CTA that
@@ -1826,7 +1801,9 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   }
 
   // Shopify AJAX cart. Posted to /cart/add.js relative to the storefront
-  // domain — same origin as the widget, so no CORS.
+  // domain — same origin as the widget, so no CORS. Currently unused — the
+  // per-card CTA navigates to the product page instead — but kept alongside
+  // addItemsToBag for the disabled bundle path / easy re-enable.
   //
   // Note on Shopify's response shape: success returns the added line item
   // (has product_id / variant_id / title); SOFT failures (out of stock,

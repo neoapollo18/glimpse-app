@@ -66,6 +66,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       accentColor: config.accent_color,
       greetingMessage: config.greeting_message,
       greetingDelaySeconds: config.greeting_delay_seconds,
+      // Bot message pushed right after the hero CTA opens the chat, before
+      // the first recommendation question. Empty string = skipped.
+      openingMessage: renderTokens(config.opening_message),
       recommendButtonText: config.recommend_button_text,
       preferenceQuestion: config.preference_question,
       preferenceOptions: config.preference_options,
@@ -110,6 +113,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         // Hero tint: explicit override, else the global accent. Resolved here
         // so the widget always gets a usable color.
         accentColor: config.hero_accent_color || config.accent_color,
+        // Exact panel background + headline color. Null = widget falls back
+        // to the accent-derived tint / default dark headline.
+        backgroundColor: config.hero_background_color,
+        textColor: config.hero_text_color,
         // Merchant-supplied sample images take precedence over the auto color
         // swatches; the widget falls back to `swatches` when this is empty.
         sampleImages: Array.isArray(config.hero_sample_images) ? config.hero_sample_images : [],

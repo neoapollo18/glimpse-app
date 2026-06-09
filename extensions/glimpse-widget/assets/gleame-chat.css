@@ -1466,20 +1466,22 @@ body.gleame-chat-no-scroll {
 
 /* Top section — tinted accent-colored panel with eyebrow + headline.
    Bumped saturation so the tint reads as a deliberate brand band, not
-   a wash. The mockup uses a much stronger pink tint than my original. */
+   a wash. The mockup uses a much stronger pink tint than my original.
+   --gleame-hero-bg (set by applyColors only when the merchant configured
+   an explicit background color) overrides the accent-derived gradient. */
 .gleame-hero-top {
   position: relative !important;
   padding: 26px 26px 28px !important;
-  background:
+  background: var(--gleame-hero-bg,
     linear-gradient(135deg,
       color-mix(in srgb, var(--gleame-hero-accent, var(--gleame-chat-accent-color, #8b5cf6)) 22%, #ffffff) 0%,
-      color-mix(in srgb, var(--gleame-hero-accent, var(--gleame-chat-accent-color, #8b5cf6)) 12%, #ffffff) 100%) !important;
+      color-mix(in srgb, var(--gleame-hero-accent, var(--gleame-chat-accent-color, #8b5cf6)) 12%, #ffffff) 100%)) !important;
 }
 
 /* Fallback for browsers without color-mix (older Safari) */
 @supports not (background: color-mix(in srgb, red 50%, white)) {
   .gleame-hero-top {
-    background: #fbeaff !important;
+    background: var(--gleame-hero-bg, #fbeaff) !important;
   }
 }
 
@@ -1507,7 +1509,9 @@ body.gleame-chat-no-scroll {
   font-size: 28px !important;
   font-weight: 700 !important;
   line-height: 1.15 !important;
-  color: #111827 !important;
+  /* Merchant-configurable so the headline stays readable on a custom
+     hero background (see --gleame-hero-bg). */
+  color: var(--gleame-hero-text, #111827) !important;
   margin: 0 !important;
   letter-spacing: -0.015em !important;
 }

@@ -2146,6 +2146,13 @@ export interface ChatAssistantConfig {
   hero_sample_count: number;
   // Hero color override (migration 037). NULL/empty → fall back to accent_color.
   hero_accent_color: string | null;
+  // Hero panel colors (migration 038). background NULL → tint of the accent;
+  // text NULL → default dark headline.
+  hero_background_color: string | null;
+  hero_text_color: string | null;
+  // Bot message sent right after the hero CTA opens the chat, before the
+  // first recommendation question (migration 038). Empty → skipped.
+  opening_message: string;
   // Merchant-supplied hero sample images (migration 037). When non-empty, the
   // hero shows these instead of the auto color swatches.
   hero_sample_images: string[];
@@ -2204,6 +2211,9 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   hero_show_delay_seconds: 1,
   hero_sample_count: 3,
   hero_accent_color: null,
+  hero_background_color: null,
+  hero_text_color: null,
+  opening_message: "Let's find your perfect match! Just a few quick questions first.",
   hero_sample_images: [],
   header_idle_status: 'Your AI assistant',
   header_working_status: 'Working on it…',
@@ -2261,6 +2271,9 @@ export async function getChatAssistantConfig(shopDomain: string): Promise<ChatAs
     hero_show_delay_seconds: data.hero_show_delay_seconds ?? CHAT_ASSISTANT_DEFAULTS.hero_show_delay_seconds,
     hero_sample_count: data.hero_sample_count ?? CHAT_ASSISTANT_DEFAULTS.hero_sample_count,
     hero_accent_color: data.hero_accent_color ?? CHAT_ASSISTANT_DEFAULTS.hero_accent_color,
+    hero_background_color: data.hero_background_color ?? CHAT_ASSISTANT_DEFAULTS.hero_background_color,
+    hero_text_color: data.hero_text_color ?? CHAT_ASSISTANT_DEFAULTS.hero_text_color,
+    opening_message: data.opening_message ?? CHAT_ASSISTANT_DEFAULTS.opening_message,
     hero_sample_images: Array.isArray(data.hero_sample_images) ? data.hero_sample_images : CHAT_ASSISTANT_DEFAULTS.hero_sample_images,
     header_idle_status: data.header_idle_status ?? CHAT_ASSISTANT_DEFAULTS.header_idle_status,
     header_working_status: data.header_working_status ?? CHAT_ASSISTANT_DEFAULTS.header_working_status,
@@ -2341,6 +2354,9 @@ export async function getAllChatAssistantConfigs(): Promise<
     hero_show_delay_seconds: row.hero_show_delay_seconds ?? CHAT_ASSISTANT_DEFAULTS.hero_show_delay_seconds,
     hero_sample_count: row.hero_sample_count ?? CHAT_ASSISTANT_DEFAULTS.hero_sample_count,
     hero_accent_color: row.hero_accent_color ?? CHAT_ASSISTANT_DEFAULTS.hero_accent_color,
+    hero_background_color: row.hero_background_color ?? CHAT_ASSISTANT_DEFAULTS.hero_background_color,
+    hero_text_color: row.hero_text_color ?? CHAT_ASSISTANT_DEFAULTS.hero_text_color,
+    opening_message: row.opening_message ?? CHAT_ASSISTANT_DEFAULTS.opening_message,
     hero_sample_images: Array.isArray(row.hero_sample_images) ? row.hero_sample_images : CHAT_ASSISTANT_DEFAULTS.hero_sample_images,
     header_idle_status: row.header_idle_status ?? CHAT_ASSISTANT_DEFAULTS.header_idle_status,
     header_working_status: row.header_working_status ?? CHAT_ASSISTANT_DEFAULTS.header_working_status,

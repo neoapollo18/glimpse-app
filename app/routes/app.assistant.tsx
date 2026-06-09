@@ -67,6 +67,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       accent_color: formData.get("accent_color") as string,
       greeting_message: formData.get("greeting_message") as string,
       greeting_delay_seconds: parseInt(formData.get("greeting_delay_seconds") as string, 10),
+      opening_message: formData.get("opening_message") as string,
       recommend_button_text: formData.get("recommend_button_text") as string,
       preference_question: formData.get("preference_question") as string,
       preference_options: JSON.parse(formData.get("preference_options") as string),
@@ -90,6 +91,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       hero_show_delay_seconds: parseInt(formData.get("hero_show_delay_seconds") as string, 10),
       hero_sample_count: parseInt(formData.get("hero_sample_count") as string, 10),
       hero_accent_color: (formData.get("hero_accent_color") as string) || null,
+      hero_background_color: (formData.get("hero_background_color") as string) || null,
+      hero_text_color: (formData.get("hero_text_color") as string) || null,
       hero_sample_images: JSON.parse((formData.get("hero_sample_images") as string) || "[]"),
       bundle_enabled: formData.get("bundle_enabled") === "true",
       bundle_title: formData.get("bundle_title") as string,
@@ -119,6 +122,7 @@ export default function AssistantConfig() {
   const [accentColor, setAccentColor] = useState(config.accent_color);
   const [greetingMessage, setGreetingMessage] = useState(config.greeting_message);
   const [greetingDelay, setGreetingDelay] = useState(config.greeting_delay_seconds);
+  const [openingMessage, setOpeningMessage] = useState(config.opening_message);
   const [recommendButtonText, setRecommendButtonText] = useState(config.recommend_button_text);
   const [preferenceQuestion, setPreferenceQuestion] = useState(config.preference_question);
   const [preferenceOptions, setPreferenceOptions] = useState<string[]>(config.preference_options);
@@ -141,8 +145,10 @@ export default function AssistantConfig() {
   const [heroShowDelay, setHeroShowDelay] = useState(config.hero_show_delay_seconds);
   const [heroSampleCount, setHeroSampleCount] = useState(config.hero_sample_count);
   const [newTrustItem, setNewTrustItem] = useState("");
-  // Hero accent color + merchant-supplied sample images
+  // Hero colors + merchant-supplied sample images
   const [heroAccentColor, setHeroAccentColor] = useState(config.hero_accent_color || "");
+  const [heroBackgroundColor, setHeroBackgroundColor] = useState(config.hero_background_color || "");
+  const [heroTextColor, setHeroTextColor] = useState(config.hero_text_color || "");
   const [heroSampleImages, setHeroSampleImages] = useState<string[]>(config.hero_sample_images || []);
   const [uploadingSample, setUploadingSample] = useState(false);
   const sampleInputRef = useRef<HTMLInputElement>(null);
@@ -200,6 +206,7 @@ export default function AssistantConfig() {
     formData.append("accent_color", accentColor);
     formData.append("greeting_message", greetingMessage);
     formData.append("greeting_delay_seconds", String(greetingDelay));
+    formData.append("opening_message", openingMessage);
     formData.append("recommend_button_text", recommendButtonText);
     formData.append("preference_question", preferenceQuestion);
     formData.append("preference_options", JSON.stringify(preferenceOptions));
@@ -222,6 +229,8 @@ export default function AssistantConfig() {
     formData.append("hero_show_delay_seconds", String(heroShowDelay));
     formData.append("hero_sample_count", String(heroSampleCount));
     formData.append("hero_accent_color", heroAccentColor);
+    formData.append("hero_background_color", heroBackgroundColor);
+    formData.append("hero_text_color", heroTextColor);
     formData.append("hero_sample_images", JSON.stringify(heroSampleImages));
     formData.append("bundle_enabled", String(bundleEnabled));
     formData.append("bundle_title", bundleTitle);
@@ -231,11 +240,11 @@ export default function AssistantConfig() {
     fetcher.submit(formData, { method: "POST" });
   }, [
     fetcher, enabled, assistantName, avatarUrl, bubbleColor, bubbleText, accentColor,
-    greetingMessage, greetingDelay, recommendButtonText, preferenceQuestion,
+    greetingMessage, greetingDelay, openingMessage, recommendButtonText, preferenceQuestion,
     preferenceOptions, photoUploadMessage, numRecommendations, productScope, selectedProductIds,
     heroEnabled, heroEyebrow, heroHeadline, heroBody, heroCtaLabel, heroFooter,
     heroSampleLabel, heroTrustItems, heroShowDelay, heroSampleCount,
-    heroAccentColor, heroSampleImages,
+    heroAccentColor, heroBackgroundColor, heroTextColor, heroSampleImages,
     bundleEnabled, bundleTitle, bundleSubtext, bundleButton, titleFont,
   ]);
 
@@ -534,6 +543,14 @@ export default function AssistantConfig() {
                       helpText="Big button that opens the chat"
                     />
                     <TextField
+                      label="Opening Message"
+                      value={openingMessage}
+                      onChange={setOpeningMessage}
+                      autoComplete="off"
+                      multiline={2}
+                      helpText="Sent by the assistant right after the CTA opens the chat, immediately followed by the first question — no reply needed. Use {assistant_name} for the configured name. Leave blank to jump straight to the question."
+                    />
+                    <TextField
                       label="Footer Line"
                       value={heroFooter}
                       onChange={setHeroFooter}
@@ -548,30 +565,86 @@ export default function AssistantConfig() {
                       maxLength={40}
                       helpText='Small label above the swatch row (e.g. "Sample result preview")'
                     />
-                    <TextField
-                      label="Hero Accent Color"
-                      value={heroAccentColor}
-                      onChange={setHeroAccentColor}
-                      autoComplete="off"
-                      placeholder="Blank = use Accent Color"
-                      connectedLeft={
-                        <input
-                          type="color"
-                          value={heroAccentColor || accentColor}
-                          onChange={(e) => setHeroAccentColor(e.target.value)}
-                          style={{
-                            width: 34,
-                            height: 34,
-                            padding: 2,
-                            border: "1px solid #c9cccf",
-                            borderRadius: "8px 0 0 8px",
-                            cursor: "pointer",
-                            background: "#fff",
-                          }}
+                    <InlineStack gap="400" wrap={false}>
+                      <div style={{ flex: 1 }}>
+                        <TextField
+                          label="Hero Accent Color"
+                          value={heroAccentColor}
+                          onChange={setHeroAccentColor}
+                          autoComplete="off"
+                          placeholder="Blank = Accent Color"
+                          connectedLeft={
+                            <input
+                              type="color"
+                              value={heroAccentColor || accentColor}
+                              onChange={(e) => setHeroAccentColor(e.target.value)}
+                              style={{
+                                width: 34,
+                                height: 34,
+                                padding: 2,
+                                border: "1px solid #c9cccf",
+                                borderRadius: "8px 0 0 8px",
+                                cursor: "pointer",
+                                background: "#fff",
+                              }}
+                            />
+                          }
+                          helpText="Eyebrow label — also tints the panel when no Background Color is set"
                         />
-                      }
-                      helpText="Tints the hero's top panel + eyebrow. Leave blank to use the global Accent Color."
-                    />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <TextField
+                          label="Hero Background Color"
+                          value={heroBackgroundColor}
+                          onChange={setHeroBackgroundColor}
+                          autoComplete="off"
+                          placeholder="Blank = accent tint"
+                          connectedLeft={
+                            <input
+                              type="color"
+                              value={heroBackgroundColor || "#fbeaff"}
+                              onChange={(e) => setHeroBackgroundColor(e.target.value)}
+                              style={{
+                                width: 34,
+                                height: 34,
+                                padding: 2,
+                                border: "1px solid #c9cccf",
+                                borderRadius: "8px 0 0 8px",
+                                cursor: "pointer",
+                                background: "#fff",
+                              }}
+                            />
+                          }
+                          helpText="Exact background for the hero's top panel"
+                        />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <TextField
+                          label="Hero Text Color"
+                          value={heroTextColor}
+                          onChange={setHeroTextColor}
+                          autoComplete="off"
+                          placeholder="Blank = dark gray"
+                          connectedLeft={
+                            <input
+                              type="color"
+                              value={heroTextColor || "#111827"}
+                              onChange={(e) => setHeroTextColor(e.target.value)}
+                              style={{
+                                width: 34,
+                                height: 34,
+                                padding: 2,
+                                border: "1px solid #c9cccf",
+                                borderRadius: "8px 0 0 8px",
+                                cursor: "pointer",
+                                background: "#fff",
+                              }}
+                            />
+                          }
+                          helpText="Headline color — pick one that stays readable on your background"
+                        />
+                      </div>
+                    </InlineStack>
                     <BlockStack gap="200">
                       <Text as="p" variant="bodySm" fontWeight="semibold">
                         Sample Images
