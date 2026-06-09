@@ -2698,10 +2698,11 @@ export async function getRecommendationAdminConfig(
 }
 
 /**
- * Flat target list for the matrix editor's cell pickers. Returns one entry
- * per configured variant PLUS one entry per configured product that has no
- * variants (so product-level merchants can assign whole products in the
- * matrix). Each entry carries an encoded `value`:
+ * Flat target list for the matrix editor's cell pickers. Returns a
+ * whole-product entry for EVERY configured product, PLUS one entry per
+ * configured variant (shade) for products that have them — so a merchant can
+ * assign either the whole product or a specific shade. Each entry carries an
+ * encoded `value`:
  *   - "v:<product_variants.id>"  → a specific shade
  *   - "p:<products.id>"          → the whole product
  * The editor stores this `value` as the rule target and the save path
@@ -2753,21 +2754,26 @@ export async function getShopVariantsFlat(
     };
   });
 
-  // Products with no configured variant become whole-product targets.
-  const productEntries = (productsRes.data || [])
-    .filter((p: any) => !productsWithVariants.has(p.id as string))
-    .map((p: any) => {
-      const productName = (p.product_name as string) || '';
-      return {
-        value: `p:${p.id}`,
-        id: p.id as string,
-        kind: 'product' as const,
-        label: productName ? `${productName} (whole product)` : '(whole product)',
-        productName,
-        variantTitle: '',
-        displayColor: null as string | null,
-      };
-    });
+  // Every configured product is selectable as a whole-product target — not
+  // just variant-less ones. Products that also have configured shades show
+  // both: the whole product AND each shade (the editor groups them together).
+  const productEntries = (productsRes.data || []).map((p: any) => {
+    const productName = (p.product_name as string) || '';
+    const hasVariants = productsWithVariants.has(p.id as string);
+    return {
+      value: `p:${p.id}`,
+      id: p.id as string,
+      kind: 'product' as const,
+      // Only tag "(whole product)" when there are shades to contrast against;
+      // for a product with no shades, the bare name is clearer.
+      label: productName
+        ? (hasVariants ? `${productName} (whole product)` : productName)
+        : '(whole product)',
+      productName,
+      variantTitle: '',
+      displayColor: null as string | null,
+    };
+  });
 
   // Group by product name so a product and its shades sit together; the
   // whole-product entry sorts before any of its variants (rare to have both).
