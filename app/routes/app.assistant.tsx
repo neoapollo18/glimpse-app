@@ -89,6 +89,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       hero_trust_items: JSON.parse(formData.get("hero_trust_items") as string),
       hero_show_delay_seconds: parseInt(formData.get("hero_show_delay_seconds") as string, 10),
       hero_sample_count: parseInt(formData.get("hero_sample_count") as string, 10),
+      hero_accent_color: (formData.get("hero_accent_color") as string) || null,
+      hero_sample_images: JSON.parse((formData.get("hero_sample_images") as string) || "[]"),
       bundle_enabled: formData.get("bundle_enabled") === "true",
       bundle_title: formData.get("bundle_title") as string,
       bundle_subtext: formData.get("bundle_subtext") as string,
@@ -139,6 +141,30 @@ export default function AssistantConfig() {
   const [heroShowDelay, setHeroShowDelay] = useState(config.hero_show_delay_seconds);
   const [heroSampleCount, setHeroSampleCount] = useState(config.hero_sample_count);
   const [newTrustItem, setNewTrustItem] = useState("");
+  // Hero accent color + merchant-supplied sample images
+  const [heroAccentColor, setHeroAccentColor] = useState(config.hero_accent_color || "");
+  const [heroSampleImages, setHeroSampleImages] = useState<string[]>(config.hero_sample_images || []);
+  const [uploadingSample, setUploadingSample] = useState(false);
+  const sampleInputRef = useRef<HTMLInputElement>(null);
+
+  // Reuses the avatar upload endpoint (a generic authenticated image upload
+  // that returns a public URL). Appends the URL to the sample-image list, cap 4.
+  const handleSampleUpload = useCallback(async (file: File) => {
+    setUploadingSample(true);
+    try {
+      const fd = new FormData();
+      fd.append("image", file);
+      const res = await fetch("/api/upload-avatar", { method: "POST", body: fd });
+      const data = await res.json();
+      if (data.avatarUrl) {
+        setHeroSampleImages((prev) => (prev.length >= 4 ? prev : [...prev, data.avatarUrl]));
+      }
+    } catch (e) {
+      console.error("Sample image upload failed", e);
+    } finally {
+      setUploadingSample(false);
+    }
+  }, []);
   // Bundle card + title font
   const [bundleEnabled, setBundleEnabled] = useState(config.bundle_enabled);
   const [bundleTitle, setBundleTitle] = useState(config.bundle_title);
@@ -195,6 +221,8 @@ export default function AssistantConfig() {
     formData.append("hero_trust_items", JSON.stringify(heroTrustItems));
     formData.append("hero_show_delay_seconds", String(heroShowDelay));
     formData.append("hero_sample_count", String(heroSampleCount));
+    formData.append("hero_accent_color", heroAccentColor);
+    formData.append("hero_sample_images", JSON.stringify(heroSampleImages));
     formData.append("bundle_enabled", String(bundleEnabled));
     formData.append("bundle_title", bundleTitle);
     formData.append("bundle_subtext", bundleSubtext);
@@ -207,6 +235,7 @@ export default function AssistantConfig() {
     preferenceOptions, photoUploadMessage, numRecommendations, productScope, selectedProductIds,
     heroEnabled, heroEyebrow, heroHeadline, heroBody, heroCtaLabel, heroFooter,
     heroSampleLabel, heroTrustItems, heroShowDelay, heroSampleCount,
+    heroAccentColor, heroSampleImages,
     bundleEnabled, bundleTitle, bundleSubtext, bundleButton, titleFont,
   ]);
 
@@ -519,6 +548,90 @@ export default function AssistantConfig() {
                       maxLength={40}
                       helpText='Small label above the swatch row (e.g. "Sample result preview")'
                     />
+                    <TextField
+                      label="Hero Accent Color"
+                      value={heroAccentColor}
+                      onChange={setHeroAccentColor}
+                      autoComplete="off"
+                      placeholder="Blank = use Accent Color"
+                      connectedLeft={
+                        <input
+                          type="color"
+                          value={heroAccentColor || accentColor}
+                          onChange={(e) => setHeroAccentColor(e.target.value)}
+                          style={{
+                            width: 34,
+                            height: 34,
+                            padding: 2,
+                            border: "1px solid #c9cccf",
+                            borderRadius: "8px 0 0 8px",
+                            cursor: "pointer",
+                            background: "#fff",
+                          }}
+                        />
+                      }
+                      helpText="Tints the hero's top panel + eyebrow. Leave blank to use the global Accent Color."
+                    />
+                    <BlockStack gap="200">
+                      <Text as="p" variant="bodySm" fontWeight="semibold">
+                        Sample Images
+                      </Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Upload up to 4 images for the sample preview tiles. When set, these
+                        are used instead of the auto color swatches (which only appear when
+                        your variants have a color configured).
+                      </Text>
+                      {heroSampleImages.length > 0 && (
+                        <InlineStack gap="300" wrap>
+                          {heroSampleImages.map((url, i) => (
+                            <BlockStack key={url + i} gap="050" inlineAlign="center">
+                              <img
+                                src={url}
+                                alt=""
+                                style={{
+                                  width: 56,
+                                  height: 56,
+                                  objectFit: "cover",
+                                  borderRadius: 8,
+                                  border: "1px solid #e1e3e5",
+                                }}
+                              />
+                              <Button
+                                size="micro"
+                                variant="plain"
+                                tone="critical"
+                                onClick={() =>
+                                  setHeroSampleImages(heroSampleImages.filter((_, j) => j !== i))
+                                }
+                              >
+                                Remove
+                              </Button>
+                            </BlockStack>
+                          ))}
+                        </InlineStack>
+                      )}
+                      <InlineStack>
+                        <Button
+                          size="slim"
+                          loading={uploadingSample}
+                          disabled={heroSampleImages.length >= 4}
+                          onClick={() => sampleInputRef.current?.click()}
+                        >
+                          {heroSampleImages.length >= 4 ? "Max 4 images" : "Upload sample image"}
+                        </Button>
+                      </InlineStack>
+                      <input
+                        ref={sampleInputRef}
+                        type="file"
+                        accept="image/*"
+                        style={{ display: "none" }}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleSampleUpload(file);
+                          e.target.value = "";
+                        }}
+                      />
+                    </BlockStack>
                     <BlockStack gap="200">
                       <Text as="p" variant="bodySm" fontWeight="semibold">
                         Trust Row Items

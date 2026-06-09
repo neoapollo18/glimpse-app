@@ -304,6 +304,10 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     // Product + bundle title font is merchant-configurable (serif | sans).
     var titleFont = (config.titleFont === 'sans') ? TITLE_FONT_SANS : TITLE_FONT_SERIF;
     root.style.setProperty('--gleame-chat-title-font', titleFont);
+    // Hero tint — its own configurable accent, resolved server-side to fall
+    // back to the chat accent when the merchant hasn't set a hero color.
+    var heroAccent = (config.hero && config.hero.accentColor) || config.accentColor || '#8b5cf6';
+    root.style.setProperty('--gleame-hero-accent', heroAccent);
   }
 
   // ---- Bubble ----
@@ -434,25 +438,37 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     }
 
     var swatchesHtml = '';
-    // Cap client-side as a defense in depth against any future API drift
-    // (server already caps at 4). Without this, an unexpected 10-tile
-    // payload would scrunch the CSS grid.
+    // Merchant-supplied sample images win when present (they always render,
+    // unlike the color swatches which depend on variants having display_color).
+    // Cap at 4 so an oversized list can't scrunch the CSS grid.
+    var sampleImages = Array.isArray(heroCfg.sampleImages)
+      ? heroCfg.sampleImages.filter(function(u) { return typeof u === 'string' && u; }).slice(0, 4)
+      : [];
     var swatches = Array.isArray(heroCfg.swatches) ? heroCfg.swatches.slice(0, 4) : [];
-    if (swatches.length >= 2) {
-      var swatchTiles = swatches.map(function(s) {
+    var tilesHtml = '';
+    if (sampleImages.length >= 1) {
+      tilesHtml = sampleImages.map(function(url) {
+        // escapeHtml guards the attribute (quotes/angle brackets); the URL is a
+        // Supabase public URL written via the authenticated admin upload.
+        return '<div class="gleame-hero-sample">' +
+          '<img class="gleame-hero-sample-img" src="' + escapeHtml(url) + '" alt="" loading="lazy">' +
+          '</div>';
+      }).join('');
+    } else if (swatches.length >= 2) {
+      tilesHtml = swatches.map(function(s) {
         var color = (s && s.color) ? s.color : '#e5e7eb';
         // Inline style is necessary because the color comes from data, not CSS.
-        // escapeHtml on the label; raw `color` is restricted to the hex set
-        // we get from display_color in Supabase (validated server-side).
         return (
           '<div class="gleame-hero-sample" style="background:' + sanitizeColor(color) + '">' +
             (s && s.label ? '<span class="gleame-hero-sample-label-text">' + escapeHtml(s.label) + '</span>' : '') +
           '</div>'
         );
       }).join('');
+    }
+    if (tilesHtml) {
       swatchesHtml =
         (heroCfg.sampleLabel ? '<div class="gleame-hero-sample-label">' + escapeHtml(heroCfg.sampleLabel) + '</div>' : '') +
-        '<div class="gleame-hero-samples">' + swatchTiles + '</div>';
+        '<div class="gleame-hero-samples">' + tilesHtml + '</div>';
     }
 
     var trustItems = Array.isArray(heroCfg.trustItems) ? heroCfg.trustItems.slice(0, 4) : [];

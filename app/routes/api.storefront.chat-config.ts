@@ -107,6 +107,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         sampleLabel: renderTokens(config.hero_sample_label),
         trustItems: config.hero_trust_items,
         showDelaySeconds: config.hero_show_delay_seconds,
+        // Hero tint: explicit override, else the global accent. Resolved here
+        // so the widget always gets a usable color.
+        accentColor: config.hero_accent_color || config.accent_color,
+        // Merchant-supplied sample images take precedence over the auto color
+        // swatches; the widget falls back to `swatches` when this is empty.
+        sampleImages: Array.isArray(config.hero_sample_images) ? config.hero_sample_images : [],
         swatches: heroSwatches,
       },
     },

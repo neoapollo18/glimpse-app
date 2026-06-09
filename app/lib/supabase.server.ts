@@ -2144,6 +2144,11 @@ export interface ChatAssistantConfig {
   hero_trust_items: string[];
   hero_show_delay_seconds: number;
   hero_sample_count: number;
+  // Hero color override (migration 037). NULL/empty → fall back to accent_color.
+  hero_accent_color: string | null;
+  // Merchant-supplied hero sample images (migration 037). When non-empty, the
+  // hero shows these instead of the auto color swatches.
+  hero_sample_images: string[];
   // Header status state-machine copy (migration 033). header_done_status
   // supports the {count} token, replaced at render time with the number
   // of recommendations returned.
@@ -2198,6 +2203,8 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   hero_trust_items: ['60 sec', 'Processed instantly', 'Never stored'],
   hero_show_delay_seconds: 1,
   hero_sample_count: 3,
+  hero_accent_color: null,
+  hero_sample_images: [],
   header_idle_status: 'Your AI assistant',
   header_working_status: 'Working on it…',
   header_done_status: 'Your {count} perfect picks',
@@ -2253,6 +2260,8 @@ export async function getChatAssistantConfig(shopDomain: string): Promise<ChatAs
     hero_trust_items: data.hero_trust_items ?? CHAT_ASSISTANT_DEFAULTS.hero_trust_items,
     hero_show_delay_seconds: data.hero_show_delay_seconds ?? CHAT_ASSISTANT_DEFAULTS.hero_show_delay_seconds,
     hero_sample_count: data.hero_sample_count ?? CHAT_ASSISTANT_DEFAULTS.hero_sample_count,
+    hero_accent_color: data.hero_accent_color ?? CHAT_ASSISTANT_DEFAULTS.hero_accent_color,
+    hero_sample_images: Array.isArray(data.hero_sample_images) ? data.hero_sample_images : CHAT_ASSISTANT_DEFAULTS.hero_sample_images,
     header_idle_status: data.header_idle_status ?? CHAT_ASSISTANT_DEFAULTS.header_idle_status,
     header_working_status: data.header_working_status ?? CHAT_ASSISTANT_DEFAULTS.header_working_status,
     header_done_status: data.header_done_status ?? CHAT_ASSISTANT_DEFAULTS.header_done_status,
@@ -2331,6 +2340,8 @@ export async function getAllChatAssistantConfigs(): Promise<
     hero_trust_items: row.hero_trust_items ?? CHAT_ASSISTANT_DEFAULTS.hero_trust_items,
     hero_show_delay_seconds: row.hero_show_delay_seconds ?? CHAT_ASSISTANT_DEFAULTS.hero_show_delay_seconds,
     hero_sample_count: row.hero_sample_count ?? CHAT_ASSISTANT_DEFAULTS.hero_sample_count,
+    hero_accent_color: row.hero_accent_color ?? CHAT_ASSISTANT_DEFAULTS.hero_accent_color,
+    hero_sample_images: Array.isArray(row.hero_sample_images) ? row.hero_sample_images : CHAT_ASSISTANT_DEFAULTS.hero_sample_images,
     header_idle_status: row.header_idle_status ?? CHAT_ASSISTANT_DEFAULTS.header_idle_status,
     header_working_status: row.header_working_status ?? CHAT_ASSISTANT_DEFAULTS.header_working_status,
     header_done_status: row.header_done_status ?? CHAT_ASSISTANT_DEFAULTS.header_done_status,
@@ -2727,11 +2738,14 @@ export async function getShopVariantsFlat(
       .select('id, product_id, variant_title, display_color, products!inner ( id, shop_id, product_name )')
       .eq('products.shop_id', shopId)
       .order('created_at', { ascending: true }),
+    // NOTE: do NOT .order('created_at') here — the products table may not have
+    // that column, and a bad ORDER BY makes the whole query error out, which
+    // silently drops every product from the picker (you'd see only variants).
+    // Final ordering is done in JS below by product_name.
     supabase
       .from('products')
-      .select('id, product_name, created_at')
-      .eq('shop_id', shopId)
-      .order('created_at', { ascending: true }),
+      .select('id, product_name')
+      .eq('shop_id', shopId),
   ]);
 
   if (variantsRes.error) console.error('getShopVariantsFlat variants error', variantsRes.error);
