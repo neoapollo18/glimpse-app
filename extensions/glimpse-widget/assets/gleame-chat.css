@@ -800,14 +800,25 @@
 .gleame-chat-product-image-wrap {
   position: relative;
   width: 100%;
-  aspect-ratio: 3/4;
+  /* Cap the image height so the whole card (title · price · Add to bag) fits
+     the panel without scrolling past a giant photo. Now that cards are
+     full-width, a 3/4 portrait ratio made the image ~1.3× the card width and
+     pushed the CTA below the fold. The wrap owns the size and the <img> fills
+     it (object-fit: cover), so the cap can't be broken by the photo's own
+     ratio; aspect-ratio still sizes the gray placeholder if the image fails. */
+  aspect-ratio: 1 / 1;
+  max-height: 260px;
+  overflow: hidden;
   background: #f3f4f6;
 }
 
 .gleame-chat-product-image {
+  position: absolute;
+  inset: 0;
   width: 100%;
-  aspect-ratio: 3/4;
+  height: 100%;
   object-fit: cover;
+  object-position: center;
   display: block;
 }
 
@@ -1379,12 +1390,11 @@
   }
 
   /* Product card — cap image height so users still see card title + CTA
-     without scrolling each card individually on smaller screens */
-  .gleame-chat-product-image,
-  .gleame-chat-skeleton-image {
-    max-height: 60vh !important;
-    aspect-ratio: 3 / 4 !important;
-    object-position: center top !important;
+     without scrolling each card individually on smaller screens. Cap the wrap
+     (the <img> fills it); scale to the shorter phone viewport so a full card
+     stays visible. */
+  .gleame-chat-product-image-wrap {
+    max-height: min(260px, 42vh) !important;
   }
 }
 
