@@ -2571,16 +2571,23 @@ export async function pickVariantsByCriteria(
 ): Promise<Array<{ variantInternalId: string | null; productInternalId: string | null; rank: number }> | null> {
   if (Object.keys(criteria).length === 0) return null;
 
-  // JSONB equality in Postgres is order-independent — passing the criteria
-  // object straight through is correct; no need to sort keys client-side.
+  // The filter value must be a JSON STRING: supabase-js stringifies a raw
+  // object as "[object Object]", which Postgres rejects with "invalid input
+  // syntax for type json" — making every lookup silently miss. JSONB
+  // equality itself is key-order independent, so no client-side key sort
+  // is needed.
   const { data, error } = await supabase
     .from('recommendation_rules')
     .select('variant_id, product_id, rank')
     .eq('shop_id', shopId)
-    .eq('criteria', criteria as any)
+    .eq('criteria', JSON.stringify(criteria))
     .order('rank', { ascending: true });
 
-  if (error || !data || data.length === 0) return null;
+  if (error) {
+    console.error('pickVariantsByCriteria error:', error.message);
+    return null;
+  }
+  if (!data || data.length === 0) return null;
 
   // Each hit targets either a variant or a whole product (DB XOR check). The
   // caller resolves whichever is set against the in-scope candidate pool.
@@ -2588,6 +2595,38 @@ export async function pickVariantsByCriteria(
     variantInternalId: (r.variant_id as string | null) ?? null,
     productInternalId: (r.product_id as string | null) ?? null,
     rank: r.rank as number,
+  }));
+}
+
+/**
+ * Photo-sourced axes with their allowed values, for server-side selfie
+ * classification in chat-recommend. Rules store criteria across ALL axes,
+ * so any photo axis missing from the runtime criteria makes the strict
+ * equality lookup unmatchable — chat-recommend uses this list to fill
+ * those axes from the photo before the lookup.
+ */
+export async function getPhotoAxes(
+  shopId: string,
+): Promise<Array<{ key: string; label: string; values: Array<{ value: string; label: string }> }>> {
+  const { data, error } = await supabase
+    .from('recommendation_axes')
+    .select('key, label, recommendation_axis_values ( value, label, position )')
+    .eq('shop_id', shopId)
+    .eq('source', 'photo')
+    .order('position', { ascending: true });
+
+  if (error || !data) {
+    if (error) console.error('getPhotoAxes error', error);
+    return [];
+  }
+
+  return data.map((a: any) => ({
+    key: a.key as string,
+    label: a.label as string,
+    values: ((a.recommendation_axis_values || []) as any[])
+      .slice()
+      .sort((x, y) => (x.position ?? 0) - (y.position ?? 0))
+      .map((v) => ({ value: v.value as string, label: v.label as string })),
   }));
 }
 
@@ -2653,7 +2692,10 @@ export interface AdminRecommendationConfig {
 export async function getRecommendationAdminConfig(
   shopId: string,
 ): Promise<AdminRecommendationConfig> {
-  const [axesRes, questionsRes, rulesRes] = await Promise.all([
+  // Axes come first: their ids scope the questions query, and an empty
+  // .in() list is a PostgREST error on some versions — skip the query
+  // entirely when the shop has no axes.
+  const [axesRes, rulesRes] = await Promise.all([
     supabase
       .from('recommendation_axes')
       .select('id, key, label, source, position, recommendation_axis_values ( id, value, label, position )')
@@ -2661,20 +2703,19 @@ export async function getRecommendationAdminConfig(
       .order('position', { ascending: true })
       .order('created_at', { ascending: true }),
     supabase
-      .from('recommendation_questions')
-      .select('id, axis_id, prompt, recommendation_question_options ( id, label, axis_value_id, bot_response, position )')
-      .in(
-        'axis_id',
-        // Subquery via .in() needs the axis ids; we'll filter in code instead
-        // to avoid a separate roundtrip — see below.
-        (await supabase.from('recommendation_axes').select('id').eq('shop_id', shopId)).data?.map((a: any) => a.id) || [],
-      ),
-    supabase
       .from('recommendation_rules')
       .select('id, criteria, variant_id, product_id, rank')
       .eq('shop_id', shopId)
       .order('rank', { ascending: true }),
   ]);
+
+  const axisIds = (axesRes.data || []).map((a: any) => a.id as string);
+  const questionsRes = axisIds.length > 0
+    ? await supabase
+        .from('recommendation_questions')
+        .select('id, axis_id, prompt, recommendation_question_options ( id, label, axis_value_id, bot_response, position )')
+        .in('axis_id', axisIds)
+    : { data: [], error: null };
 
   if (axesRes.error) console.error('admin axes fetch error', axesRes.error);
   if (questionsRes.error) console.error('admin questions fetch error', questionsRes.error);
@@ -2817,18 +2858,15 @@ export async function getShopVariantsFlat(
 }
 
 /**
- * Wipe-and-rewrite save for the entire recommendation config. Trading
- * write efficiency for code simplicity: the editor sends the full desired
- * state and we mirror it into the DB. Deletes cascade to dependent rows
- * (axis → values, axis → question → options, axis_value → options/rules),
- * so we delete top-down and reinsert.
+ * Wipe-and-rewrite save for the entire recommendation config, executed
+ * atomically by the save_recommendation_config Postgres function
+ * (migration 039). A constraint failure mid-rewrite rolls the whole
+ * transaction back, so the previous config survives a bad save — unlike
+ * the old row-by-row PostgREST version, which destroyed it.
  *
- * Two failure modes worth knowing:
- *   - Partial failures (e.g. one rule fails CHECK constraint) leave the
- *     DB in a partially-updated state. We log + bubble the error; admin
- *     UI shows a banner. Caller should refetch on error.
- *   - Concurrent edits from two admin tabs will race — last write wins.
- *     Unavoidable without optimistic locking columns.
+ * Validation here mirrors the DB constraints so merchants get a friendly
+ * message instead of a raw constraint error. Concurrent edits from two
+ * admin tabs still race — last write wins.
  */
 export async function saveRecommendationConfig(
   shopId: string,
@@ -2854,125 +2892,49 @@ export async function saveRecommendationConfig(
     }>;
   },
 ): Promise<{ ok: boolean; error?: string }> {
-  // Delete all existing axes for this shop. Cascades wipe values, questions,
-  // options, and rules referencing those axes/values. Rules whose criteria
-  // values still match by string survive only because they're FK'd to
-  // variant_id (not to axis values directly) — but we wipe them explicitly
-  // below to be safe.
-  const { error: delAxesErr } = await supabase
-    .from('recommendation_axes')
-    .delete()
-    .eq('shop_id', shopId);
-  if (delAxesErr) return { ok: false, error: delAxesErr.message };
-
-  const { error: delRulesErr } = await supabase
-    .from('recommendation_rules')
-    .delete()
-    .eq('shop_id', shopId);
-  if (delRulesErr) return { ok: false, error: delRulesErr.message };
-
-  // Insert axes, capturing their generated ids so we can wire up values
-  // and questions in subsequent inserts.
-  const axisKeyToId = new Map<string, string>();
-  for (const axis of input.axes) {
-    const { data: insAxis, error: insAxisErr } = await supabase
-      .from('recommendation_axes')
-      .insert({
-        shop_id: shopId,
-        key: axis.key,
-        label: axis.label,
-        source: axis.source,
-        position: axis.position,
-      })
-      .select('id')
-      .single();
-    if (insAxisErr || !insAxis) return { ok: false, error: insAxisErr?.message || 'axis insert failed' };
-    axisKeyToId.set(axis.key, insAxis.id as string);
-
-    // Insert values for this axis, capturing ids keyed by (axisKey, value)
-    // so question options can resolve them by string.
-    for (const v of axis.values) {
-      const { error: insValErr } = await supabase
-        .from('recommendation_axis_values')
-        .insert({
-          axis_id: insAxis.id,
-          value: v.value,
-          label: v.label,
-          position: v.position,
-        });
-      if (insValErr) return { ok: false, error: insValErr.message };
+  // Pre-validate against the DB constraints so a bad payload gets a
+  // friendly message and never reaches the rewrite at all.
+  const ID_RE = /^[a-z_][a-z0-9_]*$/;
+  const seenKeys = new Set<string>();
+  for (const axis of input.axes || []) {
+    if (!ID_RE.test(axis.key)) {
+      return { ok: false, error: `Axis key "${axis.key}" must be lower snake_case` };
+    }
+    if (seenKeys.has(axis.key)) {
+      return { ok: false, error: `Duplicate axis key "${axis.key}" — axis keys must be unique` };
+    }
+    seenKeys.add(axis.key);
+    if (axis.source !== 'photo' && axis.source !== 'user_question') {
+      return { ok: false, error: `Axis "${axis.key}" has an invalid source` };
+    }
+    const seenValues = new Set<string>();
+    for (const v of axis.values || []) {
+      if (!ID_RE.test(v.value)) {
+        return { ok: false, error: `Value "${v.value}" in axis "${axis.key}" must be lower snake_case` };
+      }
+      if (seenValues.has(v.value)) {
+        return { ok: false, error: `Duplicate value "${v.value}" in axis "${axis.key}"` };
+      }
+      seenValues.add(v.value);
+    }
+  }
+  for (const rule of input.rules || []) {
+    if (!(Number(rule.rank) > 0)) {
+      return { ok: false, error: 'Rule rank must be a positive number' };
     }
   }
 
-  // Re-fetch axis_values to get ids keyed by (axis_id, value). We could
-  // collect them during the insert loop above, but a single select keeps
-  // the code shorter and the query is small.
-  const { data: allValues, error: valsFetchErr } = await supabase
-    .from('recommendation_axis_values')
-    .select('id, value, axis_id')
-    .in('axis_id', Array.from(axisKeyToId.values()));
-  if (valsFetchErr) return { ok: false, error: valsFetchErr.message };
+  // Single atomic rewrite — see migration 039. On any constraint failure
+  // the transaction rolls back and the previous config is untouched.
+  const { error } = await supabase.rpc('save_recommendation_config', {
+    p_shop_id: shopId,
+    p_payload: input,
+  });
 
-  const axisValueLookup = new Map<string, string>(); // `${axisKey}:${value}` → id
-  for (const v of allValues || []) {
-    const axisId = (v as any).axis_id as string;
-    // Reverse-map axis id → axis key
-    let axisKey = '';
-    for (const [k, id] of axisKeyToId.entries()) {
-      if (id === axisId) { axisKey = k; break; }
-    }
-    if (axisKey) axisValueLookup.set(`${axisKey}:${(v as any).value}`, (v as any).id);
+  if (error) {
+    console.error(`saveRecommendationConfig RPC error for shop ${shopId}:`, error);
+    return { ok: false, error: error.message };
   }
-
-  // Insert questions + their options.
-  for (const q of input.questions) {
-    const axisId = axisKeyToId.get(q.axisKey);
-    if (!axisId) continue;
-    const { data: insQ, error: insQErr } = await supabase
-      .from('recommendation_questions')
-      .insert({ axis_id: axisId, prompt: q.prompt })
-      .select('id')
-      .single();
-    if (insQErr || !insQ) return { ok: false, error: insQErr?.message || 'question insert failed' };
-
-    for (const opt of q.options) {
-      const axisValueId = axisValueLookup.get(`${q.axisKey}:${opt.axisValueValue}`);
-      if (!axisValueId) continue; // option references a value that doesn't exist; skip
-      const { error: insOptErr } = await supabase
-        .from('recommendation_question_options')
-        .insert({
-          question_id: insQ.id,
-          label: opt.label,
-          axis_value_id: axisValueId,
-          bot_response: opt.botResponse,
-          position: opt.position,
-        });
-      if (insOptErr) return { ok: false, error: insOptErr.message };
-    }
-  }
-
-  // Insert rules. Each rule references variant_id and a JSONB criteria
-  // object. We don't validate that criteria values actually exist as
-  // axis_values here — the editor enforces that client-side via dropdowns,
-  // and the worst-case (orphan criteria) just means the rule won't match
-  // any user input.
-  for (const rule of input.rules) {
-    // A rule must target exactly one of variant / product. The DB XOR check
-    // would reject a target-less rule mid-rewrite; skip it here instead so a
-    // stray empty cell doesn't fail the whole save.
-    if (!rule.variantId && !rule.productId) continue;
-    const { error: insRuleErr } = await supabase
-      .from('recommendation_rules')
-      .insert({
-        shop_id: shopId,
-        criteria: rule.criteria,
-        variant_id: rule.variantId ?? null,
-        product_id: rule.productId ?? null,
-        rank: rule.rank,
-      });
-    if (insRuleErr) return { ok: false, error: insRuleErr.message };
-  }
-
   return { ok: true };
 }
 

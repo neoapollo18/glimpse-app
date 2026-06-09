@@ -230,7 +230,28 @@ export default function AssistantRecommendations() {
   }, []);
 
   const updateAxis = useCallback((idx: number, patch: Partial<EditorAxis>) => {
-    setAxes((prev) => prev.map((a, i) => (i === idx ? { ...a, ...patch } : a)));
+    setAxes((prev) => {
+      const old = prev[idx];
+      // Renaming an axis key must follow through to the question and every
+      // rule's criteria — otherwise the rules vanish from the matrix UI
+      // (combos use the new key) but still get saved with the stale key,
+      // becoming permanently unmatchable rows.
+      if (patch.key !== undefined && old && patch.key !== old.key) {
+        const oldKey = old.key;
+        const newKey = patch.key;
+        setQuestions((qs) =>
+          qs.map((q) => (q.axisKey === oldKey ? { ...q, axisKey: newKey } : q)),
+        );
+        setRules((rs) =>
+          rs.map((r) => {
+            if (!(oldKey in r.criteria)) return r;
+            const { [oldKey]: moved, ...rest } = r.criteria;
+            return { ...r, criteria: { ...rest, [newKey]: moved } };
+          }),
+        );
+      }
+      return prev.map((a, i) => (i === idx ? { ...a, ...patch } : a));
+    });
   }, []);
 
   const removeAxis = useCallback((idx: number) => {
@@ -256,16 +277,45 @@ export default function AssistantRecommendations() {
 
   const updateAxisValue = useCallback(
     (axisIdx: number, valueIdx: number, patch: Partial<EditorAxisValue>) => {
-      setAxes((prev) =>
-        prev.map((a, i) =>
+      setAxes((prev) => {
+        const axis = prev[axisIdx];
+        const old = axis?.values[valueIdx];
+        // Same follow-through as axis-key renames: question options and
+        // rule criteria reference values by string, so a rename must
+        // propagate or the assignments silently orphan.
+        if (patch.value !== undefined && axis && old && patch.value !== old.value) {
+          const axisKey = axis.key;
+          const oldValue = old.value;
+          const newValue = patch.value;
+          setQuestions((qs) =>
+            qs.map((q) =>
+              q.axisKey === axisKey
+                ? {
+                    ...q,
+                    options: q.options.map((o) =>
+                      o.axisValueValue === oldValue ? { ...o, axisValueValue: newValue } : o,
+                    ),
+                  }
+                : q,
+            ),
+          );
+          setRules((rs) =>
+            rs.map((r) =>
+              r.criteria[axisKey] === oldValue
+                ? { ...r, criteria: { ...r.criteria, [axisKey]: newValue } }
+                : r,
+            ),
+          );
+        }
+        return prev.map((a, i) =>
           i === axisIdx
             ? {
                 ...a,
                 values: a.values.map((v, j) => (j === valueIdx ? { ...v, ...patch } : v)),
               }
             : a,
-        ),
-      );
+        );
+      });
     },
     [],
   );
@@ -393,23 +443,67 @@ export default function AssistantRecommendations() {
     setValidationError(null);
 
     // Identifier validation — fail fast with a clear message rather than
-    // letting the DB CHECK constraint reject mid-rewrite.
+    // letting the DB constraints reject the save.
+    const seenAxisKeys = new Set<string>();
     for (const axis of axes) {
       if (!isValidIdentifier(axis.key)) {
         setValidationError(`Axis key "${axis.key}" must be lower snake_case (e.g. "undertone")`);
         return;
       }
+      if (seenAxisKeys.has(axis.key)) {
+        setValidationError(`Two axes share the key "${axis.key}" — axis keys must be unique`);
+        return;
+      }
+      seenAxisKeys.add(axis.key);
       if (!axis.label.trim()) {
         setValidationError(`Axis "${axis.key}" needs a display label`);
         return;
       }
+      if (axis.values.length === 0) {
+        setValidationError(`Axis "${axis.key}" needs at least one value`);
+        return;
+      }
+      const seenValues = new Set<string>();
       for (const v of axis.values) {
         if (!isValidIdentifier(v.value)) {
           setValidationError(`Value "${v.value}" in axis "${axis.key}" must be lower snake_case`);
           return;
         }
+        if (seenValues.has(v.value)) {
+          setValidationError(`Axis "${axis.key}" has the value "${v.value}" twice — values must be unique`);
+          return;
+        }
+        seenValues.add(v.value);
         if (!v.label.trim()) {
           setValidationError(`Value "${v.value}" in axis "${axis.key}" needs a display label`);
+          return;
+        }
+      }
+    }
+
+    // Every "Ask the shopper" axis must be collectible at runtime: a prompt
+    // plus at least one fully-mapped option. Without this, the chat never
+    // gathers that axis, the criteria stays incomplete, and the strict
+    // rule lookup silently misses — every recommendation falls back to AI.
+    for (const axis of axes) {
+      if (axis.source !== "user_question") continue;
+      const q = questions.find((qq) => qq.axisKey === axis.key);
+      if (!q || !q.prompt.trim()) {
+        setValidationError(`Axis "${axis.key}" needs a question prompt — without it the chat can't collect this axis and no matrix rule can match`);
+        return;
+      }
+      const validOptions = q.options.filter((o) => o.label.trim() && o.axisValueValue);
+      if (validOptions.length === 0) {
+        setValidationError(`The question for axis "${axis.key}" needs at least one answer option with a label and a mapped value`);
+        return;
+      }
+      for (const o of q.options) {
+        if (o.label.trim() && !o.axisValueValue) {
+          setValidationError(`Option "${o.label}" for axis "${axis.key}" isn't mapped to a value`);
+          return;
+        }
+        if (!o.label.trim() && o.axisValueValue) {
+          setValidationError(`An option for axis "${axis.key}" is missing its button label`);
           return;
         }
       }
@@ -431,18 +525,33 @@ export default function AssistantRecommendations() {
       })),
       questions: questions
         .filter((q) => axes.some((a) => a.key === q.axisKey && a.source === "user_question"))
-        .map((q) => ({
+        .map((q, qi) => ({
           axisKey: q.axisKey,
           prompt: q.prompt,
-          options: q.options.map((o, i) => ({
-            label: o.label,
-            axisValueValue: o.axisValueValue,
-            botResponse: o.botResponse || null,
-            position: i,
-          })),
+          position: qi,
+          options: q.options
+            .filter((o) => o.label.trim() && o.axisValueValue)
+            .map((o, i) => ({
+              label: o.label,
+              axisValueValue: o.axisValueValue,
+              botResponse: o.botResponse || null,
+              position: i,
+            })),
         })),
       rules: rules
         .filter((r) => r.target)
+        // Drop rules whose criteria no longer line up with the current
+        // axes/values (stale rows from before rename-propagation existed,
+        // or hand-edited data). They'd never match at runtime and would
+        // silently accumulate in the DB otherwise.
+        .filter((r) => {
+          const keys = Object.keys(r.criteria);
+          if (keys.length !== axes.length) return false;
+          return keys.every((k) => {
+            const axis = axes.find((a) => a.key === k);
+            return !!axis && axis.values.some((v) => v.value === r.criteria[k]);
+          });
+        })
         .map((r) => {
           // Decode "v:<id>" / "p:<id>" back into the two DB columns.
           const isProduct = r.target.startsWith("p:");
@@ -571,7 +680,7 @@ export default function AssistantRecommendations() {
                         onChange={(v) => updateAxis(axisIdx, { source: v as any })}
                         helpText={
                           axis.source === "photo"
-                            ? "Coming soon — photo extraction isn't wired in yet, so rules using this axis will fall back to AI."
+                            ? "Classified automatically from the shopper's photo by AI — pick clear, visually distinct values."
                             : "A button-choice question in the chat"
                         }
                       />

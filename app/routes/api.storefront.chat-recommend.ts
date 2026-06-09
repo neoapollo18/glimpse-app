@@ -18,7 +18,9 @@ import {
   trackTransformationEvent,
   getVariantsForProducts,
   pickVariantsByCriteria,
+  getPhotoAxes,
 } from "../lib/supabase.server";
+import { classifyPhotoAxes } from "../lib/photo-axis-classifier.server";
 import { checkRateLimit, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
 import { safeFetch } from "../lib/safe-fetch.server";
 import prisma from "../db.server";
@@ -300,18 +302,73 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       );
     }
 
+    // Convert image to base64 once — used by the photo-axis classifier
+    // below and by every transform.
+    const arrayBuffer = await imageFile.arrayBuffer();
+    const base64Image = Buffer.from(arrayBuffer).toString("base64");
+
+    // -----------------------------------------------------------------
+    // Photo-sourced axes: matrix rules store criteria across ALL axes,
+    // but the widget only collects user-question answers. Classify any
+    // photo axes (e.g. skintone) from the selfie and merge them in —
+    // without this the strict-equality rule lookup can never match for
+    // shops that have a photo axis.
+    // -----------------------------------------------------------------
+    const photoAxes = await getPhotoAxes(verifiedShop.id);
+    const missingPhotoAxes = photoAxes.filter((a) => !(a.key in criteria));
+    if (missingPhotoAxes.length > 0) {
+      const photoCriteria = await classifyPhotoAxes(
+        base64Image,
+        imageFile.type,
+        missingPhotoAxes,
+      );
+      Object.assign(criteria, photoCriteria);
+      const stillMissing = missingPhotoAxes.filter((a) => !(a.key in criteria));
+      if (stillMissing.length > 0) {
+        console.warn(
+          `[chat-recommend] photo axes unclassified for ${verifiedDomain}: ` +
+            `${stillMissing.map((a) => a.key).join(", ")} — matrix lookup will miss`
+        );
+      }
+    }
+
+    // AI ordering (uniform shuffle + diversity-by-product pass) is computed
+    // unconditionally: it's the full fallback when the matrix doesn't apply,
+    // and the backfill pool when a curated pick fails to transform.
+    const shuffled = [...candidates];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    const seenProducts = new Set<string>();
+    const uniquePassFirst: Candidate[] = [];
+    const uniquePassRest: Candidate[] = [];
+    for (const c of shuffled) {
+      if (seenProducts.has(c.product.id)) {
+        uniquePassRest.push(c);
+      } else {
+        seenProducts.add(c.product.id);
+        uniquePassFirst.push(c);
+      }
+    }
+    const aiOrdered = uniquePassFirst.concat(uniquePassRest);
+
     // -----------------------------------------------------------------
     // Matrix path: if the merchant has a recommendation matrix and the
-    // criteria matches a rule, the variants are pre-selected and pre-
-    // ordered by rank. We honor that exactly — no shuffle, no diversity
-    // pass — so the merchant's curated picks come through unchanged.
+    // criteria matches a rule, the curated picks come first in rank order
+    // — no shuffle, no diversity pass. AI-ordered candidates are appended
+    // after them purely as a backfill pool, so a curated pick that fails
+    // to transform doesn't shrink the response.
     //
     // If the matrix doesn't apply (criteria empty, no matching rule, or
-    // matched variants aren't in the eligible candidate pool), we fall
-    // through to the legacy AI-pick path below.
+    // matched targets aren't in the eligible candidate pool), the AI
+    // ordering is used as before — with a log line, since a silent miss
+    // here looks like "the matrix is ignored" to the merchant.
     // -----------------------------------------------------------------
-    let ordered: Candidate[];
+    let ordered: Candidate[] = aiOrdered;
     let matrixApplied = false;
+    let matrixCount = 0;
+    const candidateKey = (c: Candidate) => `${c.product.id}|${c.variant ? c.variant.id : ""}`;
 
     if (Object.keys(criteria).length > 0) {
       const matrixHits = await pickVariantsByCriteria(verifiedShop.id, criteria);
@@ -340,43 +397,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
 
         if (matched.length > 0) {
-          ordered = matched;
           matrixApplied = true;
+          matrixCount = matched.length;
+          const used = new Set(matched.map(candidateKey));
+          ordered = matched.concat(aiOrdered.filter((c) => !used.has(candidateKey(c))));
         } else {
-          ordered = candidates;
+          console.warn(
+            `[chat-recommend] matrix rule matched but no target in scope for ${verifiedDomain}; ` +
+              `criteria=${JSON.stringify(criteria)} — AI fallback`
+          );
         }
       } else {
-        ordered = candidates;
+        console.log(
+          `[chat-recommend] no matrix rule for ${verifiedDomain}; ` +
+            `criteria=${JSON.stringify(criteria)} — AI fallback`
+        );
       }
-    } else {
-      ordered = candidates;
     }
-
-    // Legacy AI-pick path: only when the matrix didn't deliver. Uniform
-    // shuffle + diversity-by-product pass, same as before.
-    if (!matrixApplied) {
-      const shuffled = [...candidates];
-      for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-      }
-      const seenProducts = new Set<string>();
-      const uniquePassFirst: Candidate[] = [];
-      const uniquePassRest: Candidate[] = [];
-      for (const c of shuffled) {
-        if (seenProducts.has(c.product.id)) {
-          uniquePassRest.push(c);
-        } else {
-          seenProducts.add(c.product.id);
-          uniquePassFirst.push(c);
-        }
-      }
-      ordered = uniquePassFirst.concat(uniquePassRest);
-    }
-
-    // Convert image to base64 once
-    const arrayBuffer = await imageFile.arrayBuffer();
-    const base64Image = Buffer.from(arrayBuffer).toString("base64");
 
     const transformCandidate = async (candidate: Candidate) => {
       const { product, variant } = candidate;
@@ -487,17 +524,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     };
 
+    // When the matrix applied, the merchant curated exactly matrixCount
+    // picks for this combination — don't pad past that with AI picks. The
+    // AI candidates appended to `ordered` serve only as backfill when a
+    // curated pick fails to transform.
+    const targetCount = matrixApplied
+      ? Math.min(desiredCount, matrixCount)
+      : desiredCount;
+
     // First pass: transform the top N candidates in parallel
-    const firstBatch = ordered.slice(0, desiredCount);
+    const firstBatch = ordered.slice(0, targetCount);
     const firstResults = await Promise.all(firstBatch.map(transformCandidate));
     let successful = firstResults.filter((r) => r.tryOnPreview !== null);
 
     // Backfill: if any failed and we still have candidates in the pool, try more
-    if (successful.length < desiredCount && ordered.length > desiredCount) {
-      const needed = desiredCount - successful.length;
+    if (successful.length < targetCount && ordered.length > targetCount) {
+      const needed = targetCount - successful.length;
       const backfillPool = ordered.slice(
-        desiredCount,
-        desiredCount + Math.min(needed * 2, ordered.length - desiredCount)
+        targetCount,
+        targetCount + Math.min(needed * 2, ordered.length - targetCount)
       );
       const backfillResults = await Promise.all(backfillPool.map(transformCandidate));
       successful = successful.concat(
@@ -505,7 +550,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       );
     }
 
-    const finalSuccessful = successful.slice(0, desiredCount);
+    const finalSuccessful = successful.slice(0, targetCount);
 
     // Replace slugified placeholder handles with the real Shopify handles
     // so the "Shop This" link in gleame-chat.js resolves to /products/{real}.
