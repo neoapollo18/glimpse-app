@@ -323,11 +323,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
         const matched: Candidate[] = [];
         for (const hit of matrixHits) {
-          const v = variantById.get(hit.variantInternalId);
-          if (!v) continue; // rule references a variant not in scope; skip
-          const p = productById.get(v.product_id);
-          if (!p) continue;
-          matched.push({ product: p, variant: v, matrixRank: hit.rank });
+          if (hit.variantInternalId) {
+            const v = variantById.get(hit.variantInternalId);
+            if (!v) continue; // rule references a variant not in scope; skip
+            const p = productById.get(v.product_id);
+            if (!p) continue;
+            matched.push({ product: p, variant: v, matrixRank: hit.rank });
+          } else if (hit.productInternalId) {
+            // Whole-product target (no specific variant) → recommend the
+            // product itself. transformCandidate handles variant:null by
+            // falling back to the product-level prompt.
+            const p = productById.get(hit.productInternalId);
+            if (!p) continue; // rule references a product not in scope; skip
+            matched.push({ product: p, variant: null, matrixRank: hit.rank });
+          }
         }
 
         if (matched.length > 0) {

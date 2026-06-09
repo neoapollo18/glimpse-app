@@ -89,6 +89,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       hero_trust_items: JSON.parse(formData.get("hero_trust_items") as string),
       hero_show_delay_seconds: parseInt(formData.get("hero_show_delay_seconds") as string, 10),
       hero_sample_count: parseInt(formData.get("hero_sample_count") as string, 10),
+      bundle_enabled: formData.get("bundle_enabled") === "true",
+      bundle_title: formData.get("bundle_title") as string,
+      bundle_subtext: formData.get("bundle_subtext") as string,
+      bundle_button: formData.get("bundle_button") as string,
+      title_font: (formData.get("title_font") as string) === "sans" ? "sans" : "serif",
     };
 
     await saveChatAssistantConfig(shopDomain, config);
@@ -134,6 +139,12 @@ export default function AssistantConfig() {
   const [heroShowDelay, setHeroShowDelay] = useState(config.hero_show_delay_seconds);
   const [heroSampleCount, setHeroSampleCount] = useState(config.hero_sample_count);
   const [newTrustItem, setNewTrustItem] = useState("");
+  // Bundle card + title font
+  const [bundleEnabled, setBundleEnabled] = useState(config.bundle_enabled);
+  const [bundleTitle, setBundleTitle] = useState(config.bundle_title);
+  const [bundleSubtext, setBundleSubtext] = useState(config.bundle_subtext);
+  const [bundleButton, setBundleButton] = useState(config.bundle_button);
+  const [titleFont, setTitleFont] = useState(config.title_font);
 
   const handleAvatarUpload = useCallback(async (file: File) => {
     setUploading(true);
@@ -184,6 +195,11 @@ export default function AssistantConfig() {
     formData.append("hero_trust_items", JSON.stringify(heroTrustItems));
     formData.append("hero_show_delay_seconds", String(heroShowDelay));
     formData.append("hero_sample_count", String(heroSampleCount));
+    formData.append("bundle_enabled", String(bundleEnabled));
+    formData.append("bundle_title", bundleTitle);
+    formData.append("bundle_subtext", bundleSubtext);
+    formData.append("bundle_button", bundleButton);
+    formData.append("title_font", titleFont);
     fetcher.submit(formData, { method: "POST" });
   }, [
     fetcher, enabled, assistantName, avatarUrl, bubbleColor, bubbleText, accentColor,
@@ -191,6 +207,7 @@ export default function AssistantConfig() {
     preferenceOptions, photoUploadMessage, numRecommendations, productScope, selectedProductIds,
     heroEnabled, heroEyebrow, heroHeadline, heroBody, heroCtaLabel, heroFooter,
     heroSampleLabel, heroTrustItems, heroShowDelay, heroSampleCount,
+    bundleEnabled, bundleTitle, bundleSubtext, bundleButton, titleFont,
   ]);
 
   const addTrustItem = useCallback(() => {
@@ -679,6 +696,82 @@ export default function AssistantConfig() {
                     )}
                   </BlockStack>
                 )}
+              </BlockStack>
+            </Card>
+
+            {/* Recommendation Cards — card styling + bundle CTA */}
+            <Card>
+              <BlockStack gap="400">
+                <Text as="h2" variant="headingMd">
+                  Recommendation Cards
+                </Text>
+
+                <Select
+                  label="Title font"
+                  options={[
+                    { label: "Serif (matches the hero)", value: "serif" },
+                    { label: "Sans-serif", value: "sans" },
+                  ]}
+                  value={titleFont}
+                  onChange={setTitleFont}
+                  helpText="Font for the product name on the result cards"
+                />
+
+                {/* Bundle card controls hidden for now (the bundle is disabled in
+                    the widget). The state + save wiring are kept, so re-enabling is
+                    just un-commenting this block.
+                <Divider />
+
+                <InlineStack align="space-between" blockAlign="start" gap="500">
+                  <BlockStack gap="100">
+                    <Text as="h3" variant="headingSm">
+                      Bundle card
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      A "Love all N?" card after the recommendations that adds every
+                      shade to the cart in one tap. No discount is applied — the total
+                      is just the sum of the shown prices.
+                    </Text>
+                  </BlockStack>
+                  <div style={{ flexShrink: 0 }}>
+                    <Button
+                      role="switch"
+                      ariaChecked={bundleEnabled ? "true" : "false"}
+                      onClick={() => setBundleEnabled(!bundleEnabled)}
+                      variant={bundleEnabled ? "primary" : undefined}
+                      size="slim"
+                    >
+                      {bundleEnabled ? "Enabled" : "Disabled"}
+                    </Button>
+                  </div>
+                </InlineStack>
+
+                {bundleEnabled && (
+                  <BlockStack gap="400">
+                    <TextField
+                      label="Bundle headline"
+                      value={bundleTitle}
+                      onChange={setBundleTitle}
+                      autoComplete="off"
+                      helpText="Use count token for the number of items"
+                    />
+                    <TextField
+                      label="Bundle subtext"
+                      value={bundleSubtext}
+                      onChange={setBundleSubtext}
+                      autoComplete="off"
+                      helpText="Small line under the headline"
+                    />
+                    <TextField
+                      label="Bundle button"
+                      value={bundleButton}
+                      onChange={setBundleButton}
+                      autoComplete="off"
+                      helpText="Use count and total tokens for the item count and summed price"
+                    />
+                  </BlockStack>
+                )}
+                */}
               </BlockStack>
             </Card>
 

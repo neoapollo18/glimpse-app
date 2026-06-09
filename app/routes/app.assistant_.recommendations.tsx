@@ -104,7 +104,8 @@ type EditorQuestion = {
 };
 type EditorRule = {
   criteria: Record<string, string>;
-  variantId: string;
+  // Encoded target from the picker: "v:<variantId>" or "p:<productId>".
+  target: string;
   rank: number;
 };
 
@@ -180,7 +181,8 @@ export default function AssistantRecommendations() {
 
   const initialRules: EditorRule[] = (config?.rules || []).map((r: any) => ({
     criteria: r.criteria,
-    variantId: r.variantId,
+    // Rebuild the encoded picker value from whichever target the rule stored.
+    target: r.productId ? `p:${r.productId}` : r.variantId ? `v:${r.variantId}` : "",
     rank: r.rank,
   }));
 
@@ -205,12 +207,14 @@ export default function AssistantRecommendations() {
   }, [rules]);
 
   // -----------------------------------------------------------------
-  // Variant picker options. Polaris Select expects { label, value }.
+  // Target picker options. Polaris Select expects { label, value }. The
+  // value is the encoded target ("v:<id>" / "p:<id>") from getShopVariantsFlat
+  // — covers both specific variants and whole products (no variant).
   // -----------------------------------------------------------------
   const variantOptions = useMemo(
     () => [
       { label: "— Unassigned —", value: "" },
-      ...variants.map((v: any) => ({ label: v.label, value: v.id })),
+      ...variants.map((v: any) => ({ label: v.label, value: v.value })),
     ],
     [variants],
   );
@@ -356,15 +360,15 @@ export default function AssistantRecommendations() {
   // at 5 to match the chat-config slider.
   const NUM_RANKS = 3;
 
-  const setRuleVariant = useCallback(
-    (criteria: Record<string, string>, rank: number, variantId: string) => {
+  const setRuleTarget = useCallback(
+    (criteria: Record<string, string>, rank: number, target: string) => {
       const k = criteriaKey(criteria);
       setRules((prev) => {
         const next = prev.filter(
           (r) => !(criteriaKey(r.criteria) === k && r.rank === rank),
         );
-        if (variantId) {
-          next.push({ criteria, variantId, rank });
+        if (target) {
+          next.push({ criteria, target, rank });
         }
         return next;
       });
@@ -372,12 +376,12 @@ export default function AssistantRecommendations() {
     [],
   );
 
-  const getRuleVariant = useCallback(
+  const getRuleTarget = useCallback(
     (criteria: Record<string, string>, rank: number): string => {
       const k = criteriaKey(criteria);
       const matched = rulesByCriteria.get(k) || [];
       const found = matched.find((r) => r.rank === rank);
-      return found?.variantId || "";
+      return found?.target || "";
     },
     [rulesByCriteria],
   );
@@ -437,11 +441,19 @@ export default function AssistantRecommendations() {
             position: i,
           })),
         })),
-      rules: rules.map((r) => ({
-        criteria: r.criteria,
-        variantId: r.variantId,
-        rank: r.rank,
-      })),
+      rules: rules
+        .filter((r) => r.target)
+        .map((r) => {
+          // Decode "v:<id>" / "p:<id>" back into the two DB columns.
+          const isProduct = r.target.startsWith("p:");
+          const id = r.target.slice(2);
+          return {
+            criteria: r.criteria,
+            variantId: isProduct ? null : id,
+            productId: isProduct ? id : null,
+            rank: r.rank,
+          };
+        }),
     };
 
     const fd = new FormData();
@@ -751,8 +763,8 @@ export default function AssistantRecommendations() {
             <Text as="h2" variant="headingMd">Recommendation Matrix</Text>
             <Text as="p" variant="bodySm" tone="subdued">
               Each row is one combination of axis values. Assign up to {NUM_RANKS}{" "}
-              variants per cell in rank order — rank 1 gets the Top Match badge in the
-              chat. Leave blank to fall back to AI for that combination.
+              products or shades per cell in rank order — rank 1 gets the Top Match
+              badge in the chat. Leave blank to fall back to AI for that combination.
             </Text>
             {combinations.length === 0 && (
               <Banner tone="info">
@@ -761,8 +773,8 @@ export default function AssistantRecommendations() {
             )}
             {combinations.length > 0 && variants.length === 0 && (
               <Banner tone="warning">
-                You have no product variants configured. Add variants on the Products
-                page first, then come back to assign them here.
+                You have no products configured. Add products on the Products page
+                first, then come back to assign them here.
               </Banner>
             )}
             {combinations.length > 0 && variants.length > 0 && (
@@ -797,8 +809,8 @@ export default function AssistantRecommendations() {
                                 <Select
                                   label={`Rank ${rank}${rank === 1 ? " (Top Match)" : ""}`}
                                   options={variantOptions}
-                                  value={getRuleVariant(combo, rank)}
-                                  onChange={(v) => setRuleVariant(combo, rank, v)}
+                                  value={getRuleTarget(combo, rank)}
+                                  onChange={(v) => setRuleTarget(combo, rank, v)}
                                 />
                               </div>
                             );

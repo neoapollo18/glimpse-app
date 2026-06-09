@@ -295,9 +295,15 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     trackEvent('widget_view');
   }
 
+  var TITLE_FONT_SERIF = "Georgia, 'Times New Roman', serif";
+  var TITLE_FONT_SANS = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+
   function applyColors() {
     root.style.setProperty('--gleame-chat-bubble-color', config.bubbleColor || '#1f2937');
     root.style.setProperty('--gleame-chat-accent-color', config.accentColor || '#8b5cf6');
+    // Product + bundle title font is merchant-configurable (serif | sans).
+    var titleFont = (config.titleFont === 'sans') ? TITLE_FONT_SANS : TITLE_FONT_SERIF;
+    root.style.setProperty('--gleame-chat-title-font', titleFont);
   }
 
   // ---- Bubble ----
@@ -1091,19 +1097,23 @@ console.log('Gleame Chat Assistant v1.0 loaded');
         pushMessage({ type: 'bot-text', text: introText });
         pushMessage({ type: 'bot-cards', recommendations: data.recommendations });
         // bot-end-actions stores only what renderEndActions actually uses:
-        // a flat list of numeric variant ids (for save) + count (for the
-        // {count} token). Storing the full recommendations array would
-        // duplicate hundreds of KB of base64 tryOnPreview already present
-        // in bot-cards — silently blowing past sessionStorage quota on
-        // longer conversations.
-        var endVariantIds = [];
+        // the per-rec { variantId, handle } pairs for the bundle CTA + count
+        // (for the {count} token). Handles are short, so this stays tiny —
+        // unlike the full recommendations array, which carries hundreds of KB
+        // of base64 tryOnPreview already present in bot-cards and would blow
+        // past the sessionStorage quota on longer conversations.
+        var endBundle = [];
         for (var i = 0; i < data.recommendations.length; i++) {
-          var vid = data.recommendations[i].variantNumericId;
-          if (vid) endVariantIds.push(vid);
+          var r = data.recommendations[i];
+          var h = (r.productHandle || '').trim();
+          if (!h) continue;
+          var vid = (r.variantNumericId && /^\d+$/.test(String(r.variantNumericId)))
+            ? String(r.variantNumericId) : null;
+          endBundle.push({ variantId: vid, handle: h });
         }
         pushMessage({
           type: 'bot-end-actions',
-          variantIds: endVariantIds,
+          bundle: endBundle,
           count: data.recommendations.length,
         });
         trackEvent('chat_recommendation_shown');
@@ -1362,64 +1372,38 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     messagesContainer.appendChild(uploadWrap);
   }
 
-  // Stage 3 redesigned product card. Layout:
-  //   [TOP MATCH badge]   [♡ save heart]
+  // Redesigned product card. Layout (matches the storefront mockup):
+  //   [TOP MATCH badge]
   //   [tryOnPreview image]
-  //   [title]
+  //   [title ........... price]
   //   [variantTitle subtitle]
   //   [italic tagline (optional)]
-  //   [Add to bag / Shop This button]
+  //   [Add to bag button — full width]
   //
-  // "Top Match" badge surfaces on rec.rank === 1 (already preserved from
-  // matrix rank — see chat-recommend backend). Heart toggles a localStorage
-  // entry. Add to bag posts to Shopify's AJAX cart and falls back to a
-  // PDP nav when no variant id is available.
+  // "Top Match" badge surfaces on rec.rank === 1 (preserved from matrix rank
+  // — see chat-recommend backend). Price is pulled per-card from the
+  // storefront's same-origin /products/{handle}.js (no heart / save — those
+  // were removed by request).
   function renderProductCards(recommendations) {
-    var saved = loadSavedVariants();
     recommendations.forEach(function(rec, idx) {
       var card = document.createElement('div');
-      card.className = 'gleame-chat-msg gleame-chat-msg-bot gleame-chat-card-enter';
+      // gleame-chat-msg-card lifts the 85% bubble cap so the card spans the
+      // full conversation width.
+      card.className = 'gleame-chat-msg gleame-chat-msg-bot gleame-chat-msg-card gleame-chat-card-enter';
       card.style.animationDelay = (idx * 90) + 'ms';
 
       var cardInner = document.createElement('div');
       cardInner.className = 'gleame-chat-product-card';
 
-      // Image area (with overlaid badge + heart)
+      // Image area (with overlaid TOP MATCH badge)
       var imgWrap = document.createElement('div');
       imgWrap.className = 'gleame-chat-product-image-wrap';
 
-      var isTop = rec.rank === 1;
-      if (isTop) {
+      if (rec.rank === 1) {
         var badge = document.createElement('span');
         badge.className = 'gleame-chat-product-badge';
         badge.textContent = 'TOP MATCH';
         imgWrap.appendChild(badge);
-      }
-
-      // Heart save toggle — visual state driven by localStorage. Requires
-      // a numeric variant id so saved-variants stays in a single canonical
-      // format (see SAVED_VARIANTS_KEY comment). When the variant id is
-      // missing or non-numeric, the heart is omitted entirely.
-      if (rec.variantNumericId && /^\d+$/.test(String(rec.variantNumericId))) {
-        var savedId = String(rec.variantNumericId);
-        var heartBtn = document.createElement('button');
-        heartBtn.type = 'button';
-        heartBtn.className = 'gleame-chat-product-heart';
-        var isSaved = saved.indexOf(savedId) >= 0;
-        if (isSaved) heartBtn.classList.add('gleame-chat-product-heart-on');
-        heartBtn.setAttribute('aria-label', isSaved ? 'Remove from saved' : 'Save this');
-        heartBtn.setAttribute('aria-pressed', isSaved ? 'true' : 'false');
-        heartBtn.innerHTML = heartIconSvg(isSaved);
-        heartBtn.onclick = function(e) {
-          e.preventDefault();
-          e.stopPropagation();
-          var nowSaved = toggleSavedVariant(savedId);
-          heartBtn.classList.toggle('gleame-chat-product-heart-on', nowSaved);
-          heartBtn.innerHTML = heartIconSvg(nowSaved);
-          heartBtn.setAttribute('aria-label', nowSaved ? 'Remove from saved' : 'Save this');
-          heartBtn.setAttribute('aria-pressed', nowSaved ? 'true' : 'false');
-        };
-        imgWrap.appendChild(heartBtn);
       }
 
       if (rec.tryOnPreview) {
@@ -1437,10 +1421,19 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       var info = document.createElement('div');
       info.className = 'gleame-chat-product-info';
 
+      // Title + price share one row, price right-aligned. Price is filled in
+      // asynchronously once /products/{handle}.js loads — starts blank so we
+      // never flash a placeholder if the lookup is slow or unavailable.
+      var titleRow = document.createElement('div');
+      titleRow.className = 'gleame-chat-product-title-row';
       var titleEl = document.createElement('div');
       titleEl.className = 'gleame-chat-product-title';
       titleEl.textContent = rec.productName || rec.title || '';
-      info.appendChild(titleEl);
+      var priceEl = document.createElement('div');
+      priceEl.className = 'gleame-chat-product-price';
+      titleRow.appendChild(titleEl);
+      titleRow.appendChild(priceEl);
+      info.appendChild(titleRow);
 
       if (rec.variantTitle) {
         var variantEl = document.createElement('div');
@@ -1457,125 +1450,137 @@ console.log('Gleame Chat Assistant v1.0 loaded');
         info.appendChild(taglineEl);
       }
 
-      info.appendChild(buildCardCta(rec));
+      var cta = buildCardCta(rec);
+      info.appendChild(cta.el);
 
       cardInner.appendChild(info);
       card.appendChild(cardInner);
       messagesContainer.appendChild(card);
+
+      // One storefront lookup per card: fill the price and, for product-level
+      // recs that have no specific variant id, resolve the product's default
+      // variant so "Add to bag" still works (the curated 9-product configs
+      // come through as product-level recs).
+      var handle = (rec.productHandle || '').trim();
+      if (handle) {
+        fetchProductJson(handle).then(function(pj) {
+          if (!pj) return;
+          var cents = priceCentsForRec(pj, rec);
+          if (cents != null) priceEl.textContent = formatMoney(cents);
+          if ((!rec.variantNumericId || !/^\d+$/.test(String(rec.variantNumericId))) &&
+              Array.isArray(pj.variants) && pj.variants.length > 0) {
+            cta.setVariantId(String(pj.variants[0].id));
+          }
+        });
+      }
     });
   }
 
-  // Card CTA: "Add to bag" when we have a numeric variant id (so the AJAX
-  // cart call has something to push); falls back to a "Shop This" link
-  // navigating to the PDP otherwise. The Add-to-bag button cycles through
-  // its own visual states (idle → adding → added → idle) on click.
+  // Card CTA: a single "Add to bag" pill. When we already have a numeric
+  // variant id it adds immediately; for product-level recs the variant id is
+  // resolved lazily from /products/{handle}.js (set via setVariantId after
+  // the card's price lookup, or fetched on click as a fallback). If no
+  // variant can be resolved at all, the click navigates to the product page
+  // so the shopper is never stranded. Returns { el, setVariantId }.
   function buildCardCta(rec) {
-    var hasVariant = !!rec.variantNumericId;
-    if (!hasVariant) {
-      var shopLink = document.createElement('a');
-      shopLink.className = 'gleame-chat-product-shop-btn';
-      shopLink.target = '_top';
-      var handle = (rec.productHandle || '').trim();
+    var resolvedId = (rec.variantNumericId && /^\d+$/.test(String(rec.variantNumericId)))
+      ? String(rec.variantNumericId) : null;
+    var handle = (rec.productHandle || '').trim();
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'gleame-chat-product-add-btn';
+    btn.textContent = 'Add to bag';
+
+    function pdpUrl() {
       if (handle) {
-        var url = '/products/' + encodeURIComponent(handle);
-        if (rec.variantNumericId) url += '?variant=' + encodeURIComponent(rec.variantNumericId);
-        shopLink.href = url;
-      } else {
-        var searchQuery = rec.productName || rec.title || '';
-        shopLink.href = '/search?type=product&q=' + encodeURIComponent(searchQuery);
+        var u = '/products/' + encodeURIComponent(handle);
+        if (resolvedId) u += '?variant=' + encodeURIComponent(resolvedId);
+        return u;
       }
-      shopLink.textContent = 'Shop this';
-      // Mark chat as closed before navigating — same nav-safety as before.
-      shopLink.addEventListener('click', function() {
-        isOpen = false;
-        pendingRequest = false;
-        unlockBodyScroll();
-        saveState();
-      });
-      return shopLink;
+      return '/search?type=product&q=' + encodeURIComponent(rec.productName || rec.title || '');
     }
-    var addBtn = document.createElement('button');
-    addBtn.type = 'button';
-    addBtn.className = 'gleame-chat-product-add-btn';
-    addBtn.textContent = 'Add to bag';
-    addBtn.onclick = function() {
-      if (addBtn.disabled) return;
-      addBtn.disabled = true;
-      addBtn.classList.add('gleame-chat-product-add-btn-loading');
-      addBtn.textContent = 'Adding…';
-      addToBag(rec.variantNumericId, 1)
-        .then(function() {
-          addBtn.classList.remove('gleame-chat-product-add-btn-loading');
-          addBtn.classList.add('gleame-chat-product-add-btn-added');
-          addBtn.textContent = 'Added ✓';
-          trackEvent('chat_add_to_bag');
-          setTimeout(function() {
-            addBtn.classList.remove('gleame-chat-product-add-btn-added');
-            addBtn.textContent = 'Add to bag';
-            addBtn.disabled = false;
-          }, 2000);
+
+    function ensureVariantId() {
+      if (resolvedId) return Promise.resolve(resolvedId);
+      if (!handle) return Promise.resolve(null);
+      return fetchProductJson(handle).then(function(pj) {
+        if (pj && Array.isArray(pj.variants) && pj.variants.length > 0) {
+          resolvedId = String(pj.variants[0].id);
+        }
+        return resolvedId;
+      });
+    }
+
+    btn.onclick = function() {
+      if (btn.disabled) return;
+      btn.disabled = true;
+      btn.classList.add('gleame-chat-product-add-btn-loading');
+      btn.textContent = 'Adding…';
+      ensureVariantId()
+        .then(function(vid) {
+          if (!vid) {
+            // No variant resolvable — fall back to the product page.
+            isOpen = false;
+            pendingRequest = false;
+            unlockBodyScroll();
+            saveState();
+            window.location.href = pdpUrl();
+            return;
+          }
+          return addToBag(vid, 1).then(function() {
+            btn.classList.remove('gleame-chat-product-add-btn-loading');
+            btn.classList.add('gleame-chat-product-add-btn-added');
+            btn.textContent = 'Added ✓';
+            trackEvent('chat_add_to_bag');
+            setTimeout(function() {
+              btn.classList.remove('gleame-chat-product-add-btn-added');
+              btn.textContent = 'Add to bag';
+              btn.disabled = false;
+            }, 2000);
+          });
         })
         .catch(function(err) {
           console.error('Gleame Chat: add to bag failed', err);
-          addBtn.classList.remove('gleame-chat-product-add-btn-loading');
-          addBtn.textContent = 'Try again';
+          btn.classList.remove('gleame-chat-product-add-btn-loading');
+          btn.textContent = 'Try again';
           setTimeout(function() {
-            addBtn.textContent = 'Add to bag';
-            addBtn.disabled = false;
+            btn.textContent = 'Add to bag';
+            btn.disabled = false;
           }, 1800);
         });
     };
-    return addBtn;
+
+    return {
+      el: btn,
+      setVariantId: function(id) {
+        if (id && /^\d+$/.test(String(id))) resolvedId = String(id);
+      },
+    };
   }
 
-  // Heart icon — outline when unsaved, filled when saved.
-  function heartIconSvg(filled) {
-    if (filled) {
-      return '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>';
-    }
-    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>';
-  }
-
-  // End-of-flow actions: "Save these" + "Try another look" + curated
-  // footer line. Driven by the minimal payload pushed in sendRecommendation
-  // (variantIds + count) — does NOT need the full recommendations array,
-  // which is what the bot-cards message already carries.
+  // End-of-flow actions: a full-width "Try another look" restart, then the
+  // curated footer line. (The "Save these" / heart affordances were removed
+  // by request.)
   function renderEndActions(msg) {
-    var variantIds = Array.isArray(msg.variantIds) ? msg.variantIds : [];
-    var count = (typeof msg.count === 'number') ? msg.count : variantIds.length;
+    var count = (typeof msg.count === 'number') ? msg.count : 0;
 
     var wrap = document.createElement('div');
     wrap.className = 'gleame-chat-msg gleame-chat-msg-bot gleame-chat-msg-bot-action gleame-chat-end-actions';
 
-    var saveLabel = (config && config.endSaveLabel) || 'Save these';
+    // Bundle card ("Love all N?") is disabled for now. To re-enable, uncomment
+    // these three lines (buildBundleCard + addItemsToBag are kept intact below).
+    // The per-product "Add to bag" on each card is a separate path, unaffected.
+    //   var bundle = Array.isArray(msg.bundle) ? msg.bundle : [];
+    //   var bundleEl = buildBundleCard(bundle);
+    //   if (bundleEl) wrap.appendChild(bundleEl);
+
     var restartLabel = (config && config.endRestartLabel) || 'Try another look';
     var footerTemplate = (config && config.endFooter) || '';
     var footer = footerTemplate.replace(/\{count\}/g, String(count));
 
     var row = document.createElement('div');
     row.className = 'gleame-chat-end-actions-row';
-
-    var saveBtn = document.createElement('button');
-    saveBtn.type = 'button';
-    saveBtn.className = 'gleame-chat-end-action-btn';
-    saveBtn.innerHTML =
-      '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>' +
-      '<span>' + escapeHtml(saveLabel) + '</span>';
-    saveBtn.onclick = function() {
-      var added = saveVariantIds(variantIds);
-      var labelSpan = saveBtn.querySelector('span');
-      // Only flip to "Saved ✓" when something was actually added; otherwise
-      // show "Already saved" so the affordance reflects reality. (Returning
-      // 0 also happens when there are no variant ids at all — same UX.)
-      var msgText = added > 0 ? 'Saved ✓' : 'Already saved';
-      saveBtn.classList.add('gleame-chat-end-action-btn-on');
-      if (labelSpan) labelSpan.textContent = msgText;
-      trackEvent('chat_save_recommendations');
-      setTimeout(function() {
-        saveBtn.classList.remove('gleame-chat-end-action-btn-on');
-        if (labelSpan) labelSpan.textContent = saveLabel;
-      }, 1800);
-    };
 
     var restartBtn = document.createElement('button');
     restartBtn.type = 'button';
@@ -1589,7 +1594,6 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       handleButtonClick('recommend', restartLabel, null);
     };
 
-    row.appendChild(saveBtn);
     row.appendChild(restartBtn);
     wrap.appendChild(row);
 
@@ -1603,67 +1607,206 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     messagesContainer.appendChild(wrap);
   }
 
-  // ---- Cart + saved-variants storage ----
+  // DISABLED FOR NOW: renderEndActions does not call buildBundleCard, so the
+  // bundle card never renders. Kept here (with addItemsToBag below) so it can
+  // be re-enabled by restoring the commented call in renderEndActions. The
+  // per-product "Add to bag" (buildCardCta/addToBag) is a separate, active path.
   //
-  // Saved variants are stored as a flat array of NUMERIC Shopify variant
-  // ids (strings like "12345"). We deliberately don't store the full GID
-  // form ("gid://shopify/ProductVariant/12345") — keeping the storage
-  // format consistent means any future "show saved" feature can query
-  // without having to handle two shapes.
+  // "Love all N?" bundle card. Resolves each item's price + variant id from
+  // the storefront, then shows a single "Add all N to bag · $total" CTA that
+  // posts every variant to the cart in one /cart/add.js call. Returns the
+  // element (hidden until resolved) or null when there's nothing to bundle.
+  // Note: the subtext does NOT promise a discount — there's no bundle pricing
+  // wired up, so it stays factual ("…in one tap"). Override via config if a
+  // real bundle offer exists.
+  function buildBundleCard(bundle) {
+    if (!Array.isArray(bundle) || bundle.length < 2) return null;
+    // All copy + the on/off toggle come from chat-config (merchant-editable).
+    var bundleCfg = (config && config.bundle) || {};
+    if (bundleCfg.enabled === false) return null;
+
+    var el = document.createElement('div');
+    el.className = 'gleame-chat-bundle';
+    el.style.display = 'none';
+
+    var titleEl = document.createElement('div');
+    titleEl.className = 'gleame-chat-bundle-title';
+    var subEl = document.createElement('div');
+    subEl.className = 'gleame-chat-bundle-sub';
+    subEl.textContent = bundleCfg.subtext || 'Add your full match set in one tap.';
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'gleame-chat-bundle-btn';
+    el.appendChild(titleEl);
+    el.appendChild(subEl);
+    el.appendChild(btn);
+
+    var lookups = bundle.map(function(item) {
+      var handle = item && item.handle ? String(item.handle).trim() : '';
+      if (!handle) return Promise.resolve(null);
+      return fetchProductJson(handle).then(function(pj) {
+        if (!pj) return null;
+        var id = item.variantId;
+        if ((!id || !/^\d+$/.test(String(id))) && Array.isArray(pj.variants) && pj.variants.length) {
+          id = String(pj.variants[0].id);
+        }
+        if (!id || !/^\d+$/.test(String(id))) return null;
+        var cents = null;
+        if (Array.isArray(pj.variants)) {
+          for (var i = 0; i < pj.variants.length; i++) {
+            if (String(pj.variants[i].id) === String(id)) { cents = pj.variants[i].price; break; }
+          }
+        }
+        if (typeof cents !== 'number') cents = pj.price;
+        if (typeof cents !== 'number') return null;
+        return { id: String(id), cents: cents };
+      }).catch(function() { return null; });
+    });
+
+    Promise.all(lookups).then(function(results) {
+      // De-dupe by variant id: if two recs resolve to the same variant (same
+      // product recommended twice, or two product-level recs for one product),
+      // we'd otherwise add it twice and double-count it in the total.
+      var seen = {};
+      var ok = [];
+      for (var r = 0; r < results.length; r++) {
+        var item = results[r];
+        if (!item || seen[item.id]) continue;
+        seen[item.id] = true;
+        ok.push(item);
+      }
+      if (ok.length < 2) return; // not enough to bundle — leave hidden
+      var ids = ok.map(function(x) { return x.id; });
+      var total = ok.reduce(function(s, x) { return s + x.cents; }, 0);
+      var n = ok.length;
+
+      titleEl.textContent = (bundleCfg.title || 'Love all {count}?')
+        .replace(/\{count\}/g, String(n));
+      var idleLabel = (bundleCfg.button || 'Add all {count} to bag · {total}')
+        .replace(/\{count\}/g, String(n))
+        .replace(/\{total\}/g, formatMoney(total));
+      btn.textContent = idleLabel;
+      btn.onclick = function() {
+        if (btn.disabled) return;
+        btn.disabled = true;
+        btn.classList.add('gleame-chat-bundle-btn-loading');
+        btn.textContent = 'Adding…';
+        addItemsToBag(ids)
+          .then(function() {
+            btn.classList.remove('gleame-chat-bundle-btn-loading');
+            btn.classList.add('gleame-chat-bundle-btn-added');
+            btn.textContent = 'Added ✓';
+            trackEvent('chat_add_bundle_to_bag');
+            setTimeout(function() {
+              btn.classList.remove('gleame-chat-bundle-btn-added');
+              btn.textContent = idleLabel;
+              btn.disabled = false;
+            }, 2000);
+          })
+          .catch(function(err) {
+            console.error('Gleame Chat: bundle add failed', err);
+            btn.classList.remove('gleame-chat-bundle-btn-loading');
+            btn.textContent = 'Try again';
+            setTimeout(function() {
+              btn.textContent = idleLabel;
+              btn.disabled = false;
+            }, 1800);
+          });
+      };
+      el.style.display = '';
+    });
+
+    return el;
+  }
+
+  // ---- Storefront product lookups (price + variant resolution) ----
   //
-  // Variants that lack a numeric id (rare — Admin GraphQL gid extraction
-  // failed) are silently not saveable. The heart icon already hides when
-  // there's no variant id, so this is consistent UX.
+  // The widget runs on the merchant's storefront domain, so Shopify's
+  // same-origin AJAX endpoints are available with no auth and no CORS.
+  // /products/{handle}.js returns the product JSON including `price` (the
+  // min variant price, in cents) and `variants[]` (each with `id` + `price`
+  // in cents). We use it for two things: showing the price on each card, and
+  // resolving a default variant id for product-level recommendations so
+  // "Add to bag" still works when the rec has no specific variant.
+  //
+  // Cached per handle (Promise) so repeated cards / the bundle card don't
+  // refetch the same product.
 
-  var SAVED_VARIANTS_KEY = 'gleame-saved-variants-v1';
+  var productJsonCache = {};
 
-  function loadSavedVariants() {
-    try {
-      var raw = localStorage.getItem(SAVED_VARIANTS_KEY);
-      if (!raw) return [];
-      var parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch (e) { return []; }
+  function fetchProductJson(handle) {
+    if (!handle) return Promise.resolve(null);
+    if (productJsonCache[handle]) return productJsonCache[handle];
+    var p = fetch('/products/' + encodeURIComponent(handle) + '.js', {
+      headers: { 'Accept': 'application/json' },
+    })
+      .then(function(res) { return res.ok ? res.json() : null; })
+      .catch(function() { return null; });
+    productJsonCache[handle] = p;
+    return p;
   }
 
-  function persistSavedVariants(list) {
-    try { localStorage.setItem(SAVED_VARIANTS_KEY, JSON.stringify(list)); } catch (e) {}
-  }
-
-  // Accepts a single numeric variant id. Returns the new saved state
-  // (true = now saved, false = now unsaved). No-op + false when id is
-  // falsy or non-numeric.
-  function toggleSavedVariant(id) {
-    if (!id || !/^\d+$/.test(String(id))) return false;
-    var saved = loadSavedVariants();
-    var idx = saved.indexOf(String(id));
-    if (idx >= 0) {
-      saved.splice(idx, 1);
-      persistSavedVariants(saved);
-      return false;
-    }
-    saved.push(String(id));
-    persistSavedVariants(saved);
-    return true;
-  }
-
-  // Adds every numeric variant id in `ids` that isn't already saved.
-  // Returns the count of newly-added ids — caller uses this to decide
-  // whether to show "Saved ✓" or "Already saved".
-  function saveVariantIds(ids) {
-    if (!Array.isArray(ids) || ids.length === 0) return 0;
-    var saved = loadSavedVariants();
-    var added = 0;
-    for (var i = 0; i < ids.length; i++) {
-      var id = ids[i];
-      if (!id || !/^\d+$/.test(String(id))) continue;
-      if (saved.indexOf(String(id)) < 0) {
-        saved.push(String(id));
-        added++;
+  // cents for a recommendation: the matched variant's price when we have a
+  // variant id, else the product's (min) price. Returns null if unknown.
+  function priceCentsForRec(pj, rec) {
+    if (!pj) return null;
+    if (rec.variantNumericId && Array.isArray(pj.variants)) {
+      for (var i = 0; i < pj.variants.length; i++) {
+        if (String(pj.variants[i].id) === String(rec.variantNumericId)) {
+          return typeof pj.variants[i].price === 'number' ? pj.variants[i].price : null;
+        }
       }
     }
-    if (added > 0) persistSavedVariants(saved);
-    return added;
+    // Product-level rec: "Add to bag" (and the bundle) use the default — first
+    // — variant, so show ITS price, not pj.price (the catalog MIN, which can be
+    // a cheaper shade). Keeps the card price, the cart, and the bundle total in
+    // agreement when a product has variants at differing prices.
+    if (Array.isArray(pj.variants) && pj.variants.length > 0 &&
+        typeof pj.variants[0].price === 'number') {
+      return pj.variants[0].price;
+    }
+    return typeof pj.price === 'number' ? pj.price : null;
+  }
+
+  // Format cents in the shop's active currency ("$10.50"). Falls back to a
+  // bare dollar string if Intl / Shopify.currency aren't available.
+  function formatMoney(cents) {
+    var amount = (Number(cents) || 0) / 100;
+    try {
+      var code = (window.Shopify && window.Shopify.currency && window.Shopify.currency.active) || 'USD';
+      return new Intl.NumberFormat(undefined, { style: 'currency', currency: code }).format(amount);
+    } catch (e) {
+      return '$' + amount.toFixed(2);
+    }
+  }
+
+  // Multi-add for the bundle CTA. Shopify /cart/add.js accepts an `items`
+  // array; mirrors addToBag's success / soft-failure handling + cart events.
+  function addItemsToBag(variantIds) {
+    var items = [];
+    for (var i = 0; i < variantIds.length; i++) {
+      items.push({ id: Number(variantIds[i]) || variantIds[i], quantity: 1 });
+    }
+    return fetch('/cart/add.js', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ items: items }),
+    }).then(function(res) {
+      return res.json().then(function(body) {
+        if (!res.ok) {
+          var msg = (body && (body.description || body.message)) || ('cart add failed: ' + res.status);
+          throw new Error(msg);
+        }
+        if (body && typeof body.status === 'number' && body.status >= 400) {
+          throw new Error(body.description || body.message || ('cart add soft-failure: ' + body.status));
+        }
+        try {
+          document.dispatchEvent(new CustomEvent('cart:updated', { detail: { source: 'gleame-chat' } }));
+          document.dispatchEvent(new CustomEvent('cart:refresh', { detail: { source: 'gleame-chat' } }));
+        } catch (e) { /* old browsers without CustomEvent — ignore */ }
+        return body;
+      });
+    });
   }
 
   // Shopify AJAX cart. Posted to /cart/add.js relative to the storefront

@@ -87,6 +87,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       endSaveLabel: renderTokens(config.end_save_label),
       endRestartLabel: renderTokens(config.end_restart_label),
       endFooter: renderTokens(config.end_footer),
+      // Bundle card copy. {assistant_name} resolved now; {count}/{total} stay
+      // as tokens the widget fills with runtime values.
+      bundle: {
+        enabled: config.bundle_enabled,
+        title: renderTokens(config.bundle_title),
+        subtext: renderTokens(config.bundle_subtext),
+        button: renderTokens(config.bundle_button),
+      },
+      // 'serif' | 'sans' — applied to product + bundle titles via a CSS var.
+      titleFont: config.title_font,
       hero: {
         enabled: config.hero_enabled,
         eyebrow: renderTokens(config.hero_eyebrow),

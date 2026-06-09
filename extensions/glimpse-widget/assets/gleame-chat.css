@@ -418,6 +418,15 @@
   align-self: stretch !important;
 }
 
+/* Product cards span the full conversation width (not the 85% bubble cap),
+   so the image + title/price row + full-width CTA read like a storefront
+   product tile. */
+.gleame-chat-msg-card {
+  max-width: 100% !important;
+  width: 100% !important;
+  align-self: stretch !important;
+}
+
 .gleame-chat-msg-avatar {
   width: 28px;
   height: 28px;
@@ -490,7 +499,9 @@
   display: block !important;
   width: 100% !important;
   padding: 11px 18px !important;
-  border: 1px solid #111827 !important;
+  /* Accent-tinted outline (matches the mockup's rose option pills); fills
+     with the accent on hover/active below. */
+  border: 1px solid var(--gleame-chat-accent-color, #8b5cf6) !important;
   border-radius: 999px !important;
   background: #ffffff !important;
   color: #111827 !important;
@@ -818,60 +829,47 @@
   z-index: 2 !important;
 }
 
-/* Heart save toggle — circular grey backdrop in the top-right of the
-   image area. Filled state uses accent color. */
-.gleame-chat-product-heart {
-  position: absolute !important;
-  top: 12px !important;
-  right: 12px !important;
-  width: 32px !important;
-  height: 32px !important;
-  border-radius: 50% !important;
-  background: rgba(255, 255, 255, 0.85) !important;
-  border: none !important;
-  cursor: pointer !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  color: #6b7280 !important;
-  padding: 0 !important;
-  z-index: 2 !important;
-  transition: background 0.15s, color 0.15s, transform 0.05s !important;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-}
-
-.gleame-chat-product-heart svg {
-  width: 16px !important;
-  height: 16px !important;
-}
-
-@media (hover: hover) {
-  .gleame-chat-product-heart:hover {
-    background: #ffffff !important;
-    color: #111827 !important;
-  }
-}
-
-.gleame-chat-product-heart:active {
-  transform: scale(0.92);
-}
-
-.gleame-chat-product-heart.gleame-chat-product-heart-on {
-  color: var(--gleame-chat-accent-color, #8b5cf6) !important;
-}
-
 .gleame-chat-product-info {
   padding: 14px 16px 16px;
 }
 
-.gleame-chat-product-title {
-  font-size: 15px;
-  font-weight: 700;
-  color: #111827;
-  margin-bottom: 4px;
-  line-height: 1.25;
-  letter-spacing: -0.005em;
+/* Title + price share one baseline-aligned row; the title takes the slack
+   and the price hugs the right edge (matches the mockup). */
+.gleame-chat-product-title-row {
+  display: flex !important;
+  align-items: baseline !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  margin-bottom: 4px !important;
+}
+
+/* Title font is merchant-configurable (serif | sans) via the
+   --gleame-chat-title-font variable set in applyColors(); defaults to the
+   serif stack that matches the hero headline + avatar letter. */
+#gleame-chat-root .gleame-chat-product-title {
+  font-family: var(--gleame-chat-title-font, Georgia, 'Times New Roman', serif) !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  color: #111827 !important;
+  line-height: 1.2 !important;
+  letter-spacing: 0 !important;
+  min-width: 0;
+}
+
+.gleame-chat-product-title-row .gleame-chat-product-title {
+  flex: 1 1 auto;
+  margin-bottom: 0 !important;
+}
+
+/* Price — bold, never wraps, stays pinned right. Empty until the storefront
+   lookup resolves, so an unavailable price just shows nothing (no "$0.00"). */
+#gleame-chat-root .gleame-chat-product-price {
+  flex: 0 0 auto !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  color: #111827 !important;
+  line-height: 1.25 !important;
+  white-space: nowrap !important;
 }
 
 .gleame-chat-product-variant {
@@ -940,9 +938,69 @@
   background: #22c55e !important;
 }
 
-/* ---- End-of-flow actions (Stage 3) ----
-   Sits after the last product card. Two outlined pills (Save these /
-   Try another look) side by side, with a small italic-style footer below. */
+/* ---- Bundle card ("Love all N?") ----
+   Soft accent-tinted card above the end-of-flow row. Serif headline to match
+   the product titles + hero; a single full-width dark "Add all N to bag · $X"
+   CTA. Hidden until ≥2 add-to-cart-able items resolve (set inline in JS). */
+.gleame-chat-bundle {
+  background: color-mix(in srgb, var(--gleame-chat-accent-color, #8b5cf6) 12%, #ffffff);
+  border-radius: 16px;
+  padding: 16px 16px 18px;
+  margin: 8px 0 12px;
+  text-align: center;
+}
+
+@supports not (background: color-mix(in srgb, red 50%, white)) {
+  .gleame-chat-bundle { background: #fbe9f1; }
+}
+
+#gleame-chat-root .gleame-chat-bundle-title {
+  font-family: var(--gleame-chat-title-font, Georgia, 'Times New Roman', serif) !important;
+  font-size: 17px !important;
+  font-weight: 600 !important;
+  color: #111827 !important;
+  line-height: 1.2 !important;
+}
+
+#gleame-chat-root .gleame-chat-bundle-sub {
+  font-size: 12.5px !important;
+  color: #6b7280 !important;
+  margin: 3px 0 13px !important;
+  line-height: 1.35 !important;
+}
+
+.gleame-chat-bundle-btn {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  padding: 12px 16px !important;
+  background: #111827 !important;
+  color: #ffffff !important;
+  border: none !important;
+  border-radius: 999px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  min-height: 46px !important;
+  line-height: 1.2 !important;
+  transition: background 0.15s, transform 0.05s !important;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+@media (hover: hover) {
+  .gleame-chat-bundle-btn:hover { background: #000000 !important; }
+}
+
+.gleame-chat-bundle-btn:active { transform: scale(0.99) !important; }
+.gleame-chat-bundle-btn-loading { opacity: 0.7 !important; cursor: progress !important; }
+.gleame-chat-bundle-btn-added { background: #22c55e !important; }
+
+/* ---- End-of-flow actions ----
+   Sits after the last product card (and the optional bundle card). A single
+   full-width "Try another look" pill, with a small italic-style footer below.
+   (The "Save these" affordance was removed by request.) */
 .gleame-chat-end-actions {
   /* Adds breathing room above so the action row reads as a discrete
      wrap-up section, not stuck to the last card. */

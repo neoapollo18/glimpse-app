@@ -2161,6 +2161,14 @@ export interface ChatAssistantConfig {
   end_save_label: string;
   end_restart_label: string;
   end_footer: string;
+  // Bundle card (migration 036). bundle_title supports {count}; bundle_button
+  // supports {count} + {total}. title_font: 'serif' | 'sans' for the product
+  // and bundle card headings.
+  bundle_enabled: boolean;
+  bundle_title: string;
+  bundle_subtext: string;
+  bundle_button: string;
+  title_font: string;
 }
 
 const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
@@ -2199,6 +2207,11 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   end_save_label: 'Save these',
   end_restart_label: 'Try another look',
   end_footer: '— Curated by {assistant_name}, your AI shade advisor —',
+  bundle_enabled: true,
+  bundle_title: 'Love all {count}?',
+  bundle_subtext: 'Add your full match set in one tap.',
+  bundle_button: 'Add all {count} to bag · {total}',
+  title_font: 'serif',
 };
 
 export async function getChatAssistantConfig(shopDomain: string): Promise<ChatAssistantConfig> {
@@ -2249,6 +2262,11 @@ export async function getChatAssistantConfig(shopDomain: string): Promise<ChatAs
     end_save_label: data.end_save_label ?? CHAT_ASSISTANT_DEFAULTS.end_save_label,
     end_restart_label: data.end_restart_label ?? CHAT_ASSISTANT_DEFAULTS.end_restart_label,
     end_footer: data.end_footer ?? CHAT_ASSISTANT_DEFAULTS.end_footer,
+    bundle_enabled: data.bundle_enabled ?? CHAT_ASSISTANT_DEFAULTS.bundle_enabled,
+    bundle_title: data.bundle_title ?? CHAT_ASSISTANT_DEFAULTS.bundle_title,
+    bundle_subtext: data.bundle_subtext ?? CHAT_ASSISTANT_DEFAULTS.bundle_subtext,
+    bundle_button: data.bundle_button ?? CHAT_ASSISTANT_DEFAULTS.bundle_button,
+    title_font: data.title_font ?? CHAT_ASSISTANT_DEFAULTS.title_font,
   };
 }
 
@@ -2322,6 +2340,11 @@ export async function getAllChatAssistantConfigs(): Promise<
     end_save_label: row.end_save_label ?? CHAT_ASSISTANT_DEFAULTS.end_save_label,
     end_restart_label: row.end_restart_label ?? CHAT_ASSISTANT_DEFAULTS.end_restart_label,
     end_footer: row.end_footer ?? CHAT_ASSISTANT_DEFAULTS.end_footer,
+    bundle_enabled: row.bundle_enabled ?? CHAT_ASSISTANT_DEFAULTS.bundle_enabled,
+    bundle_title: row.bundle_title ?? CHAT_ASSISTANT_DEFAULTS.bundle_title,
+    bundle_subtext: row.bundle_subtext ?? CHAT_ASSISTANT_DEFAULTS.bundle_subtext,
+    bundle_button: row.bundle_button ?? CHAT_ASSISTANT_DEFAULTS.bundle_button,
+    title_font: row.title_font ?? CHAT_ASSISTANT_DEFAULTS.title_font,
   }));
 }
 
@@ -2518,22 +2541,25 @@ export async function getRecommendationFlow(shopId: string): Promise<Recommendat
 export async function pickVariantsByCriteria(
   shopId: string,
   criteria: Record<string, string>,
-): Promise<Array<{ variantInternalId: string; rank: number }> | null> {
+): Promise<Array<{ variantInternalId: string | null; productInternalId: string | null; rank: number }> | null> {
   if (Object.keys(criteria).length === 0) return null;
 
   // JSONB equality in Postgres is order-independent — passing the criteria
   // object straight through is correct; no need to sort keys client-side.
   const { data, error } = await supabase
     .from('recommendation_rules')
-    .select('variant_id, rank')
+    .select('variant_id, product_id, rank')
     .eq('shop_id', shopId)
     .eq('criteria', criteria as any)
     .order('rank', { ascending: true });
 
   if (error || !data || data.length === 0) return null;
 
+  // Each hit targets either a variant or a whole product (DB XOR check). The
+  // caller resolves whichever is set against the in-scope candidate pool.
   return data.map((r: any) => ({
-    variantInternalId: r.variant_id as string,
+    variantInternalId: (r.variant_id as string | null) ?? null,
+    productInternalId: (r.product_id as string | null) ?? null,
     rank: r.rank as number,
   }));
 }
@@ -2579,7 +2605,10 @@ export interface AdminQuestion {
 export interface AdminRule {
   id: string;
   criteria: Record<string, string>;
-  variantId: string;
+  // Exactly one of variantId / productId is set (DB XOR check). variantId =
+  // a specific shade; productId = a whole product with no variant.
+  variantId: string | null;
+  productId: string | null;
   rank: number;
 }
 
@@ -2615,7 +2644,7 @@ export async function getRecommendationAdminConfig(
       ),
     supabase
       .from('recommendation_rules')
-      .select('id, criteria, variant_id, rank')
+      .select('id, criteria, variant_id, product_id, rank')
       .eq('shop_id', shopId)
       .order('rank', { ascending: true }),
   ]);
@@ -2660,7 +2689,8 @@ export async function getRecommendationAdminConfig(
   const rules: AdminRule[] = (rulesRes.data || []).map((r: any) => ({
     id: r.id,
     criteria: r.criteria as Record<string, string>,
-    variantId: r.variant_id,
+    variantId: (r.variant_id as string | null) ?? null,
+    productId: (r.product_id as string | null) ?? null,
     rank: r.rank,
   }));
 
@@ -2668,33 +2698,86 @@ export async function getRecommendationAdminConfig(
 }
 
 /**
- * Flat variant list for the matrix editor's cell pickers. Each entry has
- * a stable id (internal `product_variants.id`) and a display label like
- * "Coral Crush — Orly Nail Lacquer". Used to render the rule-cell dropdowns.
+ * Flat target list for the matrix editor's cell pickers. Returns one entry
+ * per configured variant PLUS one entry per configured product that has no
+ * variants (so product-level merchants can assign whole products in the
+ * matrix). Each entry carries an encoded `value`:
+ *   - "v:<product_variants.id>"  → a specific shade
+ *   - "p:<products.id>"          → the whole product
+ * The editor stores this `value` as the rule target and the save path
+ * decodes it back into variant_id / product_id. Labels read like
+ * "Coral Crush — Orly Nail Lacquer" (variant) or "Orly Nail Lacquer
+ * (whole product)".
  */
 export async function getShopVariantsFlat(
   shopId: string,
-): Promise<Array<{ id: string; label: string; productName: string; variantTitle: string; displayColor: string | null }>> {
-  const { data, error } = await supabase
-    .from('product_variants')
-    .select('id, variant_title, display_color, products!inner ( id, shop_id, product_name )')
-    .eq('products.shop_id', shopId)
-    .order('created_at', { ascending: true });
+): Promise<Array<{
+  value: string;
+  id: string;
+  kind: 'variant' | 'product';
+  label: string;
+  productName: string;
+  variantTitle: string;
+  displayColor: string | null;
+}>> {
+  const [variantsRes, productsRes] = await Promise.all([
+    supabase
+      .from('product_variants')
+      .select('id, product_id, variant_title, display_color, products!inner ( id, shop_id, product_name )')
+      .eq('products.shop_id', shopId)
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('products')
+      .select('id, product_name, created_at')
+      .eq('shop_id', shopId)
+      .order('created_at', { ascending: true }),
+  ]);
 
-  if (error || !data) return [];
+  if (variantsRes.error) console.error('getShopVariantsFlat variants error', variantsRes.error);
+  if (productsRes.error) console.error('getShopVariantsFlat products error', productsRes.error);
 
-  return data.map((v: any) => {
+  const productsWithVariants = new Set<string>();
+  const variantEntries = (variantsRes.data || []).map((v: any) => {
+    productsWithVariants.add(v.product_id as string);
     const productName = (v.products?.product_name as string) || '';
     const variantTitle = (v.variant_title as string) || '';
     const label = variantTitle ? `${productName} — ${variantTitle}` : productName;
     return {
+      value: `v:${v.id}`,
       id: v.id as string,
+      kind: 'variant' as const,
       label,
       productName,
       variantTitle,
       displayColor: (v.display_color as string | null) ?? null,
     };
   });
+
+  // Products with no configured variant become whole-product targets.
+  const productEntries = (productsRes.data || [])
+    .filter((p: any) => !productsWithVariants.has(p.id as string))
+    .map((p: any) => {
+      const productName = (p.product_name as string) || '';
+      return {
+        value: `p:${p.id}`,
+        id: p.id as string,
+        kind: 'product' as const,
+        label: productName ? `${productName} (whole product)` : '(whole product)',
+        productName,
+        variantTitle: '',
+        displayColor: null as string | null,
+      };
+    });
+
+  // Group by product name so a product and its shades sit together; the
+  // whole-product entry sorts before any of its variants (rare to have both).
+  const all = [...variantEntries, ...productEntries];
+  all.sort((a, b) => {
+    if (a.productName !== b.productName) return a.productName.localeCompare(b.productName);
+    if (a.kind !== b.kind) return a.kind === 'product' ? -1 : 1;
+    return a.variantTitle.localeCompare(b.variantTitle);
+  });
+  return all;
 }
 
 /**
@@ -2728,7 +2811,9 @@ export async function saveRecommendationConfig(
     }>;
     rules: Array<{
       criteria: Record<string, string>;
-      variantId: string;
+      // Exactly one of variantId / productId is set per rule.
+      variantId?: string | null;
+      productId?: string | null;
       rank: number;
     }>;
   },
@@ -2836,12 +2921,17 @@ export async function saveRecommendationConfig(
   // and the worst-case (orphan criteria) just means the rule won't match
   // any user input.
   for (const rule of input.rules) {
+    // A rule must target exactly one of variant / product. The DB XOR check
+    // would reject a target-less rule mid-rewrite; skip it here instead so a
+    // stray empty cell doesn't fail the whole save.
+    if (!rule.variantId && !rule.productId) continue;
     const { error: insRuleErr } = await supabase
       .from('recommendation_rules')
       .insert({
         shop_id: shopId,
         criteria: rule.criteria,
-        variant_id: rule.variantId,
+        variant_id: rule.variantId ?? null,
+        product_id: rule.productId ?? null,
         rank: rule.rank,
       });
     if (insRuleErr) return { ok: false, error: insRuleErr.message };
