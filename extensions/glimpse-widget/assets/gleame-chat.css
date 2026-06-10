@@ -682,6 +682,22 @@
   transform: rotate(45deg);
 }
 
+/* Photo bubble placeholder — shown when no thumbnail is available for a
+   restored user photo (pre-thumbnail sessions, undecodable formats). A
+   neutral chip instead of a src-less <img>, which renders as a broken
+   image icon. */
+#gleame-chat-root .gleame-chat-msg-image-placeholder {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  padding: 10px 14px !important;
+  border-radius: 12px !important;
+  background: #f3f4f6 !important;
+  color: #6b7280 !important;
+  font-size: 13px !important;
+  line-height: 1 !important;
+}
+
 /* Typing indicator */
 .gleame-chat-typing {
   display: flex !important;

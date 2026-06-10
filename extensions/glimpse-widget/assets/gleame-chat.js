@@ -55,7 +55,8 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   // messages: array of { type, ...payload }
   //   bot-text       { type, text }
   //   user-text      { type, text }
-  //   user-image     { type } (transient image preview; dataUrl not persisted)
+  //   user-image     { type, thumb } (small JPEG thumbnail persisted so the
+  //                  photo survives navigation; the full dataUrl is not)
   //   bot-buttons    { type, buttons: [{label, action}], consumed: boolean }
   //   bot-upload     { type, consumed: boolean }
   //   bot-cards      { type, recommendations: [...] }
@@ -100,8 +101,9 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   function saveState() {
     try {
       var serialisable = messages.map(function(m) {
-        // Strip large transient fields before persisting
-        if (m.type === 'user-image') return { type: 'user-image' };
+        // Persist only the small thumbnail of the shopper's photo — the
+        // full-size dataUrl stays transient.
+        if (m.type === 'user-image') return { type: 'user-image', thumb: m.thumb || null };
         return m;
       });
       var state = {
@@ -974,22 +976,62 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     pushMessage({ type: 'bot-upload', consumed: false });
   }
 
+  // Downscale a data URL to a small JPEG thumbnail (longest edge maxPx).
+  // Used to persist the shopper's photo across page navigations without
+  // blowing the sessionStorage quota — a 240px JPEG is a few KB vs the
+  // multi-MB original. cb(null) on any failure (e.g. HEIC the browser
+  // can't decode) — callers fall back to the placeholder chip.
+  function makeThumbnail(dataUrl, maxPx, cb) {
+    try {
+      var img = new Image();
+      img.onload = function() {
+        try {
+          var scale = Math.min(1, maxPx / Math.max(img.width, img.height, 1));
+          var w = Math.max(1, Math.round(img.width * scale));
+          var h = Math.max(1, Math.round(img.height * scale));
+          var canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          cb(canvas.toDataURL('image/jpeg', 0.7));
+        } catch (e) {
+          cb(null);
+        }
+      };
+      img.onerror = function() { cb(null); };
+      img.src = dataUrl;
+    } catch (e) {
+      cb(null);
+    }
+  }
+
   function handlePhotoUpload(file, uploadMsg) {
     trackEvent('chat_photo_upload');
 
     // Mark upload widget as consumed
     if (uploadMsg) uploadMsg.consumed = true;
 
-    // Show user image preview transiently (not persisted with dataUrl)
-    pushMessage({ type: 'user-image' });
+    // Photo bubble: the full-size preview is shown transiently in-page; a
+    // small thumbnail is persisted on the message record so the photo
+    // survives navigation (e.g. the "View page" card CTA) instead of
+    // restoring as a broken <img>.
+    var imageMsg = { type: 'user-image', thumb: null };
+    pushMessage(imageMsg);
     var lastImageEl = messagesContainer.lastChild;
     var reader = new FileReader();
     reader.onload = function(e) {
-      // Replace the placeholder with the actual preview
+      var dataUrl = e.target.result;
+      // Swap the placeholder chip for the actual full-size preview
       if (lastImageEl && lastImageEl.parentNode) {
-        var img = lastImageEl.querySelector('img');
-        if (img) img.src = e.target.result;
+        while (lastImageEl.firstChild) lastImageEl.removeChild(lastImageEl.firstChild);
+        lastImageEl.appendChild(buildPreviewImg(dataUrl));
       }
+      makeThumbnail(dataUrl, 240, function(thumb) {
+        if (thumb) {
+          imageMsg.thumb = thumb;
+          saveState();
+        }
+      });
     };
     reader.readAsDataURL(file);
 
@@ -1222,7 +1264,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
         renderTextBubble(m.text, 'user');
         break;
       case 'user-image':
-        renderImagePreview();
+        renderImagePreview(m);
         break;
       case 'bot-buttons':
         if (!m.consumed) renderButtons(m);
@@ -1287,9 +1329,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     '</div>';
   }
 
-  function renderImagePreview() {
-    var imgMsg = document.createElement('div');
-    imgMsg.className = 'gleame-chat-msg gleame-chat-msg-user';
+  function buildPreviewImg(src) {
     var img = document.createElement('img');
     img.className = 'gleame-chat-msg-image';
     img.alt = 'Your photo';
@@ -1298,7 +1338,27 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     img.style.background = '#f3f4f6';
     img.style.minWidth = '120px';
     img.style.minHeight = '120px';
-    imgMsg.appendChild(img);
+    img.src = src;
+    return img;
+  }
+
+  // Renders the shopper's photo bubble. Restored sessions use the persisted
+  // thumbnail; when none exists (upload still reading, pre-thumbnail saved
+  // state, or an undecodable format) render a neutral chip instead of an
+  // <img> with no src — that shows as a broken-image icon.
+  function renderImagePreview(m) {
+    var imgMsg = document.createElement('div');
+    imgMsg.className = 'gleame-chat-msg gleame-chat-msg-user';
+    if (m && m.thumb) {
+      imgMsg.appendChild(buildPreviewImg(m.thumb));
+    } else {
+      var chip = document.createElement('div');
+      chip.className = 'gleame-chat-msg-image-placeholder';
+      chip.innerHTML =
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>' +
+        '<span>Your photo</span>';
+      imgMsg.appendChild(chip);
+    }
     messagesContainer.appendChild(imgMsg);
   }
 
