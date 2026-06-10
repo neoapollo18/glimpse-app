@@ -39,16 +39,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const config = await getChatAssistantConfig(verifiedShop.shop_domain);
 
-  // Only fetch swatches if the hero is actually going to render — saves a
-  // round-trip per page load for the (currently) majority of shops with
-  // hero_enabled=false. Pass the resolved shop_id (and recommendation scope)
-  // so the swatch helper doesn't re-resolve the domain and doesn't preview
-  // variants that wouldn't appear in the actual recommendation pool.
+  // One swatch fetch serves two consumers: the hero's preview tiles (capped
+  // at hero_sample_count) and the chat's loading ribbon (wants the fuller
+  // set), so it runs regardless of hero_enabled. Pass the resolved shop_id
+  // (and recommendation scope) so the helper doesn't re-resolve the domain
+  // and doesn't preview variants outside the actual recommendation pool.
+  const swatchPool = await getHeroSwatches(verifiedShop.id, 8, {
+    productScope: config.product_scope,
+    selectedProductIds: config.selected_product_ids,
+    max: 8,
+  });
   const heroSwatches = config.hero_enabled
-    ? await getHeroSwatches(verifiedShop.id, config.hero_sample_count, {
-        productScope: config.product_scope,
-        selectedProductIds: config.selected_product_ids,
-      })
+    ? swatchPool.slice(0, Math.max(2, Math.min(4, config.hero_sample_count)))
     : [];
 
   // Token-replace {assistant_name} in user-editable hero copy so the widget
@@ -84,6 +86,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       loadingSteps: Array.isArray(config.loading_steps)
         ? config.loading_steps.map((s) => renderTokens(s))
         : [],
+      // Shade colors for the loading-state marquee ribbon. Widget falls back
+      // to a built-in palette when empty (no variant display_colors set).
+      loadingSwatches: swatchPool
+        .map((s) => s.color)
+        .filter((c): c is string => Boolean(c)),
       // End-of-flow copy. {assistant_name} is replaced now; {count} stays
       // as a token because the widget knows the runtime count.
       recommendationsIntro: renderTokens(config.recommendations_intro),

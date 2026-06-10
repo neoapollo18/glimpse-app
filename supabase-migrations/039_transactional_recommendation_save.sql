@@ -107,5 +107,12 @@ BEGIN
 END;
 $$;
 
+-- SECURITY DEFINER bypasses RLS and Postgres grants EXECUTE to PUBLIC by
+-- default, which Supabase exposes at /rest/v1/rpc/ — without this revoke,
+-- anyone holding the anon key could wipe any shop's matrix. Service-role
+-- only (the Remix app uses the service key).
+REVOKE ALL ON FUNCTION save_recommendation_config(uuid, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION save_recommendation_config(uuid, jsonb) TO service_role;
+
 COMMENT ON FUNCTION save_recommendation_config(uuid, jsonb) IS
   'Atomic wipe-and-rewrite of a shop''s recommendation matrix (axes, values, questions, options, rules). A constraint failure rolls the whole save back, preserving the previous config.';

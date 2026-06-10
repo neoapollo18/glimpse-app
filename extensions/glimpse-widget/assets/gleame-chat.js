@@ -1011,6 +1011,12 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     'Visualizing your picks',
   ];
   var LOADING_CAPTION_FALLBACK = 'Reading your skin tone and matching shades…';
+  // Ribbon palette used when the shop has no variant display_colors —
+  // warm beauty-shade neutrals matching the design mock.
+  var LOADING_RIBBON_FALLBACK = [
+    '#5b1f2a', '#f3e3d3', '#d9a86c', '#f7d9d0',
+    '#7a3b2e', '#e8b4a6', '#e2725b', '#f0c9b1',
+  ];
   var loadingStepInterval = null;
 
   // Renders the loading state in two parts that get cleaned up together:
@@ -1018,7 +1024,8 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   //      your skin tone and matching shades…"). Looks like a normal
   //      bot-text bubble (avatar + gray bubble) but isn't persisted to
   //      the messages array — removed in removeLoadingMsg.
-  //   2. The accent-color halo with sparkle + 3-step checklist below it.
+  //   2. A marquee ribbon of shade swatches scrolling right-to-left +
+  //      the 3-step checklist below it.
   function renderLoadingSpinner() {
     // 1. Transient text bubble — matches the regular bot-text rendering
     //    so the visual style is identical, including the inline avatar.
@@ -1031,7 +1038,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       '<div class="gleame-chat-msg-bubble">' + escapeHtml(caption) + '</div>';
     messagesContainer.appendChild(textMsg);
 
-    // 2. Halo + checklist
+    // 2. Ribbon + checklist
     var wrap = document.createElement('div');
     wrap.id = 'gleame-chat-loading-msg';
     wrap.className = 'gleame-chat-msg gleame-chat-msg-bot gleame-chat-loading-hero';
@@ -1044,22 +1051,36 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     // Clamp to 3 — CSS layout assumes ≤3 rows; merchants entering more
     // would distort the hero.
     var steps = configSteps.slice(0, 3);
+    // {count} in step labels resolves to the configured recommendation
+    // count (e.g. "Visualizing your 3 shades").
+    var stepCount = Number(config && config.numRecommendations) || 3;
 
     var stepsHtml = steps.map(function(label, i) {
+      var resolved = String(label).replace(/\{count\}/g, String(stepCount));
       return (
         '<li class="gleame-chat-loading-hero-step" data-step="' + i + '">' +
           '<span class="gleame-chat-loading-hero-step-mark" aria-hidden="true"></span>' +
-          '<span class="gleame-chat-loading-hero-step-label">' + escapeHtml(label) + '</span>' +
+          '<span class="gleame-chat-loading-hero-step-label">' + escapeHtml(resolved) + '</span>' +
         '</li>'
       );
     }).join('');
 
+    // Shade ribbon — swatch tiles scrolling right-to-left like a marquee
+    // until results arrive. The tile set is rendered twice back-to-back so
+    // the -50% keyframe wrap is invisible (the second copy slides in
+    // exactly where the first one started). Colors come from the shop's
+    // variant display_colors via chat-config; the fallback palette keeps
+    // the ribbon alive for shops without colors configured.
+    var ribbonColors = (config && Array.isArray(config.loadingSwatches) && config.loadingSwatches.length >= 3)
+      ? config.loadingSwatches
+      : LOADING_RIBBON_FALLBACK;
+    var tilesHtml = ribbonColors.map(function(c) {
+      return '<span class="gleame-chat-loading-ribbon-tile" style="background:' + sanitizeColor(c) + '"></span>';
+    }).join('');
+
     wrap.innerHTML =
-      '<div class="gleame-chat-loading-hero-halo" aria-hidden="true">' +
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' +
-          '<path d="M12 3.5l1.3 3.8L17 8.5l-3.7 1.3L12 13.5l-1.3-3.7L7 8.5l3.7-1.2z"/>' +
-          '<path d="M18.5 14.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" opacity=".7"/>' +
-        '</svg>' +
+      '<div class="gleame-chat-loading-ribbon" aria-hidden="true">' +
+        '<div class="gleame-chat-loading-ribbon-track">' + tilesHtml + tilesHtml + '</div>' +
       '</div>' +
       '<ul class="gleame-chat-loading-hero-steps">' + stepsHtml + '</ul>';
 

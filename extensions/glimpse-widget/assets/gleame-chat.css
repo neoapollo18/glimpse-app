@@ -563,12 +563,11 @@
   to { transform: rotate(360deg); }
 }
 
-/* ---- Loading hero (Phase 2): halo + 3-step checklist ----
-   Accent-color halo around a sparkle icon + a checklist that ticks off
-   cosmetically on a 2.5s-per-step timer. The last step stays in "active"
-   state until the API responds. (The Gleame logo + caption row that used
-   to sit above the halo was removed — the header status line already
-   communicates "Working on it…", and the duplicate felt cluttered.) */
+/* ---- Loading hero (Phase 2): shade ribbon + 3-step checklist ----
+   A marquee of swatch tiles scrolling right-to-left + a checklist that
+   ticks off cosmetically on a 2.5s-per-step timer. The last step stays
+   in "active" state until the API responds. The ribbon is purely the
+   visual signal that the assistant is working — no interaction. */
 #gleame-chat-root .gleame-chat-loading-hero {
   max-width: 100% !important;
   align-self: stretch !important;
@@ -579,32 +578,39 @@
   padding: 18px 8px 22px !important;
 }
 
-#gleame-chat-root .gleame-chat-loading-hero-halo {
-  width: 92px !important;
-  height: 92px !important;
-  border-radius: 50% !important;
-  border: 5px solid var(--gleame-chat-accent-color, #8b5cf6) !important;
+/* The track holds the tile set TWICE; the keyframe slides exactly one set
+   width (-50%), so when it wraps the second copy is pixel-identical to
+   where the first started — the loop joint is invisible. Edge fade via
+   mask keeps tiles from being cut off hard at the container edges. */
+#gleame-chat-root .gleame-chat-loading-ribbon {
+  align-self: stretch !important;
+  overflow: hidden !important;
+  margin: 2px 0 !important;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 12%, #000 88%, transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 12%, #000 88%, transparent 100%);
+}
+
+#gleame-chat-root .gleame-chat-loading-ribbon-track {
   display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  color: var(--gleame-chat-accent-color, #8b5cf6) !important;
-  margin: 6px 0 !important;
-  position: relative !important;
-  animation: gleame-chat-loading-hero-pulse 1.6s ease-in-out infinite !important;
+  width: max-content !important;
+  animation: gleame-chat-loading-ribbon-scroll 14s linear infinite !important;
 }
 
-#gleame-chat-root .gleame-chat-loading-hero-halo svg {
-  width: 36px !important;
-  height: 36px !important;
+/* Uniform margin-right (not flex gap) so the duplicated halves tile at an
+   exact period — a gap between the two copies would make -50% land off by
+   one gutter and the wrap would visibly jump. */
+#gleame-chat-root .gleame-chat-loading-ribbon-tile {
+  display: block !important;
+  width: 48px !important;
+  height: 48px !important;
+  border-radius: 12px !important;
+  margin-right: 10px !important;
+  flex-shrink: 0 !important;
+  box-shadow: inset 0 -10px 16px rgba(0, 0, 0, 0.06) !important;
 }
 
-/* Halo pulse uses transform + opacity only (no color-bound box-shadow) so
-   the animation tracks any accent color the merchant has set, not just a
-   hardcoded purple. The accent shows through via the static `border` and
-   `color` properties above. */
-@keyframes gleame-chat-loading-hero-pulse {
-  0%, 100% { transform: scale(0.96); opacity: 0.85; }
-  50% { transform: scale(1); opacity: 1; }
+@keyframes gleame-chat-loading-ribbon-scroll {
+  to { transform: translateX(-50%); }
 }
 
 #gleame-chat-root .gleame-chat-loading-hero-steps {
@@ -1243,7 +1249,7 @@
   .gleame-chat-bubble,
   .gleame-hero,
   .gleame-hero-cta,
-  .gleame-chat-loading-hero-halo,
+  .gleame-chat-loading-ribbon-track,
   .gleame-chat-loading-hero-step-mark,
   .gleame-chat-loading-hero-step-active .gleame-chat-loading-hero-step-mark,
   .gleame-chat-header-presence-dot {

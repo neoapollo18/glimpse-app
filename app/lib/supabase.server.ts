@@ -2401,9 +2401,13 @@ export async function getHeroSwatches(
   options?: {
     productScope?: string;
     selectedProductIds?: string[];
+    // Raises the clamp ceiling above the hero's 4-tile default — the chat
+    // loading ribbon reuses this fetch and wants a fuller set.
+    max?: number;
   },
 ): Promise<Array<{ label: string; color: string | null; productHandle: string | null }>> {
-  const safeLimit = Math.max(2, Math.min(4, Math.floor(limit) || 3));
+  const maxLimit = Math.max(4, Math.min(12, options?.max ?? 4));
+  const safeLimit = Math.max(2, Math.min(maxLimit, Math.floor(limit) || 3));
 
   let query = supabase
     .from('product_variants')
