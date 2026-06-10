@@ -290,7 +290,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
 
     // Reflect the most-likely status given saved state: done if results
     // already arrived, idle otherwise. Working state isn't preserved (the
-    // restoreFromState path injects a "request cancelled" message instead).
+    // restoreFromState path injects a "request interrupted" message instead).
     var hasResults = messages.some(function(m) { return m.type === 'bot-cards'; });
     setHeaderStatus(hasResults ? 'done' : 'idle');
 
@@ -653,20 +653,13 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     if (!isOpen) return;
     isOpen = false;
 
-    // Abort any pending recommendation request and leave a recovery point
-    // so reopening doesn't strand the user mid-loading. Header status
-    // returns to idle so the next open doesn't show "Working on it…" for
-    // a request that's no longer running.
-    if (inFlightRequest) {
-      try { inFlightRequest.abort(); } catch (e) {}
-      inFlightRequest = null;
-      removeLoadingMsg();
-      setHeaderStatus('idle');
-      pushMessage({ type: 'bot-text', text: "Your request was cancelled." });
-      pushMessage({ type: 'bot-buttons', buttons: [{ label: 'Try again', action: 'recommend' }], consumed: false });
-      conversationEnded = true;
-    }
-    pendingRequest = false;
+    // An in-flight recommendation keeps running while the panel is closed.
+    // Closing is browsing behavior, not a cancel intent — transforms take
+    // ~20s and shoppers naturally minimize the chat to look at the page
+    // while they wait. The response handlers render results into the
+    // (hidden) conversation, so reopening shows them. Aborting here used
+    // to throw the work away and greet the shopper with "Your request was
+    // cancelled." when they peeked back in.
 
     if (panel) {
       panel.classList.remove('gleame-chat-visible');
@@ -1178,7 +1171,9 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       if (inFlightRequest !== controller) return;
       inFlightRequest = null;
       pendingRequest = false;
-      if (!isOpen) { saveState(); return; }
+      // No isOpen check: when the shopper closed the panel while waiting,
+      // results still render into the hidden conversation and persist, so
+      // reopening shows them instead of a stalled flow.
       removeLoadingMsg();
       if (data.recommendations && data.recommendations.length > 0) {
         setHeaderStatus('done', data.recommendations.length);
@@ -1226,7 +1221,6 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       if (inFlightRequest !== controller) return;
       inFlightRequest = null;
       pendingRequest = false;
-      if (!isOpen) { saveState(); return; }
       removeLoadingMsg();
       setHeaderStatus('idle');
       console.error('Gleame Chat: recommend error', err);
@@ -1617,9 +1611,11 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       trackEvent('chat_view_product');
       // Persist a closed-panel state before navigating so the conversation
       // restores quietly (pill only) on the product page instead of
-      // reopening over it.
+      // reopening over it. pendingRequest is left as-is: if a request is
+      // in flight (View page clicked on an older card mid-flow), the
+      // navigation kills it and the saved flag lets restoreFromState show
+      // its "interrupted" + Try again recovery on the next page.
       isOpen = false;
-      pendingRequest = false;
       unlockBodyScroll();
       saveState();
       window.location.href = pdpUrl();
