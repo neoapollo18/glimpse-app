@@ -184,7 +184,23 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   // itself, recommendation-config drives the multi-question matrix flow.
   // The widget works even if recommendation-config is empty — falls back
   // to the legacy single-preference flow from chatConfig.
+  // Some Shopify themes put a transform/filter/will-change on <body> (mobile
+  // drawer animations are the usual culprit). That makes <body> the containing
+  // block for any position:fixed descendant — so the chat panel, even with
+  // position:fixed, renders INLINE in the page flow instead of as a viewport
+  // overlay. On mobile the fullscreen panel then scrolls with the page and its
+  // header (the only close affordance) scrolls out of reach, stranding the
+  // shopper. The app embed injects #gleame-chat-root into <body>; re-parenting
+  // it to <html> escapes the transformed <body> so fixed is viewport-relative
+  // again. Harmless when <body> has no transform.
+  function ensureRootEscapesTransformedBody() {
+    if (root.parentNode !== document.documentElement) {
+      document.documentElement.appendChild(root);
+    }
+  }
+
   function init() {
+    ensureRootEscapesTransformedBody();
     Promise.all([
       fetch(SHOPIFY_APP_URL + '/api/storefront/chat-config?shopDomain=' + encodeURIComponent(shopDomain))
         .then(function(res) { return res.json(); }),
