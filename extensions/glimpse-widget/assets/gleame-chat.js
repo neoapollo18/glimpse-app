@@ -617,19 +617,18 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     // the user restart on demand.
     if (messages.length === 0) {
       resetConversation();
-      startConversation();
+      startConsultation();
     }
 
     saveState();
     trackEvent('chat_open');
   }
 
-  // Open path from the hero CTA. The hero already delivered the value pitch
-  // and the explicit "start" action, so skip the chat's intro greeting +
-  // "Find my perfect shade" button and jump straight to the preference
-  // question. Only fires for fresh sessions — the init() flow short-circuits
-  // to restoreFromState when there are saved messages, so this is never
-  // reached mid-conversation.
+  // Open path from the hero CTA. Same consultation start as the bubble —
+  // the hero just dismisses itself first (with keepLock) instead of going
+  // through dismissHero here. Only fires for fresh sessions — the init()
+  // flow short-circuits to restoreFromState when there are saved messages,
+  // so this is never reached mid-conversation.
   function openChatFromHero() {
     if (isOpen) return;
     isOpen = true;
@@ -642,7 +641,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
 
     if (messages.length === 0) {
       resetConversation();
-      startConversationFromHero();
+      startConsultation();
     }
 
     saveState();
@@ -835,21 +834,13 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   // Note: messages within a single conversation step are pushed synchronously
   // (no setTimeout between pushMessage calls). Otherwise navigating mid-delay
   // would leave an orphan question without its follow-up buttons in storage.
-  function startConversation() {
-    pushMessage({ type: 'bot-text', text: config.greetingMessage });
-    pushMessage({
-      type: 'bot-buttons',
-      buttons: [{ label: config.recommendButtonText || 'Find my perfect shade', action: 'recommend' }],
-      consumed: false,
-    });
-  }
-
-  // Entry point when the user came in through the hero CTA. Skips the
-  // chat's intro greeting + "Find my perfect shade" button (the hero
-  // already played that role) and starts the recommendation flow directly,
-  // optionally led by the merchant's opening message. No reply is expected
-  // between the opening message and the first question.
-  function startConversationFromHero() {
+  // Single consultation entry point for every fresh open — bubble, greeting,
+  // and hero CTA all land here. Starts the recommendation flow directly,
+  // optionally led by the merchant's opening message; no reply is expected
+  // between the opening message and the first question. (Previously the
+  // bubble showed a greeting + an intermediate "Find my perfect shade"
+  // button before starting — that extra step was the "old flow".)
+  function startConsultation() {
     trackEvent('chat_recommend_start');
     conversationEnded = false;
     criteria = {};
