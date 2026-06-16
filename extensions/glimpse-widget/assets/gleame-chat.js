@@ -1404,13 +1404,16 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     fileInput.accept = 'image/*';
     fileInput.style.display = 'none';
 
-    // Separate file input for mobile "Take a Photo" — uses capture="user"
-    // to open the front camera directly. We keep this distinct from the
-    // gallery picker so toggling between them doesn't fight each other.
+    // Separate file input for mobile "Take a Photo" — uses capture="environment"
+    // to open the rear (outward-facing) camera directly. Shoppers photograph
+    // their hands/nails/face held in front of them, so the back camera is the
+    // right default; the front-facing selfie camera made them flip it every
+    // time. We keep this distinct from the gallery picker so toggling between
+    // them doesn't fight each other.
     var captureInput = document.createElement('input');
     captureInput.type = 'file';
     captureInput.accept = 'image/*';
-    captureInput.setAttribute('capture', 'user');
+    captureInput.setAttribute('capture', 'environment');
     captureInput.style.display = 'none';
 
     function validateAndSubmit(file) {
@@ -1437,7 +1440,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     var mobile = isMobile();
 
     // "Take a photo" — primary (dark filled pill). On mobile, opens the
-    // native front-facing camera directly. On desktop, opens the in-app
+    // native rear-facing camera directly. On desktop, opens the in-app
     // camera modal (gleame-camera) which falls back to a file picker if
     // the browser denies getUserMedia.
     var cameraBtn = document.createElement('button');
