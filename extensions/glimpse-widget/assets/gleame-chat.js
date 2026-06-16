@@ -184,7 +184,23 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   // itself, recommendation-config drives the multi-question matrix flow.
   // The widget works even if recommendation-config is empty — falls back
   // to the legacy single-preference flow from chatConfig.
+  // Some Shopify themes put a transform/filter/will-change on <body> (mobile
+  // drawer animations are the usual culprit). That makes <body> the containing
+  // block for any position:fixed descendant — so the chat panel, even with
+  // position:fixed, renders INLINE in the page flow instead of as a viewport
+  // overlay. On mobile the fullscreen panel then scrolls with the page and its
+  // header (the only close affordance) scrolls out of reach, stranding the
+  // shopper. The app embed injects #gleame-chat-root into <body>; re-parenting
+  // it to <html> escapes the transformed <body> so fixed is viewport-relative
+  // again. Harmless when <body> has no transform.
+  function ensureRootEscapesTransformedBody() {
+    if (root.parentNode !== document.documentElement) {
+      document.documentElement.appendChild(root);
+    }
+  }
+
   function init() {
+    ensureRootEscapesTransformedBody();
     Promise.all([
       fetch(SHOPIFY_APP_URL + '/api/storefront/chat-config?shopDomain=' + encodeURIComponent(shopDomain))
         .then(function(res) { return res.json(); }),
@@ -1388,13 +1404,16 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     fileInput.accept = 'image/*';
     fileInput.style.display = 'none';
 
-    // Separate file input for mobile "Take a Photo" — uses capture="user"
-    // to open the front camera directly. We keep this distinct from the
-    // gallery picker so toggling between them doesn't fight each other.
+    // Separate file input for mobile "Take a Photo" — uses capture="environment"
+    // to open the rear (outward-facing) camera directly. Shoppers photograph
+    // their hands/nails/face held in front of them, so the back camera is the
+    // right default; the front-facing selfie camera made them flip it every
+    // time. We keep this distinct from the gallery picker so toggling between
+    // them doesn't fight each other.
     var captureInput = document.createElement('input');
     captureInput.type = 'file';
     captureInput.accept = 'image/*';
-    captureInput.setAttribute('capture', 'user');
+    captureInput.setAttribute('capture', 'environment');
     captureInput.style.display = 'none';
 
     function validateAndSubmit(file) {
@@ -1421,7 +1440,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     var mobile = isMobile();
 
     // "Take a photo" — primary (dark filled pill). On mobile, opens the
-    // native front-facing camera directly. On desktop, opens the in-app
+    // native rear-facing camera directly. On desktop, opens the in-app
     // camera modal (gleame-camera) which falls back to a file picker if
     // the browser denies getUserMedia.
     var cameraBtn = document.createElement('button');
