@@ -1510,6 +1510,12 @@ console.log('Gleame Chat Assistant v1.0 loaded');
         previewImg.src = 'data:image/jpeg;base64,' + rec.tryOnPreview;
         previewImg.alt = rec.title || '';
         previewImg.onerror = function() { previewImg.style.display = 'none'; };
+        // Feed the same image to the blurred backdrop (::before) so the
+        // contain-fit photo's side margins are filled instead of flat gray.
+        imgWrap.style.setProperty(
+          '--gleame-card-bg',
+          "url('data:image/jpeg;base64," + rec.tryOnPreview + "')"
+        );
         imgWrap.appendChild(previewImg);
       }
 
