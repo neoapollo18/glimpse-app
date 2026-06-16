@@ -965,6 +965,11 @@
   touch-action: manipulation;
   min-height: 44px;
   line-height: 1.2;
+  /* Guarantees breathing room above the CTA even when the card has no
+     variant/tagline line (product-level recs) — those only contribute 4px
+     from the title-row otherwise. Collapses with the tagline's margin so
+     spacing stays consistent across card variants. */
+  margin-top: 14px;
 }
 
 @media (hover: hover) {
