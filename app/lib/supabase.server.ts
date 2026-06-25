@@ -406,6 +406,48 @@ export async function trackTransformationEvent(
   }
 }
 
+// The chat assistant funnel events are shop-level, not tied to a product, so
+// they're inserted directly with a null product_id (unlike trackTransformationEvent,
+// which requires a matching product row). See migration 040.
+export async function trackAssistantEvent(
+  shopDomain: string,
+  eventType: string,
+  widgetType: string = 'chat',
+  cartToken?: string
+) {
+  try {
+    const normalizedCartToken = normalizeCartToken(cartToken);
+
+    const shop = await findShopByDomain(shopDomain);
+    if (!shop) {
+      console.log('Shop not found for assistant analytics tracking:', shopDomain);
+      return null;
+    }
+
+    const { data, error } = await supabase
+      .from('analytics_events')
+      .insert([{
+        shop_id: shop.id,
+        product_id: null,
+        event_type: eventType,
+        widget_type: widgetType,
+        cart_token: normalizedCartToken,
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error tracking assistant event:', error);
+      return null;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error in trackAssistantEvent:', error);
+    return null;
+  }
+}
+
 /**
  * Record an order from the orders/create webhook
  * Used for conversion attribution tracking
@@ -738,6 +780,85 @@ export async function getAnalytics(shopDomain: string, daysBack: number = 7) {
     };
   } catch (error) {
     console.error('Error in getAnalytics:', error);
+    return null;
+  }
+}
+
+export interface AssistantEngagement {
+  opens: number;                 // chat_open
+  starts: number;                // chat_recommend_start
+  photoUploads: number;          // chat_photo_upload
+  recommendationsShown: number;  // chat_recommendation_shown
+  productClicks: number;         // chat_view_product
+  addToBag: number;              // chat_add_bundle_to_bag
+  heroViews: number;             // hero_view
+  heroCtaClicks: number;         // hero_cta_click
+}
+
+// Engagement funnel for the chat assistant. Counts are event volume (not unique
+// sessions) — the widget doesn't emit a session id today, so a shopper who
+// uploads twice counts twice. Good enough for tracking relative funnel health.
+export async function getAssistantEngagement(
+  shopDomain: string,
+  daysBack: number = 7,
+): Promise<AssistantEngagement | null> {
+  try {
+    const shop = await findShopByDomain(shopDomain);
+    if (!shop) {
+      console.log('Shop not found for assistant engagement:', shopDomain);
+      return null;
+    }
+
+    const dateThreshold = new Date();
+    dateThreshold.setDate(dateThreshold.getDate() - daysBack);
+    const iso = dateThreshold.toISOString();
+
+    const countFor = async (eventType: string): Promise<number> => {
+      const { count, error } = await supabase
+        .from('analytics_events')
+        .select('*', { count: 'exact', head: true })
+        .eq('shop_id', shop.id)
+        .eq('event_type', eventType)
+        .gte('created_at', iso);
+      if (error) {
+        console.error(`Error counting assistant event ${eventType}:`, error);
+        return 0;
+      }
+      return count || 0;
+    };
+
+    const [
+      opens,
+      starts,
+      photoUploads,
+      recommendationsShown,
+      productClicks,
+      addToBag,
+      heroViews,
+      heroCtaClicks,
+    ] = await Promise.all([
+      countFor('chat_open'),
+      countFor('chat_recommend_start'),
+      countFor('chat_photo_upload'),
+      countFor('chat_recommendation_shown'),
+      countFor('chat_view_product'),
+      countFor('chat_add_bundle_to_bag'),
+      countFor('hero_view'),
+      countFor('hero_cta_click'),
+    ]);
+
+    return {
+      opens,
+      starts,
+      photoUploads,
+      recommendationsShown,
+      productClicks,
+      addToBag,
+      heroViews,
+      heroCtaClicks,
+    };
+  } catch (error) {
+    console.error('Error in getAssistantEngagement:', error);
     return null;
   }
 }

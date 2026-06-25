@@ -1,6 +1,6 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { trackTransformationEvent } from "../lib/supabase.server";
+import { trackTransformationEvent, trackAssistantEvent } from "../lib/supabase.server";
 import { checkRateLimit, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
 
 // Simple event tracking endpoint for widget views and add-to-cart events
@@ -43,17 +43,40 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const body = await request.json();
     const { shopDomain, productId, eventType, widgetType, cartToken } = body;
 
-    if (!shopDomain || !productId || !eventType) {
-      return json({ error: "Missing required fields" }, { 
+    // Product-level events (tied to a specific product page widget) vs.
+    // assistant-level funnel events (shop-wide, no product). The chat assistant
+    // fires the latter, so those don't require a productId.
+    const allowedProductEvents = ['widget_view', 'add_to_cart', 'transformation'];
+    const allowedAssistantEvents = [
+      'chat_open',
+      'chat_recommend_start',
+      'chat_photo_upload',
+      'chat_recommendation_shown',
+      'chat_view_product',
+      'chat_add_bundle_to_bag',
+      'hero_view',
+      'hero_dismiss',
+      'hero_cta_click',
+    ];
+    const isAssistantEvent = allowedAssistantEvents.includes(eventType);
+
+    if (!shopDomain || !eventType) {
+      return json({ error: "Missing required fields" }, {
         status: 400,
         headers: { "Access-Control-Allow-Origin": "*" }
       });
     }
 
-    // Only allow specific event types
-    const allowedEvents = ['widget_view', 'add_to_cart', 'transformation'];
-    if (!allowedEvents.includes(eventType)) {
-      return json({ error: "Invalid event type" }, { 
+    // Product events still require a productId; assistant events don't.
+    if (!isAssistantEvent && !productId) {
+      return json({ error: "Missing required fields" }, {
+        status: 400,
+        headers: { "Access-Control-Allow-Origin": "*" }
+      });
+    }
+
+    if (!allowedProductEvents.includes(eventType) && !isAssistantEvent) {
+      return json({ error: "Invalid event type" }, {
         status: 400,
         headers: { "Access-Control-Allow-Origin": "*" }
       });
@@ -70,15 +93,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     // Track the event with cart token for conversion attribution (fire and forget for speed)
-    trackTransformationEvent(
-      shopDomain, 
-      productId, 
-      eventType, 
-      widgetType || 'unknown',
-      sanitizedCartToken
-    ).catch(err => {
-      console.error('Failed to track event:', err);
-    });
+    if (isAssistantEvent) {
+      trackAssistantEvent(
+        shopDomain,
+        eventType,
+        widgetType || 'chat',
+        sanitizedCartToken
+      ).catch(err => {
+        console.error('Failed to track assistant event:', err);
+      });
+    } else {
+      trackTransformationEvent(
+        shopDomain,
+        productId,
+        eventType,
+        widgetType || 'unknown',
+        sanitizedCartToken
+      ).catch(err => {
+        console.error('Failed to track event:', err);
+      });
+    }
 
     return json({ success: true }, {
       headers: { "Access-Control-Allow-Origin": "*" }

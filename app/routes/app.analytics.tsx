@@ -23,7 +23,7 @@ import {
 } from "@shopify/polaris-icons";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { getAnalytics, getConversionStats, getTopTrafficSources, type TrafficSourceStat } from "../lib/supabase.server";
+import { getAnalytics, getConversionStats, getTopTrafficSources, getAssistantEngagement, type TrafficSourceStat, type AssistantEngagement } from "../lib/supabase.server";
 import { useState, useCallback } from "react";
 
 interface WidgetBreakdown {
@@ -66,6 +66,17 @@ const EMPTY_ATTRIBUTION: AttributionStats = {
   trafficSources: [],
 };
 
+const EMPTY_ASSISTANT: AssistantEngagement = {
+  opens: 0,
+  starts: 0,
+  photoUploads: 0,
+  recommendationsShown: 0,
+  productClicks: 0,
+  addToBag: 0,
+  heroViews: 0,
+  heroCtaClicks: 0,
+};
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
 
@@ -76,6 +87,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     conversion30Days,
     sources7Days,
     sources30Days,
+    assistant7Days,
+    assistant30Days,
   ] = await Promise.all([
     getAnalytics(session.shop, 7),
     getAnalytics(session.shop, 30),
@@ -83,6 +96,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     getConversionStats(session.shop, 30),
     getTopTrafficSources(session.shop, 7),
     getTopTrafficSources(session.shop, 30),
+    getAssistantEngagement(session.shop, 7),
+    getAssistantEngagement(session.shop, 30),
   ]);
 
   // Fetch product images from Shopify
@@ -153,12 +168,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     analytics30: safeAnalytics30,
     attribution7,
     attribution30,
+    assistant7: assistant7Days ?? EMPTY_ASSISTANT,
+    assistant30: assistant30Days ?? EMPTY_ASSISTANT,
     productImages,
   });
 };
 
 export default function Analytics() {
-  const { analytics7, analytics30, attribution7, attribution30, productImages } = useLoaderData<typeof loader>();
+  const { analytics7, analytics30, attribution7, attribution30, assistant7, assistant30, productImages } = useLoaderData<typeof loader>();
   const [timeRange, setTimeRange] = useState("30");
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
 
@@ -172,6 +189,34 @@ export default function Analytics() {
     (timeRange === "7" ? attribution7 : attribution30) ?? EMPTY_ATTRIBUTION;
   const hasAttributionData =
     currentAttribution.totalOrders > 0 || currentAttribution.widgetSessions > 0;
+
+  const assistant: AssistantEngagement = timeRange === "7" ? assistant7 : assistant30;
+  const hasAssistantData =
+    assistant.opens > 0 ||
+    assistant.heroViews > 0 ||
+    assistant.photoUploads > 0 ||
+    assistant.recommendationsShown > 0;
+
+  // Clamp display percentages to [0, 100]. Counts are event volume, not unique
+  // sessions, so a downstream stage can legitimately exceed its predecessor
+  // (e.g. several product clicks per recommendation set) — a raw >100% step
+  // rate would read as nonsense, so we cap it for the badge/bar.
+  const pct = (num: number, denom: number) =>
+    denom > 0 ? Math.min((num / denom) * 100, 100) : 0;
+
+  // Funnel stages, in order. Each stage's step-conversion is measured against
+  // the immediately prior stage so the "from the prior stage" caption holds.
+  const assistantFunnel = [
+    { label: "Assistant opened", count: assistant.opens },
+    { label: "Consultation started", count: assistant.starts },
+    { label: "Photo uploaded", count: assistant.photoUploads },
+    { label: "Recommendations shown", count: assistant.recommendationsShown },
+    { label: "Product clicked", count: assistant.productClicks },
+    { label: "Added to bag", count: assistant.addToBag },
+  ].map((stage, i, arr) => ({
+    ...stage,
+    of: i === 0 ? stage.count : arr[i - 1].count,
+  }));
 
   const toggleProduct = useCallback((productId: string) => {
     setExpandedProducts((prev) => {
@@ -282,6 +327,128 @@ export default function Analytics() {
                   </Box>
                 </Card>
               )}
+            </BlockStack>
+          )}
+        </BlockStack>
+
+        <Divider />
+
+        {/* Assistant engagement funnel */}
+        <BlockStack gap="300">
+          <InlineStack gap="200" blockAlign="center">
+            <Text as="h2" variant="headingMd">Assistant engagement</Text>
+            <Badge tone="info">Chat assistant</Badge>
+          </InlineStack>
+
+          {!hasAssistantData ? (
+            <Card padding="400">
+              <BlockStack gap="200">
+                <Text as="p" variant="bodyMd" fontWeight="semibold">
+                  No assistant activity yet
+                </Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Once shoppers open the chat assistant and upload a photo, you'll see the engagement funnel here.
+                </Text>
+              </BlockStack>
+            </Card>
+          ) : (
+            <BlockStack gap="400">
+              <InlineGrid columns={{ xs: 1, sm: 3 }} gap="400">
+                <Card padding="400">
+                  <BlockStack gap="200">
+                    <Text as="span" variant="bodySm" tone="subdued">Assistant opens</Text>
+                    <Text as="p" variant="headingXl" fontWeight="bold">
+                      {assistant.opens.toLocaleString()}
+                    </Text>
+                    {assistant.heroViews > 0 && (
+                      <Text as="span" variant="bodySm" tone="subdued">
+                        {pct(assistant.heroCtaClicks, assistant.heroViews).toFixed(0)}% hero click-through ({assistant.heroCtaClicks.toLocaleString()} of {assistant.heroViews.toLocaleString()})
+                      </Text>
+                    )}
+                  </BlockStack>
+                </Card>
+
+                <Card padding="400">
+                  <BlockStack gap="200">
+                    <Text as="span" variant="bodySm" tone="subdued">Completion rate</Text>
+                    <Text as="p" variant="headingXl" fontWeight="bold">
+                      {pct(assistant.recommendationsShown, assistant.opens).toFixed(1)}%
+                    </Text>
+                    <Text as="span" variant="bodySm" tone="subdued">
+                      {assistant.recommendationsShown.toLocaleString()} of {assistant.opens.toLocaleString()} opens reached recommendations
+                    </Text>
+                  </BlockStack>
+                </Card>
+
+                <Card padding="400">
+                  <BlockStack gap="200">
+                    <Text as="span" variant="bodySm" tone="subdued">Recommendation → bag</Text>
+                    <Text as="p" variant="headingXl" fontWeight="bold">
+                      {pct(assistant.addToBag, assistant.recommendationsShown).toFixed(1)}%
+                    </Text>
+                    <Text as="span" variant="bodySm" tone="subdued">
+                      {assistant.addToBag.toLocaleString()} added to bag after seeing recommendations
+                    </Text>
+                  </BlockStack>
+                </Card>
+              </InlineGrid>
+
+              <Card padding="0">
+                <Box padding="400" paddingBlockEnd="300">
+                  <Text as="h3" variant="headingSm">Funnel — from opening the assistant to adding to bag</Text>
+                </Box>
+                <Divider />
+                <Box padding="400" paddingBlockStart="300">
+                  <BlockStack gap="300">
+                    {assistantFunnel.map((stage, i) => {
+                      const shareOfOpens = pct(stage.count, assistant.opens);
+                      const stepConversion = i === 0 ? 100 : pct(stage.count, stage.of);
+                      return (
+                        <BlockStack gap="150" key={stage.label}>
+                          <InlineStack align="space-between" blockAlign="center">
+                            <Text as="span" variant="bodyMd" fontWeight="semibold">
+                              {stage.label}
+                            </Text>
+                            <InlineStack gap="300" blockAlign="center">
+                              <Text as="span" variant="bodyMd" fontWeight="semibold">
+                                {stage.count.toLocaleString()}
+                              </Text>
+                              {i > 0 && (
+                                <Box minWidth="52px">
+                                  <Badge tone={stepConversion >= 50 ? "success" : stepConversion >= 20 ? "attention" : "critical"}>
+                                    {`${stepConversion.toFixed(0)}%`}
+                                  </Badge>
+                                </Box>
+                              )}
+                            </InlineStack>
+                          </InlineStack>
+                          <div
+                            style={{
+                              height: "8px",
+                              borderRadius: "4px",
+                              background: "var(--p-color-bg-surface-secondary)",
+                              overflow: "hidden",
+                            }}
+                          >
+                            <div
+                              style={{
+                                height: "100%",
+                                width: `${Math.max(shareOfOpens, stage.count > 0 ? 2 : 0)}%`,
+                                background: "var(--p-color-bg-fill-info)",
+                              }}
+                            />
+                          </div>
+                        </BlockStack>
+                      );
+                    })}
+                  </BlockStack>
+                </Box>
+                <Box padding="400" paddingBlockStart="300">
+                  <Text as="span" variant="bodySm" tone="subdued">
+                    Percentages show step-over-step conversion from the prior stage. Counts are event volume, not unique shoppers.
+                  </Text>
+                </Box>
+              </Card>
             </BlockStack>
           )}
         </BlockStack>
