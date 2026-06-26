@@ -212,7 +212,6 @@ export default function Analytics() {
     { label: "Photo uploaded", count: assistant.photoUploads },
     { label: "Recommendations shown", count: assistant.recommendationsShown },
     { label: "Product clicked", count: assistant.productClicks },
-    { label: "Added to bag", count: assistant.addToBag },
   ].map((stage, i, arr) => ({
     ...stage,
     of: i === 0 ? stage.count : arr[i - 1].count,
@@ -382,12 +381,12 @@ export default function Analytics() {
 
                 <Card padding="400">
                   <BlockStack gap="200">
-                    <Text as="span" variant="bodySm" tone="subdued">Recommendation → bag</Text>
+                    <Text as="span" variant="bodySm" tone="subdued">Recommendation → product</Text>
                     <Text as="p" variant="headingXl" fontWeight="bold">
-                      {pct(assistant.addToBag, assistant.recommendationsShown).toFixed(1)}%
+                      {pct(assistant.productClicks, assistant.recommendationsShown).toFixed(1)}%
                     </Text>
                     <Text as="span" variant="bodySm" tone="subdued">
-                      {assistant.addToBag.toLocaleString()} added to bag after seeing recommendations
+                      {assistant.productClicks.toLocaleString()} viewed a product after seeing recommendations
                     </Text>
                   </BlockStack>
                 </Card>
@@ -395,7 +394,7 @@ export default function Analytics() {
 
               <Card padding="0">
                 <Box padding="400" paddingBlockEnd="300">
-                  <Text as="h3" variant="headingSm">Funnel — from opening the assistant to adding to bag</Text>
+                  <Text as="h3" variant="headingSm">Funnel — from opening the assistant to viewing a product</Text>
                 </Box>
                 <Divider />
                 <Box padding="400" paddingBlockStart="300">
