@@ -72,6 +72,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       preference_question: formData.get("preference_question") as string,
       preference_options: JSON.parse(formData.get("preference_options") as string),
       photo_upload_message: formData.get("photo_upload_message") as string,
+      photo_frame_hint: formData.get("photo_frame_hint") as string,
       num_recommendations: parseInt(formData.get("num_recommendations") as string, 10),
       product_scope: formData.get("product_scope") as string,
       selected_product_ids: JSON.parse(formData.get("selected_product_ids") as string || "[]"),
@@ -127,6 +128,7 @@ export default function AssistantConfig() {
   const [preferenceQuestion, setPreferenceQuestion] = useState(config.preference_question);
   const [preferenceOptions, setPreferenceOptions] = useState<string[]>(config.preference_options);
   const [photoUploadMessage, setPhotoUploadMessage] = useState(config.photo_upload_message);
+  const [photoFrameHint, setPhotoFrameHint] = useState(config.photo_frame_hint);
   const [numRecommendations, setNumRecommendations] = useState(config.num_recommendations);
   const [productScope, setProductScope] = useState(config.product_scope);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>(config.selected_product_ids);
@@ -211,6 +213,7 @@ export default function AssistantConfig() {
     formData.append("preference_question", preferenceQuestion);
     formData.append("preference_options", JSON.stringify(preferenceOptions));
     formData.append("photo_upload_message", photoUploadMessage);
+    formData.append("photo_frame_hint", photoFrameHint);
     formData.append("num_recommendations", String(numRecommendations));
     formData.append("product_scope", productScope);
     formData.append("selected_product_ids", JSON.stringify(selectedProductIds));
@@ -241,7 +244,7 @@ export default function AssistantConfig() {
   }, [
     fetcher, enabled, assistantName, avatarUrl, bubbleColor, bubbleText, accentColor,
     greetingMessage, greetingDelay, openingMessage, recommendButtonText, preferenceQuestion,
-    preferenceOptions, photoUploadMessage, numRecommendations, productScope, selectedProductIds,
+    preferenceOptions, photoUploadMessage, photoFrameHint, numRecommendations, productScope, selectedProductIds,
     heroEnabled, heroEyebrow, heroHeadline, heroBody, heroCtaLabel, heroFooter,
     heroSampleLabel, heroTrustItems, heroShowDelay, heroSampleCount,
     heroAccentColor, heroBackgroundColor, heroTextColor, heroSampleImages,
@@ -836,6 +839,14 @@ export default function AssistantConfig() {
                   autoComplete="off"
                   multiline={2}
                   helpText="Shown after the shopper picks a preference, prompting them to upload a selfie"
+                />
+                <TextField
+                  label="Camera Framing Hint"
+                  value={photoFrameHint}
+                  onChange={setPhotoFrameHint}
+                  autoComplete="off"
+                  placeholder="Position your face in the frame"
+                  helpText="Instruction shown inside the desktop camera (e.g. “Position your nails in the frame”)"
                 />
                 <RangeSlider
                   label={`Number of recommendations: ${numRecommendations}`}

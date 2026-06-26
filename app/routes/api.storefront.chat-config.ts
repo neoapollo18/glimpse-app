@@ -75,6 +75,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       preferenceQuestion: config.preference_question,
       preferenceOptions: config.preference_options,
       photoUploadMessage: config.photo_upload_message,
+      // Framing hint shown inside the desktop camera modal.
+      photoFrameHint: config.photo_frame_hint,
       numRecommendations: config.num_recommendations,
       // Header subtitle copy. {count} in done-status is replaced client-side
       // when the recommendation count is known.

@@ -9,10 +9,24 @@
   var UPLOAD_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>';
   var CAMERA_OFF_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m2 2 20 20"/><path d="M7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2"/><path d="M14.5 4h-5L7 7"/><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5H20a2 2 0 0 1 2 2v7.5"/></svg>';
 
+  var DEFAULT_FRAME_HINT = 'Position your face in the frame';
+
   var overlay = null;
   var stream = null;
   var currentCallback = null;
   var currentFallback = null;
+  // Merchant-configurable framing instruction, set per open() call. Falls back
+  // to the face-framing default when the caller doesn't pass one.
+  var frameHint = DEFAULT_FRAME_HINT;
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
 
   function isMobile() {
     return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
@@ -59,7 +73,7 @@
             '<button class="gleame-camera-close" id="gleameCameraClose">' + CLOSE_SVG + '</button>' +
           '</div>' +
           '<div class="gleame-camera-body">' +
-            '<p class="gleame-camera-hint" id="gleameCameraHint">Position your face in the frame</p>' +
+            '<p class="gleame-camera-hint" id="gleameCameraHint">' + escapeHtml(frameHint) + '</p>' +
             '<div class="gleame-camera-actions" id="gleameCameraActions">' +
               '<button class="gleame-camera-capture-btn" id="gleameCameraCapture" title="Take photo"></button>' +
               '<span class="gleame-camera-capture-label">Capture</span>' +
@@ -199,7 +213,7 @@
       }
 
       // Update hint to positioning guidance
-      if (hint) hint.textContent = 'Position your face in the frame';
+      if (hint) hint.textContent = frameHint;
 
       var video = document.createElement('video');
       video.setAttribute('autoplay', '');
@@ -227,7 +241,12 @@
 
   // Public API
   window.gleameCamera = {
-    open: function(onCapture, onFallbackUpload) {
+    open: function(onCapture, onFallbackUpload, options) {
+      // Resolve the framing hint for this session (merchant-configurable),
+      // falling back to the face-framing default.
+      var hintOpt = options && options.hint;
+      frameHint = (typeof hintOpt === 'string' && hintOpt.trim()) ? hintOpt.trim() : DEFAULT_FRAME_HINT;
+
       // Don't open on mobile
       if (isMobile()) {
         if (onFallbackUpload) onFallbackUpload();

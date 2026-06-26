@@ -1460,7 +1460,8 @@ console.log('Gleame Chat Assistant v1.0 loaded');
             if (uploadWrap.parentNode) uploadWrap.parentNode.removeChild(uploadWrap);
             handlePhotoUpload(file, msgRecord);
           },
-          function() { fileInput.click(); }
+          function() { fileInput.click(); },
+          { hint: config && config.photoFrameHint }
         );
       } else {
         captureInput.click();

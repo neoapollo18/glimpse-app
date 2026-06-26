@@ -2250,6 +2250,9 @@ export interface ChatAssistantConfig {
   preference_question: string;
   preference_options: string[];
   photo_upload_message: string;
+  // Instructional line shown in the desktop camera modal (migration 041).
+  // Empty → widget falls back to the built-in face-framing default.
+  photo_frame_hint: string;
   num_recommendations: number;
   product_scope: string;
   selected_product_ids: string[];
@@ -2317,6 +2320,7 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   preference_question: 'What kind of look are you going for?',
   preference_options: ['Natural', 'Bold', 'Glossy', 'Surprise me'],
   photo_upload_message: "Take a photo or upload one and I'll show you what looks best on you!",
+  photo_frame_hint: 'Position your face in the frame',
   num_recommendations: 3,
   product_scope: 'all_configured',
   selected_product_ids: [],
@@ -2376,6 +2380,7 @@ export async function getChatAssistantConfig(shopDomain: string): Promise<ChatAs
     preference_question: data.preference_question ?? CHAT_ASSISTANT_DEFAULTS.preference_question,
     preference_options: data.preference_options ?? CHAT_ASSISTANT_DEFAULTS.preference_options,
     photo_upload_message: data.photo_upload_message ?? CHAT_ASSISTANT_DEFAULTS.photo_upload_message,
+    photo_frame_hint: data.photo_frame_hint ?? CHAT_ASSISTANT_DEFAULTS.photo_frame_hint,
     num_recommendations: data.num_recommendations ?? CHAT_ASSISTANT_DEFAULTS.num_recommendations,
     product_scope: data.product_scope ?? CHAT_ASSISTANT_DEFAULTS.product_scope,
     selected_product_ids: data.selected_product_ids ?? CHAT_ASSISTANT_DEFAULTS.selected_product_ids,
@@ -2459,6 +2464,7 @@ export async function getAllChatAssistantConfigs(): Promise<
     preference_question: row.preference_question ?? CHAT_ASSISTANT_DEFAULTS.preference_question,
     preference_options: row.preference_options ?? CHAT_ASSISTANT_DEFAULTS.preference_options,
     photo_upload_message: row.photo_upload_message ?? CHAT_ASSISTANT_DEFAULTS.photo_upload_message,
+    photo_frame_hint: row.photo_frame_hint ?? CHAT_ASSISTANT_DEFAULTS.photo_frame_hint,
     num_recommendations: row.num_recommendations ?? CHAT_ASSISTANT_DEFAULTS.num_recommendations,
     product_scope: row.product_scope ?? CHAT_ASSISTANT_DEFAULTS.product_scope,
     selected_product_ids: row.selected_product_ids ?? [],
