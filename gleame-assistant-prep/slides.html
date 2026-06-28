@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Gleame — AI Assistant · Technical Deep Dive</title>
+<style>
+  :root{
+    --accent:#8b5cf6;
+    --accent-2:#ec4899;
+    --ink:#0f172a;
+    --muted:#64748b;
+    --line:#e2e8f0;
+    --paper:#ffffff;
+    --good:#16a34a;
+    --warn:#d97706;
+    --bad:#dc2626;
+    --shadow:0 10px 40px rgba(15,23,42,.08);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink);
+    background:
+      radial-gradient(1200px 800px at 85% -10%, #f3e8ff 0%, transparent 55%),
+      radial-gradient(1000px 700px at -10% 110%, #ffe4f1 0%, transparent 50%),
+      #faf7ff;
+    overflow:hidden;
+  }
+  .deck{height:100vh;width:100vw;position:relative}
+  /* scrim so any content overrun fades under the chrome instead of colliding */
+  .deck::before{
+    content:"";position:absolute;left:0;right:0;bottom:0;height:12vh;
+    background:linear-gradient(transparent,#faf7ff 72%);
+    z-index:4;pointer-events:none;
+  }
+  .slide{
+    position:absolute;inset:0;
+    display:none;
+    padding:6vh 8vw 11vh;          /* extra bottom clearance for footer/nav */
+    flex-direction:column;
+    overflow-y:auto;               /* worst case scrolls — never silently clips */
+    min-height:0;
+    animation:fade .45s ease;
+  }
+  .slide.active{display:flex}
+  @keyframes fade{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+  .kicker{
+    display:inline-flex;align-items:center;gap:.5rem;
+    font-size:.78rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--accent);margin-bottom:1.1rem;
+  }
+  .kicker .dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+  h1{font-family:Georgia,"Times New Roman",serif;font-size:clamp(2rem,5vw,3.9rem);line-height:1.05;letter-spacing:-.02em}
+  h2{font-family:Georgia,serif;font-size:clamp(1.5rem,3.4vw,2.6rem);line-height:1.1;letter-spacing:-.01em;margin-bottom:clamp(.8rem,2.2vh,1.3rem)}
+  h2 .em{color:var(--accent)}
+  .lead{font-size:clamp(1.05rem,1.7vw,1.4rem);color:#334155;max-width:60ch;line-height:1.5}
+  .big-num{font-family:Georgia,serif;font-size:clamp(2rem,5vw,3.8rem);line-height:1;color:var(--ink)}
+  ul{list-style:none;display:flex;flex-direction:column;gap:clamp(.5rem,1.4vh,.85rem);margin-top:.4rem}
+  li{position:relative;padding-left:1.7rem;font-size:clamp(1rem,1.45vw,1.22rem);line-height:1.45;color:#1e293b;max-width:64ch}
+  li::before{content:"";position:absolute;left:0;top:.55em;width:9px;height:9px;border-radius:2px;background:linear-gradient(135deg,var(--accent),var(--accent-2))}
+  li b{color:var(--ink)}
+  .row{display:flex;gap:2.5rem;align-items:flex-start;flex-wrap:wrap}
+  .col{flex:1;min-width:280px}
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:1.4rem 1.5rem;box-shadow:var(--shadow)}
+  .card h3{font-size:.82rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:.6rem;font-weight:700}
+  .pill{display:inline-block;padding:.28rem .7rem;border-radius:999px;font-size:.8rem;font-weight:600;background:#f1f5f9;color:#475569;border:1px solid var(--line)}
+  .pill.good{background:#dcfce7;color:#166534;border-color:#bbf7d0}
+  .pill.bad{background:#fee2e2;color:#991b1b;border-color:#fecaca}
+  .pill.warn{background:#fef3c7;color:#92400e;border-color:#fde68a}
+  .grid{display:grid;gap:1rem}
+  .grid.g2{grid-template-columns:repeat(2,1fr)}
+  .grid.g3{grid-template-columns:repeat(3,1fr)}
+  .grid.g4{grid-template-columns:repeat(4,1fr)}
+  table{border-collapse:collapse;width:100%;font-size:clamp(.85rem,1.15vw,1.05rem)}
+  th,td{text-align:left;padding:.55rem .8rem;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  td b{color:var(--ink)}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;background:#f1f5f9;border:1px solid var(--line);border-radius:6px;padding:.08em .4em;font-size:.86em;color:#7c3aed}
+  .callout{border-left:4px solid var(--accent);background:linear-gradient(90deg,#faf5ff,transparent);padding:1rem 1.3rem;border-radius:0 12px 12px 0;font-size:clamp(1rem,1.4vw,1.2rem);color:#334155;max-width:74ch;line-height:1.5;margin-top:clamp(.7rem,2vh,1.4rem)}
+  .callout.q{border-color:var(--accent-2);background:linear-gradient(90deg,#fdf2f8,transparent)}
+  .quote{font-family:Georgia,serif;font-style:italic;font-size:clamp(1.15rem,2.1vw,1.7rem);line-height:1.45;color:#1e293b;max-width:30ch}
+  .spacer{flex:1}
+  .center{justify-content:center}
+  svg{max-width:100%;height:auto;display:block}
+  .slide svg{max-height:54vh}                /* protect tall diagrams on short screens */
+  .muted{color:var(--muted)}
+  .small{font-size:.85rem}
+  /* chrome */
+  .badge{position:absolute;top:3.2vh;right:8vw;font-size:.8rem;font-weight:700;color:var(--muted);letter-spacing:.06em;z-index:6}
+  .timer{position:absolute;top:3vh;left:8vw;font-size:.9rem;font-weight:700;color:var(--muted);letter-spacing:.04em;font-variant-numeric:tabular-nums;background:#fff;border:1px solid var(--line);border-radius:8px;padding:.25rem .6rem;box-shadow:var(--shadow);z-index:6}
+  .timer.warn{color:#92400e;border-color:#fde68a;background:#fffbeb}
+  .timer.over{color:#991b1b;border-color:#fecaca;background:#fef2f2}
+  .footer{position:absolute;left:8vw;bottom:3.4vh;font-size:.78rem;color:var(--muted);letter-spacing:.05em;z-index:6}
+  .progress{position:absolute;left:0;bottom:0;height:4px;background:linear-gradient(90deg,var(--accent),var(--accent-2));transition:width .4s ease;z-index:5}
+  .nav{position:absolute;right:8vw;bottom:3vh;display:flex;gap:.5rem;z-index:6}
+  .nav button{width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--ink);font-size:1.1rem;cursor:pointer;box-shadow:var(--shadow);transition:.15s}
+  .nav button:hover{border-color:var(--accent);color:var(--accent);transform:translateY(-1px)}
+  .hint{position:absolute;left:50%;bottom:3.4vh;transform:translateX(-50%);font-size:.72rem;color:#94a3b8;letter-spacing:.06em;z-index:6;white-space:nowrap}
+  /* speaker notes (screen) */
+  .notes{display:none;position:fixed;inset:auto 0 0 0;max-height:42vh;overflow:auto;background:#0f172a;color:#e2e8f0;padding:1.4rem 8vw;font-size:.98rem;line-height:1.5;z-index:20;border-top:3px solid var(--accent);box-shadow:0 -20px 40px rgba(0,0,0,.25)}
+  .notes.show{display:block}
+  .notes h4{color:var(--accent);font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;margin-bottom:.5rem}
+  .notes ul{gap:.4rem}
+  .notes li{color:#cbd5e1;font-size:.96rem;padding-left:1.3rem}
+  .notes li::before{background:var(--accent);top:.5em}
+  /* overview grid */
+  .grid-ov{display:none;position:fixed;inset:0;background:rgba(250,247,255,.97);z-index:30;padding:6vh 6vw;overflow:auto}
+  .grid-ov.show{display:block}
+  .grid-ov h4{font-size:.8rem;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:1.2rem}
+  .ov-wrap{display:grid;grid-template-columns:repeat(4,1fr);gap:.9rem}
+  .ov-cell{text-align:left;background:#fff;border:1px solid var(--line);border-radius:12px;padding:.8rem .9rem;cursor:pointer;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:.3rem;transition:.12s}
+  .ov-cell:hover{border-color:var(--accent);transform:translateY(-2px)}
+  .ov-cell.cur{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
+  .ov-n{font-size:.72rem;font-weight:700;color:var(--accent)}
+  .ov-t{font-family:Georgia,serif;font-size:.95rem;color:var(--ink);line-height:1.2}
+  .tag-flow{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;font-size:.95rem}
+  .tag-flow .step{background:#fff;border:1px solid var(--line);border-radius:10px;padding:.5rem .8rem;box-shadow:var(--shadow);font-weight:600;color:#334155}
+  .tag-flow .arr{color:var(--accent);font-weight:800}
+  .title-mark{width:64px;height:64px;border-radius:16px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:flex;align-items:center;justify-content:center;color:#fff;font-family:Georgia,serif;font-size:2rem;box-shadow:var(--shadow);margin-bottom:1.6rem}
+  /* print notes (hidden on screen, shown in PDF export) */
+  .print-notes{display:none}
+  @page{size:1280px 720px landscape;margin:0}
+  @media print{
+    html,body{height:auto;overflow:visible;background:#fff}
+    .deck{height:auto;width:auto}
+    .deck::before{display:none}
+    .slide{position:relative !important;inset:auto;display:flex !important;min-height:100vh;break-after:page;page-break-after:always;animation:none;padding:6vh 8vw;overflow:visible}
+    .nav,.hint,.progress,.badge,.notes,.timer,.grid-ov{display:none !important}
+    .slide svg{max-height:60vh}
+    .print-notes{display:block;margin-top:1.2rem;border-top:1px solid #e2e8f0;padding-top:.7rem}
+    .print-notes h5{font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:#8b5cf6;margin-bottom:.4rem}
+    .print-notes li{color:#334155;font-size:.82rem}
+  }
+</style>
+</head>
+<body>
+<div class="deck" id="deck">
+
+  <!-- 1 TITLE -->
+  <section class="slide active center" data-notes="Open relaxed. One line: 'Gleame is a conversion-optimization product — the AI try-on is the engine, but the real product is the funnel, the recommender, and the measurement.'|Set the arc you will land on: build → measure → diagnose → iterate.|~20 min, then questions. You'll walk one shopper through the whole system.">
+    <div class="title-mark">G</div>
+    <div class="kicker"><span class="dot"></span> Technical Deep Dive · Charlie Gao · for Neo / Foothill Labs</div>
+    <h1>Gleame</h1>
+    <p class="lead" style="margin-top:1.2rem">Gleame asks a couple of questions, reads a selfie, and shows shoppers <span style="color:var(--accent)"><b>real try-ons of the exact products it recommends</b></span> — turning browsing into buying.</p>
+    <div class="tag-flow" style="margin-top:auto;margin-bottom:2vh">
+      <span class="step">Ask</span><span class="arr">→</span>
+      <span class="step">See yourself</span><span class="arr">→</span>
+      <span class="step">Believe</span><span class="arr">→</span>
+      <span class="step">Buy</span>
+    </div>
+  </section>
+
+  <!-- 2 AGENDA -->
+  <section class="slide" data-notes="Promise the payoff up front so the 9-slide build run reads as setup, not the whole talk.|Say: 'I'll show you the system, then what the production data said, then the one thing I'd fix.'|This is the spine: build → measure → diagnose → iterate.">
+    <div class="kicker"><span class="dot"></span> Where we're going · ~20 min</div>
+    <h2>Four acts</h2>
+    <div class="grid g4" style="margin-top:.4rem">
+      <div class="card"><h3>① Build</h3><p>The system — widget, cold-start recommender, image pipeline, security, attribution.</p></div>
+      <div class="card"><h3>② Measure</h3><p>Real production funnel + a live A/B test.</p></div>
+      <div class="card"><h3>③ Diagnose</h3><p>Two data sources → one root cause.</p></div>
+      <div class="card" style="background:linear-gradient(135deg,#faf5ff,#fff)"><h3>④ Iterate</h3><p>The one fix that flips the result.</p></div>
+    </div>
+    <div class="callout" style="margin-top:2rem">The thread to hold onto: <b>the AI works — the interesting engineering is everything around it, and the honesty is in the measurement.</b></div>
+  </section>
+
+  <!-- 3 PROBLEM -->
+  <section class="slide" data-notes="Two structural problems, ONE root cause: you can't tell if a shade suits you from a flat photo.|Existing solutions are weak — AR filters are gimmicks that don't map to real SKUs; quizzes don't SHOW you anything.|The wedge: a conversational assistant that personalizes AND shows real products on the shopper's own face.">
+    <div class="kicker"><span class="dot"></span> Motivation</div>
+    <h2>Beauty e-commerce loses money at <span class="em">one specific moment</span></h2>
+    <div class="row" style="margin-top:1rem">
+      <div class="col card">
+        <h3>Problem 1 — Conversion</h3>
+        <p class="lead">A shopper can't tell if a lipstick or foundation shade suits <i>their</i> skin from a flat product photo. <b>Doubt kills the purchase.</b></p>
+      </div>
+      <div class="col card">
+        <h3>Problem 2 — Returns</h3>
+        <p class="lead">When they buy anyway and it's wrong, it comes back — <b>eroding margin and trust.</b></p>
+      </div>
+    </div>
+    <div class="callout"><b>Same root cause:</b> you can't experience the product before buying. AR filters are gimmicks that don't map to real SKUs; shade quizzes don't <i>show</i> you anything. <b>Gleame's bet:</b> personalize with a couple of questions + a selfie, recommend real in-catalog products, and <b>show them on the shopper's own face.</b></div>
+  </section>
+
+  <!-- 4 DEMO STORYBOARD -->
+  <!-- TODO before the talk: replace this schematic SVG with a 15-second screen recording (local .mp4/.gif) or 3 real product screenshots. A real before→after is the single strongest frame in the deck. -->
+  <section class="slide" data-notes="A founder needs to SEE the product. BEFORE THE TALK: swap this schematic for a real 15-sec screen recording or real screenshots.|Narrate it as the lived experience: 'two taps, a selfie, and twenty seconds later three shades rendered on your own face.'|This is the emotional core — slow down, let them picture their own store.">
+    <div class="kicker"><span class="dot"></span> What the shopper sees</div>
+    <h2>Consult → selfie → <span class="em">three personalized try-ons</span></h2>
+    <svg viewBox="0 0 920 320" role="img" aria-label="Shopper journey storyboard">
+      <defs>
+        <linearGradient id="thumb" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#c4b5fd"/><stop offset="1" stop-color="#f9a8d4"/></linearGradient>
+        <marker id="dm" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#8b5cf6"/></marker>
+      </defs>
+      <g font-family="-apple-system,sans-serif">
+        <!-- panel 1: consult -->
+        <rect x="8" y="14" width="270" height="292" rx="18" fill="#fff" stroke="#e2e8f0" stroke-width="1.5"/>
+        <rect x="8" y="14" width="270" height="44" rx="18" fill="#8b5cf6"/><rect x="8" y="40" width="270" height="18" fill="#8b5cf6"/>
+        <text x="28" y="42" fill="#fff" font-size="14" font-weight="700">Orly Stylist</text>
+        <rect x="28" y="80" width="200" height="58" rx="14" fill="#f1f5f9"/>
+        <text x="44" y="104" fill="#334155" font-size="13">What's your undertone?</text>
+        <text x="44" y="124" fill="#94a3b8" font-size="11">pick one</text>
+        <rect x="40" y="158" width="84" height="34" rx="17" fill="#fff" stroke="#8b5cf6" stroke-width="1.5"/><text x="82" y="180" fill="#7c3aed" font-size="13" font-weight="600" text-anchor="middle">Warm</text>
+        <rect x="138" y="158" width="84" height="34" rx="17" fill="#fff" stroke="#e2e8f0" stroke-width="1.5"/><text x="180" y="180" fill="#64748b" font-size="13" font-weight="600" text-anchor="middle">Cool</text>
+        <text x="143" y="240" fill="#cbd5e1" font-size="11" text-anchor="middle">step 1 of 2</text>
+
+        <!-- panel 2: selfie -->
+        <rect x="325" y="14" width="270" height="292" rx="18" fill="#fff" stroke="#e2e8f0" stroke-width="1.5"/>
+        <rect x="325" y="14" width="270" height="44" rx="18" fill="#0f172a"/><rect x="325" y="40" width="270" height="18" fill="#0f172a"/>
+        <text x="345" y="42" fill="#fff" font-size="14" font-weight="700">Your photo</text>
+        <circle cx="460" cy="150" r="58" fill="#ede9fe" stroke="#c4b5fd" stroke-width="2"/>
+        <circle cx="442" cy="138" r="6" fill="#a78bfa"/><circle cx="478" cy="138" r="6" fill="#a78bfa"/>
+        <path d="M440 168 Q460 184 480 168" stroke="#a78bfa" stroke-width="3" fill="none" stroke-linecap="round"/>
+        <rect x="402" y="120" width="116" height="3" rx="1.5" fill="#ec4899" opacity=".7"/>
+        <text x="460" y="244" fill="#64748b" font-size="13" font-weight="600" text-anchor="middle">Analyzing your selfie…</text>
+        <text x="460" y="264" fill="#cbd5e1" font-size="11" text-anchor="middle">skin tone · undertone</text>
+
+        <!-- panel 3: results -->
+        <rect x="642" y="14" width="270" height="292" rx="18" fill="#fff" stroke="#e2e8f0" stroke-width="1.5"/>
+        <rect x="642" y="14" width="270" height="44" rx="18" fill="#8b5cf6"/><rect x="642" y="40" width="270" height="18" fill="#8b5cf6"/>
+        <text x="662" y="42" fill="#fff" font-size="14" font-weight="700">Your 3 matches</text>
+        <g>
+          <rect x="660" y="76" width="234" height="64" rx="12" fill="#faf5ff" stroke="#eee"/>
+          <rect x="672" y="86" width="44" height="44" rx="8" fill="url(#thumb)"/>
+          <circle cx="740" cy="100" r="8" fill="#b91c1c"/><text x="756" y="104" font-size="13" font-weight="700" fill="#0f172a">Wildflower</text>
+          <text x="756" y="122" font-size="11" fill="#94a3b8">warm red</text>
+          <rect x="828" y="96" width="54" height="26" rx="13" fill="#0f172a"/><text x="855" y="113" font-size="11" fill="#fff" text-anchor="middle">View</text>
+        </g>
+        <g>
+          <rect x="660" y="148" width="234" height="64" rx="12" fill="#faf5ff" stroke="#eee"/>
+          <rect x="672" y="158" width="44" height="44" rx="8" fill="url(#thumb)"/>
+          <circle cx="740" cy="172" r="8" fill="#9a3412"/><text x="756" y="176" font-size="13" font-weight="700" fill="#0f172a">Mocha</text>
+          <text x="756" y="194" font-size="11" fill="#94a3b8">warm nude</text>
+          <rect x="828" y="168" width="54" height="26" rx="13" fill="#0f172a"/><text x="855" y="185" font-size="11" fill="#fff" text-anchor="middle">View</text>
+        </g>
+        <g>
+          <rect x="660" y="220" width="234" height="64" rx="12" fill="#faf5ff" stroke="#eee"/>
+          <rect x="672" y="230" width="44" height="44" rx="8" fill="url(#thumb)"/>
+          <circle cx="740" cy="244" r="8" fill="#e11d48"/><text x="756" y="248" font-size="13" font-weight="700" fill="#0f172a">Coral</text>
+          <text x="756" y="266" font-size="11" fill="#94a3b8">bright coral</text>
+          <rect x="828" y="240" width="54" height="26" rx="13" fill="#0f172a"/><text x="855" y="257" font-size="11" fill="#fff" text-anchor="middle">View</text>
+        </g>
+
+        <!-- arrows -->
+        <path d="M286 160 H320" stroke="#8b5cf6" stroke-width="2.5" fill="none" marker-end="url(#dm)"/>
+        <path d="M603 160 H637" stroke="#8b5cf6" stroke-width="2.5" fill="none" marker-end="url(#dm)"/>
+      </g>
+    </svg>
+    <p class="small muted" style="margin-top:.6rem">The lived experience: two taps, a selfie, and ~20 seconds later — three shades rendered on the shopper's own face.</p>
+  </section>
+
+  <!-- 5 WHAT IT IS -->
+  <section class="slide" data-notes="Reframe HARD: this is NOT 'an AI try-on widget.' It's a CRO system. The model is the engine; I built the car.|Name the 5 real subsystems so they know the surface area is large.|The assistant is the highest-intent surface: open + answer + upload = deep purchase intent.">
+    <div class="kicker"><span class="dot"></span> What it actually is</div>
+    <h2>The model is the engine. <span class="em">I built the car.</span></h2>
+    <div class="grid g3" style="margin-top:.5rem">
+      <div class="card"><h3>① Cold-start recommender</h3><p>Elicit + infer preferences when a merchant has <b>zero behavioral data</b>.</p></div>
+      <div class="card"><h3>② Image-gen pipeline</h3><p>Multi-model, parallel, fallback-hardened personalized try-ons.</p></div>
+      <div class="card"><h3>③ Deterministic prompt-gen</h3><p>Funnel-driven, reproducible, merchant-controlled.</p></div>
+      <div class="card"><h3>④ Security boundary</h3><p>Multi-tenant verification, billing gate, tiered rate limiting.</p></div>
+      <div class="card"><h3>⑤ Attribution pipeline</h3><p>Funnel analytics + cart-token → order reconciliation.</p></div>
+      <div class="card" style="background:linear-gradient(135deg,#faf5ff,#fff)"><h3>The surface</h3><p>Vanilla-JS Theme App Extension — <b>on the merchant's domain, no iframe.</b></p></div>
+    </div>
+  </section>
+
+  <!-- 6 FUNNEL = PRODUCT -->
+  <section class="slide" data-notes="This funnel is the SPINE. Everything technical exists to move shoppers down it.|You will return to this exact picture for the impact story — plant it now.|Say: 'Hold this shape — we come back to it with real numbers.' (deliberate ~15s beat)">
+    <div class="kicker"><span class="dot"></span> The frame</div>
+    <h2>The funnel <span class="em">is</span> the product</h2>
+    <svg viewBox="0 0 900 300" role="img" aria-label="Conversion funnel">
+      <defs>
+        <linearGradient id="fg" x1="0" x2="1"><stop offset="0" stop-color="#8b5cf6"/><stop offset="1" stop-color="#ec4899"/></linearGradient>
+      </defs>
+      <g font-family="-apple-system,sans-serif" font-size="15" font-weight="600" fill="#fff" text-anchor="middle">
+        <rect x="60"  y="30"  width="780" height="38" rx="8" fill="url(#fg)"/><text x="450" y="55">Open the assistant</text>
+        <rect x="110" y="82"  width="680" height="38" rx="8" fill="url(#fg)"/><text x="450" y="107">Consultation — a couple of questions</text>
+        <rect x="170" y="134" width="560" height="38" rx="8" fill="url(#fg)"/><text x="450" y="159">Upload a selfie</text>
+        <rect x="230" y="186" width="440" height="38" rx="8" fill="url(#fg)"/><text x="450" y="211">See personalized try-on cards</text>
+        <rect x="290" y="238" width="320" height="38" rx="8" fill="url(#fg)"/><text x="450" y="263">Click through → buy</text>
+      </g>
+    </svg>
+    <p class="lead" style="margin-top:1rem">Every architectural decision exists to push shoppers down this shape — and to <b>measure where they fall out.</b></p>
+  </section>
+
+  <!-- 7 ARCHITECTURE -->
+  <section class="slide" data-notes="THE map slide. Walk it left-to-right: browser widget → server APIs → data + AI.|Emphasize: no iframe = same-origin = direct AJAX cart access + speed + trust.|Legend: purple = AI call, pink dashed = the cart_token join (analytics_events → widget_orders).">
+    <div class="kicker"><span class="dot"></span> System architecture</div>
+    <h2>One map, four layers</h2>
+    <svg viewBox="0 0 960 430" role="img" aria-label="System architecture" preserveAspectRatio="xMidYMid meet" style="max-height:52vh;width:auto;margin:0 auto">
+      <style>
+        .box{fill:#fff;stroke:#e2e8f0;stroke-width:1.5}
+        .lbl{font-family:-apple-system,sans-serif;font-size:13px;fill:#1e293b;font-weight:600}
+        .sub{font-family:-apple-system,sans-serif;font-size:11px;fill:#64748b}
+        .grp{font-family:-apple-system,sans-serif;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+        .edge{stroke:#cbd5e1;stroke-width:2;fill:none;marker-end:url(#ar)}
+        .edge.ai{stroke:#8b5cf6;marker-end:url(#arP)}
+        .edge.dot{stroke-dasharray:5 5;stroke:#ec4899;marker-end:url(#arK)}
+        .edge.fb{stroke-dasharray:3 4;stroke:#cbd5e1}
+      </style>
+      <defs>
+        <marker id="ar"  markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#cbd5e1"/></marker>
+        <marker id="arP" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#8b5cf6"/></marker>
+        <marker id="arK" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#ec4899"/></marker>
+      </defs>
+
+      <!-- groups -->
+      <rect x="20" y="40" width="220" height="360" rx="16" fill="#faf5ff" stroke="#e9d5ff"/>
+      <text x="32" y="32" class="grp" fill="#8b5cf6">Browser</text>
+      <rect x="270" y="40" width="360" height="360" rx="16" fill="#f8fafc" stroke="#e2e8f0"/>
+      <text x="282" y="32" class="grp" fill="#475569">Remix server · /api/storefront/*</text>
+      <rect x="660" y="40" width="280" height="170" rx="16" fill="#f0fdf4" stroke="#bbf7d0"/>
+      <text x="672" y="32" class="grp" fill="#16a34a">Supabase / Postgres</text>
+      <rect x="660" y="232" width="280" height="168" rx="16" fill="#fdf2f8" stroke="#fbcfe8"/>
+      <text x="672" y="224" class="grp" fill="#db2777">AI providers</text>
+
+      <!-- browser boxes -->
+      <rect x="40" y="70" width="180" height="60" rx="12" class="box"/><text x="56" y="96" class="lbl">gleame-chat.js</text><text x="56" y="114" class="sub">widget · state machine</text>
+      <rect x="40" y="150" width="180" height="56" rx="12" class="box"/><text x="56" y="175" class="lbl">gleame-camera.js</text><text x="56" y="193" class="sub">desktop webcam</text>
+
+      <!-- server boxes -->
+      <rect x="290" y="70" width="150" height="54" rx="12" class="box"/><text x="304" y="94" class="lbl">chat-config</text><text x="304" y="110" class="sub">copy · colors · axes</text>
+      <rect x="460" y="70" width="150" height="54" rx="12" class="box"/><text x="474" y="94" class="lbl">recommend</text><text x="474" y="110" class="sub">the brain</text>
+      <rect x="290" y="146" width="150" height="54" rx="12" class="box"/><text x="304" y="170" class="lbl">transform-image</text><text x="304" y="186" class="sub">per-product try-on</text>
+      <rect x="460" y="146" width="150" height="54" rx="12" class="box"/><text x="474" y="170" class="lbl">track-event</text><text x="474" y="186" class="sub">funnel</text>
+      <rect x="375" y="320" width="150" height="54" rx="12" class="box"/><text x="389" y="344" class="lbl">webhooks/orders</text><text x="389" y="360" class="sub">attribution</text>
+
+      <!-- data boxes -->
+      <rect x="680" y="66" width="240" height="40" rx="10" class="box"/><text x="694" y="91" class="lbl">recommendation_rules · axes</text>
+      <rect x="680" y="116" width="240" height="40" rx="10" class="box"/><text x="694" y="141" class="lbl">analytics_events</text>
+      <rect x="680" y="166" width="240" height="36" rx="10" class="box"/><text x="694" y="189" class="lbl">widget_orders</text>
+
+      <!-- ai boxes -->
+      <rect x="680" y="262" width="240" height="50" rx="12" class="box"/><text x="694" y="284" class="lbl">Google Gemini</text><text x="694" y="301" class="sub">image-gen + vision · primary</text>
+      <rect x="680" y="332" width="240" height="50" rx="12" class="box"/><text x="694" y="354" class="lbl">OpenAI gpt-image</text><text x="694" y="371" class="sub">fallback</text>
+
+      <!-- edges -->
+      <path class="edge" d="M130 150 V132"/>                         <!-- camera -> chat.js -->
+      <path class="edge" d="M220 96 H290"/>                          <!-- chat.js -> chat-config -->
+      <path class="edge" d="M220 116 C255 116 255 168 290 170"/>      <!-- chat.js -> transform-image -->
+      <path class="edge" d="M610 94 C645 90 652 86 680 86"/>          <!-- recommend -> rules (DB read, gray) -->
+      <path class="edge ai" d="M610 108 C650 150 650 252 680 284"/>   <!-- recommend -> Gemini (AI) -->
+      <path class="edge" d="M610 170 C645 152 652 138 680 136"/>      <!-- track-event -> analytics_events -->
+      <path class="edge dot" d="M800 156 V166"/>                      <!-- cart_token: analytics_events -> widget_orders -->
+      <path class="edge" d="M525 338 C645 330 650 240 680 188"/>      <!-- webhooks -> widget_orders -->
+      <path class="edge fb" d="M800 312 V332"/>                       <!-- Gemini -> OpenAI fallback -->
+    </svg>
+    <p class="small muted" style="margin-top:.4rem"><span style="color:var(--accent)">Purple</span> = AI call · <span style="color:var(--accent-2)">pink dashed</span> = the <code>cart_token</code> join that links an analytics event to a real Shopify order.</p>
+  </section>
+
+  <!-- 8 LIFECYCLE -->
+  <section class="slide" data-notes="Narrate ONE shopper. This is your 'walk the request' moment.|Hit the order: security gauntlet → classify selfie → match → parallel render → backfill → handles → cards.|Say the ~20s out loud as 'the number the data later indicts' — it's a UX estimate I still need to instrument.">
+    <div class="kicker"><span class="dot"></span> The request lifecycle</div>
+    <h2>What happens in those <span class="em">~20 seconds</span></h2>
+    <div class="row">
+      <div class="col">
+        <ul>
+          <li><b>① Boot</b> — widget fetches <code>chat-config</code> + <code>recommendation-config</code></li>
+          <li><b>② Consult</b> — answers accumulate <code>criteria = {undertone:"warm"}</code></li>
+          <li><b>③ Photo</b> — selfie uploaded → <code>POST /chat-recommend</code></li>
+          <li><b>④ Gauntlet</b> — verify shop · billing · rate-limit · 5 MB cap</li>
+          <li><b>⑤ Classify</b> — Gemini reads the selfie → <code>{depth:"fair"}</code></li>
+        </ul>
+      </div>
+      <div class="col">
+        <ul>
+          <li><b>⑥ Match</b> — JSONB-equality lookup in the rules matrix, ordered by rank</li>
+          <li><b>⑦ Render</b> — top N try-ons in <b>parallel</b> (Promise.all)</li>
+          <li><b>⑧ Backfill</b> — a failed generation is replaced so cards are never short</li>
+          <li><b>⑨ Resolve</b> — batched Admin GraphQL → real product handles</li>
+          <li><b>⑩ Cards</b> — render → <code>chat_recommendation_shown</code></li>
+        </ul>
+      </div>
+    </div>
+    <div class="callout">A security gauntlet, a vision classification, a deterministic lookup, <b>N parallel image generations with failure backfill</b>, and a handle round-trip — presented to the shopper as a calm 3-step "consultation."</div>
+  </section>
+
+  <!-- 9 RECOMMENDER COLD START -->
+  <section class="slide center" data-notes="This is your single best 'technical strength' insight. Slow down here.|A normal recommender needs behavioral data you DON'T have at install. So invert it: elicit + infer, don't learn.|Land the line verbatim. Then say: 'and it's the substrate I'd layer learning onto later.'">
+    <div class="kicker"><span class="dot"></span> The recommendation engine · the insight</div>
+    <h2>You can't learn from <span class="em">zero users</span></h2>
+    <div class="row" style="align-items:center">
+      <div class="col">
+        <p class="quote">"So I don't learn preferences — I <span style="color:var(--accent)">elicit</span> them with a couple of questions and <span style="color:var(--accent-2)">infer</span> the rest from the photo, then map to merchant-authored rules."</p>
+      </div>
+      <div class="col">
+        <div class="card"><h3>Normal recommender</h3><p>Needs click/purchase history → <b>nothing to learn from on day one.</b></p></div>
+        <div class="card" style="margin-top:1rem;border-color:#e9d5ff;background:linear-gradient(135deg,#faf5ff,#fff)"><h3>Gleame — knowledge engineering</h3><p>Works at <b>N = 0 users.</b> Deterministic, debuggable, merchant-controlled — and upgradeable to learning later.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10 RECOMMENDER MATCH -->
+  <section class="slide" data-notes="Two parts: the vision classifier (a LABELER, not a generator) and the matrix lookup.|temp 0 + enum = it can't emit a value the matrix won't understand. Degrades to {} → AI fallback.|The match is strict JSONB equality — say plainly: NO ML scoring. Defend it as deliberate.">
+    <div class="kicker"><span class="dot"></span> The recommendation engine · the match</div>
+    <h2>Selfie → axes → <span class="em">deterministic lookup</span></h2>
+    <div class="row">
+      <div class="col card">
+        <h3>Photo classifier — a labeler, not a generator</h3>
+        <ul style="margin-top:.3rem">
+          <li><b>gemini-2.5-flash</b> used as vision classifier</li>
+          <li>Output <b>constrained to an enum</b> per axis</li>
+          <li><b>temperature 0</b> — deterministic; can't return an unknown value</li>
+          <li>768px · 12s timeout · "never refuse" · errors → <code>{}</code></li>
+        </ul>
+      </div>
+      <div class="col card">
+        <h3>The match — strict JSONB equality</h3>
+        <pre style="margin:.4rem 0 0;font-family:'SF Mono',monospace;font-size:.82rem;background:#0f172a;color:#e2e8f0;padding:1rem;border-radius:12px;overflow:auto;line-height:1.5">SELECT variant_id, product_id, rank
+FROM recommendation_rules
+WHERE shop_id = $1
+  AND criteria = $2::jsonb
+ORDER BY rank;</pre>
+        <p class="small muted" style="margin-top:.6rem">A rule matches or it doesn't — <b>no fuzzy scoring.</b> One indexed hit on <code>UNIQUE(shop_id,criteria,rank)</code>. No match → shuffle + diversity fallback.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 11 IMAGE GEN -->
+  <section class="slide" data-notes="Model tiering is a COST + QUALITY decision, not just latency.|Fallback chain = reliability engineering. Single-provider face editing is fragile (refusals, outages).|Safety-framed prompt is how you beat face-edit refusals on the OpenAI path.">
+    <div class="kicker"><span class="dot"></span> The image-generation pipeline</div>
+    <h2>Multi-model, parallel, <span class="em">fallback-hardened</span></h2>
+    <div class="row">
+      <div class="col">
+        <table>
+          <tr><th>Model</th><th>When</th></tr>
+          <tr><td><b>gemini-3-pro-image</b></td><td>Variant configs (precise makeup)</td></tr>
+          <tr><td><b>gemini-2.5-flash-image</b></td><td>Standard — fast + cheap</td></tr>
+          <tr><td><b>gemini-3.1-flash (2K)</b></td><td>High-detail input</td></tr>
+          <tr><td><b>gpt-image-1.5</b> <span class="pill">OpenAI</span></td><td>Fallback + refusal handling</td></tr>
+        </table>
+        <p class="small muted" style="margin-top:.5rem">IDs abbreviated; full strings end in <code>-preview</code>.</p>
+      </div>
+      <div class="col">
+        <div class="tag-flow" style="flex-direction:column;align-items:stretch;gap:.55rem">
+          <span class="step">Build prompt + fetch 0–5 product refs (SSRF-safe)</span>
+          <span class="arr" style="text-align:center">↓</span>
+          <span class="step">Compress · Sharp resize · HEIC→JPEG · EXIF-rotate</span>
+          <span class="arr" style="text-align:center">↓</span>
+          <span class="step">Gemini · 2 retries w/ backoff</span>
+          <span class="arr" style="text-align:center">↓ on failure (with refs)</span>
+          <span class="step" style="border-color:#fbcfe8;background:#fdf2f8">OpenAI · safety-framed prompt</span>
+        </div>
+      </div>
+    </div>
+    <div class="callout"><b>Parallel</b> top-N generation (Promise.all) → wall-clock ≈ one image. <b>Backfill</b> → the shopper always gets a full set. <b>No output caching</b> — every result is a function of <i>this</i> photo (hit rate ≈ 0).</div>
+  </section>
+
+  <!-- 12 TRIANGLE -->
+  <section class="slide center" data-notes="THE centerpiece of technical strength. Draw their eye to the triangle.|Every decision is a response to ONE of these three pulling against the others.|Name the tension: even optimized, an ESTIMATED ~20s mobile wait before value — which IS the funnel leak. Owning this is a power move.">
+    <div class="kicker"><span class="dot"></span> The hard problem</div>
+    <h2>The <span class="em">latency · cost · quality</span> triangle</h2>
+    <div class="row" style="align-items:center">
+      <div class="col" style="max-width:420px">
+        <svg viewBox="0 0 360 320" aria-label="Tradeoff triangle">
+          <polygon points="180,30 330,290 30,290" fill="#faf5ff" stroke="#8b5cf6" stroke-width="2.5"/>
+          <g font-family="Georgia,serif" font-size="20" fill="#0f172a" text-anchor="middle">
+            <text x="180" y="22">Latency</text>
+            <text x="330" y="312">Cost</text>
+            <text x="30" y="312">Quality</text>
+          </g>
+          <g font-family="-apple-system,sans-serif" font-size="12" fill="#475569" text-anchor="middle">
+            <text x="180" y="120">parallelize</text>
+            <text x="180" y="138">downscale</text>
+            <text x="248" y="218">model tiering</text>
+            <text x="248" y="234">only-render-shown</text>
+            <text x="112" y="218">reference images</text>
+            <text x="112" y="234">deep-skin strategy</text>
+          </g>
+          <circle cx="180" cy="195" r="6" fill="#ec4899"/>
+        </svg>
+      </div>
+      <div class="col">
+        <ul>
+          <li><b>Latency</b> → parallel transforms, input downscaling, capped retries, a consultation UI that makes the wait feel purposeful</li>
+          <li><b>Cost</b> → flash by default, pro only where precision pays; generate only what you show; rate limits as a circuit-breaker</li>
+          <li><b>Quality</b> → real product reference images, deep-skin visibility strategy, pro model for makeup precision</li>
+        </ul>
+        <div class="callout">Even optimized: an <b>estimated ~20s wait, mostly on mobile</b> (perceived; end-to-end latency not yet instrumented), before value appears. <span class="pill warn">that's the leak</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 13 UNIT ECONOMICS -->
+  <section class="slide" data-notes="A consumer founder WILL ask unit economics. Get ahead of it.|Flat subscription revenue vs per-session variable AI cost = the core tension. This is WHY tiering + only-render-shown exist.|Do NOT quote a $/image live — pricing isn't in the codebase. Give the formula; recite your pre-measured rate-card number only if pushed.">
+    <div class="kicker"><span class="dot"></span> Unit economics &amp; margin</div>
+    <h2>Flat revenue, <span class="em">variable cost</span></h2>
+    <div class="grid g2" style="margin-top:.4rem">
+      <div class="card" style="border-color:#bbf7d0;background:linear-gradient(135deg,#f0fdf4,#fff)">
+        <h3>Revenue — flat</h3>
+        <p class="lead" style="font-size:1.05rem">Session-based subscription tiers (Hey Mantle):</p>
+        <p style="margin-top:.5rem;font-weight:700;color:var(--ink)">Free $0 · Starter $30 · Launch $149 · Growth $399</p>
+        <p class="small muted" style="margin-top:.4rem">Merchant pays the same whether shoppers run 10 try-ons or 10,000.</p>
+      </div>
+      <div class="card" style="border-color:#fbcfe8;background:linear-gradient(135deg,#fdf2f8,#fff)">
+        <h3>Cost — variable, per session</h3>
+        <p style="font-family:'SF Mono',monospace;font-size:.92rem;color:var(--ink);margin-top:.2rem">cost = <b>N</b>×image-gen + 1×classification</p>
+        <p class="small muted" style="margin-top:.4rem"><b>N = 3</b> by default (configurable 1–5). Scales with every shopper who completes the flow.</p>
+        <p class="small muted" style="margin-top:.3rem">Per-image $ lives on the provider's rate card — never guessed in the room.</p>
+      </div>
+    </div>
+    <div class="callout">This is the tension that drives the architecture: <b>model tiering, "only render what you show," and rate limits are margin decisions</b> — not just latency ones.</div>
+  </section>
+
+  <!-- 14 PROMPT GEN -->
+  <section class="slide" data-notes="Prompts are NOT written by an LLM. They are concatenated from a CSV-driven funnel.|Defense: determinism = reproducibility + merchant control + no injection surface.|Merchant configures MEANING (levels); system assembles the STRING. (Strong Q&A: zero free-text reaches the model.)">
+    <div class="kicker"><span class="dot"></span> Prompt generation</div>
+    <h2>Deterministic, <span class="em">not</span> LLM-written</h2>
+    <div class="tag-flow" style="margin:.5rem 0 1.4rem">
+      <span class="step">categories.csv</span><span class="arr">→</span>
+      <span class="step">category_parameters.csv</span><span class="arr">→</span>
+      <span class="step">parameter_levels.csv</span><span class="arr">+</span>
+      <span class="step">variant_color_profiles</span><span class="arr">→</span>
+      <span class="step" style="background:#0f172a;color:#fff">final transform instruction</span>
+    </div>
+    <div class="row">
+      <div class="col card"><h3>How</h3><p>Merchant picks a level per parameter → system stitches each level's <code>prompt_text</code> + locked "guardrail" prompts + the variant's color profile (shade, hue family, undertone, deep-skin strategy) into one string.</p></div>
+      <div class="col card" style="border-color:#e9d5ff;background:linear-gradient(135deg,#faf5ff,#fff)"><h3>Why it's a feature</h3><p><b>Reproducible</b> (same inputs → same prompt), <b>merchant-controlled</b> (they own brand voice + safety), and <b>no prompt-injection surface</b> (no free-text reaches the model uncontrolled).</p></div>
+    </div>
+  </section>
+
+  <!-- 15 SECURITY -->
+  <section class="slide" data-notes="Every storefront request crosses this boundary BEFORE doing expensive work.|Shop-domain verification stops cross-shop data access AND rate-limit bypass via spoofed domains.|Own the scaling caveat: rate limiter is in-memory → needs Redis to scale horizontally.">
+    <div class="kicker"><span class="dot"></span> Security &amp; multi-tenancy</div>
+    <h2>The gauntlet every request crosses <span class="em">first</span></h2>
+    <table style="margin-top:.4rem">
+      <tr><th>Control</th><th>What it stops</th></tr>
+      <tr><td><b>Shop-domain verification</b><br><span class="small muted">exact match or alternate-domains whitelist</span></td><td>Cross-shop data access · rate-limit bypass via spoofing</td></tr>
+      <tr><td><b>Billing gate</b></td><td>Unpaid usage (active / trial / grace / grandfathered → else 403)</td></tr>
+      <tr><td><b>Tiered rate limiting</b><br><span class="small muted">20/min · 100/hr per IP · 1000/hr per shop · 10/min on recommend</span></td><td>Burst + sustained abuse of an expensive endpoint</td></tr>
+      <tr><td><b>Input validation</b></td><td>Bad uploads · oversized payloads (5 MB cap, MIME + ext sniff)</td></tr>
+      <tr><td><b>SSRF-safe fetch</b></td><td>Malicious merchant-supplied reference-image URLs</td></tr>
+      <tr><td><b>Deterministic prompts</b></td><td>Prompt injection — no free-text reaches the model</td></tr>
+    </table>
+    <div class="callout"><b>Own it:</b> the rate limiter is in-memory today — correct for current scale, needs Redis to scale horizontally. <span class="pill">honesty &gt; hiding</span></div>
+  </section>
+
+  <!-- 16 ATTRIBUTION -->
+  <section class="slide" data-notes="Tracking must NEVER slow or break the shopper path → fire-and-forget client-side.|Real attribution is reconciled server-side via cart_token + the orders/create webhook.|Cart token is the only reliable session↔order join on Shopify. Also: counts are events not unique sessions — flag it.">
+    <div class="kicker"><span class="dot"></span> Analytics &amp; attribution</div>
+    <h2>Closing the loop to <span class="em">revenue</span></h2>
+    <svg viewBox="0 0 900 200" aria-label="Attribution loop">
+      <style>.b{fill:#fff;stroke:#e2e8f0;stroke-width:1.5}.t{font-family:-apple-system,sans-serif;font-size:13px;fill:#1e293b;font-weight:600}.s{font-family:-apple-system,sans-serif;font-size:11px;fill:#64748b}.e{stroke:#cbd5e1;stroke-width:2;fill:none;marker-end:url(#a2)}.e.d{stroke-dasharray:5 5;stroke:#ec4899;marker-end:url(#a2K)}</style>
+      <defs>
+        <marker id="a2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#cbd5e1"/></marker>
+        <marker id="a2K" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#ec4899"/></marker>
+      </defs>
+      <rect x="20"  y="40" width="180" height="56" rx="12" class="b"/><text x="36" y="66" class="t">trackEvent (client)</text><text x="36" y="84" class="s">fire-and-forget</text>
+      <rect x="250" y="40" width="180" height="56" rx="12" class="b"/><text x="266" y="66" class="t">analytics_events</text><text x="266" y="84" class="s">+ cart_token</text>
+      <rect x="250" y="120" width="180" height="56" rx="12" class="b"/><text x="266" y="146" class="t">widget_orders</text><text x="266" y="164" class="s">+ journey enrichment</text>
+      <rect x="490" y="120" width="180" height="56" rx="12" class="b"/><text x="506" y="146" class="t">orders/create</text><text x="506" y="164" class="s">Shopify webhook</text>
+      <rect x="710" y="80" width="170" height="56" rx="12" class="b" style="stroke:#bbf7d0;fill:#f0fdf4"/><text x="726" y="106" class="t">get_conversion_stats()</text><text x="726" y="124" class="s">attributed revenue</text>
+      <path class="e" d="M200 68 H250"/>
+      <path class="e" d="M490 148 H430"/>
+      <path class="e d" d="M340 96 V120"/>
+      <path class="e" d="M430 140 C520 100 600 100 710 108"/>
+    </svg>
+    <p class="lead" style="margin-top:.8rem">The <code>cart_token</code> is the only reliable session↔order join on Shopify. <span class="small muted">(Counts are event-volume, not unique sessions — no session ID yet; fine for relative health.)</span></p>
+  </section>
+
+  <!-- 17 IMPACT FUNNEL -->
+  <section class="slide" data-notes="Now the payoff. Real production data — most candidates have none.|The funnel is healthy EVERYWHERE except the photo step. 66% leak. Everything downstream converts great.|The whole business is gated on one step: getting a mobile shopper to upload a photo.">
+    <div class="kicker"><span class="dot"></span> Now: what the production data actually said</div>
+    <h2>Healthy everywhere — except <span class="em">one step</span></h2>
+    <svg viewBox="0 0 900 300" aria-label="Funnel with leak">
+      <style>.bar{fill:url(#fg2)}.n{font-family:Georgia,serif;font-size:18px;fill:#0f172a;font-weight:700}.l{font-family:-apple-system,sans-serif;font-size:14px;fill:#334155}.p{font-family:-apple-system,sans-serif;font-size:13px;font-weight:700}</style>
+      <defs><linearGradient id="fg2" x1="0" x2="1"><stop offset="0" stop-color="#8b5cf6"/><stop offset="1" stop-color="#ec4899"/></linearGradient></defs>
+      <g>
+        <text x="20" y="36" class="l">Assistant opened</text>      <rect x="250" y="22" width="600" height="22" rx="5" class="bar"/><text x="862" y="40" class="n">245</text>
+        <text x="20" y="76" class="l">Consultation started</text>  <rect x="250" y="62" width="576" height="22" rx="5" class="bar"/><text x="836" y="80" class="n">235</text><text x="690" y="80" class="p" fill="#16a34a">96%</text>
+        <text x="20" y="116" class="l">Photo uploaded</text>        <rect x="250" y="102" width="194" height="22" rx="5" class="bar"/><text x="456" y="120" class="n">79</text><text x="500" y="120" class="p" fill="#dc2626">34% continue · 66% leak</text>
+        <text x="20" y="156" class="l">Recommendations shown</text><rect x="250" y="142" width="191" height="22" rx="5" class="bar"/><text x="453" y="160" class="n">78</text><text x="500" y="160" class="p" fill="#16a34a">99%</text>
+        <text x="20" y="196" class="l">Product clicked</text>       <rect x="250" y="182" width="93" height="22" rx="5" class="bar"/><text x="355" y="200" class="n">38</text><text x="400" y="200" class="p" fill="#16a34a">49%</text>
+      </g>
+      <line x1="250" y1="92" x2="850" y2="92" stroke="#fca5a5" stroke-dasharray="4 4"/>
+      <rect x="250" y="232" width="600" height="44" rx="10" fill="#fef2f2" stroke="#fecaca"/>
+      <text x="270" y="259" class="l" fill="#991b1b"><tspan font-weight="700">Diagnosis:</tspan> the entire business is gated on one step — getting a mobile shopper to upload a photo.</text>
+    </svg>
+    <p class="small muted" style="margin-top:.5rem">Live on a production Shopify store · last 7 days. Counts are event volume, not unique sessions (no session ID yet) — directional, fine for relative funnel health.</p>
+  </section>
+
+  <!-- 18 IMPACT AB -->
+  <section class="slide" data-notes="The A/B is Shopify-native — SAY you didn't build A/B infra. You built the product + funnel instrumentation.|Blended negative — but the split is the whole story. Desktop wins, mobile loses, mobile is most traffic.|AOV up + conversion down is a real signal, not noise: attracts higher-basket buyers, loses marginal mobile converters.">
+    <div class="kicker"><span class="dot"></span> Impact · the A/B test <span class="pill" style="margin-left:.5rem">Shopify-native</span></div>
+    <h2>Blended negative — but the <span class="em">split</span> is the story</h2>
+    <div class="grid g3" style="margin-top:.5rem">
+      <div class="card"><h3>Blended</h3><div class="big-num" style="color:var(--bad)">▼ 3.0%</div><p>vs 3.7% baseline. <b style="color:var(--good)">AOV +7.5%</b> though.</p></div>
+      <div class="card" style="border-color:#bbf7d0;background:linear-gradient(135deg,#f0fdf4,#fff)"><h3>Desktop</h3><div class="big-num" style="color:var(--good)">▲ up</div><p>Conversion, AOV, <b>revenue/visitor all up.</b> Concept directionally validated.</p></div>
+      <div class="card" style="border-color:#fecaca;background:linear-gradient(135deg,#fef2f2,#fff)"><h3>Mobile <span class="small">(most traffic)</span></h3><div class="big-num" style="color:var(--bad)">▼ down</div><p>Conversion + revenue/visitor down. Drags the blend red.</p></div>
+    </div>
+    <div class="callout q"><b>AOV up + conversion down is a real signal, not noise:</b> Gleame attracts higher-basket buyers but loses marginal mobile converters at the photo gate. <span class="pill warn">caveat: ~60–74 conv/arm — directional, not yet significant</span></div>
+  </section>
+
+  <!-- 19 SYNTHESIS -->
+  <section class="slide center" data-notes="The money line. Say it slowly and verbatim.|Two independent data sources (A/B + funnel) triangulate to ONE root cause: mobile photo friction.|Punchline: 'The AI works. The mobile friction is the bug. That's a product fix, not a model fix.' This is founder behavior — emphasize it.">
+    <div class="kicker"><span class="dot"></span> The synthesis</div>
+    <p class="quote" style="max-width:48ch;font-size:clamp(1.3rem,2.6vw,2.2rem)">"On desktop, where the photo step is frictionless, the try-on lifts conversion <span style="color:var(--good)">and</span> basket size — the concept directionally validates. On mobile, photo friction costs marginal converters faster than the try-on wins them back — and mobile is most of the traffic. <span style="color:var(--accent)">The AI works. The mobile friction is the bug.</span> That's a product fix, not a model fix."</p>
+    <div class="tag-flow" style="margin-top:2rem">
+      <span class="step">Build</span><span class="arr">→</span>
+      <span class="step">Measure</span><span class="arr">→</span>
+      <span class="step">Diagnose</span><span class="arr">→</span>
+      <span class="step" style="background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;border:none">Iterate</span>
+    </div>
+  </section>
+
+  <!-- 20 ROADMAP -->
+  <section class="slide" data-notes="Shows you think in roadmaps. The #1 item directly attacks the diagnosed leak.|Stream-a-hero-first: show 1 fast try-on, backfill the rest → cut perceived mobile latency.|Mention measuring returns — the second-order value thesis is currently unmeasured.">
+    <div class="kicker"><span class="dot"></span> What I'd build next</div>
+    <h2>The roadmap <span class="em">follows the diagnosis</span></h2>
+    <div class="grid g2" style="margin-top:.4rem">
+      <div class="card"><h3>1 · Kill mobile photo friction</h3><p>Stream a hero try-on first (1 fast image), backfill the rest; tighten camera UX + framing copy.</p></div>
+      <div class="card"><h3>2 · Session IDs</h3><p>Honest unique-user funnels + true per-session conversion.</p></div>
+      <div class="card"><h3>3 · Layer learning on the matrix</h3><p>Re-rank merchant rules by observed click/convert once volume justifies it.</p></div>
+      <div class="card"><h3>4 · Measure returns</h3><p>Validate the second-order thesis: accuracy → fewer returns (currently unmeasured).</p></div>
+      <div class="card"><h3>5 · Scale-out infra</h3><p>Redis rate limiter · transform queue with streamed results.</p></div>
+      <div class="card"><h3>6 · Smart caching</h3><p>Cache classifications + reference compressions (not final outputs).</p></div>
+    </div>
+  </section>
+
+  <!-- 21 CLOSE -->
+  <section class="slide center" data-notes="Close on the reframe + the arc. Invite the hardest questions — you have the Q&A bank cold.|If asked cost-per-session: give the FORMULA + your pre-measured rate-card number. Never estimate live.|Thank them, hold the silence, take questions.">
+    <div class="title-mark">G</div>
+    <h1 style="font-size:clamp(1.8rem,4.2vw,3.2rem)">The model is the engine.<br/><span style="color:var(--accent)">I built the car —</span> and I measured it.</h1>
+    <p class="lead" style="margin-top:1.4rem">A cold-start recommender, a fallback-hardened image pipeline, a deterministic prompt layer, a multi-tenant security boundary, and an attribution loop — instrumented end-to-end, A/B-tested in production, diagnosed honestly.</p>
+    <div class="callout" style="max-width:62ch">Desktop already validates the concept; the next unlock is <b>one mobile-friction fix</b> — and I know exactly which one.</div>
+    <div class="spacer"></div>
+    <p class="muted">Thank you. Questions welcome — including the hard ones.</p>
+  </section>
+
+</div>
+
+<div class="progress" id="progress"></div>
+<div class="timer" id="timer">00:00</div>
+<div class="badge" id="badge">01</div>
+<div class="footer">Gleame · AI Assistant · Technical Deep Dive</div>
+<div class="nav">
+  <button onclick="go(-1);this.blur()" aria-label="Previous">‹</button>
+  <button onclick="go(1);this.blur()" aria-label="Next">›</button>
+</div>
+<div class="hint">← → navigate · F fullscreen · S notes · O overview · T timer · R reset · # jump</div>
+<div class="notes" id="notes"><h4>Speaker notes</h4><ul id="notesBody"></ul></div>
+<div class="grid-ov" id="gridOv"><h4>Overview — click a slide to jump</h4><div class="ov-wrap" id="ovWrap"></div></div>
+
+<script>
+  const slides=[...document.querySelectorAll('.slide')];
+  let i=0;
+  const badge=document.getElementById('badge');
+  const prog=document.getElementById('progress');
+  const notes=document.getElementById('notes');
+  const notesBody=document.getElementById('notesBody');
+  const timerEl=document.getElementById('timer');
+  const gridOv=document.getElementById('gridOv');
+  const ovWrap=document.getElementById('ovWrap');
+  let notesOn=false, ovOpen=false;
+
+  function pad(n){return String(n).padStart(2,'0')}
+  function render(){
+    slides.forEach((s,k)=>s.classList.toggle('active',k===i));
+    badge.textContent=pad(i+1)+' / '+pad(slides.length);
+    prog.style.width=((i+1)/slides.length*100)+'%';
+    if(notesOn)fillNotes();
+    if(ovOpen)markOverview();
+  }
+  function go(d){i=Math.min(slides.length-1,Math.max(0,i+d));render()}
+
+  // ---- speaker notes ----
+  function fillNotes(){
+    const raw=slides[i].dataset.notes||'';
+    notesBody.innerHTML='';
+    raw.split('|').filter(Boolean).forEach(t=>{
+      const li=document.createElement('li');li.textContent=t.trim();notesBody.appendChild(li);
+    });
+  }
+
+  // ---- overview ----
+  function buildOverview(){
+    ovWrap.innerHTML='';
+    slides.forEach((s,k)=>{
+      const h=s.querySelector('h1,h2');
+      const t=h?h.textContent:('Slide '+(k+1));
+      const cell=document.createElement('button');
+      cell.className='ov-cell'+(k===i?' cur':'');
+      cell.dataset.k=k;
+      cell.innerHTML='<span class="ov-n">'+pad(k+1)+'</span><span class="ov-t"></span>';
+      cell.querySelector('.ov-t').textContent=t;
+      cell.onclick=()=>{i=k;closeOverview();render()};
+      ovWrap.appendChild(cell);
+    });
+  }
+  function markOverview(){[...ovWrap.children].forEach(c=>c.classList.toggle('cur',+c.dataset.k===i))}
+  function openOverview(){buildOverview();gridOv.classList.add('show');ovOpen=true}
+  function closeOverview(){gridOv.classList.remove('show');ovOpen=false}
+
+  // ---- talk timer (20-min budget) ----
+  const BUDGET=20*60;
+  let running=false, base=0, startedAt=0, timerInt=null;
+  function timerSecs(){return base+(running?(Date.now()-startedAt)/1000:0)}
+  function fmt(s){s=Math.max(0,Math.floor(s));return pad(Math.floor(s/60))+':'+pad(s%60)}
+  function paintTimer(){
+    const s=timerSecs();
+    timerEl.textContent=fmt(s);
+    timerEl.classList.toggle('warn',s>=BUDGET-120&&s<BUDGET);
+    timerEl.classList.toggle('over',s>=BUDGET);
+  }
+  function toggleTimer(){
+    running=!running;
+    if(running){startedAt=Date.now();timerInt=setInterval(paintTimer,500);}
+    else{base=timerSecs();clearInterval(timerInt);}
+    paintTimer();
+  }
+  function resetTimer(){running=false;base=0;clearInterval(timerInt);paintTimer();}
+
+  // ---- jump-by-number ----
+  let numBuf='', numT=null;
+
+  document.addEventListener('keydown',e=>{
+    if(e.metaKey||e.ctrlKey||e.altKey)return;                 // don't hijack Cmd-P etc.
+    const k=e.key;
+    if(/^[0-9]$/.test(k)){
+      numBuf+=k;clearTimeout(numT);
+      numT=setTimeout(()=>{const n=parseInt(numBuf,10);if(n>=1&&n<=slides.length){i=n-1;render();}numBuf='';},700);
+      return;
+    }
+    if(k==='Escape'){if(ovOpen)closeOverview();if(notesOn){notesOn=false;notes.classList.remove('show');}return;}
+    if(k==='ArrowRight'||k===' '||k==='PageDown'){e.preventDefault();go(1);}
+    else if(k==='ArrowLeft'||k==='PageUp'){e.preventDefault();go(-1);}
+    else if(k==='Home'){i=0;render();}
+    else if(k==='End'){i=slides.length-1;render();}
+    else if(k.toLowerCase()==='f'){if(!document.fullscreenElement)document.documentElement.requestFullscreen();else document.exitFullscreen();}
+    else if(k.toLowerCase()==='s'){notesOn=!notesOn;notes.classList.toggle('show',notesOn);if(notesOn)fillNotes();}
+    else if(k.toLowerCase()==='o'){ovOpen?closeOverview():openOverview();}
+    else if(k.toLowerCase()==='t'){toggleTimer();}
+    else if(k.toLowerCase()==='r'){resetTimer();}
+  });
+
+  // ---- swipe (ignores vertical intent + gestures inside notes/overview) ----
+  let x0=null,y0=null;
+  document.addEventListener('touchstart',e=>{
+    if(e.target.closest('.notes,.grid-ov')){x0=null;return;}
+    x0=e.touches[0].clientX;y0=e.touches[0].clientY;
+  });
+  document.addEventListener('touchend',e=>{
+    if(x0===null)return;
+    const dx=e.changedTouches[0].clientX-x0, dy=e.changedTouches[0].clientY-y0;
+    if(Math.abs(dx)>50&&Math.abs(dx)>Math.abs(dy)*1.5)go(dx<0?1:-1);
+    x0=y0=null;
+  });
+
+  // ---- print / PDF fallback: inject speaker notes into each slide ----
+  window.addEventListener('beforeprint',()=>{
+    slides.forEach(s=>{
+      if(s.querySelector('.print-notes'))return;
+      const raw=s.dataset.notes||'';if(!raw)return;
+      const div=document.createElement('div');div.className='print-notes';
+      const h=document.createElement('h5');h.textContent='Speaker notes';
+      const ul=document.createElement('ul');
+      raw.split('|').filter(Boolean).forEach(t=>{const li=document.createElement('li');li.textContent=t.trim();ul.appendChild(li);});
+      div.appendChild(h);div.appendChild(ul);s.appendChild(div);
+    });
+  });
+  window.addEventListener('afterprint',()=>{document.querySelectorAll('.print-notes').forEach(n=>n.remove());});
+
+  paintTimer();
+  render();
+</script>
+</body>
+</html>

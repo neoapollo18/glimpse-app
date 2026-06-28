@@ -41,7 +41,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   try {
     const body = await request.json();
-    const { shopDomain, productId, eventType, widgetType, cartToken } = body;
+    const { shopDomain, productId, eventType, widgetType, cartToken, deviceType } = body;
 
     // Product-level events (tied to a specific product page widget) vs.
     // assistant-level funnel events (shop-wide, no product). The chat assistant
@@ -92,13 +92,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     }
 
+    // Only accept the two device classes the widget emits; anything else is
+    // stored as null (counts toward totals, not the mobile/desktop split).
+    const sanitizedDeviceType: 'mobile' | 'desktop' | undefined =
+      deviceType === 'mobile' || deviceType === 'desktop' ? deviceType : undefined;
+
     // Track the event with cart token for conversion attribution (fire and forget for speed)
     if (isAssistantEvent) {
       trackAssistantEvent(
         shopDomain,
         eventType,
         widgetType || 'chat',
-        sanitizedCartToken
+        sanitizedCartToken,
+        sanitizedDeviceType
       ).catch(err => {
         console.error('Failed to track assistant event:', err);
       });

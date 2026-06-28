@@ -413,7 +413,8 @@ export async function trackAssistantEvent(
   shopDomain: string,
   eventType: string,
   widgetType: string = 'chat',
-  cartToken?: string
+  cartToken?: string,
+  deviceType?: 'mobile' | 'desktop'
 ) {
   try {
     const normalizedCartToken = normalizeCartToken(cartToken);
@@ -432,6 +433,7 @@ export async function trackAssistantEvent(
         event_type: eventType,
         widget_type: widgetType,
         cart_token: normalizedCartToken,
+        device_type: deviceType ?? null,
       }])
       .select()
       .single();
@@ -784,7 +786,7 @@ export async function getAnalytics(shopDomain: string, daysBack: number = 7) {
   }
 }
 
-export interface AssistantEngagement {
+export interface AssistantFunnelCounts {
   opens: number;                 // chat_open
   starts: number;                // chat_recommend_start
   photoUploads: number;          // chat_photo_upload
@@ -793,6 +795,17 @@ export interface AssistantEngagement {
   addToBag: number;              // chat_add_bundle_to_bag
   heroViews: number;             // hero_view
   heroCtaClicks: number;         // hero_cta_click
+}
+
+// Top-level counts are device-agnostic totals (mobile + desktop + any events
+// recorded before device tracking existed). `byDevice` splits the same funnel
+// by the device the shopper entered on; mobile + desktop may sum to less than
+// the total because legacy/unclassified events have a null device_type.
+export interface AssistantEngagement extends AssistantFunnelCounts {
+  byDevice: {
+    mobile: AssistantFunnelCounts;
+    desktop: AssistantFunnelCounts;
+  };
 }
 
 // Engagement funnel for the chat assistant. Counts are event volume (not unique
@@ -813,49 +826,67 @@ export async function getAssistantEngagement(
     dateThreshold.setDate(dateThreshold.getDate() - daysBack);
     const iso = dateThreshold.toISOString();
 
-    const countFor = async (eventType: string): Promise<number> => {
-      const { count, error } = await supabase
+    // One head-count per (event type, device filter). `device` undefined counts
+    // every event for that type (the device-agnostic total); 'mobile'/'desktop'
+    // restrict to that device. Null/legacy device_type rows only land in totals.
+    const countFor = async (
+      eventType: string,
+      device?: 'mobile' | 'desktop',
+    ): Promise<number> => {
+      let query = supabase
         .from('analytics_events')
         .select('*', { count: 'exact', head: true })
         .eq('shop_id', shop.id)
         .eq('event_type', eventType)
         .gte('created_at', iso);
+      if (device) {
+        query = query.eq('device_type', device);
+      }
+      const { count, error } = await query;
       if (error) {
-        console.error(`Error counting assistant event ${eventType}:`, error);
+        console.error(`Error counting assistant event ${eventType} (${device ?? 'all'}):`, error);
         return 0;
       }
       return count || 0;
     };
 
-    const [
-      opens,
-      starts,
-      photoUploads,
-      recommendationsShown,
-      productClicks,
-      addToBag,
-      heroViews,
-      heroCtaClicks,
-    ] = await Promise.all([
-      countFor('chat_open'),
-      countFor('chat_recommend_start'),
-      countFor('chat_photo_upload'),
-      countFor('chat_recommendation_shown'),
-      countFor('chat_view_product'),
-      countFor('chat_add_bundle_to_bag'),
-      countFor('hero_view'),
-      countFor('hero_cta_click'),
-    ]);
+    // [funnel key, event_type] in funnel order.
+    const fields: Array<[keyof AssistantFunnelCounts, string]> = [
+      ['opens', 'chat_open'],
+      ['starts', 'chat_recommend_start'],
+      ['photoUploads', 'chat_photo_upload'],
+      ['recommendationsShown', 'chat_recommendation_shown'],
+      ['productClicks', 'chat_view_product'],
+      ['addToBag', 'chat_add_bundle_to_bag'],
+      ['heroViews', 'hero_view'],
+      ['heroCtaClicks', 'hero_cta_click'],
+    ];
+
+    // Fire every count (total + per-device for each field) in parallel, then
+    // assemble. Each entry resolves to its field key and the three counts.
+    const rows = await Promise.all(
+      fields.map(async ([key, eventType]) => {
+        const [total, mobile, desktop] = await Promise.all([
+          countFor(eventType),
+          countFor(eventType, 'mobile'),
+          countFor(eventType, 'desktop'),
+        ]);
+        return { key, total, mobile, desktop };
+      }),
+    );
+
+    const total = {} as AssistantFunnelCounts;
+    const mobile = {} as AssistantFunnelCounts;
+    const desktop = {} as AssistantFunnelCounts;
+    for (const row of rows) {
+      total[row.key] = row.total;
+      mobile[row.key] = row.mobile;
+      desktop[row.key] = row.desktop;
+    }
 
     return {
-      opens,
-      starts,
-      photoUploads,
-      recommendationsShown,
-      productClicks,
-      addToBag,
-      heroViews,
-      heroCtaClicks,
+      ...total,
+      byDevice: { mobile, desktop },
     };
   } catch (error) {
     console.error('Error in getAssistantEngagement:', error);

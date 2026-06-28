@@ -1988,6 +1988,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
           eventType: eventType,
           widgetType: 'chat',
           productId: null,
+          deviceType: isMobile() ? 'mobile' : 'desktop',
         }),
       }).catch(function() {});
     } catch (e) {}

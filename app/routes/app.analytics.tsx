@@ -23,7 +23,7 @@ import {
 } from "@shopify/polaris-icons";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { getAnalytics, getConversionStats, getTopTrafficSources, getAssistantEngagement, type TrafficSourceStat, type AssistantEngagement } from "../lib/supabase.server";
+import { getAnalytics, getConversionStats, getTopTrafficSources, getAssistantEngagement, type TrafficSourceStat, type AssistantEngagement, type AssistantFunnelCounts } from "../lib/supabase.server";
 import { useState, useCallback } from "react";
 
 interface WidgetBreakdown {
@@ -66,7 +66,7 @@ const EMPTY_ATTRIBUTION: AttributionStats = {
   trafficSources: [],
 };
 
-const EMPTY_ASSISTANT: AssistantEngagement = {
+const EMPTY_FUNNEL_COUNTS = {
   opens: 0,
   starts: 0,
   photoUploads: 0,
@@ -75,6 +75,14 @@ const EMPTY_ASSISTANT: AssistantEngagement = {
   addToBag: 0,
   heroViews: 0,
   heroCtaClicks: 0,
+};
+
+const EMPTY_ASSISTANT: AssistantEngagement = {
+  ...EMPTY_FUNNEL_COUNTS,
+  byDevice: {
+    mobile: { ...EMPTY_FUNNEL_COUNTS },
+    desktop: { ...EMPTY_FUNNEL_COUNTS },
+  },
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -206,16 +214,26 @@ export default function Analytics() {
 
   // Funnel stages, in order. Each stage's step-conversion is measured against
   // the immediately prior stage so the "from the prior stage" caption holds.
-  const assistantFunnel = [
-    { label: "Assistant opened", count: assistant.opens },
-    { label: "Consultation started", count: assistant.starts },
-    { label: "Photo uploaded", count: assistant.photoUploads },
-    { label: "Recommendations shown", count: assistant.recommendationsShown },
-    { label: "Product clicked", count: assistant.productClicks },
-  ].map((stage, i, arr) => ({
-    ...stage,
-    of: i === 0 ? stage.count : arr[i - 1].count,
-  }));
+  const buildFunnel = (counts: AssistantFunnelCounts) =>
+    [
+      { label: "Assistant opened", count: counts.opens },
+      { label: "Consultation started", count: counts.starts },
+      { label: "Photo uploaded", count: counts.photoUploads },
+      { label: "Recommendations shown", count: counts.recommendationsShown },
+      { label: "Product clicked", count: counts.productClicks },
+    ].map((stage, i, arr) => ({
+      ...stage,
+      of: i === 0 ? stage.count : arr[i - 1].count,
+    }));
+
+  const assistantFunnel = buildFunnel(assistant);
+  const mobileFunnel = buildFunnel(assistant.byDevice.mobile);
+  const desktopFunnel = buildFunnel(assistant.byDevice.desktop);
+  const mobileOpens = assistant.byDevice.mobile.opens;
+  const desktopOpens = assistant.byDevice.desktop.opens;
+  // Share of entrances that are classified (mobile + desktop). Legacy/unclassed
+  // events have a null device_type and aren't in either bucket.
+  const classifiedOpens = mobileOpens + desktopOpens;
 
   const toggleProduct = useCallback((productId: string) => {
     setExpandedProducts((prev) => {
@@ -447,6 +465,103 @@ export default function Analytics() {
                     Percentages show step-over-step conversion from the prior stage. Counts are event volume, not unique shoppers.
                   </Text>
                 </Box>
+              </Card>
+
+              {/* Mobile vs desktop split of the same funnel */}
+              <Card padding="0">
+                <Box padding="400" paddingBlockEnd="300">
+                  <BlockStack gap="100">
+                    <Text as="h3" variant="headingSm">Mobile vs desktop</Text>
+                    <Text as="span" variant="bodySm" tone="subdued">
+                      How shoppers entered and moved through the assistant, split by device.
+                    </Text>
+                  </BlockStack>
+                </Box>
+                <Divider />
+                {classifiedOpens === 0 ? (
+                  <Box padding="400" paddingBlockStart="300">
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Device data is collecting. New assistant activity will appear here split by mobile and desktop.
+                    </Text>
+                  </Box>
+                ) : (
+                  <Box padding="400" paddingBlockStart="300">
+                    <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
+                      {[
+                        { label: "Mobile", opens: mobileOpens, funnel: mobileFunnel },
+                        { label: "Desktop", opens: desktopOpens, funnel: desktopFunnel },
+                      ].map((device) => (
+                        <Box
+                          key={device.label}
+                          padding="400"
+                          background="bg-surface-secondary"
+                          borderRadius="200"
+                        >
+                          <BlockStack gap="300">
+                            <InlineStack align="space-between" blockAlign="center">
+                              <Badge tone={device.label === "Mobile" ? "info" : "success"}>
+                                {device.label}
+                              </Badge>
+                              <Text as="span" variant="bodySm" tone="subdued">
+                                {pct(device.opens, classifiedOpens).toFixed(0)}% of entrances
+                              </Text>
+                            </InlineStack>
+                            <BlockStack gap="050">
+                              <Text as="p" variant="headingLg" fontWeight="bold">
+                                {device.opens.toLocaleString()}
+                              </Text>
+                              <Text as="span" variant="bodySm" tone="subdued">
+                                assistant opens
+                              </Text>
+                            </BlockStack>
+                            <Divider />
+                            <BlockStack gap="200">
+                              {device.funnel.map((stage, i) => {
+                                const shareOfOpens = pct(stage.count, device.opens);
+                                const stepConversion = i === 0 ? 100 : pct(stage.count, stage.of);
+                                return (
+                                  <BlockStack gap="100" key={stage.label}>
+                                    <InlineStack align="space-between" blockAlign="center">
+                                      <Text as="span" variant="bodySm">
+                                        {stage.label}
+                                      </Text>
+                                      <InlineStack gap="200" blockAlign="center">
+                                        <Text as="span" variant="bodySm" fontWeight="semibold">
+                                          {stage.count.toLocaleString()}
+                                        </Text>
+                                        {i > 0 && (
+                                          <Text as="span" variant="bodySm" tone="subdued">
+                                            {`${stepConversion.toFixed(0)}%`}
+                                          </Text>
+                                        )}
+                                      </InlineStack>
+                                    </InlineStack>
+                                    <div
+                                      style={{
+                                        height: "6px",
+                                        borderRadius: "3px",
+                                        background: "var(--p-color-bg-surface)",
+                                        overflow: "hidden",
+                                      }}
+                                    >
+                                      <div
+                                        style={{
+                                          height: "100%",
+                                          width: `${Math.max(shareOfOpens, stage.count > 0 ? 2 : 0)}%`,
+                                          background: "var(--p-color-bg-fill-info)",
+                                        }}
+                                      />
+                                    </div>
+                                  </BlockStack>
+                                );
+                              })}
+                            </BlockStack>
+                          </BlockStack>
+                        </Box>
+                      ))}
+                    </InlineGrid>
+                  </Box>
+                )}
               </Card>
             </BlockStack>
           )}
