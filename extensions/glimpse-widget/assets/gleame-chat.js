@@ -1623,7 +1623,6 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     var viewBtn = document.createElement('button');
     viewBtn.type = 'button';
     viewBtn.className = 'gleame-chat-product-view-link';
-    viewBtn.textContent = 'View page';
 
     function pdpUrl() {
       if (handle) {
@@ -1634,21 +1633,41 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       return '/search?type=product&q=' + encodeURIComponent(rec.productName || rec.title || '');
     }
 
-    function goToPdp() {
-      trackEvent('chat_view_product');
-      // Persist a closed-panel state before navigating so the conversation
-      // restores quietly (pill only) on the product page instead of
-      // reopening over it. pendingRequest is left as-is: if a request is
-      // in flight (clicked on an older card mid-flow), the navigation kills
-      // it and the saved flag lets restoreFromState show its "interrupted" +
-      // Try again recovery on the next page.
+    // Persist a closed-panel state before navigating so the conversation
+    // restores quietly (pill only) on the destination page instead of
+    // reopening over it. pendingRequest is left as-is: if a request is in
+    // flight (clicked on an older card mid-flow), the navigation kills it and
+    // the saved flag lets restoreFromState show its "interrupted" + Try again
+    // recovery on the next page.
+    function navigateAway(url) {
       isOpen = false;
       unlockBodyScroll();
       saveState();
-      window.location.href = pdpUrl();
+      window.location.href = url;
     }
 
-    viewBtn.onclick = goToPdp;
+    function goToPdp() {
+      trackEvent('chat_view_product');
+      navigateAway(pdpUrl());
+    }
+
+    function goToCart() {
+      navigateAway('/cart');
+    }
+
+    // The secondary link starts as "View page" and flips to "View bag" once the
+    // shopper has added this item — at that point the cart (which always
+    // reflects the true contents) is the more useful place to send them, and it
+    // sidesteps the unreliable live cart-drawer sync across themes.
+    var viewingCart = false;
+    function refreshViewLink() {
+      viewBtn.textContent = viewingCart ? 'View bag' : 'View page';
+    }
+    viewBtn.onclick = function() {
+      if (viewingCart) goToCart();
+      else goToPdp();
+    };
+    refreshViewLink();
 
     addBtn.onclick = function() {
       if (addBtn.disabled) return;
@@ -1668,6 +1687,9 @@ console.log('Gleame Chat Assistant v1.0 loaded');
           addBtn.classList.add('gleame-chat-product-add-btn-added');
           addBtn.textContent = 'Added ✓';
           trackEvent('chat_add_product_to_bag');
+          // Now that it's in the cart, point the secondary link at the bag.
+          viewingCart = true;
+          refreshViewLink();
           setTimeout(function() {
             addBtn.classList.remove('gleame-chat-product-add-btn-added');
             addBtn.textContent = ADD_LABEL;
@@ -1915,45 +1937,6 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     }
   }
 
-  // Cart sections to re-render via Shopify's Section Rendering API on add, so
-  // the storefront's cart count/drawer update instantly instead of waiting for
-  // the theme to re-fetch on its own (the cause of the multi-second lag — many
-  // themes, Dawn included, ignore our cart:updated/cart:refresh events). These
-  // are the common Dawn-family section ids; unknown ones are simply skipped, so
-  // this is a safe no-op on themes that don't have them.
-  var CART_REFRESH_SECTIONS = [
-    'cart-icon-bubble',
-    'cart-live-region-text',
-    'cart-notification-product',
-    'cart-notification-button',
-    'cart-drawer',
-    'cart-notification',
-    'main-cart-items',
-    'main-cart-footer',
-    'mini-cart',
-  ];
-
-  // Swap re-rendered section HTML (from the /cart/add.js `sections` response)
-  // into the live DOM. Only touches sections that came back as HTML AND have a
-  // matching element on the page — anything else is left alone.
-  function applyCartSections(body) {
-    var sections = body && body.sections;
-    if (!sections || typeof sections !== 'object') return;
-    Object.keys(sections).forEach(function(id) {
-      var html = sections[id];
-      if (typeof html !== 'string' || !html) return;
-      var target = document.getElementById(id);
-      if (!target) return;
-      try {
-        var parsed = new DOMParser().parseFromString(html, 'text/html');
-        var fresh = parsed.getElementById(id);
-        target.innerHTML = fresh ? fresh.innerHTML : html;
-      } catch (e) {
-        target.innerHTML = html;
-      }
-    });
-  }
-
   // Multi-add for the bundle CTA. Shopify /cart/add.js accepts an `items`
   // array; mirrors addToBag's success / soft-failure handling + cart events.
   function addItemsToBag(variantIds) {
@@ -1964,11 +1947,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     return fetch('/cart/add.js', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({
-        items: items,
-        sections: CART_REFRESH_SECTIONS,
-        sections_url: window.location.pathname,
-      }),
+      body: JSON.stringify({ items: items }),
     }).then(function(res) {
       return res.json().then(function(body) {
         if (!res.ok) {
@@ -1978,7 +1957,6 @@ console.log('Gleame Chat Assistant v1.0 loaded');
         if (body && typeof body.status === 'number' && body.status >= 400) {
           throw new Error(body.description || body.message || ('cart add soft-failure: ' + body.status));
         }
-        applyCartSections(body);
         try {
           document.dispatchEvent(new CustomEvent('cart:updated', { detail: { source: 'gleame-chat' } }));
           document.dispatchEvent(new CustomEvent('cart:refresh', { detail: { source: 'gleame-chat' } }));
@@ -2008,10 +1986,6 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     var formData = new FormData();
     formData.append('id', String(variantId));
     formData.append('quantity', String(quantity || 1));
-    // Ask Shopify to re-render the cart sections in the same round-trip so the
-    // cart UI updates immediately (see applyCartSections / CART_REFRESH_SECTIONS).
-    formData.append('sections', CART_REFRESH_SECTIONS.join(','));
-    formData.append('sections_url', window.location.pathname);
     return fetch('/cart/add.js', {
       method: 'POST',
       headers: { 'Accept': 'application/json' },
@@ -2027,8 +2001,10 @@ console.log('Gleame Chat Assistant v1.0 loaded');
         if (body && typeof body.status === 'number' && body.status >= 400) {
           throw new Error(body.description || body.message || ('cart add soft-failure: ' + body.status));
         }
-        // Success — refresh the theme's cart UI in place, then notify it.
-        applyCartSections(body);
+        // Success — notify the theme. We deliberately don't try to re-render or
+        // open the theme's cart drawer (too theme-specific / unreliable); the
+        // card surfaces a "View bag" link instead. Themes that listen for these
+        // events still get a live cart-count badge update for free.
         try {
           document.dispatchEvent(new CustomEvent('cart:updated', { detail: { source: 'gleame-chat' } }));
           document.dispatchEvent(new CustomEvent('cart:refresh', { detail: { source: 'gleame-chat' } }));
