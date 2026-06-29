@@ -1423,20 +1423,21 @@
   }
 
   /* Greeting — full width with comfortable margins, no awkward left-offset.
-     Sits above the lifted bubble (bottom:80px + 46px tall) so it never
+     Sits above the lifted bubble (bottom:120px + 46px tall) so it never
      overlaps the pill. */
   .gleame-chat-greeting {
-    bottom: calc(138px + env(safe-area-inset-bottom, 0px)) !important;
+    bottom: calc(178px + env(safe-area-inset-bottom, 0px)) !important;
     right: calc(16px + env(safe-area-inset-right, 0px)) !important;
     left: calc(16px + env(safe-area-inset-left, 0px)) !important;
     max-width: none !important;
   }
 
   /* Bubble — keep label short via min-width, ensure visible above home bar.
-     Lifted clear of the storefront's sticky "Add to Bag" bar (~64px tall on
-     most beauty themes) so the pill never overlaps the buy button. */
+     Lifted clear of the storefront's sticky footers — the "Add to Bag" bar on
+     product pages and, taller, the cart drawer's Subtotal + Checkout footer —
+     so the pill never overlaps the price or the buy button. */
   .gleame-chat-bubble {
-    bottom: calc(80px + env(safe-area-inset-bottom, 0px)) !important;
+    bottom: calc(120px + env(safe-area-inset-bottom, 0px)) !important;
     right: calc(16px + env(safe-area-inset-right, 0px)) !important;
   }
 
