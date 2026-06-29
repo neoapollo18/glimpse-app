@@ -1682,14 +1682,21 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       addBtn.classList.add('gleame-chat-product-add-btn-loading');
       addBtn.textContent = 'Adding…';
       addToBag(resolvedId, 1)
-        .then(function() {
+        .then(function(body) {
           addBtn.classList.remove('gleame-chat-product-add-btn-loading');
           addBtn.classList.add('gleame-chat-product-add-btn-added');
           addBtn.textContent = 'Added ✓';
           trackEvent('chat_add_product_to_bag');
-          // Now that it's in the cart, point the secondary link at the bag.
-          viewingCart = true;
-          refreshViewLink();
+          // Prefer opening the theme's own cart drawer with the new item. Our
+          // panel sits above it (z-index), so collapse to the pill once it's
+          // opened or the drawer would slide open hidden behind us.
+          if (showStorefrontCart(body)) {
+            closeChat();
+          } else {
+            // No theme drawer — point the secondary link at the cart page.
+            viewingCart = true;
+            refreshViewLink();
+          }
           setTimeout(function() {
             addBtn.classList.remove('gleame-chat-product-add-btn-added');
             addBtn.textContent = ADD_LABEL;
@@ -1937,6 +1944,92 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     }
   }
 
+  // Sections to ask /cart/add.js to re-render so the theme's cart drawer can
+  // refresh itself in the same round-trip. These are the standard Dawn-family
+  // ids consumed by <cart-drawer>/<cart-notification> renderContents(); unknown
+  // ones come back null and are ignored by the theme.
+  var CART_DRAWER_SECTIONS = [
+    'cart-drawer',
+    'cart-notification-product',
+    'cart-notification-button',
+    'cart-icon-bubble',
+    'cart-live-region-text',
+  ];
+
+  // The storefront theme's own cart UI element, if it exposes the Dawn-style
+  // renderContents() hook (a <cart-drawer> slide-out or <cart-notification>
+  // popup). Returns null on themes without one.
+  function themeCartEl() {
+    var el = document.querySelector('cart-drawer') || document.querySelector('cart-notification');
+    return (el && typeof el.renderContents === 'function') ? el : null;
+  }
+
+  // Open the theme's native cart drawer/notification with the freshly added
+  // item by handing the /cart/add.js response (which carries the re-rendered
+  // sections) to the theme's own renderContents() — the exact path the theme
+  // uses for its own add-to-cart buttons, so it swaps in the item and slides
+  // open. Returns true when a drawer was opened, false otherwise so the caller
+  // can fall back to a /cart link.
+  function openThemeCartDrawer(addResponse) {
+    if (!addResponse || !addResponse.sections) return false;
+    var el = themeCartEl();
+    if (!el) return false;
+    try {
+      el.renderContents(addResponse);
+      return true;
+    } catch (e) {
+      console.error('Gleame Chat: theme cart drawer render failed', e);
+      return false;
+    }
+  }
+
+  // Non-Dawn slide-out carts (e.g. the Pipeline / Out-of-the-Sandbox
+  // "quick-cart") don't expose renderContents — they open by toggling classes
+  // and are wired to a header cart link. We open the drawer by triggering the
+  // theme's own cart link (so its real open handler runs — animation, overlay,
+  // scroll lock, and any refresh-on-open), with a class-toggle fallback. The
+  // line item itself was already added via /cart/add.js. Returns true if a
+  // recognizable quick-cart was found.
+  function openQuickCartDrawer() {
+    var drawer = document.querySelector('.quick-cart, [id*="quick-cart"]');
+    if (!drawer) return false;
+
+    function isQuickCartOpen() {
+      return !!document.querySelector(
+        '.quick-cart__wrapper.active, .quick-cart.active, .quick-cart__wrapper.is-active, .quick-cart.is-active'
+      );
+    }
+
+    // Preferred: click the theme's own cart trigger so its native open logic
+    // runs (and, on themes that re-fetch the cart on open, refreshes contents).
+    var trigger = document.querySelector('.header__cart-link');
+    if (trigger && !isQuickCartOpen()) {
+      try { trigger.click(); } catch (e) {}
+    }
+
+    // Fallback: if the click didn't open it (handler not bound / different
+    // trigger), toggle the open classes we observed on this theme.
+    setTimeout(function () {
+      if (!isQuickCartOpen()) {
+        ['.quick-cart__wrapper', '.quick-cart', '.quick-cart__overlay'].forEach(function (sel) {
+          var n = document.querySelector(sel);
+          if (n) n.classList.add('active');
+        });
+      }
+    }, 60);
+
+    return true;
+  }
+
+  // Show the storefront's cart UI with the just-added item, trying each theme
+  // family in turn. Returns true if some cart UI was opened; false lets the
+  // caller fall back to a "View bag" link to /cart.
+  function showStorefrontCart(addResponse) {
+    if (openThemeCartDrawer(addResponse)) return true; // Dawn-family
+    if (openQuickCartDrawer()) return true;            // Pipeline / quick-cart
+    return false;
+  }
+
   // Multi-add for the bundle CTA. Shopify /cart/add.js accepts an `items`
   // array; mirrors addToBag's success / soft-failure handling + cart events.
   function addItemsToBag(variantIds) {
@@ -1986,6 +2079,13 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     var formData = new FormData();
     formData.append('id', String(variantId));
     formData.append('quantity', String(quantity || 1));
+    // When the theme has a Dawn-style drawer, ask Shopify to re-render its
+    // sections in this same request so openThemeCartDrawer can populate + open
+    // it. Skipped on themes without a drawer to avoid needless render work.
+    if (themeCartEl()) {
+      formData.append('sections', CART_DRAWER_SECTIONS.join(','));
+      formData.append('sections_url', window.location.pathname);
+    }
     return fetch('/cart/add.js', {
       method: 'POST',
       headers: { 'Accept': 'application/json' },
