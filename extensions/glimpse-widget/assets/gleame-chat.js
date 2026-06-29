@@ -1599,30 +1599,21 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     });
   }
 
-  // Card CTA: a primary "Add to bag" pill that adds the matched variant to the
-  // cart in place (via /cart/add.js, no navigation), plus a secondary "View
-  // page" link to the product. The variant id may be known directly or resolved
-  // lazily via setVariantId after the card's price lookup; until it resolves,
-  // "Add to bag" falls back to opening the product page so the shopper can pick
-  // the shade there. With no handle at all "View page" falls back to a product
-  // search so the shopper is never stranded. Returns { el, setVariantId }.
+  // Card CTA: a single "View page" pill that navigates to the product page.
+  // When a numeric variant id is known (directly, or resolved lazily via
+  // setVariantId after the card's price lookup) the URL deep-links the
+  // matched shade with ?variant=; with no handle at all it falls back to a
+  // product search so the shopper is never stranded. Returns
+  // { el, setVariantId }.
   function buildCardCta(rec) {
     var resolvedId = (rec.variantNumericId && /^\d+$/.test(String(rec.variantNumericId)))
       ? String(rec.variantNumericId) : null;
     var handle = (rec.productHandle || '').trim();
 
-    var wrap = document.createElement('div');
-    wrap.className = 'gleame-chat-product-cta';
-
-    var ADD_LABEL = 'Add to bag';
-    var addBtn = document.createElement('button');
-    addBtn.type = 'button';
-    addBtn.className = 'gleame-chat-product-add-btn';
-    addBtn.textContent = ADD_LABEL;
-
-    var viewBtn = document.createElement('button');
-    viewBtn.type = 'button';
-    viewBtn.className = 'gleame-chat-product-view-link';
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'gleame-chat-product-add-btn';
+    btn.textContent = 'View page';
 
     function pdpUrl() {
       if (handle) {
@@ -1633,92 +1624,22 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       return '/search?type=product&q=' + encodeURIComponent(rec.productName || rec.title || '');
     }
 
-    // Persist a closed-panel state before navigating so the conversation
-    // restores quietly (pill only) on the destination page instead of
-    // reopening over it. pendingRequest is left as-is: if a request is in
-    // flight (clicked on an older card mid-flow), the navigation kills it and
-    // the saved flag lets restoreFromState show its "interrupted" + Try again
-    // recovery on the next page.
-    function navigateAway(url) {
+    btn.onclick = function() {
+      trackEvent('chat_view_product');
+      // Persist a closed-panel state before navigating so the conversation
+      // restores quietly (pill only) on the product page instead of
+      // reopening over it. pendingRequest is left as-is: if a request is
+      // in flight (View page clicked on an older card mid-flow), the
+      // navigation kills it and the saved flag lets restoreFromState show
+      // its "interrupted" + Try again recovery on the next page.
       isOpen = false;
       unlockBodyScroll();
       saveState();
-      window.location.href = url;
-    }
-
-    function goToPdp() {
-      trackEvent('chat_view_product');
-      navigateAway(pdpUrl());
-    }
-
-    function goToCart() {
-      navigateAway('/cart');
-    }
-
-    // The secondary link starts as "View page" and flips to "View bag" once the
-    // shopper has added this item — at that point the cart (which always
-    // reflects the true contents) is the more useful place to send them, and it
-    // sidesteps the unreliable live cart-drawer sync across themes.
-    var viewingCart = false;
-    function refreshViewLink() {
-      viewBtn.textContent = viewingCart ? 'View bag' : 'View page';
-    }
-    viewBtn.onclick = function() {
-      if (viewingCart) goToCart();
-      else goToPdp();
+      window.location.href = pdpUrl();
     };
-    refreshViewLink();
-
-    addBtn.onclick = function() {
-      if (addBtn.disabled) return;
-      // No resolvable variant yet (lookup slow/failed, or no variant on a
-      // product-level rec) — send the shopper to the PDP to choose + add
-      // rather than firing a cart add with no id.
-      if (!resolvedId) {
-        goToPdp();
-        return;
-      }
-      addBtn.disabled = true;
-      addBtn.classList.add('gleame-chat-product-add-btn-loading');
-      addBtn.textContent = 'Adding…';
-      addToBag(resolvedId, 1)
-        .then(function(body) {
-          addBtn.classList.remove('gleame-chat-product-add-btn-loading');
-          addBtn.classList.add('gleame-chat-product-add-btn-added');
-          addBtn.textContent = 'Added ✓';
-          trackEvent('chat_add_product_to_bag');
-          // Prefer opening the theme's own cart drawer with the new item. Our
-          // panel sits above it (z-index), so collapse to the pill once it's
-          // opened or the drawer would slide open hidden behind us.
-          if (showStorefrontCart(body)) {
-            closeChat();
-          } else {
-            // No theme drawer — point the secondary link at the cart page.
-            viewingCart = true;
-            refreshViewLink();
-          }
-          setTimeout(function() {
-            addBtn.classList.remove('gleame-chat-product-add-btn-added');
-            addBtn.textContent = ADD_LABEL;
-            addBtn.disabled = false;
-          }, 2000);
-        })
-        .catch(function(err) {
-          console.error('Gleame Chat: product add failed', err);
-          addBtn.classList.remove('gleame-chat-product-add-btn-loading');
-          addBtn.textContent = 'Try again';
-          setTimeout(function() {
-            addBtn.textContent = ADD_LABEL;
-            addBtn.disabled = false;
-          }, 1800);
-        });
-    };
-
-    wrap.appendChild(addBtn);
-    wrap.appendChild(viewBtn);
 
     return {
-      el: wrap,
+      el: btn,
       setVariantId: function(id) {
         if (id && /^\d+$/.test(String(id))) resolvedId = String(id);
       },
@@ -1944,92 +1865,6 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     }
   }
 
-  // Sections to ask /cart/add.js to re-render so the theme's cart drawer can
-  // refresh itself in the same round-trip. These are the standard Dawn-family
-  // ids consumed by <cart-drawer>/<cart-notification> renderContents(); unknown
-  // ones come back null and are ignored by the theme.
-  var CART_DRAWER_SECTIONS = [
-    'cart-drawer',
-    'cart-notification-product',
-    'cart-notification-button',
-    'cart-icon-bubble',
-    'cart-live-region-text',
-  ];
-
-  // The storefront theme's own cart UI element, if it exposes the Dawn-style
-  // renderContents() hook (a <cart-drawer> slide-out or <cart-notification>
-  // popup). Returns null on themes without one.
-  function themeCartEl() {
-    var el = document.querySelector('cart-drawer') || document.querySelector('cart-notification');
-    return (el && typeof el.renderContents === 'function') ? el : null;
-  }
-
-  // Open the theme's native cart drawer/notification with the freshly added
-  // item by handing the /cart/add.js response (which carries the re-rendered
-  // sections) to the theme's own renderContents() — the exact path the theme
-  // uses for its own add-to-cart buttons, so it swaps in the item and slides
-  // open. Returns true when a drawer was opened, false otherwise so the caller
-  // can fall back to a /cart link.
-  function openThemeCartDrawer(addResponse) {
-    if (!addResponse || !addResponse.sections) return false;
-    var el = themeCartEl();
-    if (!el) return false;
-    try {
-      el.renderContents(addResponse);
-      return true;
-    } catch (e) {
-      console.error('Gleame Chat: theme cart drawer render failed', e);
-      return false;
-    }
-  }
-
-  // Non-Dawn slide-out carts (e.g. the Pipeline / Out-of-the-Sandbox
-  // "quick-cart") don't expose renderContents — they open by toggling classes
-  // and are wired to a header cart link. We open the drawer by triggering the
-  // theme's own cart link (so its real open handler runs — animation, overlay,
-  // scroll lock, and any refresh-on-open), with a class-toggle fallback. The
-  // line item itself was already added via /cart/add.js. Returns true if a
-  // recognizable quick-cart was found.
-  function openQuickCartDrawer() {
-    var drawer = document.querySelector('.quick-cart, [id*="quick-cart"]');
-    if (!drawer) return false;
-
-    function isQuickCartOpen() {
-      return !!document.querySelector(
-        '.quick-cart__wrapper.active, .quick-cart.active, .quick-cart__wrapper.is-active, .quick-cart.is-active'
-      );
-    }
-
-    // Preferred: click the theme's own cart trigger so its native open logic
-    // runs (and, on themes that re-fetch the cart on open, refreshes contents).
-    var trigger = document.querySelector('.header__cart-link');
-    if (trigger && !isQuickCartOpen()) {
-      try { trigger.click(); } catch (e) {}
-    }
-
-    // Fallback: if the click didn't open it (handler not bound / different
-    // trigger), toggle the open classes we observed on this theme.
-    setTimeout(function () {
-      if (!isQuickCartOpen()) {
-        ['.quick-cart__wrapper', '.quick-cart', '.quick-cart__overlay'].forEach(function (sel) {
-          var n = document.querySelector(sel);
-          if (n) n.classList.add('active');
-        });
-      }
-    }, 60);
-
-    return true;
-  }
-
-  // Show the storefront's cart UI with the just-added item, trying each theme
-  // family in turn. Returns true if some cart UI was opened; false lets the
-  // caller fall back to a "View bag" link to /cart.
-  function showStorefrontCart(addResponse) {
-    if (openThemeCartDrawer(addResponse)) return true; // Dawn-family
-    if (openQuickCartDrawer()) return true;            // Pipeline / quick-cart
-    return false;
-  }
-
   // Multi-add for the bundle CTA. Shopify /cart/add.js accepts an `items`
   // array; mirrors addToBag's success / soft-failure handling + cart events.
   function addItemsToBag(variantIds) {
@@ -2060,9 +1895,9 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   }
 
   // Shopify AJAX cart. Posted to /cart/add.js relative to the storefront
-  // domain — same origin as the widget, so no CORS. Used by the per-card
-  // "Add to bag" CTA (buildCardCta); addItemsToBag is the multi-item sibling
-  // for the bundle path.
+  // domain — same origin as the widget, so no CORS. Currently unused — the
+  // per-card CTA navigates to the product page instead — but kept alongside
+  // addItemsToBag for the disabled bundle path / easy re-enable.
   //
   // Note on Shopify's response shape: success returns the added line item
   // (has product_id / variant_id / title); SOFT failures (out of stock,
@@ -2079,13 +1914,6 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     var formData = new FormData();
     formData.append('id', String(variantId));
     formData.append('quantity', String(quantity || 1));
-    // When the theme has a Dawn-style drawer, ask Shopify to re-render its
-    // sections in this same request so openThemeCartDrawer can populate + open
-    // it. Skipped on themes without a drawer to avoid needless render work.
-    if (themeCartEl()) {
-      formData.append('sections', CART_DRAWER_SECTIONS.join(','));
-      formData.append('sections_url', window.location.pathname);
-    }
     return fetch('/cart/add.js', {
       method: 'POST',
       headers: { 'Accept': 'application/json' },
