@@ -53,6 +53,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       'chat_photo_upload',
       'chat_recommendation_shown',
       'chat_view_product',
+      'chat_add_product_to_bag',
       'chat_add_bundle_to_bag',
       'hero_view',
       'hero_dismiss',

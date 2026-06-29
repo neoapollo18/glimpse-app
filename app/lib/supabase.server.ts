@@ -792,7 +792,7 @@ export interface AssistantFunnelCounts {
   photoUploads: number;          // chat_photo_upload
   recommendationsShown: number;  // chat_recommendation_shown
   productClicks: number;         // chat_view_product
-  addToBag: number;              // chat_add_bundle_to_bag
+  addToBag: number;              // chat_add_product_to_bag + chat_add_bundle_to_bag
   heroViews: number;             // hero_view
   heroCtaClicks: number;         // hero_cta_click
 }
@@ -826,19 +826,23 @@ export async function getAssistantEngagement(
     dateThreshold.setDate(dateThreshold.getDate() - daysBack);
     const iso = dateThreshold.toISOString();
 
-    // One head-count per (event type, device filter). `device` undefined counts
-    // every event for that type (the device-agnostic total); 'mobile'/'desktop'
-    // restrict to that device. Null/legacy device_type rows only land in totals.
+    // One head-count per (event type(s), device filter). Pass an array to count
+    // several event types together (e.g. add-to-bag spans per-product and bundle
+    // events). `device` undefined counts every matching row (the device-agnostic
+    // total); 'mobile'/'desktop' restrict to that device. Null/legacy
+    // device_type rows only land in totals.
     const countFor = async (
-      eventType: string,
+      eventType: string | string[],
       device?: 'mobile' | 'desktop',
     ): Promise<number> => {
       let query = supabase
         .from('analytics_events')
         .select('*', { count: 'exact', head: true })
         .eq('shop_id', shop.id)
-        .eq('event_type', eventType)
         .gte('created_at', iso);
+      query = Array.isArray(eventType)
+        ? query.in('event_type', eventType)
+        : query.eq('event_type', eventType);
       if (device) {
         query = query.eq('device_type', device);
       }
@@ -850,14 +854,16 @@ export async function getAssistantEngagement(
       return count || 0;
     };
 
-    // [funnel key, event_type] in funnel order.
-    const fields: Array<[keyof AssistantFunnelCounts, string]> = [
+    // [funnel key, event_type(s)] in funnel order. add-to-bag combines the
+    // per-product card adds (chat_add_product_to_bag) and the bundle "add all"
+    // (chat_add_bundle_to_bag) so the metric reflects every add the assistant drove.
+    const fields: Array<[keyof AssistantFunnelCounts, string | string[]]> = [
       ['opens', 'chat_open'],
       ['starts', 'chat_recommend_start'],
       ['photoUploads', 'chat_photo_upload'],
       ['recommendationsShown', 'chat_recommendation_shown'],
       ['productClicks', 'chat_view_product'],
-      ['addToBag', 'chat_add_bundle_to_bag'],
+      ['addToBag', ['chat_add_product_to_bag', 'chat_add_bundle_to_bag']],
       ['heroViews', 'hero_view'],
       ['heroCtaClicks', 'hero_cta_click'],
     ];

@@ -1599,21 +1599,31 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     });
   }
 
-  // Card CTA: a single "View page" pill that navigates to the product page.
-  // When a numeric variant id is known (directly, or resolved lazily via
-  // setVariantId after the card's price lookup) the URL deep-links the
-  // matched shade with ?variant=; with no handle at all it falls back to a
-  // product search so the shopper is never stranded. Returns
-  // { el, setVariantId }.
+  // Card CTA: a primary "Add to bag" pill that adds the matched variant to the
+  // cart in place (via /cart/add.js, no navigation), plus a secondary "View
+  // page" link to the product. The variant id may be known directly or resolved
+  // lazily via setVariantId after the card's price lookup; until it resolves,
+  // "Add to bag" falls back to opening the product page so the shopper can pick
+  // the shade there. With no handle at all "View page" falls back to a product
+  // search so the shopper is never stranded. Returns { el, setVariantId }.
   function buildCardCta(rec) {
     var resolvedId = (rec.variantNumericId && /^\d+$/.test(String(rec.variantNumericId)))
       ? String(rec.variantNumericId) : null;
     var handle = (rec.productHandle || '').trim();
 
-    var btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'gleame-chat-product-add-btn';
-    btn.textContent = 'View page';
+    var wrap = document.createElement('div');
+    wrap.className = 'gleame-chat-product-cta';
+
+    var ADD_LABEL = 'Add to bag';
+    var addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'gleame-chat-product-add-btn';
+    addBtn.textContent = ADD_LABEL;
+
+    var viewBtn = document.createElement('button');
+    viewBtn.type = 'button';
+    viewBtn.className = 'gleame-chat-product-view-link';
+    viewBtn.textContent = 'View page';
 
     function pdpUrl() {
       if (handle) {
@@ -1624,22 +1634,62 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       return '/search?type=product&q=' + encodeURIComponent(rec.productName || rec.title || '');
     }
 
-    btn.onclick = function() {
+    function goToPdp() {
       trackEvent('chat_view_product');
       // Persist a closed-panel state before navigating so the conversation
       // restores quietly (pill only) on the product page instead of
       // reopening over it. pendingRequest is left as-is: if a request is
-      // in flight (View page clicked on an older card mid-flow), the
-      // navigation kills it and the saved flag lets restoreFromState show
-      // its "interrupted" + Try again recovery on the next page.
+      // in flight (clicked on an older card mid-flow), the navigation kills
+      // it and the saved flag lets restoreFromState show its "interrupted" +
+      // Try again recovery on the next page.
       isOpen = false;
       unlockBodyScroll();
       saveState();
       window.location.href = pdpUrl();
+    }
+
+    viewBtn.onclick = goToPdp;
+
+    addBtn.onclick = function() {
+      if (addBtn.disabled) return;
+      // No resolvable variant yet (lookup slow/failed, or no variant on a
+      // product-level rec) — send the shopper to the PDP to choose + add
+      // rather than firing a cart add with no id.
+      if (!resolvedId) {
+        goToPdp();
+        return;
+      }
+      addBtn.disabled = true;
+      addBtn.classList.add('gleame-chat-product-add-btn-loading');
+      addBtn.textContent = 'Adding…';
+      addToBag(resolvedId, 1)
+        .then(function() {
+          addBtn.classList.remove('gleame-chat-product-add-btn-loading');
+          addBtn.classList.add('gleame-chat-product-add-btn-added');
+          addBtn.textContent = 'Added ✓';
+          trackEvent('chat_add_product_to_bag');
+          setTimeout(function() {
+            addBtn.classList.remove('gleame-chat-product-add-btn-added');
+            addBtn.textContent = ADD_LABEL;
+            addBtn.disabled = false;
+          }, 2000);
+        })
+        .catch(function(err) {
+          console.error('Gleame Chat: product add failed', err);
+          addBtn.classList.remove('gleame-chat-product-add-btn-loading');
+          addBtn.textContent = 'Try again';
+          setTimeout(function() {
+            addBtn.textContent = ADD_LABEL;
+            addBtn.disabled = false;
+          }, 1800);
+        });
     };
 
+    wrap.appendChild(addBtn);
+    wrap.appendChild(viewBtn);
+
     return {
-      el: btn,
+      el: wrap,
       setVariantId: function(id) {
         if (id && /^\d+$/.test(String(id))) resolvedId = String(id);
       },

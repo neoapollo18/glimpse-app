@@ -221,6 +221,7 @@ export default function Analytics() {
       { label: "Photo uploaded", count: counts.photoUploads },
       { label: "Recommendations shown", count: counts.recommendationsShown },
       { label: "Product clicked", count: counts.productClicks },
+      { label: "Added to bag", count: counts.addToBag },
     ].map((stage, i, arr) => ({
       ...stage,
       of: i === 0 ? stage.count : arr[i - 1].count,
@@ -412,7 +413,7 @@ export default function Analytics() {
 
               <Card padding="0">
                 <Box padding="400" paddingBlockEnd="300">
-                  <Text as="h3" variant="headingSm">Funnel — from opening the assistant to viewing a product</Text>
+                  <Text as="h3" variant="headingSm">Funnel — from opening the assistant to adding to bag</Text>
                 </Box>
                 <Divider />
                 <Box padding="400" paddingBlockStart="300">

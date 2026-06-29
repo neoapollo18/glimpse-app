@@ -944,6 +944,45 @@
 }
 
 /* Primary Add-to-bag CTA — dark filled pill, full width of the card. */
+/* CTA stack: primary "Add to bag" pill + secondary "View page" link. The
+   primary button keeps its own margin-top for spacing from the card body; the
+   gap handles the space between the two affordances. */
+.gleame-chat-product-cta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Secondary, low-emphasis link beneath the Add to bag pill. */
+.gleame-chat-product-view-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 8px 16px;
+  background: transparent;
+  color: #6b7280;
+  border: none;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 36px;
+  line-height: 1.2;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+@media (hover: hover) {
+  .gleame-chat-product-view-link:hover {
+    color: #111827;
+  }
+}
+
+.gleame-chat-product-view-link:active {
+  transform: scale(0.99);
+}
+
 .gleame-chat-product-add-btn,
 .gleame-chat-product-shop-btn {
   display: flex;
