@@ -1915,6 +1915,45 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     }
   }
 
+  // Cart sections to re-render via Shopify's Section Rendering API on add, so
+  // the storefront's cart count/drawer update instantly instead of waiting for
+  // the theme to re-fetch on its own (the cause of the multi-second lag — many
+  // themes, Dawn included, ignore our cart:updated/cart:refresh events). These
+  // are the common Dawn-family section ids; unknown ones are simply skipped, so
+  // this is a safe no-op on themes that don't have them.
+  var CART_REFRESH_SECTIONS = [
+    'cart-icon-bubble',
+    'cart-live-region-text',
+    'cart-notification-product',
+    'cart-notification-button',
+    'cart-drawer',
+    'cart-notification',
+    'main-cart-items',
+    'main-cart-footer',
+    'mini-cart',
+  ];
+
+  // Swap re-rendered section HTML (from the /cart/add.js `sections` response)
+  // into the live DOM. Only touches sections that came back as HTML AND have a
+  // matching element on the page — anything else is left alone.
+  function applyCartSections(body) {
+    var sections = body && body.sections;
+    if (!sections || typeof sections !== 'object') return;
+    Object.keys(sections).forEach(function(id) {
+      var html = sections[id];
+      if (typeof html !== 'string' || !html) return;
+      var target = document.getElementById(id);
+      if (!target) return;
+      try {
+        var parsed = new DOMParser().parseFromString(html, 'text/html');
+        var fresh = parsed.getElementById(id);
+        target.innerHTML = fresh ? fresh.innerHTML : html;
+      } catch (e) {
+        target.innerHTML = html;
+      }
+    });
+  }
+
   // Multi-add for the bundle CTA. Shopify /cart/add.js accepts an `items`
   // array; mirrors addToBag's success / soft-failure handling + cart events.
   function addItemsToBag(variantIds) {
@@ -1925,7 +1964,11 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     return fetch('/cart/add.js', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ items: items }),
+      body: JSON.stringify({
+        items: items,
+        sections: CART_REFRESH_SECTIONS,
+        sections_url: window.location.pathname,
+      }),
     }).then(function(res) {
       return res.json().then(function(body) {
         if (!res.ok) {
@@ -1935,6 +1978,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
         if (body && typeof body.status === 'number' && body.status >= 400) {
           throw new Error(body.description || body.message || ('cart add soft-failure: ' + body.status));
         }
+        applyCartSections(body);
         try {
           document.dispatchEvent(new CustomEvent('cart:updated', { detail: { source: 'gleame-chat' } }));
           document.dispatchEvent(new CustomEvent('cart:refresh', { detail: { source: 'gleame-chat' } }));
@@ -1945,9 +1989,9 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   }
 
   // Shopify AJAX cart. Posted to /cart/add.js relative to the storefront
-  // domain — same origin as the widget, so no CORS. Currently unused — the
-  // per-card CTA navigates to the product page instead — but kept alongside
-  // addItemsToBag for the disabled bundle path / easy re-enable.
+  // domain — same origin as the widget, so no CORS. Used by the per-card
+  // "Add to bag" CTA (buildCardCta); addItemsToBag is the multi-item sibling
+  // for the bundle path.
   //
   // Note on Shopify's response shape: success returns the added line item
   // (has product_id / variant_id / title); SOFT failures (out of stock,
@@ -1964,6 +2008,10 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     var formData = new FormData();
     formData.append('id', String(variantId));
     formData.append('quantity', String(quantity || 1));
+    // Ask Shopify to re-render the cart sections in the same round-trip so the
+    // cart UI updates immediately (see applyCartSections / CART_REFRESH_SECTIONS).
+    formData.append('sections', CART_REFRESH_SECTIONS.join(','));
+    formData.append('sections_url', window.location.pathname);
     return fetch('/cart/add.js', {
       method: 'POST',
       headers: { 'Accept': 'application/json' },
@@ -1979,7 +2027,8 @@ console.log('Gleame Chat Assistant v1.0 loaded');
         if (body && typeof body.status === 'number' && body.status >= 400) {
           throw new Error(body.description || body.message || ('cart add soft-failure: ' + body.status));
         }
-        // Success — let the theme update its cart UI.
+        // Success — refresh the theme's cart UI in place, then notify it.
+        applyCartSections(body);
         try {
           document.dispatchEvent(new CustomEvent('cart:updated', { detail: { source: 'gleame-chat' } }));
           document.dispatchEvent(new CustomEvent('cart:refresh', { detail: { source: 'gleame-chat' } }));
