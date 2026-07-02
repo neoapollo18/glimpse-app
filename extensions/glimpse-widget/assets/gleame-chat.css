@@ -1476,8 +1476,9 @@ body.gleame-chat-no-scroll {
 /* ============================================================
    HERO POPUP (.gleame-hero-*)
    Value-preview entry point shown before the user engages.
-   Desktop: floating card in a corner. Mobile: bottom sheet at
-   ~78dvh. Dismiss reveals the pill. Sits below the chat panel.
+   Desktop only: floating card in a corner; hidden on mobile
+   (JS also skips it there and shows the greeting toast instead).
+   Dismiss reveals the pill. Sits below the chat panel.
    ============================================================ */
 
 .gleame-hero {
@@ -1740,63 +1741,10 @@ body.gleame-chat-no-scroll {
 
 /* ---- Mobile hero — bottom sheet at ~78dvh ---- */
 @media (max-width: 600px) {
-  .gleame-hero,
-  .gleame-hero.gleame-hero-top-right,
-  .gleame-hero.gleame-hero-top-left,
-  .gleame-hero.gleame-hero-bottom-right,
-  .gleame-hero.gleame-hero-bottom-left {
-    bottom: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    top: auto !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    height: 78dvh !important;
-    max-height: 78dvh !important;
-    border-radius: 22px 22px 0 0 !important;
-    border: none !important;
-    box-shadow: 0 -10px 32px rgba(0, 0, 0, 0.18) !important;
-    transform: translateY(100%) !important;
-    transition: transform 0.36s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.28s ease !important;
-    display: flex !important;
-    flex-direction: column !important;
-    overflow: hidden !important;
-  }
-
-  .gleame-hero.gleame-hero-visible {
-    transform: translateY(0) !important;
-  }
-
-  /* No drag-handle indicator: we don't actually wire drag-to-dismiss, so
-     showing a swipe affordance would be a misleading promise. The X button
-     in the top-right is the explicit dismiss path. */
-
-  .gleame-hero-top {
-    flex-shrink: 0 !important;
-  }
-
-  .gleame-hero-close {
-    top: 18px !important;
-    right: 16px !important;
-    width: 36px !important;
-    height: 36px !important;
-  }
-
-  .gleame-hero-headline {
-    font-size: 28px !important;
-  }
-
-  /* Scrollable body so trust + CTA always reachable */
-  .gleame-hero-body {
-    flex: 1 !important;
-    overflow-y: auto !important;
-    -webkit-overflow-scrolling: touch !important;
-    overscroll-behavior: contain !important;
-    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)) !important;
-  }
-
-  .gleame-hero-cta {
-    padding: 18px !important;
-    font-size: 14px !important;
+  /* Hero is desktop-only. JS already skips it on mobile (scheduleEntryPoint
+     falls back to the greeting toast); this hides it if the viewport shrinks
+     past the breakpoint while a desktop hero is up. */
+  .gleame-hero {
+    display: none !important;
   }
 }

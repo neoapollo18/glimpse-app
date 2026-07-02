@@ -255,7 +255,10 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   // a second nudge would be noise. The pill bubble remains visible.
   function scheduleEntryPoint() {
     var heroCfg = config && config.hero;
-    if (heroCfg && heroCfg.enabled) {
+    // Hero is desktop-only: on mobile the 78dvh sheet is too intrusive, so
+    // fall through to the greeting toast instead. CSS also hides
+    // .gleame-hero at the same breakpoint as a backstop.
+    if (heroCfg && heroCfg.enabled && !isPanelFullscreen()) {
       if (heroDismissed) return; // already dismissed this session — pill only
       scheduleHero();
       return;
@@ -441,6 +444,9 @@ console.log('Gleame Chat Assistant v1.0 loaded');
 
   function showHero() {
     if (heroShown) return;
+    // Guard against a desktop→mobile resize between scheduling and firing:
+    // showing here would lock body scroll under a CSS-hidden hero.
+    if (isPanelFullscreen()) return;
     var heroCfg = (config && config.hero) || null;
     if (!heroCfg) return;
     heroShown = true;
