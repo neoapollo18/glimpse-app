@@ -65,8 +65,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       bubble_color: formData.get("bubble_color") as string,
       bubble_text: formData.get("bubble_text") as string,
       accent_color: formData.get("accent_color") as string,
-      greeting_message: formData.get("greeting_message") as string,
-      greeting_delay_seconds: parseInt(formData.get("greeting_delay_seconds") as string, 10),
       opening_message: formData.get("opening_message") as string,
       recommend_button_text: formData.get("recommend_button_text") as string,
       preference_question: formData.get("preference_question") as string,
@@ -121,8 +119,6 @@ export default function AssistantConfig() {
   const [bubbleColor, setBubbleColor] = useState(config.bubble_color);
   const [bubbleText, setBubbleText] = useState(config.bubble_text);
   const [accentColor, setAccentColor] = useState(config.accent_color);
-  const [greetingMessage, setGreetingMessage] = useState(config.greeting_message);
-  const [greetingDelay, setGreetingDelay] = useState(config.greeting_delay_seconds);
   const [openingMessage, setOpeningMessage] = useState(config.opening_message);
   const [recommendButtonText, setRecommendButtonText] = useState(config.recommend_button_text);
   const [preferenceQuestion, setPreferenceQuestion] = useState(config.preference_question);
@@ -206,8 +202,6 @@ export default function AssistantConfig() {
     formData.append("bubble_color", bubbleColor);
     formData.append("bubble_text", bubbleText);
     formData.append("accent_color", accentColor);
-    formData.append("greeting_message", greetingMessage);
-    formData.append("greeting_delay_seconds", String(greetingDelay));
     formData.append("opening_message", openingMessage);
     formData.append("recommend_button_text", recommendButtonText);
     formData.append("preference_question", preferenceQuestion);
@@ -243,7 +237,7 @@ export default function AssistantConfig() {
     fetcher.submit(formData, { method: "POST" });
   }, [
     fetcher, enabled, assistantName, avatarUrl, bubbleColor, bubbleText, accentColor,
-    greetingMessage, greetingDelay, openingMessage, recommendButtonText, preferenceQuestion,
+    openingMessage, recommendButtonText, preferenceQuestion,
     preferenceOptions, photoUploadMessage, photoFrameHint, numRecommendations, productScope, selectedProductIds,
     heroEnabled, heroEyebrow, heroHeadline, heroBody, heroCtaLabel, heroFooter,
     heroSampleLabel, heroTrustItems, heroShowDelay, heroSampleCount,
@@ -343,7 +337,7 @@ export default function AssistantConfig() {
                   value={assistantName}
                   onChange={setAssistantName}
                   autoComplete="off"
-                  helpText="Shown in the chat header and greeting"
+                  helpText="Shown in the chat header"
                 />
                 <BlockStack gap="200">
                   <Text as="p" variant="bodySm" fontWeight="semibold">
@@ -456,31 +450,6 @@ export default function AssistantConfig() {
               </BlockStack>
             </Card>
 
-            {/* Greeting */}
-            <Card>
-              <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">
-                  Greeting
-                </Text>
-                <TextField
-                  label="Greeting Message"
-                  value={greetingMessage}
-                  onChange={setGreetingMessage}
-                  autoComplete="off"
-                  helpText="Notification bubble shown when shoppers first visit"
-                />
-                <RangeSlider
-                  label={`Greeting delay: ${greetingDelay} second${greetingDelay !== 1 ? "s" : ""}`}
-                  value={greetingDelay}
-                  min={0}
-                  max={10}
-                  step={1}
-                  onChange={(val) => setGreetingDelay(val as number)}
-                  output
-                />
-              </BlockStack>
-            </Card>
-
             {/* Hero Popup */}
             <Card>
               <BlockStack gap="400">
@@ -490,7 +459,7 @@ export default function AssistantConfig() {
                       Hero Popup
                     </Text>
                     <Text as="p" variant="bodySm" tone="subdued">
-                      A larger entry point that previews what shoppers get before they click. Appears directly above the chat pill on desktop, as a bottom sheet on mobile. When dismissed, the pill bubble takes over.
+                      A larger entry point that previews what shoppers get before they click. Appears directly above the chat pill on desktop only; on mobile the chat pill is the entry point. When dismissed, the pill bubble takes over.
                     </Text>
                   </BlockStack>
                   <div style={{ flexShrink: 0 }}>
@@ -796,7 +765,7 @@ export default function AssistantConfig() {
                   value={recommendButtonText}
                   onChange={setRecommendButtonText}
                   autoComplete="off"
-                  helpText="The call-to-action shown after the greeting"
+                  helpText="The call-to-action that starts a recommendation"
                 />
                 <TextField
                   label="Preference Question"
@@ -1116,7 +1085,7 @@ export default function AssistantConfig() {
 
                     {/* Messages */}
                     <div style={{ padding: "14px 12px", display: "flex", flexDirection: "column", gap: 8, flex: 1 }}>
-                      {/* Bot greeting */}
+                      {/* Opening message */}
                       <div style={{ alignSelf: "flex-start", maxWidth: "85%" }}>
                         <div
                           style={{
@@ -1128,7 +1097,7 @@ export default function AssistantConfig() {
                             lineHeight: 1.4,
                           }}
                         >
-                          {greetingMessage || "Hey! How can I help?"}
+                          {openingMessage || "Hey! How can I help?"}
                         </div>
                       </div>
                       {/* CTA button */}
@@ -1150,28 +1119,6 @@ export default function AssistantConfig() {
                       </div>
                     </div>
 
-                  </div>
-                )}
-
-                {/* Greeting bubble (when closed) */}
-                {!previewOpen && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      bottom: 68,
-                      right: 12,
-                      maxWidth: 200,
-                      background: "#fff",
-                      borderRadius: "14px 14px 4px 14px",
-                      padding: "10px 14px",
-                      boxShadow: "0 8px 28px rgba(0,0,0,0.14), 0 2px 8px rgba(0,0,0,0.06)",
-                      fontSize: 12,
-                      lineHeight: 1.4,
-                      color: "#1f2937",
-                      border: "1px solid rgba(0,0,0,0.06)",
-                    }}
-                  >
-                    {greetingMessage || "Hey! How can I help?"}
                   </div>
                 )}
 

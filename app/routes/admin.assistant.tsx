@@ -91,7 +91,7 @@ export default function AdminAssistant() {
                     { title: "Shop" },
                     { title: "Status" },
                     { title: "Assistant Name" },
-                    { title: "Greeting" },
+                    { title: "Opening Message" },
                     { title: "Products" },
                     { title: "Actions" },
                   ]}
@@ -116,7 +116,7 @@ export default function AdminAssistant() {
                       </IndexTable.Cell>
                       <IndexTable.Cell>
                         <Text as="span" variant="bodySm" truncate>
-                          {config.greeting_message}
+                          {config.opening_message}
                         </Text>
                       </IndexTable.Cell>
                       <IndexTable.Cell>

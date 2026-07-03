@@ -66,8 +66,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       bubbleColor: config.bubble_color,
       bubbleText: config.bubble_text,
       accentColor: config.accent_color,
-      greetingMessage: config.greeting_message,
-      greetingDelaySeconds: config.greeting_delay_seconds,
       // Bot message pushed right after the hero CTA opens the chat, before
       // the first recommendation question. Empty string = skipped.
       openingMessage: renderTokens(config.opening_message),

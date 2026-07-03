@@ -63,7 +63,6 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   var messages = [];
   var isOpen = false;
   var panelExpanded = false;
-  var greetingDismissed = false;
   var conversationEnded = false;
   var preference = null;
   var pendingRequest = false;
@@ -79,7 +78,6 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   // ---- Session-only state ----
   var config = null;
   var recommendationFlow = null; // { questions, photoAxes, configured }
-  var greetingShown = false;
   var inFlightRequest = null;
   var heroEl = null;
   var heroShown = false;
@@ -90,7 +88,6 @@ console.log('Gleame Chat Assistant v1.0 loaded');
 
   // ---- DOM refs ----
   var bubble = null;
-  var greetingEl = null;
   var panel = null;
   var messagesContainer = null;
   var expandBtn = null;
@@ -111,7 +108,6 @@ console.log('Gleame Chat Assistant v1.0 loaded');
         messages: serialisable,
         isOpen: isOpen,
         panelExpanded: panelExpanded,
-        greetingDismissed: greetingDismissed,
         conversationEnded: conversationEnded,
         preference: preference,
         pendingRequest: pendingRequest,
@@ -149,7 +145,6 @@ console.log('Gleame Chat Assistant v1.0 loaded');
           messages: stripped,
           isOpen: isOpen,
           panelExpanded: panelExpanded,
-          greetingDismissed: greetingDismissed,
           conversationEnded: conversationEnded,
           preference: preference,
           pendingRequest: pendingRequest,
@@ -219,15 +214,14 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       renderBubble();
 
       var saved = loadState();
-      // Restore dismiss flags before deciding what to show, regardless of
-      // whether a conversation is in flight. Previously these were only
+      // Restore the dismiss flag before deciding what to show, regardless of
+      // whether a conversation is in flight. Previously it was only
       // restored inside restoreFromState() (the messages-exist branch),
-      // which meant a shopper who dismissed the hero or greeting and then
+      // which meant a shopper who dismissed the hero and then
       // navigated to a new page would see it again on every page load —
       // breaking the "X → just the pill" promise.
       if (saved) {
         if (saved.heroDismissed) heroDismissed = true;
-        if (saved.greetingDismissed) greetingDismissed = true;
       }
 
       if (saved && Array.isArray(saved.messages) && saved.messages.length > 0) {
@@ -242,33 +236,21 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     });
   }
 
-  // Choose the first-visit entry point: hero takes precedence whenever
-  // the merchant has enabled it — they explicitly opted in with custom
-  // copy, so silently swapping to a generic greeting because some
-  // optional data is missing would hide their work.
-  //
-  // The swatch row is rendered when it has data and quietly omitted when
-  // it doesn't (see showHero) — but the hero itself still renders.
-  //
-  // Once the hero has been dismissed (this session), we do NOT fall back
-  // to the greeting toast either — the shopper explicitly opted out and
-  // a second nudge would be noise. The pill bubble remains visible.
+  // Choose the first-visit entry point. The hero is the only proactive
+  // nudge (the greeting toast was removed entirely); when it's disabled,
+  // dismissed, or suppressed on mobile, the pill bubble alone remains.
   function scheduleEntryPoint() {
     var heroCfg = config && config.hero;
-    // Hero is desktop-only: on mobile the 78dvh sheet is too intrusive, so
-    // fall through to the greeting toast instead. CSS also hides
-    // .gleame-hero at the same breakpoint as a backstop.
+    // Hero is desktop-only: on mobile the 78dvh sheet is too intrusive.
+    // CSS also hides .gleame-hero at the same breakpoint as a backstop.
     if (heroCfg && heroCfg.enabled && !isPanelFullscreen()) {
       if (heroDismissed) return; // already dismissed this session — pill only
       scheduleHero();
-      return;
     }
-    scheduleGreeting();
   }
 
   function restoreFromState(saved) {
     messages = saved.messages || [];
-    greetingDismissed = !!saved.greetingDismissed;
     heroDismissed = !!saved.heroDismissed;
     conversationEnded = !!saved.conversationEnded;
     preference = saved.preference || null;
@@ -370,64 +352,8 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     root.appendChild(bubble);
   }
 
-  // ---- Greeting notification ----
-  function scheduleGreeting() {
-    var raw = Number(config.greetingDelaySeconds);
-    var seconds = isFinite(raw) && raw >= 0 ? raw : 2;
-    var delay = Math.min(seconds, 30) * 1000;
-    setTimeout(function() {
-      if (isOpen || greetingDismissed) return;
-      showGreeting();
-    }, delay);
-  }
-
-  function showGreeting() {
-    if (greetingShown) return;
-    greetingShown = true;
-
-    greetingEl = document.createElement('div');
-    greetingEl.className = 'gleame-chat-greeting';
-    greetingEl.innerHTML =
-      '<span class="gleame-chat-greeting-text">' + escapeHtml(config.greetingMessage) + '</span>' +
-      '<button class="gleame-chat-greeting-close" aria-label="Dismiss">&times;</button>';
-
-    greetingEl.querySelector('.gleame-chat-greeting-close').onclick = function(e) {
-      e.stopPropagation();
-      dismissGreeting();
-    };
-    greetingEl.onclick = function() {
-      dismissGreeting();
-      openChat();
-    };
-
-    root.appendChild(greetingEl);
-
-    requestAnimationFrame(function() {
-      requestAnimationFrame(function() {
-        greetingEl.classList.add('gleame-chat-visible');
-      });
-    });
-
-    setTimeout(function() {
-      if (!greetingDismissed) dismissGreeting();
-    }, 8000);
-  }
-
-  function dismissGreeting() {
-    if (greetingDismissed) return;
-    greetingDismissed = true;
-    saveState();
-    if (greetingEl) {
-      greetingEl.classList.remove('gleame-chat-visible');
-      setTimeout(function() {
-        if (greetingEl && greetingEl.parentNode) greetingEl.parentNode.removeChild(greetingEl);
-      }, 300);
-    }
-  }
-
   // ---- Hero popup ----
-  // Configurable value-preview card. Same lifecycle shape as the greeting
-  // (schedule → show → dismiss) so they're interchangeable as entry points.
+  // Configurable value-preview card (schedule → show → dismiss).
   function scheduleHero() {
     var heroCfg = config.hero || {};
     var raw = Number(heroCfg.showDelaySeconds);
@@ -623,7 +549,6 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   function openChat() {
     if (isOpen) return;
     isOpen = true;
-    dismissGreeting();
     // keepLock: we're about to lock for the chat ourselves; passing
     // keepLock=true avoids the unlock-then-relock churn from dismissHero.
     dismissHero(/* skipPersist */ false, /* keepLock */ true);
@@ -654,7 +579,6 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   function openChatFromHero() {
     if (isOpen) return;
     isOpen = true;
-    dismissGreeting();
 
     if (!panel) buildPanel();
     panel.classList.add('gleame-chat-visible');
@@ -856,12 +780,12 @@ console.log('Gleame Chat Assistant v1.0 loaded');
   // Note: messages within a single conversation step are pushed synchronously
   // (no setTimeout between pushMessage calls). Otherwise navigating mid-delay
   // would leave an orphan question without its follow-up buttons in storage.
-  // Single consultation entry point for every fresh open — bubble, greeting,
-  // and hero CTA all land here. Starts the recommendation flow directly,
+  // Single consultation entry point for every fresh open — bubble and
+  // hero CTA both land here. Starts the recommendation flow directly,
   // optionally led by the merchant's opening message; no reply is expected
   // between the opening message and the first question. (Previously the
-  // bubble showed a greeting + an intermediate "Find my perfect shade"
-  // button before starting — that extra step was the "old flow".)
+  // bubble showed an intermediate "Find my perfect shade" button before
+  // starting — that extra step was the "old flow".)
   function startConsultation() {
     trackEvent('chat_recommend_start');
     conversationEnded = false;

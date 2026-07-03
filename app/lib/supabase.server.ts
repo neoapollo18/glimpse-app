@@ -2281,8 +2281,6 @@ export interface ChatAssistantConfig {
   bubble_color: string;
   bubble_text: string;
   accent_color: string;
-  greeting_message: string;
-  greeting_delay_seconds: number;
   recommend_button_text: string;
   preference_question: string;
   preference_options: string[];
@@ -2351,8 +2349,6 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   bubble_color: '#1f2937',
   bubble_text: 'Try on a shade',
   accent_color: '#8b5cf6',
-  greeting_message: "Hey I'm Laura, your shopping assistant ✨",
-  greeting_delay_seconds: 2,
   recommend_button_text: 'Find my perfect shade',
   preference_question: 'What kind of look are you going for?',
   preference_options: ['Natural', 'Bold', 'Glossy', 'Surprise me'],
@@ -2411,8 +2407,6 @@ export async function getChatAssistantConfig(shopDomain: string): Promise<ChatAs
     bubble_color: data.bubble_color ?? CHAT_ASSISTANT_DEFAULTS.bubble_color,
     bubble_text: data.bubble_text ?? CHAT_ASSISTANT_DEFAULTS.bubble_text,
     accent_color: data.accent_color ?? CHAT_ASSISTANT_DEFAULTS.accent_color,
-    greeting_message: data.greeting_message ?? CHAT_ASSISTANT_DEFAULTS.greeting_message,
-    greeting_delay_seconds: data.greeting_delay_seconds ?? CHAT_ASSISTANT_DEFAULTS.greeting_delay_seconds,
     recommend_button_text: data.recommend_button_text ?? CHAT_ASSISTANT_DEFAULTS.recommend_button_text,
     preference_question: data.preference_question ?? CHAT_ASSISTANT_DEFAULTS.preference_question,
     preference_options: data.preference_options ?? CHAT_ASSISTANT_DEFAULTS.preference_options,
@@ -2495,8 +2489,6 @@ export async function getAllChatAssistantConfigs(): Promise<
     bubble_color: row.bubble_color ?? CHAT_ASSISTANT_DEFAULTS.bubble_color,
     bubble_text: row.bubble_text ?? CHAT_ASSISTANT_DEFAULTS.bubble_text,
     accent_color: row.accent_color ?? CHAT_ASSISTANT_DEFAULTS.accent_color,
-    greeting_message: row.greeting_message ?? CHAT_ASSISTANT_DEFAULTS.greeting_message,
-    greeting_delay_seconds: row.greeting_delay_seconds ?? CHAT_ASSISTANT_DEFAULTS.greeting_delay_seconds,
     recommend_button_text: row.recommend_button_text ?? CHAT_ASSISTANT_DEFAULTS.recommend_button_text,
     preference_question: row.preference_question ?? CHAT_ASSISTANT_DEFAULTS.preference_question,
     preference_options: row.preference_options ?? CHAT_ASSISTANT_DEFAULTS.preference_options,

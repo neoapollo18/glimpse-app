@@ -101,58 +101,6 @@
   color: #ffffff !important;
 }
 
-/* ---- Greeting notification ---- */
-.gleame-chat-greeting {
-  position: fixed !important;
-  bottom: calc(90px + env(safe-area-inset-bottom, 0px)) !important;
-  right: calc(20px + env(safe-area-inset-right, 0px)) !important;
-  max-width: 280px !important;
-  background: #ffffff !important;
-  border-radius: 18px 18px 4px 18px !important;
-  padding: 14px 18px !important;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12) !important;
-  z-index: 999998 !important;
-  opacity: 0;
-  transform: translateY(10px) scale(0.95);
-  transition: opacity 0.3s ease, transform 0.3s ease;
-  cursor: pointer !important;
-  border: 1px solid rgba(0, 0, 0, 0.06) !important;
-  margin: 0 !important;
-}
-
-.gleame-chat-greeting.gleame-chat-visible {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-}
-
-.gleame-chat-greeting-text {
-  font-size: 14px;
-  line-height: 1.45;
-  color: #1f2937;
-}
-
-.gleame-chat-greeting-close {
-  position: absolute;
-  top: -8px;
-  right: -8px;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: #f3f4f6;
-  border: 1px solid #e5e7eb;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  color: #6b7280;
-  transition: background 0.15s;
-}
-
-.gleame-chat-greeting-close:hover {
-  background: #e5e7eb;
-}
-
 /* ---- Chat Panel ---- */
 .gleame-chat-panel {
   position: fixed !important;
@@ -1422,16 +1370,6 @@
     padding-right: calc(14px + env(safe-area-inset-right, 0px)) !important;
   }
 
-  /* Greeting — full width with comfortable margins, no awkward left-offset.
-     Sits above the lifted bubble (bottom:120px + 46px tall) so it never
-     overlaps the pill. */
-  .gleame-chat-greeting {
-    bottom: calc(178px + env(safe-area-inset-bottom, 0px)) !important;
-    right: calc(16px + env(safe-area-inset-right, 0px)) !important;
-    left: calc(16px + env(safe-area-inset-left, 0px)) !important;
-    max-width: none !important;
-  }
-
   /* Bubble — keep label short via min-width, ensure visible above home bar.
      Lifted clear of the storefront's sticky footers — the "Add to Bag" bar on
      product pages and, taller, the cart drawer's Subtotal + Checkout footer —
@@ -1477,7 +1415,7 @@ body.gleame-chat-no-scroll {
    HERO POPUP (.gleame-hero-*)
    Value-preview entry point shown before the user engages.
    Desktop only: floating card in a corner; hidden on mobile
-   (JS also skips it there and shows the greeting toast instead).
+   (JS also skips it there — the pill is the only mobile entry point).
    Dismiss reveals the pill. Sits below the chat panel.
    ============================================================ */
 
@@ -1488,7 +1426,7 @@ body.gleame-chat-no-scroll {
   z-index: 999999 !important;
   /* Anchored directly above the pill: pill sits at bottom:20px height:52px
      (top edge ~72px), so bottom:90px gives the hero ~18px breathing room
-     above the pill — same offset the greeting toast uses. The hero and
+     above the pill with ~18px breathing room. The hero and
      pill always share the bottom-right corner; merchants don't choose. */
   bottom: calc(90px + env(safe-area-inset-bottom, 0px)) !important;
   right: calc(20px + env(safe-area-inset-right, 0px)) !important;
@@ -1742,7 +1680,7 @@ body.gleame-chat-no-scroll {
 /* ---- Mobile hero — bottom sheet at ~78dvh ---- */
 @media (max-width: 600px) {
   /* Hero is desktop-only. JS already skips it on mobile (scheduleEntryPoint
-     falls back to the greeting toast); this hides it if the viewport shrinks
+     leaves just the pill); this hides it if the viewport shrinks
      past the breakpoint while a desktop hero is up. */
   .gleame-hero {
     display: none !important;
