@@ -865,16 +865,38 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     pushMessage({ type: 'bot-buttons', buttons: buttons, consumed: false });
   }
 
+  // Conditional option (showIf) check against answers so far. Mirrors the
+  // quiz page's semantics for the fields chat can honor: chat is
+  // single-tap, so multi-select questions degrade to one answer (which the
+  // shared server matcher still matches), and a select-all option sends the
+  // '_any' marker ("open to anything" — matches any rule value).
+  function chatOptionVisible(opt) {
+    if (!opt.showIf) return true;
+    var v = criteria[opt.showIf.axisKey];
+    return typeof v === 'string' && (v === opt.showIf.axisValue || v === '_any');
+  }
+
   function askNextQuestion() {
     var q = recommendationFlow.questions[questionIndex];
     if (!q) {
       askForPhoto();
       return;
     }
+    var buttons = (q.options || [])
+      .filter(chatOptionVisible)
+      .map(function(opt) {
+        var value = opt.selectAll ? '_any' : opt.axisValue;
+        return { label: opt.label, action: 'qa:' + q.axisKey + ':' + value };
+      });
+    // Every option hidden by showIf → nothing to ask; skip the question
+    // rather than stranding the shopper on a prompt with no buttons.
+    if (buttons.length === 0) {
+      questionIndex++;
+      if (questionIndex < recommendationFlow.questions.length) askNextQuestion();
+      else askForPhoto();
+      return;
+    }
     pushMessage({ type: 'bot-text', text: q.prompt });
-    var buttons = (q.options || []).map(function(opt) {
-      return { label: opt.label, action: 'qa:' + q.axisKey + ':' + opt.axisValue };
-    });
     pushMessage({ type: 'bot-buttons', buttons: buttons, consumed: false });
   }
 
@@ -889,7 +911,9 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     criteria[axisKey] = axisValue;
 
     var q = recommendationFlow && recommendationFlow.questions[questionIndex];
-    var chosen = q && (q.options || []).find(function(o) { return o.axisValue === axisValue; });
+    var chosen = q && (q.options || []).find(function(o) {
+      return axisValue === '_any' ? o.selectAll : o.axisValue === axisValue;
+    });
     if (chosen && chosen.botResponse) {
       pushMessage({ type: 'bot-text', text: chosen.botResponse });
     }

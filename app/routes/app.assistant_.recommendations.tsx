@@ -680,8 +680,45 @@ export default function AssistantRecommendations() {
             setValidationError(`Option "${o.label}" for axis "${axis.key}" has a "Show only if" condition pointing at "${o.showIfAxisKey}: ${o.showIfAxisValue}", which no longer exists`);
             return;
           }
+          // The referenced answer must exist when the option renders: only a
+          // shopper-question axis asked EARLIER in the flow qualifies. Photo
+          // axes resolve after all questions (at the try-on gate) and later
+          // questions haven't been answered yet — the option would save fine
+          // but never show for any shopper. The Select only offers valid
+          // choices now, but stale showIfs from older saves (or from
+          // reordering) still need catching here.
+          const qFlowIdx = questions.findIndex((qq) => qq.axisKey === axis.key);
+          const condFlowIdx = questions.findIndex((qq) => qq.axisKey === o.showIfAxisKey);
+          if (
+            condAxis.source !== "user_question" ||
+            condFlowIdx === -1 ||
+            condFlowIdx >= qFlowIdx
+          ) {
+            setValidationError(`Option "${o.label}" (question ${qFlowIdx + 1}): "Show only if" must reference an earlier question's answer — photo-based traits and later questions aren't known yet when this option renders`);
+            return;
+          }
         }
       }
+    }
+
+    // Questions sharing a screen group must sit next to each other in the
+    // flow — buildScreens in the storefront widget only merges CONSECUTIVE
+    // questions with the same screenGroup, so a split group would silently
+    // render as separate quiz screens. Checked against the same filtered
+    // list the payload ships (stale questions for removed axes don't count).
+    const flowQuestions = questions.filter((q) =>
+      axes.some((a) => a.key === q.axisKey && a.source === "user_question"),
+    );
+    const lastGroupIdx = new Map<string, number>();
+    for (let i = 0; i < flowQuestions.length; i++) {
+      const group = flowQuestions[i].screenGroup.trim();
+      if (!group) continue;
+      const prev = lastGroupIdx.get(group);
+      if (prev !== undefined && prev !== i - 1) {
+        setValidationError(`Screen group "${group}": questions sharing a group must be consecutive — move them next to each other or they'll render as separate quiz screens`);
+        return;
+      }
+      lastGroupIdx.set(group, i);
     }
 
     // Every assigned rule's quantity must be a positive whole number. Empty
@@ -1001,6 +1038,19 @@ export default function AssistantRecommendations() {
                   screenGroup: "",
                   options: [] as EditorQuestionOption[],
                 };
+                // "Show only if" can only reference an answer that exists when
+                // this option renders: a shopper-question axis whose question
+                // comes EARLIER in the flow (the questions array order). Photo
+                // axes resolve after all questions (at the try-on gate) and
+                // later questions haven't been answered yet — either would
+                // save fine but the option would never show for any shopper.
+                const qFlowIdx = questions.findIndex((qq) => qq.axisKey === axis.key);
+                const earlierAxisKeys = new Set(
+                  questions.slice(0, Math.max(qFlowIdx, 0)).map((qq) => qq.axisKey),
+                );
+                const showIfAxisOptions = axes.filter(
+                  (a) => a.key && a.source === "user_question" && earlierAxisKeys.has(a.key),
+                );
                 return (
                   <Box
                     key={axis.key}
@@ -1044,7 +1094,7 @@ export default function AssistantRecommendations() {
                             onChange={(v) => updateQuestion(axis.key, { screenGroup: v })}
                             autoComplete="off"
                             placeholder="style_screen"
-                            helpText="Questions with the same group render together on one quiz screen (e.g. style_screen)"
+                            helpText="Consecutive questions with the same group render together on one quiz screen (e.g. style_screen)"
                           />
                         </div>
                       </InlineStack>
@@ -1134,18 +1184,21 @@ export default function AssistantRecommendations() {
                                   helpText="Options with images render as visual cards on the quiz."
                                 />
                               </div>
-                              {/* Conditional render: only offer OTHER axes —
-                                  an option can't depend on an answer to its
-                                  own question. Changing the axis resets the
-                                  value so a stale pairing can't survive. */}
+                              {/* Conditional render: only offer shopper-question
+                                  axes asked EARLIER in the flow (see
+                                  showIfAxisOptions above) — anything else could
+                                  never be satisfied when this option renders.
+                                  Changing the axis resets the value so a stale
+                                  pairing can't survive. */}
                               <div style={{ flex: 1 }}>
                                 <Select
                                   label="Show only if (optional)"
                                   options={[
                                     { label: "Always shown", value: "" },
-                                    ...axes
-                                      .filter((a) => a.key && a.key !== axis.key)
-                                      .map((a) => ({ label: a.label || a.key, value: a.key })),
+                                    ...showIfAxisOptions.map((a) => ({
+                                      label: a.label || a.key,
+                                      value: a.key,
+                                    })),
                                   ]}
                                   value={opt.showIfAxisKey}
                                   onChange={(v) =>
@@ -1154,7 +1207,7 @@ export default function AssistantRecommendations() {
                                       showIfAxisValue: "",
                                     })
                                   }
-                                  helpText="Only show this option after a matching prior answer."
+                                  helpText="Only show this option after a matching answer to an earlier question."
                                 />
                               </div>
                               <div style={{ flex: 1 }}>

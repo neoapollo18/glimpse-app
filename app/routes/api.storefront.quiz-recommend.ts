@@ -6,6 +6,7 @@ import {
   getChatAssistantConfig,
   getRecommendationFlow,
   matchRecommendationRules,
+  ANY_VALUE,
   type MultiCriteria,
 } from "../lib/supabase.server";
 import {
@@ -170,10 +171,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         const answered = criteria[q.axisKey];
         if (!answered) continue;
         const selected = new Set(Array.isArray(answered) ? answered : [answered]);
+        // "Open to anything" answers arrive as the ANY_VALUE marker — use
+        // the select-all option's OWN copy, never a specific option's
+        // authored claim the shopper didn't actually pick.
+        const selectedOpts = selected.has(ANY_VALUE)
+          ? q.options.filter((o) => o.selectAll)
+          : q.options.filter((o) => selected.has(o.axisValue));
+        if (selectedOpts.length === 0) continue;
         // First selected option with authored reason copy wins; otherwise a
         // readable fallback listing what they picked.
-        const selectedOpts = q.options.filter((o) => selected.has(o.axisValue));
-        if (selectedOpts.length === 0) continue;
         const withReason = selectedOpts.find((o) => o.reasonText);
         reasons.push(
           withReason?.reasonText ||

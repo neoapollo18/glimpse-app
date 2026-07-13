@@ -356,11 +356,16 @@
 
   // The first screen renders inline on the intro ONLY when it's a single
   // plain single-select question — multi-select and grouped screens need a
-  // Continue button and their own space.
+  // Continue button and their own space. It must also have something to
+  // tap: a first question whose options are all conditional (never
+  // satisfiable with no answers yet) falls through to the Start-button
+  // path instead of an unstartable intro.
   function introHostsFirstScreen() {
     if (screens.length === 0) return false;
     var s0 = screens[0];
-    return s0.length === 1 && !flow.questions[s0[0]].multiSelect;
+    return s0.length === 1 &&
+      !flow.questions[s0[0]].multiSelect &&
+      visibleOptions(flow.questions[s0[0]]).length > 0;
   }
 
   function stepSlug() {
@@ -434,8 +439,9 @@
     target = clampStep(target);
     state.screen = target.screen;
     state.screenIndex = target.screenIndex || 0;
-    if (state.screen === 'intro') truncateToScreen(0);
-    else if (state.screen === 'question') truncateToScreen(state.screenIndex);
+    // NO truncation on navigation: answers survive Back/Forward so the
+    // shopper's selections re-render (draft seeding) and criteria can't
+    // develop holes. Re-ANSWERING a screen truncates downstream at commit.
     // If the popped entry was stale, rewrite it in place so Forward from
     // here lands on the corrected step too.
     if (target.screen !== original.screen || (target.screenIndex || 0) !== (original.screenIndex || 0)) {
@@ -596,6 +602,9 @@
   // -- Intro (landing + question 1 inline) --
 
   function renderIntro() {
+    // Abandoned uncommitted picks from a screen must not influence intro
+    // option visibility (conditionMet consults draft).
+    draft = {};
     var landing = config.landing || {};
     var screen = el('div', 'gq-intro');
 
@@ -699,17 +708,25 @@
   // multi-select and grouped screens). qIdx -> {options: [opt], selectAll}
   var draft = {};
 
+  // "Open to anything" marker sent instead of expanding a select-all pick
+  // into every axis value. The server treats it as "axis answered, any rule
+  // value matches"; conditions on the axis are likewise satisfied.
+  var ANY_VALUE = '_any';
+
   // Options whose showIf condition is met by committed answers or by the
-  // current screen's draft (so a same-screen dependency also works).
+  // current screen's draft (same-screen dependencies re-evaluate live via
+  // the onSelectionChange rebuild in renderScreen).
   function conditionMet(showIf) {
     if (!showIf) return true;
     var v = state.criteria[showIf.axisKey];
-    if (Array.isArray(v) && v.indexOf(showIf.axisValue) !== -1) return true;
-    if (typeof v === 'string' && v === showIf.axisValue) return true;
+    if (Array.isArray(v) && (v.indexOf(showIf.axisValue) !== -1 || v.indexOf(ANY_VALUE) !== -1)) return true;
+    if (typeof v === 'string' && (v === showIf.axisValue || v === ANY_VALUE)) return true;
     for (var qi in draft) {
       var q = flow.questions[qi];
       if (!q || q.axisKey !== showIf.axisKey) continue;
-      var opts = draft[qi].options || [];
+      var d = draft[qi];
+      if (d.selectAll) return true; // open to anything covers the condition
+      var opts = d.options || [];
       for (var i = 0; i < opts.length; i++) {
         if (opts[i].axisValue === showIf.axisValue) return true;
       }
@@ -721,8 +738,20 @@
     return q.options.filter(function(opt) { return conditionMet(opt.showIf); });
   }
 
+  // A screen every question of which has no visible options is unanswerable —
+  // navigation skips it rather than stranding the shopper.
+  function screenFullyHidden(s) {
+    var qIdxs = screens[s];
+    if (!qIdxs) return false;
+    for (var j = 0; j < qIdxs.length; j++) {
+      if (visibleOptions(flow.questions[qIdxs[j]]).length > 0) return false;
+    }
+    return true;
+  }
+
   function markSelected(btn) {
-    var siblings = btn.parentNode ? btn.parentNode.querySelectorAll('.is-selected') : [];
+    if (!btn.parentNode) return;
+    var siblings = btn.parentNode.querySelectorAll('.is-selected');
     for (var s = 0; s < siblings.length; s++) siblings[s].classList.remove('is-selected');
     btn.classList.add('is-selected');
   }
@@ -733,7 +762,8 @@
     var screen = el('div', 'gq-step');
     if (!qIdxs) return screen;
 
-    // Seed drafts from committed answers so back-nav re-renders selections.
+    // Seed drafts from committed answers so back-nav re-renders selections
+    // (answers survive navigation — they're only truncated at commit time).
     draft = {};
     qIdxs.forEach(function(qi) {
       var a = state.answers[qi];
@@ -748,6 +778,25 @@
       }
     });
 
+    // Dead screen (every option hidden by showIf) reached via history or a
+    // config change: skip past it in place instead of stranding the shopper.
+    if (screenFullyHidden(screenIdx)) {
+      setTimeout(function() {
+        if (state.screen !== 'question' || state.screenIndex !== screenIdx) return;
+        var next = screenIdx + 1;
+        while (next < screens.length && screenFullyHidden(next)) next++;
+        if (next < screens.length) {
+          state.screenIndex = next;
+        } else {
+          state.screen = 'gate';
+        }
+        saveState();
+        replaceStep();
+        render('forward');
+      }, 0);
+      return screen;
+    }
+
     screen.appendChild(buildStepHeader(screenIdx + 1));
     var body = el('div', 'gq-step-body');
 
@@ -755,13 +804,44 @@
     // single-select keeps the tap-and-advance rhythm.
     var needsContinue = qIdxs.length > 1 || flow.questions[qIdxs[0]].multiSelect;
     var continueBtn = null;
+    // Same-screen showIf dependencies need the option lists re-evaluated
+    // whenever a selection changes.
+    var hasConditionals = qIdxs.some(function(qi) {
+      return flow.questions[qi].options.some(function(o) { return Boolean(o.showIf); });
+    });
+    var listHolders = {};
 
     function refreshContinue() {
       if (!continueBtn) return;
+      // Only questions that currently HAVE visible options require an
+      // answer — a fully-hidden part of a grouped screen must not block.
       var ready = qIdxs.every(function(qi) {
+        if (visibleOptions(flow.questions[qi]).length === 0) return true;
         return draft[qi] && draft[qi].options.length > 0;
       });
       continueBtn.disabled = !ready;
+    }
+
+    function onSelectionChange() {
+      if (hasConditionals) {
+        // Prune picks whose options just became hidden, then rebuild every
+        // list so visibility reflects the new draft (both directions:
+        // newly-revealed options appear, stale hidden picks can't commit).
+        qIdxs.forEach(function(qi) {
+          var d = draft[qi];
+          if (!d) return;
+          var vis = visibleOptions(flow.questions[qi]);
+          d.options = d.options.filter(function(o) { return vis.indexOf(o) !== -1; });
+          if (d.options.length === 0) delete draft[qi];
+        });
+        qIdxs.forEach(function(qi) {
+          var fresh = buildOptionList(qi, flow.questions[qi], needsContinue, onSelectionChange, true);
+          var old = listHolders[qi];
+          if (old && old.parentNode) old.parentNode.replaceChild(fresh, old);
+          listHolders[qi] = fresh;
+        });
+      }
+      refreshContinue();
     }
 
     qIdxs.forEach(function(qi, part) {
@@ -772,7 +852,9 @@
         body.appendChild(el('h3', 'gq-question-subtitle', escapeHtml(q.prompt)));
       }
       if (q.helperText) body.appendChild(el('p', 'gq-question-helper', escapeHtml(q.helperText)));
-      body.appendChild(buildOptionList(qi, q, needsContinue, refreshContinue));
+      var list = buildOptionList(qi, q, needsContinue, onSelectionChange, false);
+      listHolders[qi] = list;
+      body.appendChild(list);
     });
 
     if (needsContinue) {
@@ -787,10 +869,12 @@
     return screen;
   }
 
-  function buildOptionList(qi, q, needsContinue, refreshContinue) {
+  var CHECK_SVG = '<svg class="gq-option-check" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+
+  function buildOptionList(qi, q, needsContinue, onChange, noAnim) {
     var opts = visibleOptions(q);
     var visual = opts.some(function(o) { return Boolean(o.imageUrl); });
-    var list = el('div', visual ? 'gq-option-grid' : 'gq-option-list');
+    var list = el('div', (visual ? 'gq-option-grid' : 'gq-option-list') + (noAnim ? ' gq-no-anim' : ''));
 
     opts.forEach(function(opt, idx) {
       var btn;
@@ -799,18 +883,16 @@
           (opt.imageUrl
             ? '<img class="gq-option-img" src="' + escapeHtml(opt.imageUrl) + '" alt="" loading="lazy">'
             : '<span class="gq-option-img gq-option-img--empty"></span>') +
-          '<span class="gq-option-visual-label">' + escapeHtml(opt.label) + '</span>' +
-          '<svg class="gq-option-check" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>');
+          '<span class="gq-option-visual-label">' + escapeHtml(opt.label) + '</span>' + CHECK_SVG);
       } else {
-        btn = el('button', 'gq-option', '<span>' + escapeHtml(opt.label) + '</span>' +
-          '<svg class="gq-option-check" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>');
+        btn = el('button', 'gq-option', '<span>' + escapeHtml(opt.label) + '</span>' + CHECK_SVG);
       }
       btn.type = 'button';
       btn.style.setProperty('--gq-stagger', idx);
 
+      // Draft options are references into q.options, so identity suffices.
       var current = draft[qi];
-      var isSelected = current && current.options.some(function(o) { return o === opt || o.axisValue === opt.axisValue && o.label === opt.label; });
-      if (isSelected) btn.classList.add('is-selected');
+      if (current && current.options.indexOf(opt) !== -1) btn.classList.add('is-selected');
 
       btn.onclick = function() {
         if (!q.multiSelect) {
@@ -824,15 +906,13 @@
         } else if (opt.selectAll) {
           // "Open to anything" is exclusive — it replaces specific picks.
           draft[qi] = { selectAll: true, options: [opt] };
-          var sel = btn.parentNode.querySelectorAll('.is-selected');
-          for (var s = 0; s < sel.length; s++) sel[s].classList.remove('is-selected');
-          btn.classList.add('is-selected');
+          markSelected(btn);
         } else {
           var d = draft[qi];
           if (!d || d.selectAll) {
             // A specific pick clears a previous "open to anything".
-            d = draft[qi] = { selectAll: false, options: [] };
-            var all = btn.parentNode.querySelectorAll('.is-selected');
+            draft[qi] = d = { selectAll: false, options: [] };
+            var all = btn.parentNode ? btn.parentNode.querySelectorAll('.is-selected') : [];
             for (var t = 0; t < all.length; t++) all[t].classList.remove('is-selected');
           }
           var at = d.options.indexOf(opt);
@@ -845,7 +925,7 @@
             if (d.options.length === 0) delete draft[qi];
           }
         }
-        if (refreshContinue) refreshContinue();
+        if (onChange) onChange();
       };
       list.appendChild(btn);
     });
@@ -853,29 +933,21 @@
   }
 
   // Resolve a question's draft into criteria values. "Open to anything"
-  // expands to every value the question's specific options map to, so it
-  // matches any rule on that axis.
+  // becomes the ANY_VALUE marker — the server matches it against any rule
+  // value, with no expansion (so option subsets and value caps can't bite).
   function draftToAnswer(qi) {
     var q = flow.questions[qi];
     var d = draft[qi];
     if (!d || d.options.length === 0) return null;
-    var values, labels;
+    var values = [];
     if (d.selectAll) {
-      var expanded = [];
-      q.options.forEach(function(o) {
-        if (!o.selectAll && expanded.indexOf(o.axisValue) === -1) expanded.push(o.axisValue);
-      });
-      values = expanded.length > 0 ? expanded : [d.options[0].axisValue];
-      labels = [d.options[0].label];
+      values = [ANY_VALUE];
     } else {
-      values = [];
-      labels = [];
       d.options.forEach(function(o) {
         if (values.indexOf(o.axisValue) === -1) values.push(o.axisValue);
-        labels.push(o.label);
       });
     }
-    return { axisKey: q.axisKey, values: values, labels: labels, selectAll: Boolean(d.selectAll) };
+    return { axisKey: q.axisKey, values: values, selectAll: Boolean(d.selectAll) };
   }
 
   function recordAnswer(qi, answer) {
@@ -884,12 +956,20 @@
     state.criteria[q.axisKey] = q.multiSelect ? answer.values : answer.values[0];
   }
 
-  function advanceFrom(screenIdx) {
+  // Fired synchronously at commit — NOT inside the tap-acknowledge delay,
+  // where a fast tab-close would drop the funnel's first-step beacons.
+  function fireAnswerEvents() {
     if (!quizStarted) { quizStarted = true; trackEvent('quiz_start'); }
     trackEvent('quiz_question_answered');
-    if (screenIdx + 1 < screens.length) {
+  }
+
+  function advanceFrom(screenIdx) {
+    // Skip screens whose every option is hidden by the answers so far.
+    var next = screenIdx + 1;
+    while (next < screens.length && screenFullyHidden(next)) next++;
+    if (next < screens.length) {
       state.screen = 'question';
-      state.screenIndex = screenIdx + 1;
+      state.screenIndex = next;
     } else {
       state.screen = 'gate';
       trackEvent('quiz_gate_view');
@@ -908,22 +988,28 @@
     var answer = draftToAnswer(qi);
     if (!answer) return;
     recordAnswer(qi, answer);
+    fireAnswerEvents();
     setTimeout(function() { advanceFrom(screenIdx); }, 220);
   }
 
-  // Continue path for multi-select and grouped screens.
+  // Continue path for multi-select and grouped screens. Questions whose
+  // options are all hidden are skipped, not required.
   function commitScreen(screenIdx) {
     var qIdxs = screens[screenIdx];
-    var answers = [];
+    var commits = [];
     for (var j = 0; j < qIdxs.length; j++) {
-      var answer = draftToAnswer(qIdxs[j]);
+      var qi = qIdxs[j];
+      if (visibleOptions(flow.questions[qi]).length === 0) continue;
+      var answer = draftToAnswer(qi);
       if (!answer) return; // Continue was enabled prematurely — refuse
-      answers.push(answer);
+      commits.push({ qi: qi, answer: answer });
     }
+    if (commits.length === 0) return;
     truncateToScreen(screenIdx);
-    for (var k = 0; k < qIdxs.length; k++) {
-      recordAnswer(qIdxs[k], answers[k]);
+    for (var k = 0; k < commits.length; k++) {
+      recordAnswer(commits[k].qi, commits[k].answer);
     }
+    fireAnswerEvents();
     advanceFrom(screenIdx);
   }
 
@@ -1504,6 +1590,7 @@
       hasPhoto: false, detectedShade: null, matches: null,
       matrixApplied: false, partial: false,
     };
+    draft = {}; // ghost selections must not leak into intro option visibility
     photoFile = null;
     if (photoObjectUrl) { try { URL.revokeObjectURL(photoObjectUrl); } catch (e) {} photoObjectUrl = null; }
     tryonCache = {};
@@ -1552,11 +1639,11 @@
         }
         // Guard restored indices against a changed question set — clampStep
         // covers both a shorter quiz and answers invalidated by edits.
+        // No truncation here: restored answers stay so the landed screen
+        // re-renders the shopper's selections (commit truncates on change).
         var restored = clampStep({ screen: state.screen, screenIndex: state.screenIndex || 0 });
         state.screen = restored.screen;
         state.screenIndex = restored.screenIndex || 0;
-        if (state.screen === 'intro') truncateToScreen(0);
-        else if (state.screen === 'question') truncateToScreen(state.screenIndex);
       }
 
       replaceStep();

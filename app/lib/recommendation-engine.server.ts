@@ -9,7 +9,7 @@ import prisma from "../db.server";
 import {
   getConfiguredProducts,
   getVariantsForProducts,
-  pickVariantsByCriteria,
+  matchRecommendationRules,
 } from "./supabase.server";
 import type { ChatAssistantConfig } from "./supabase.server";
 
@@ -227,6 +227,13 @@ export function orderByMatrix(
 /**
  * Convenience wrapper: exact matrix lookup + ordering. Mirrors the original
  * chat-recommend flow (lookup only runs when criteria is non-empty).
+ *
+ * Uses the same matcher as the quiz (matchRecommendationRules) so rule
+ * semantics can't drift between surfaces — for chat's single-value criteria
+ * the exact phase is equivalent to the old strict JSONB-equality lookup.
+ * Partial hits are ignored here: chat classifies photo axes BEFORE the
+ * lookup, so a partial match means genuinely unanswered axes and the
+ * original behavior was AI fallback.
  */
 export async function orderCandidates(
   shopId: string,
@@ -235,9 +242,10 @@ export async function orderCandidates(
   opts: { logTag: string; shopDomain: string },
 ): Promise<{ ordered: Candidate[]; matrixApplied: boolean; matrixCount: number }> {
   const aiOrdered = aiOrderCandidates(pool.candidates);
-  const hits = Object.keys(criteria).length > 0
-    ? await pickVariantsByCriteria(shopId, criteria)
+  const match = Object.keys(criteria).length > 0
+    ? await matchRecommendationRules(shopId, criteria)
     : null;
+  const hits = match && !match.partial ? match.hits : null;
   return orderByMatrix(hits, pool, aiOrdered, { ...opts, criteria });
 }
 

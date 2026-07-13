@@ -2843,50 +2843,13 @@ export async function getRecommendationFlow(shopId: string): Promise<Recommendat
   };
 }
 
-/**
- * Strict matrix lookup. Returns the variants assigned to a criteria
- * combination in rank order, or null when the matrix is sparse (no rule
- * for this combination). Callers fall back to AI-pick on null.
- *
- * `criteria` should already be normalized (axis_key → axis_value), e.g.
- * { depth: 'fair', undertone: 'warm' }. JSONB equality matches the
- * stored criteria column.
- */
-export async function pickVariantsByCriteria(
-  shopId: string,
-  criteria: Record<string, string>,
-): Promise<Array<{ variantInternalId: string | null; productInternalId: string | null; rank: number }> | null> {
-  if (Object.keys(criteria).length === 0) return null;
-
-  // The filter value must be a JSON STRING: supabase-js stringifies a raw
-  // object as "[object Object]", which Postgres rejects with "invalid input
-  // syntax for type json" — making every lookup silently miss. JSONB
-  // equality itself is key-order independent, so no client-side key sort
-  // is needed.
-  const { data, error } = await supabase
-    .from('recommendation_rules')
-    .select('variant_id, product_id, rank, quantity')
-    .eq('shop_id', shopId)
-    .eq('criteria', JSON.stringify(criteria))
-    .order('rank', { ascending: true });
-
-  if (error) {
-    console.error('pickVariantsByCriteria error:', error.message);
-    return null;
-  }
-  if (!data || data.length === 0) return null;
-
-  // Each hit targets either a variant or a whole product (DB XOR check). The
-  // caller resolves whichever is set against the in-scope candidate pool.
-  return data.map((r: any) => ({
-    variantInternalId: (r.variant_id as string | null) ?? null,
-    productInternalId: (r.product_id as string | null) ?? null,
-    rank: r.rank as number,
-    quantity: Math.max(1, Number(r.quantity) || 1),
-  }));
-}
-
 export type MultiCriteria = Record<string, string | string[]>;
+
+// "Open to anything" marker. The quiz sends this single value instead of
+// expanding a select-all pick into every axis value — the axis counts as
+// answered and satisfies ANY rule value. It passes the ID_RE identifier
+// shape, so it flows through criteria validation like a normal value.
+export const ANY_VALUE = '_any';
 
 type RuleHit = {
   variantInternalId: string | null;
@@ -2895,13 +2858,42 @@ type RuleHit = {
   quantity: number;
 };
 
+// Fetch every rule row for a shop, paging past PostgREST's silent 1000-row
+// response cap. A fully-authored matrix (cartesian cells × ranks) can exceed
+// it, and both the matcher and the admin editor need the COMPLETE set — the
+// editor's save is wipe-and-rewrite, so a truncated read would destroy the
+// tail on the next save.
+export async function fetchAllRules(
+  shopId: string,
+  columns: string,
+): Promise<{ rows: any[]; error: string | null }> {
+  const PAGE = 1000;
+  const rows: any[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('recommendation_rules')
+      .select(columns)
+      .eq('shop_id', shopId)
+      // Deterministic order is required for stable paging; created_at breaks
+      // rank ties (rank repeats across criteria combinations).
+      .order('rank', { ascending: true })
+      .order('created_at', { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) return { rows, error: error.message };
+    rows.push(...(data ?? []));
+    if (!data || data.length < PAGE) break;
+  }
+  return { rows, error: null };
+}
+
 /**
  * Matrix lookup for the quiz, supporting multi-select answers. Criteria
  * values may be a single string (single-select) or an array (multi-select,
  * e.g. lengths: ["short","medium"]). Rules stay ONE value per axis; a rule
  * value satisfies an axis when it is AMONG the shopper's selections — so a
  * shopper picking two lengths reaches both lengths' rule cells and hits are
- * deduped by target keeping the best rank.
+ * deduped by target keeping the best rank. The ANY_VALUE marker ("open to
+ * anything") satisfies every rule value on its axis.
  *
  * Two phases, mirroring the previous exact/partial split:
  * - exact: the rule covers exactly the answered axes (same key set) and
@@ -2909,8 +2901,10 @@ type RuleHit = {
  *   this is identical to the old strict-equality lookup.
  * - partial (`partial: true`): every ANSWERED axis is covered and
  *   satisfied but the rule carries extra axes (typically a photo-sourced
- *   shade not yet resolved). One rule GROUP is chosen deterministically:
- *   fewest extra keys, then lowest sorted criteria JSON.
+ *   shade not yet resolved). Deduped by target keeping best rank across ALL
+ *   satisfying rows — same as exact — so every selection competes on rank.
+ *   (Callers present partial matches at product level, so the specific
+ *   variant inside a rule row doesn't matter.)
  *
  * Returns null when nothing matches — callers fall back to AI-pick.
  */
@@ -2925,20 +2919,12 @@ export async function matchRecommendationRules(
   }
   if (selections.size === 0) return null;
 
-  // One fetch of the shop's whole rule set; matching happens here. Rule
-  // counts are small (a matrix of hand-authored cells), and multi-select
-  // semantics don't map onto a single JSONB operator.
-  const { data, error } = await supabase
-    .from('recommendation_rules')
-    .select('criteria, variant_id, product_id, rank, quantity')
-    .eq('shop_id', shopId)
-    .order('rank', { ascending: true });
-
+  const { rows, error } = await fetchAllRules(shopId, 'criteria, variant_id, product_id, rank, quantity');
   if (error) {
-    console.error('matchRecommendationRules error:', error.message);
+    console.error('matchRecommendationRules error:', error);
     return null;
   }
-  if (!data || data.length === 0) return null;
+  if (rows.length === 0) return null;
 
   const satisfies = (ruleCriteria: Record<string, string>, requireExactKeys: boolean): boolean => {
     const ruleKeys = Object.keys(ruleCriteria);
@@ -2953,6 +2939,8 @@ export async function matchRecommendationRules(
         if (requireExactKeys) return false; // rule keys must not exceed answers
         continue; // partial phase: extra (unanswered) axes are allowed
       }
+      // "Open to anything" satisfies any rule value on this axis.
+      if (selected.has(ANY_VALUE)) continue;
       if (!selected.has(ruleCriteria[key])) return false;
     }
     return true;
@@ -2967,48 +2955,29 @@ export async function matchRecommendationRules(
 
   const targetKey = (r: any) => `${r.variant_id ?? ''}|${r.product_id ?? ''}`;
 
-  // Phase 1 — exact coverage. Dedupe by target keeping the best rank (two
-  // selected values can reach two cells that share a target).
-  const exactByTarget = new Map<string, any>();
-  for (const row of data) {
-    const rc = (row.criteria ?? {}) as Record<string, string>;
-    if (!satisfies(rc, true)) continue;
-    const key = targetKey(row);
-    const prev = exactByTarget.get(key);
-    if (!prev || (row.rank as number) < (prev.rank as number)) exactByTarget.set(key, row);
-  }
-  if (exactByTarget.size > 0) {
-    const hits = [...exactByTarget.values()]
+  // Dedupe by target keeping the best rank (several selected values can
+  // reach cells that share a target). Used by both phases so partial
+  // results reflect every selection's rank, not one arbitrary rule group.
+  const collect = (requireExactKeys: boolean): RuleHit[] => {
+    const byTarget = new Map<string, any>();
+    for (const row of rows) {
+      const rc = (row.criteria ?? {}) as Record<string, string>;
+      if (!satisfies(rc, requireExactKeys)) continue;
+      const key = targetKey(row);
+      const prev = byTarget.get(key);
+      if (!prev || (row.rank as number) < (prev.rank as number)) byTarget.set(key, row);
+    }
+    return [...byTarget.values()]
       .sort((a, b) => (a.rank as number) - (b.rank as number))
       .map(toHit);
-    return { hits, partial: false };
-  }
+  };
 
-  // Phase 2 — partial coverage (extra axes on the rule). Group by the full
-  // rule criteria and pick the closest group deterministically.
-  const groupKey = (c: Record<string, string>) =>
-    JSON.stringify(Object.keys(c).sort().map((k) => [k, c[k]]));
-  const groups = new Map<string, { extraKeys: number; rows: any[] }>();
-  for (const row of data) {
-    const rc = (row.criteria ?? {}) as Record<string, string>;
-    if (!satisfies(rc, false)) continue;
-    const key = groupKey(rc);
-    let group = groups.get(key);
-    if (!group) {
-      group = { extraKeys: Math.max(0, Object.keys(rc).length - selections.size), rows: [] };
-      groups.set(key, group);
-    }
-    group.rows.push(row);
-  }
-  if (groups.size === 0) return null;
+  const exact = collect(true);
+  if (exact.length > 0) return { hits: exact, partial: false };
 
-  const bestKey = [...groups.entries()]
-    .sort((a, b) => (a[1].extraKeys - b[1].extraKeys) || (a[0] < b[0] ? -1 : 1))[0][0];
-  const hits = groups.get(bestKey)!.rows
-    .slice()
-    .sort((a, b) => (a.rank as number) - (b.rank as number))
-    .map(toHit);
-  return { hits, partial: true };
+  const partialHits = collect(false);
+  if (partialHits.length === 0) return null;
+  return { hits: partialHits, partial: true };
 }
 
 /**
@@ -3132,6 +3101,9 @@ export async function getRecommendationAdminConfig(
   // Axes come first: their ids scope the questions query, and an empty
   // .in() list is a PostgREST error on some versions — skip the query
   // entirely when the shop has no axes.
+  // Rules go through the paging fetch: the editor's save is wipe-and-rewrite,
+  // so a rule list truncated at PostgREST's 1000-row cap would permanently
+  // delete the tail on the next save.
   const [axesRes, rulesRes] = await Promise.all([
     supabase
       .from('recommendation_axes')
@@ -3139,11 +3111,7 @@ export async function getRecommendationAdminConfig(
       .eq('shop_id', shopId)
       .order('position', { ascending: true })
       .order('created_at', { ascending: true }),
-    supabase
-      .from('recommendation_rules')
-      .select('id, criteria, variant_id, product_id, rank, quantity')
-      .eq('shop_id', shopId)
-      .order('rank', { ascending: true }),
+    fetchAllRules(shopId, 'id, criteria, variant_id, product_id, rank, quantity'),
   ]);
 
   const axisIds = (axesRes.data || []).map((a: any) => a.id as string);
@@ -3159,10 +3127,10 @@ export async function getRecommendationAdminConfig(
   // configured nothing — and one click of Save would wipe-and-rewrite their
   // real matrix with that empty state. Loud failure (Remix error boundary)
   // is the only safe behavior for a read that gates a destructive save.
-  const fetchError = axesRes.error || questionsRes.error || rulesRes.error;
+  const fetchError = axesRes.error?.message || questionsRes.error?.message || rulesRes.error;
   if (fetchError) {
     console.error('getRecommendationAdminConfig fetch error', fetchError);
-    throw new Error(`Failed to load recommendation config: ${fetchError.message}`);
+    throw new Error(`Failed to load recommendation config: ${fetchError}`);
   }
 
   const axes: AdminAxis[] = (axesRes.data || []).map((a: any) => ({
@@ -3214,7 +3182,7 @@ export async function getRecommendationAdminConfig(
       }),
   }));
 
-  const rules: AdminRule[] = (rulesRes.data || []).map((r: any) => ({
+  const rules: AdminRule[] = (rulesRes.rows || []).map((r: any) => ({
     id: r.id,
     criteria: r.criteria as Record<string, string>,
     variantId: (r.variant_id as string | null) ?? null,

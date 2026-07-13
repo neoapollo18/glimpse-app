@@ -1090,6 +1090,12 @@
   #gleame-quiz-root .gq-results { padding-bottom: 84px; }
 }
 
+/* Option lists rebuilt in place (same-screen showIf refresh) skip the
+   entrance stagger — replaying it on every toggle would strobe. */
+#gleame-quiz-root .gq-no-anim .gq-option {
+  animation: none;
+}
+
 /* Reduced motion: no entrance animation, no shimmer sweep, instant reveals. */
 @media (prefers-reduced-motion: reduce) {
   #gleame-quiz-root .gq-option,
