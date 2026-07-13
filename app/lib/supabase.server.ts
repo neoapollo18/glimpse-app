@@ -2340,6 +2340,45 @@ export interface ChatAssistantConfig {
   bundle_subtext: string;
   bundle_button: string;
   title_font: string;
+  // ---- Quiz page (migration 043) ----
+  // Which storefront surface(s) run: 'chat' (floating bubble only),
+  // 'quiz' (full-page quiz only), or 'both'.
+  assistant_mode: 'chat' | 'quiz' | 'both';
+  // Landing screen
+  quiz_eyebrow: string;
+  quiz_headline: string;
+  quiz_subtext: string;
+  quiz_trust_items: string[];
+  quiz_before_image_url: string | null;
+  quiz_after_image_url: string | null;
+  quiz_visual_caption: string;
+  quiz_alt_audience_label: string;
+  quiz_alt_audience_url: string;
+  // Try-on gate (last numbered step)
+  quiz_gate_headline: string;
+  quiz_gate_helper: string;
+  quiz_gate_photo_label: string;
+  quiz_gate_skip_label: string;
+  quiz_privacy_note: string;
+  // Results + shade gate. quiz_add_button_template supports {count},
+  // {set_word}, and {total} tokens, replaced client-side.
+  quiz_results_headline_photo: string;
+  quiz_results_headline_nophoto: string;
+  quiz_best_match_pill: string;
+  quiz_also_matched_label: string;
+  quiz_add_button_template: string;
+  quiz_view_product_label: string;
+  quiz_retake_label: string;
+  quiz_shade_headline: string;
+  quiz_shade_body: string;
+  quiz_shade_cta_photo: string;
+  quiz_shade_cta_manual: string;
+  // Style. NULLs mean inherit: accent falls back to accent_color, radius to
+  // the widget default, fonts to runtime theme detection.
+  quiz_accent_color: string | null;
+  quiz_button_radius: number | null;
+  quiz_heading_font_override: string | null;
+  quiz_body_font_override: string | null;
 }
 
 const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
@@ -2387,6 +2426,36 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   bundle_subtext: 'Add your full match set in one tap.',
   bundle_button: 'Add all {count} to bag · {total}',
   title_font: 'serif',
+  assistant_mode: 'chat',
+  quiz_eyebrow: 'Find my fit',
+  quiz_headline: 'Your perfect match, in 60 seconds',
+  quiz_subtext: "Answer a few quick questions and we'll match you to exactly what suits you.",
+  quiz_trust_items: ['A few quick questions', 'Get your match instantly', 'See it on you — photo optional'],
+  quiz_before_image_url: null,
+  quiz_after_image_url: null,
+  quiz_visual_caption: '',
+  quiz_alt_audience_label: '',
+  quiz_alt_audience_url: '',
+  quiz_gate_headline: 'Want to see it on you?',
+  quiz_gate_helper: "Add a quick photo and we'll show your match on you — or skip straight to your results.",
+  quiz_gate_photo_label: 'Show my match on me',
+  quiz_gate_skip_label: 'Just take me to my results',
+  quiz_privacy_note: 'Your photo is processed instantly and never stored.',
+  quiz_results_headline_photo: "Here's your match — on you",
+  quiz_results_headline_nophoto: 'We found your fit',
+  quiz_best_match_pill: 'Best match',
+  quiz_also_matched_label: 'Also matched for you',
+  quiz_add_button_template: 'Add {count} to bag · {total}',
+  quiz_view_product_label: 'View full product',
+  quiz_retake_label: 'Retake photo',
+  quiz_shade_headline: "Now let's nail your shade",
+  quiz_shade_body: 'Both paths unlock your complete match.',
+  quiz_shade_cta_photo: 'Match my shade for me',
+  quiz_shade_cta_manual: 'I know my shade',
+  quiz_accent_color: null,
+  quiz_button_radius: null,
+  quiz_heading_font_override: null,
+  quiz_body_font_override: null,
 };
 
 export async function getChatAssistantConfig(shopDomain: string): Promise<ChatAssistantConfig> {
@@ -2400,6 +2469,13 @@ export async function getChatAssistantConfig(shopDomain: string): Promise<ChatAs
     return { ...CHAT_ASSISTANT_DEFAULTS };
   }
 
+  return mapChatAssistantRow(data);
+}
+
+// Null-coalescing merge of a chat_assistant_config row onto the defaults.
+// Shared by the single-shop getter and the all-shops admin listing so new
+// columns only need mapping once.
+function mapChatAssistantRow(data: any): ChatAssistantConfig {
   return {
     enabled: data.enabled ?? CHAT_ASSISTANT_DEFAULTS.enabled,
     assistant_name: data.assistant_name ?? CHAT_ASSISTANT_DEFAULTS.assistant_name,
@@ -2446,6 +2522,41 @@ export async function getChatAssistantConfig(shopDomain: string): Promise<ChatAs
     bundle_subtext: data.bundle_subtext ?? CHAT_ASSISTANT_DEFAULTS.bundle_subtext,
     bundle_button: data.bundle_button ?? CHAT_ASSISTANT_DEFAULTS.bundle_button,
     title_font: data.title_font ?? CHAT_ASSISTANT_DEFAULTS.title_font,
+    assistant_mode: (data.assistant_mode as ChatAssistantConfig['assistant_mode'] | undefined) ?? CHAT_ASSISTANT_DEFAULTS.assistant_mode,
+    quiz_eyebrow: data.quiz_eyebrow ?? CHAT_ASSISTANT_DEFAULTS.quiz_eyebrow,
+    quiz_headline: data.quiz_headline ?? CHAT_ASSISTANT_DEFAULTS.quiz_headline,
+    quiz_subtext: data.quiz_subtext ?? CHAT_ASSISTANT_DEFAULTS.quiz_subtext,
+    // An explicit [] is a merchant clearing the trust row — respect it.
+    // Only a missing/NULL column falls back to the defaults (same contract
+    // as hero_trust_items above).
+    quiz_trust_items: Array.isArray(data.quiz_trust_items)
+      ? data.quiz_trust_items
+      : CHAT_ASSISTANT_DEFAULTS.quiz_trust_items,
+    quiz_before_image_url: data.quiz_before_image_url ?? CHAT_ASSISTANT_DEFAULTS.quiz_before_image_url,
+    quiz_after_image_url: data.quiz_after_image_url ?? CHAT_ASSISTANT_DEFAULTS.quiz_after_image_url,
+    quiz_visual_caption: data.quiz_visual_caption ?? CHAT_ASSISTANT_DEFAULTS.quiz_visual_caption,
+    quiz_alt_audience_label: data.quiz_alt_audience_label ?? CHAT_ASSISTANT_DEFAULTS.quiz_alt_audience_label,
+    quiz_alt_audience_url: data.quiz_alt_audience_url ?? CHAT_ASSISTANT_DEFAULTS.quiz_alt_audience_url,
+    quiz_gate_headline: data.quiz_gate_headline ?? CHAT_ASSISTANT_DEFAULTS.quiz_gate_headline,
+    quiz_gate_helper: data.quiz_gate_helper ?? CHAT_ASSISTANT_DEFAULTS.quiz_gate_helper,
+    quiz_gate_photo_label: data.quiz_gate_photo_label ?? CHAT_ASSISTANT_DEFAULTS.quiz_gate_photo_label,
+    quiz_gate_skip_label: data.quiz_gate_skip_label ?? CHAT_ASSISTANT_DEFAULTS.quiz_gate_skip_label,
+    quiz_privacy_note: data.quiz_privacy_note ?? CHAT_ASSISTANT_DEFAULTS.quiz_privacy_note,
+    quiz_results_headline_photo: data.quiz_results_headline_photo ?? CHAT_ASSISTANT_DEFAULTS.quiz_results_headline_photo,
+    quiz_results_headline_nophoto: data.quiz_results_headline_nophoto ?? CHAT_ASSISTANT_DEFAULTS.quiz_results_headline_nophoto,
+    quiz_best_match_pill: data.quiz_best_match_pill ?? CHAT_ASSISTANT_DEFAULTS.quiz_best_match_pill,
+    quiz_also_matched_label: data.quiz_also_matched_label ?? CHAT_ASSISTANT_DEFAULTS.quiz_also_matched_label,
+    quiz_add_button_template: data.quiz_add_button_template ?? CHAT_ASSISTANT_DEFAULTS.quiz_add_button_template,
+    quiz_view_product_label: data.quiz_view_product_label ?? CHAT_ASSISTANT_DEFAULTS.quiz_view_product_label,
+    quiz_retake_label: data.quiz_retake_label ?? CHAT_ASSISTANT_DEFAULTS.quiz_retake_label,
+    quiz_shade_headline: data.quiz_shade_headline ?? CHAT_ASSISTANT_DEFAULTS.quiz_shade_headline,
+    quiz_shade_body: data.quiz_shade_body ?? CHAT_ASSISTANT_DEFAULTS.quiz_shade_body,
+    quiz_shade_cta_photo: data.quiz_shade_cta_photo ?? CHAT_ASSISTANT_DEFAULTS.quiz_shade_cta_photo,
+    quiz_shade_cta_manual: data.quiz_shade_cta_manual ?? CHAT_ASSISTANT_DEFAULTS.quiz_shade_cta_manual,
+    quiz_accent_color: data.quiz_accent_color ?? CHAT_ASSISTANT_DEFAULTS.quiz_accent_color,
+    quiz_button_radius: data.quiz_button_radius ?? CHAT_ASSISTANT_DEFAULTS.quiz_button_radius,
+    quiz_heading_font_override: data.quiz_heading_font_override ?? CHAT_ASSISTANT_DEFAULTS.quiz_heading_font_override,
+    quiz_body_font_override: data.quiz_body_font_override ?? CHAT_ASSISTANT_DEFAULTS.quiz_body_font_override,
   };
 }
 
@@ -2465,7 +2576,11 @@ export async function saveChatAssistantConfig(
     );
 
   if (error) {
+    // THROW so the admin actions can show a failure banner. Swallowing this
+    // showed merchants a success toast while the row-wide upsert (including
+    // unrelated fields in the same payload) was silently discarded.
     console.error(`Error saving chat assistant config for ${shopDomain}:`, error);
+    throw new Error(`Failed to save assistant settings: ${error.message}`);
   }
 }
 
@@ -2483,51 +2598,7 @@ export async function getAllChatAssistantConfigs(): Promise<
 
   return data.map((row) => ({
     shop_domain: row.shop_domain,
-    enabled: row.enabled ?? false,
-    assistant_name: row.assistant_name ?? CHAT_ASSISTANT_DEFAULTS.assistant_name,
-    avatar_url: row.avatar_url,
-    bubble_color: row.bubble_color ?? CHAT_ASSISTANT_DEFAULTS.bubble_color,
-    bubble_text: row.bubble_text ?? CHAT_ASSISTANT_DEFAULTS.bubble_text,
-    accent_color: row.accent_color ?? CHAT_ASSISTANT_DEFAULTS.accent_color,
-    recommend_button_text: row.recommend_button_text ?? CHAT_ASSISTANT_DEFAULTS.recommend_button_text,
-    preference_question: row.preference_question ?? CHAT_ASSISTANT_DEFAULTS.preference_question,
-    preference_options: row.preference_options ?? CHAT_ASSISTANT_DEFAULTS.preference_options,
-    photo_upload_message: row.photo_upload_message ?? CHAT_ASSISTANT_DEFAULTS.photo_upload_message,
-    photo_frame_hint: row.photo_frame_hint ?? CHAT_ASSISTANT_DEFAULTS.photo_frame_hint,
-    num_recommendations: row.num_recommendations ?? CHAT_ASSISTANT_DEFAULTS.num_recommendations,
-    product_scope: row.product_scope ?? CHAT_ASSISTANT_DEFAULTS.product_scope,
-    selected_product_ids: row.selected_product_ids ?? [],
-    hero_enabled: row.hero_enabled ?? CHAT_ASSISTANT_DEFAULTS.hero_enabled,
-    hero_eyebrow: row.hero_eyebrow ?? CHAT_ASSISTANT_DEFAULTS.hero_eyebrow,
-    hero_headline: row.hero_headline ?? CHAT_ASSISTANT_DEFAULTS.hero_headline,
-    hero_body: row.hero_body ?? CHAT_ASSISTANT_DEFAULTS.hero_body,
-    hero_cta_label: row.hero_cta_label ?? CHAT_ASSISTANT_DEFAULTS.hero_cta_label,
-    hero_footer: row.hero_footer ?? CHAT_ASSISTANT_DEFAULTS.hero_footer,
-    hero_sample_label: row.hero_sample_label ?? CHAT_ASSISTANT_DEFAULTS.hero_sample_label,
-    hero_position_desktop:
-      (row.hero_position_desktop as HeroPosition | undefined) ?? CHAT_ASSISTANT_DEFAULTS.hero_position_desktop,
-    hero_trust_items: row.hero_trust_items ?? CHAT_ASSISTANT_DEFAULTS.hero_trust_items,
-    hero_show_delay_seconds: row.hero_show_delay_seconds ?? CHAT_ASSISTANT_DEFAULTS.hero_show_delay_seconds,
-    hero_sample_count: row.hero_sample_count ?? CHAT_ASSISTANT_DEFAULTS.hero_sample_count,
-    hero_accent_color: row.hero_accent_color ?? CHAT_ASSISTANT_DEFAULTS.hero_accent_color,
-    hero_background_color: row.hero_background_color ?? CHAT_ASSISTANT_DEFAULTS.hero_background_color,
-    hero_text_color: row.hero_text_color ?? CHAT_ASSISTANT_DEFAULTS.hero_text_color,
-    opening_message: row.opening_message ?? CHAT_ASSISTANT_DEFAULTS.opening_message,
-    hero_sample_images: Array.isArray(row.hero_sample_images) ? row.hero_sample_images : CHAT_ASSISTANT_DEFAULTS.hero_sample_images,
-    header_idle_status: row.header_idle_status ?? CHAT_ASSISTANT_DEFAULTS.header_idle_status,
-    header_working_status: row.header_working_status ?? CHAT_ASSISTANT_DEFAULTS.header_working_status,
-    header_done_status: row.header_done_status ?? CHAT_ASSISTANT_DEFAULTS.header_done_status,
-    loading_caption: row.loading_caption ?? CHAT_ASSISTANT_DEFAULTS.loading_caption,
-    loading_steps: Array.isArray(row.loading_steps) ? row.loading_steps : CHAT_ASSISTANT_DEFAULTS.loading_steps,
-    recommendations_intro: row.recommendations_intro ?? CHAT_ASSISTANT_DEFAULTS.recommendations_intro,
-    end_save_label: row.end_save_label ?? CHAT_ASSISTANT_DEFAULTS.end_save_label,
-    end_restart_label: row.end_restart_label ?? CHAT_ASSISTANT_DEFAULTS.end_restart_label,
-    end_footer: row.end_footer ?? CHAT_ASSISTANT_DEFAULTS.end_footer,
-    bundle_enabled: row.bundle_enabled ?? CHAT_ASSISTANT_DEFAULTS.bundle_enabled,
-    bundle_title: row.bundle_title ?? CHAT_ASSISTANT_DEFAULTS.bundle_title,
-    bundle_subtext: row.bundle_subtext ?? CHAT_ASSISTANT_DEFAULTS.bundle_subtext,
-    bundle_button: row.bundle_button ?? CHAT_ASSISTANT_DEFAULTS.bundle_button,
-    title_font: row.title_font ?? CHAT_ASSISTANT_DEFAULTS.title_font,
+    ...mapChatAssistantRow(row),
   }));
 }
 
@@ -2620,14 +2691,25 @@ export async function getHeroSwatches(
 export interface RecommendationFlow {
   questions: Array<{
     axisKey: string;
+    axisLabel: string;
     prompt: string;
+    helperText: string | null;
     options: Array<{
       label: string;
       axisValue: string;
       botResponse: string | null;
+      reasonText: string | null;
     }>;
   }>;
   photoAxes: string[];
+  // Full detail for photo-sourced axes (labels + swatch colors). The quiz
+  // page's manual shade picker renders these; the chat widget ignores the
+  // field. photoAxes (keys only) is kept as-is for backward compatibility.
+  photoAxisDetails: Array<{
+    key: string;
+    label: string;
+    values: Array<{ value: string; label: string; swatch: string | null }>;
+  }>;
   configured: boolean;
 }
 
@@ -2644,17 +2726,19 @@ export async function getRecommendationFlow(shopId: string): Promise<Recommendat
       source,
       position,
       created_at,
-      recommendation_axis_values ( id, value, label, position ),
+      recommendation_axis_values ( id, value, label, position, swatch_color ),
       recommendation_questions (
         id,
         prompt,
         position,
+        helper_text,
         recommendation_question_options (
           id,
           label,
           axis_value_id,
           bot_response,
-          position
+          position,
+          reason_text
         )
       )
     `)
@@ -2666,7 +2750,7 @@ export async function getRecommendationFlow(shopId: string): Promise<Recommendat
     .order('created_at', { ascending: true });
 
   if (error || !axes) {
-    return { questions: [], photoAxes: [], configured: false };
+    return { questions: [], photoAxes: [], photoAxisDetails: [], configured: false };
   }
 
   // Build a value-id → axis-key.value map so options can echo back the
@@ -2692,6 +2776,7 @@ export async function getRecommendationFlow(shopId: string): Promise<Recommendat
           label: opt.label as string,
           axisValue: valueIdToKey.get(opt.axis_value_id as string) ?? '',
           botResponse: (opt.bot_response as string | null) ?? null,
+          reasonText: (opt.reason_text as string | null) ?? null,
         }))
         .filter((opt: any) => opt.axisValue);
       // Drop questions whose options were all invalidated by deleted axis
@@ -2700,18 +2785,32 @@ export async function getRecommendationFlow(shopId: string): Promise<Recommendat
       if (options.length === 0) return [];
       return [{
         axisKey: a.key as string,
+        axisLabel: a.label as string,
         prompt: q.prompt as string,
+        helperText: (q.helper_text as string | null) ?? null,
         options,
       }];
     });
 
-  const photoAxes = axes
-    .filter((a: any) => a.source === 'photo')
-    .map((a: any) => a.key as string);
+  const photoAxisSource = axes.filter((a: any) => a.source === 'photo');
+  const photoAxes = photoAxisSource.map((a: any) => a.key as string);
+  const photoAxisDetails = photoAxisSource.map((a: any) => ({
+    key: a.key as string,
+    label: a.label as string,
+    values: ((a.recommendation_axis_values || []) as any[])
+      .slice()
+      .sort((x, y) => (x.position ?? 0) - (y.position ?? 0))
+      .map((v) => ({
+        value: v.value as string,
+        label: v.label as string,
+        swatch: (v.swatch_color as string | null) ?? null,
+      })),
+  }));
 
   return {
     questions,
     photoAxes,
+    photoAxisDetails,
     configured: axes.length > 0 && (questions.length > 0 || photoAxes.length > 0),
   };
 }
@@ -2738,7 +2837,7 @@ export async function pickVariantsByCriteria(
   // is needed.
   const { data, error } = await supabase
     .from('recommendation_rules')
-    .select('variant_id, product_id, rank')
+    .select('variant_id, product_id, rank, quantity')
     .eq('shop_id', shopId)
     .eq('criteria', JSON.stringify(criteria))
     .order('rank', { ascending: true });
@@ -2755,7 +2854,76 @@ export async function pickVariantsByCriteria(
     variantInternalId: (r.variant_id as string | null) ?? null,
     productInternalId: (r.product_id as string | null) ?? null,
     rank: r.rank as number,
+    quantity: Math.max(1, Number(r.quantity) || 1),
   }));
+}
+
+/**
+ * Partial matrix lookup for the quiz's "best match before shade" state:
+ * returns rules whose criteria CONTAINS every provided key/value pair —
+ * the rule may carry extra axes (typically the photo-sourced shade) that
+ * the shopper hasn't answered yet.
+ *
+ * Multiple rule groups can match (one per unanswered-axis combination, e.g.
+ * ten shades of the same clip-in). We pick ONE group deterministically:
+ * fewest extra criteria keys first (closest match), then lowest sorted
+ * criteria JSON as a stable tiebreaker. Rules within the group come back in
+ * rank order. Returns null when nothing matches — callers fall back to
+ * AI-pick, exactly like the strict lookup.
+ */
+export async function pickVariantsByPartialCriteria(
+  shopId: string,
+  criteria: Record<string, string>,
+): Promise<Array<{ variantInternalId: string | null; productInternalId: string | null; rank: number; quantity: number }> | null> {
+  if (Object.keys(criteria).length === 0) return null;
+
+  // JSONB containment (criteria @> provided). Same supabase-js stringify
+  // requirement as the strict lookup — a raw object becomes
+  // "[object Object]" and silently never matches.
+  const { data, error } = await supabase
+    .from('recommendation_rules')
+    .select('criteria, variant_id, product_id, rank, quantity')
+    .eq('shop_id', shopId)
+    .contains('criteria', JSON.stringify(criteria))
+    .order('rank', { ascending: true });
+
+  if (error) {
+    console.error('pickVariantsByPartialCriteria error:', error.message);
+    return null;
+  }
+  if (!data || data.length === 0) return null;
+
+  // Group rules by their full criteria object; pick the closest group.
+  const groupKey = (c: Record<string, string>) =>
+    JSON.stringify(Object.keys(c).sort().map((k) => [k, c[k]]));
+  const groups = new Map<string, { extraKeys: number; rows: any[] }>();
+  for (const row of data) {
+    const rowCriteria = (row.criteria ?? {}) as Record<string, string>;
+    const key = groupKey(rowCriteria);
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        extraKeys: Math.max(0, Object.keys(rowCriteria).length - Object.keys(criteria).length),
+        rows: [],
+      };
+      groups.set(key, group);
+    }
+    group.rows.push(row);
+  }
+
+  const bestKey = [...groups.entries()]
+    .sort((a, b) => (a[1].extraKeys - b[1].extraKeys) || (a[0] < b[0] ? -1 : 1))[0][0];
+  const best = groups.get(bestKey)!;
+
+  return best.rows
+    .slice()
+    .sort((a, b) => (a.rank as number) - (b.rank as number))
+    .map((r: any) => ({
+      variantInternalId: (r.variant_id as string | null) ?? null,
+      productInternalId: (r.product_id as string | null) ?? null,
+      rank: r.rank as number,
+      quantity: Math.max(1, Number(r.quantity) || 1),
+    }));
 }
 
 /**
@@ -2802,6 +2970,8 @@ export interface AdminAxisValue {
   value: string;
   label: string;
   position: number;
+  // Optional hex color (e.g. "#8b5a2b") for the quiz shade-picker dot.
+  swatchColor: string | null;
 }
 
 export interface AdminAxis {
@@ -2818,6 +2988,8 @@ export interface AdminQuestionOption {
   label: string;
   axisValueId: string;
   botResponse: string | null;
+  // Optional reason bullet for quiz result cards when this option was picked.
+  reasonText: string | null;
   position: number;
 }
 
@@ -2825,6 +2997,8 @@ export interface AdminQuestion {
   id: string;
   axisId: string;
   prompt: string;
+  // Optional sub-line under the question heading on the quiz page.
+  helperText: string | null;
   options: AdminQuestionOption[];
 }
 
@@ -2836,6 +3010,9 @@ export interface AdminRule {
   variantId: string | null;
   productId: string | null;
   rank: number;
+  // Units of the target this rule recommends ("2 sets"). Quiz multiplies
+  // price by it; chat ignores it. DB default is 1.
+  quantity: number;
 }
 
 export interface AdminRecommendationConfig {
@@ -2858,13 +3035,13 @@ export async function getRecommendationAdminConfig(
   const [axesRes, rulesRes] = await Promise.all([
     supabase
       .from('recommendation_axes')
-      .select('id, key, label, source, position, recommendation_axis_values ( id, value, label, position )')
+      .select('id, key, label, source, position, recommendation_axis_values ( id, value, label, position, swatch_color )')
       .eq('shop_id', shopId)
       .order('position', { ascending: true })
       .order('created_at', { ascending: true }),
     supabase
       .from('recommendation_rules')
-      .select('id, criteria, variant_id, product_id, rank')
+      .select('id, criteria, variant_id, product_id, rank, quantity')
       .eq('shop_id', shopId)
       .order('rank', { ascending: true }),
   ]);
@@ -2873,13 +3050,20 @@ export async function getRecommendationAdminConfig(
   const questionsRes = axisIds.length > 0
     ? await supabase
         .from('recommendation_questions')
-        .select('id, axis_id, prompt, recommendation_question_options ( id, label, axis_value_id, bot_response, position )')
+        .select('id, axis_id, prompt, helper_text, recommendation_question_options ( id, label, axis_value_id, bot_response, position, reason_text )')
         .in('axis_id', axisIds)
     : { data: [], error: null };
 
-  if (axesRes.error) console.error('admin axes fetch error', axesRes.error);
-  if (questionsRes.error) console.error('admin questions fetch error', questionsRes.error);
-  if (rulesRes.error) console.error('admin rules fetch error', rulesRes.error);
+  // THROW on any fetch error rather than returning an empty config. A
+  // swallowed error here renders the matrix editor as if the merchant had
+  // configured nothing — and one click of Save would wipe-and-rewrite their
+  // real matrix with that empty state. Loud failure (Remix error boundary)
+  // is the only safe behavior for a read that gates a destructive save.
+  const fetchError = axesRes.error || questionsRes.error || rulesRes.error;
+  if (fetchError) {
+    console.error('getRecommendationAdminConfig fetch error', fetchError);
+    throw new Error(`Failed to load recommendation config: ${fetchError.message}`);
+  }
 
   const axes: AdminAxis[] = (axesRes.data || []).map((a: any) => ({
     id: a.id,
@@ -2895,6 +3079,7 @@ export async function getRecommendationAdminConfig(
         value: v.value,
         label: v.label,
         position: v.position ?? 0,
+        swatchColor: (v.swatch_color as string | null) ?? null,
       })),
   }));
 
@@ -2902,6 +3087,7 @@ export async function getRecommendationAdminConfig(
     id: q.id,
     axisId: q.axis_id,
     prompt: q.prompt,
+    helperText: (q.helper_text as string | null) ?? null,
     options: ((q.recommendation_question_options || []) as any[])
       .slice()
       .sort((x, y) => (x.position ?? 0) - (y.position ?? 0))
@@ -2910,6 +3096,7 @@ export async function getRecommendationAdminConfig(
         label: opt.label,
         axisValueId: opt.axis_value_id,
         botResponse: opt.bot_response,
+        reasonText: (opt.reason_text as string | null) ?? null,
         position: opt.position ?? 0,
       })),
   }));
@@ -2920,6 +3107,7 @@ export async function getRecommendationAdminConfig(
     variantId: (r.variant_id as string | null) ?? null,
     productId: (r.product_id as string | null) ?? null,
     rank: r.rank,
+    quantity: (r.quantity as number | null) ?? 1,
   }));
 
   return { axes, questions, rules };
@@ -3036,12 +3224,23 @@ export async function saveRecommendationConfig(
       label: string;
       source: 'photo' | 'user_question';
       position: number;
-      values: Array<{ value: string; label: string; position: number }>;
+      // swatchColor: optional hex for the quiz shade-picker dot. The RPC
+      // nullifies '' so an empty string is equivalent to omitting it.
+      values: Array<{ value: string; label: string; position: number; swatchColor?: string | null }>;
     }>;
     questions: Array<{
       axisKey: string;
       prompt: string;
-      options: Array<{ label: string; axisValueValue: string; botResponse: string | null; position: number }>;
+      // Optional quiz sub-line under the question heading. '' → NULL in the RPC.
+      helperText?: string | null;
+      options: Array<{
+        label: string;
+        axisValueValue: string;
+        botResponse: string | null;
+        // Optional quiz result-card reason bullet. '' → NULL in the RPC.
+        reasonText?: string | null;
+        position: number;
+      }>;
     }>;
     rules: Array<{
       criteria: Record<string, string>;
@@ -3049,6 +3248,8 @@ export async function saveRecommendationConfig(
       variantId?: string | null;
       productId?: string | null;
       rank: number;
+      // Units of the target this rule recommends. Omitted → 1 in the RPC.
+      quantity?: number;
     }>;
   },
 ): Promise<{ ok: boolean; error?: string }> {
@@ -3081,6 +3282,11 @@ export async function saveRecommendationConfig(
   for (const rule of input.rules || []) {
     if (!(Number(rule.rank) > 0)) {
       return { ok: false, error: 'Rule rank must be a positive number' };
+    }
+    // The RPC clamps quantity to >= 1 but a non-integer would still blow up
+    // its ::int cast — reject it here with a friendly message instead.
+    if (rule.quantity !== undefined && !(Number.isInteger(rule.quantity) && rule.quantity > 0)) {
+      return { ok: false, error: 'Rule quantity must be a positive whole number' };
     }
   }
 

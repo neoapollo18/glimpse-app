@@ -58,6 +58,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       'hero_view',
       'hero_dismiss',
       'hero_cta_click',
+      // Quiz page funnel (gleame-quiz.js). Ordered roughly by flow position:
+      // view → start → per-question → gate → photo/skip → shade → results →
+      // try-on → product/cart actions.
+      'quiz_view',
+      'quiz_start',
+      'quiz_question_answered',
+      'quiz_gate_view',
+      'quiz_photo_upload',
+      'quiz_photo_skip',
+      'quiz_shade_detected',
+      'quiz_shade_manual',
+      'quiz_results_shown',
+      'quiz_tryon_shown',
+      'quiz_tryon_secondary',
+      'quiz_view_product',
+      'quiz_add_to_cart',
+      'quiz_retake_photo',
     ];
     const isAssistantEvent = allowedAssistantEvents.includes(eventType);
 

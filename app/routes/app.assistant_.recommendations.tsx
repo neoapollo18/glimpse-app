@@ -85,7 +85,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 // ---------------------------------------------------------------------
 // Types used in editor state
 // ---------------------------------------------------------------------
-type EditorAxisValue = { value: string; label: string };
+// swatchColor: optional hex ("#8b5a2b") for the quiz shade-picker dot.
+// Empty string = no swatch (the value renders as a text chip on the quiz).
+type EditorAxisValue = { value: string; label: string; swatchColor: string };
 type EditorAxis = {
   key: string;
   label: string;
@@ -96,10 +98,14 @@ type EditorQuestionOption = {
   label: string;
   axisValueValue: string;
   botResponse: string;
+  // Optional reason bullet on quiz result cards when this option was picked.
+  reasonText: string;
 };
 type EditorQuestion = {
   axisKey: string;
   prompt: string;
+  // Optional sub-line under the question heading on the quiz page.
+  helperText: string;
   options: EditorQuestionOption[];
 };
 type EditorRule = {
@@ -107,6 +113,10 @@ type EditorRule = {
   // Encoded target from the picker: "v:<variantId>" or "p:<productId>".
   target: string;
   rank: number;
+  // Units of the target recommended ("2 sets"). Kept as a string so the
+  // TextField can hold transient states while typing; parsed on save
+  // (empty = 1).
+  quantity: string;
 };
 
 // ---------------------------------------------------------------------
@@ -157,7 +167,11 @@ export default function AssistantRecommendations() {
     key: a.key,
     label: a.label,
     source: a.source,
-    values: a.values.map((v: any) => ({ value: v.value, label: v.label })),
+    values: a.values.map((v: any) => ({
+      value: v.value,
+      label: v.label,
+      swatchColor: v.swatchColor || "",
+    })),
   }));
 
   const initialQuestions: EditorQuestion[] = (config?.questions || []).map(
@@ -167,12 +181,14 @@ export default function AssistantRecommendations() {
       return {
         axisKey,
         prompt: q.prompt,
+        helperText: q.helperText || "",
         options: q.options.map((opt: any) => {
           const av = owningAxis?.values.find((v: any) => v.id === opt.axisValueId);
           return {
             label: opt.label,
             axisValueValue: av?.value || "",
             botResponse: opt.botResponse || "",
+            reasonText: opt.reasonText || "",
           };
         }),
       };
@@ -184,6 +200,7 @@ export default function AssistantRecommendations() {
     // Rebuild the encoded picker value from whichever target the rule stored.
     target: r.productId ? `p:${r.productId}` : r.variantId ? `v:${r.variantId}` : "",
     rank: r.rank,
+    quantity: String(r.quantity ?? 1),
   }));
 
   const [axes, setAxes] = useState<EditorAxis[]>(initialAxes);
@@ -270,7 +287,9 @@ export default function AssistantRecommendations() {
   const addAxisValue = useCallback((axisIdx: number) => {
     setAxes((prev) =>
       prev.map((a, i) =>
-        i === axisIdx ? { ...a, values: [...a.values, { value: "", label: "" }] } : a,
+        i === axisIdx
+          ? { ...a, values: [...a.values, { value: "", label: "", swatchColor: "" }] }
+          : a,
       ),
     );
   }, []);
@@ -349,7 +368,7 @@ export default function AssistantRecommendations() {
     (axisKey: string): EditorQuestion => {
       const existing = questions.find((q) => q.axisKey === axisKey);
       if (existing) return existing;
-      const newQ: EditorQuestion = { axisKey, prompt: "", options: [] };
+      const newQ: EditorQuestion = { axisKey, prompt: "", helperText: "", options: [] };
       setQuestions((prev) => [...prev, newQ]);
       return newQ;
     },
@@ -359,7 +378,7 @@ export default function AssistantRecommendations() {
   const updateQuestion = useCallback((axisKey: string, patch: Partial<EditorQuestion>) => {
     setQuestions((prev) => {
       const idx = prev.findIndex((q) => q.axisKey === axisKey);
-      if (idx === -1) return [...prev, { axisKey, prompt: "", options: [], ...patch }];
+      if (idx === -1) return [...prev, { axisKey, prompt: "", helperText: "", options: [], ...patch }];
       return prev.map((q, i) => (i === idx ? { ...q, ...patch } : q));
     });
   }, []);
@@ -367,8 +386,13 @@ export default function AssistantRecommendations() {
   const addQuestionOption = useCallback((axisKey: string) => {
     setQuestions((prev) => {
       const idx = prev.findIndex((q) => q.axisKey === axisKey);
-      const newOpt: EditorQuestionOption = { label: "", axisValueValue: "", botResponse: "" };
-      if (idx === -1) return [...prev, { axisKey, prompt: "", options: [newOpt] }];
+      const newOpt: EditorQuestionOption = {
+        label: "",
+        axisValueValue: "",
+        botResponse: "",
+        reasonText: "",
+      };
+      if (idx === -1) return [...prev, { axisKey, prompt: "", helperText: "", options: [newOpt] }];
       return prev.map((q, i) =>
         i === idx ? { ...q, options: [...q.options, newOpt] } : q,
       );
@@ -414,14 +438,31 @@ export default function AssistantRecommendations() {
     (criteria: Record<string, string>, rank: number, target: string) => {
       const k = criteriaKey(criteria);
       setRules((prev) => {
+        // Carry the previous quantity through a target swap — re-picking the
+        // product in a cell shouldn't silently reset "2 sets" back to 1.
+        const existing = prev.find(
+          (r) => criteriaKey(r.criteria) === k && r.rank === rank,
+        );
         const next = prev.filter(
           (r) => !(criteriaKey(r.criteria) === k && r.rank === rank),
         );
         if (target) {
-          next.push({ criteria, target, rank });
+          next.push({ criteria, target, rank, quantity: existing?.quantity ?? "1" });
         }
         return next;
       });
+    },
+    [],
+  );
+
+  const setRuleQuantity = useCallback(
+    (criteria: Record<string, string>, rank: number, quantity: string) => {
+      const k = criteriaKey(criteria);
+      setRules((prev) =>
+        prev.map((r) =>
+          criteriaKey(r.criteria) === k && r.rank === rank ? { ...r, quantity } : r,
+        ),
+      );
     },
     [],
   );
@@ -432,6 +473,16 @@ export default function AssistantRecommendations() {
       const matched = rulesByCriteria.get(k) || [];
       const found = matched.find((r) => r.rank === rank);
       return found?.target || "";
+    },
+    [rulesByCriteria],
+  );
+
+  const getRuleQuantity = useCallback(
+    (criteria: Record<string, string>, rank: number): string => {
+      const k = criteriaKey(criteria);
+      const matched = rulesByCriteria.get(k) || [];
+      const found = matched.find((r) => r.rank === rank);
+      return found?.quantity ?? "1";
     },
     [rulesByCriteria],
   );
@@ -478,6 +529,14 @@ export default function AssistantRecommendations() {
           setValidationError(`Value "${v.value}" in axis "${axis.key}" needs a display label`);
           return;
         }
+        // Swatch is optional; when set it must look like a hex color so the
+        // quiz shade picker renders a real dot. Lenient on length (#rgb
+        // through #rrggbbaa) — this isn't a DB constraint, just sanity.
+        const swatch = v.swatchColor.trim();
+        if (swatch && !/^#[0-9a-fA-F]{3,8}$/.test(swatch)) {
+          setValidationError(`Swatch for value "${v.value}" in axis "${axis.key}" must be a hex color like #8b5a2b (or left empty)`);
+          return;
+        }
       }
     }
 
@@ -509,8 +568,21 @@ export default function AssistantRecommendations() {
       }
     }
 
+    // Every assigned rule's quantity must be a positive whole number. Empty
+    // is fine — it saves as the default of 1 (see the payload builder).
+    for (const r of rules) {
+      if (!r.target) continue;
+      const qty = r.quantity.trim();
+      if (qty !== "" && !/^[1-9]\d*$/.test(qty)) {
+        setValidationError(`Quantity "${qty}" in the matrix must be a whole number of 1 or more`);
+        return;
+      }
+    }
+
     // Build the wire payload. Positions are derived from array order so the
-    // merchant doesn't have to manage position numbers manually.
+    // merchant doesn't have to manage position numbers manually. The quiz
+    // fields (swatchColor / helperText / reasonText) send null when empty —
+    // the RPC nullifies '' too, so either spelling stores NULL.
     const payload = {
       axes: axes.map((a, i) => ({
         key: a.key,
@@ -521,6 +593,7 @@ export default function AssistantRecommendations() {
           value: v.value,
           label: v.label,
           position: j,
+          swatchColor: v.swatchColor.trim() || null,
         })),
       })),
       questions: questions
@@ -529,12 +602,14 @@ export default function AssistantRecommendations() {
           axisKey: q.axisKey,
           prompt: q.prompt,
           position: qi,
+          helperText: q.helperText || null,
           options: q.options
             .filter((o) => o.label.trim() && o.axisValueValue)
             .map((o, i) => ({
               label: o.label,
               axisValueValue: o.axisValueValue,
               botResponse: o.botResponse || null,
+              reasonText: o.reasonText || null,
               position: i,
             })),
         })),
@@ -561,6 +636,8 @@ export default function AssistantRecommendations() {
             variantId: isProduct ? null : id,
             productId: isProduct ? id : null,
             rank: r.rank,
+            // Validated above as empty-or-positive-int; empty means default 1.
+            quantity: r.quantity.trim() ? parseInt(r.quantity.trim(), 10) : 1,
           };
         }),
     };
@@ -729,6 +806,37 @@ export default function AssistantRecommendations() {
                             placeholder="Fair"
                           />
                         </div>
+                        <div style={{ width: 140 }}>
+                          <TextField
+                            label="Swatch color"
+                            labelHidden
+                            value={v.swatchColor}
+                            onChange={(val) =>
+                              updateAxisValue(axisIdx, valueIdx, { swatchColor: val })
+                            }
+                            autoComplete="off"
+                            placeholder="#8b5a2b"
+                            // Live preview dot so the merchant can eyeball the
+                            // hex without leaving the field. Invalid/empty hex
+                            // shows a transparent dot.
+                            prefix={
+                              <span
+                                style={{
+                                  display: "inline-block",
+                                  width: 14,
+                                  height: 14,
+                                  borderRadius: "50%",
+                                  border: "1px solid rgba(0,0,0,0.2)",
+                                  background: /^#[0-9a-fA-F]{3,8}$/.test(
+                                    v.swatchColor.trim(),
+                                  )
+                                    ? v.swatchColor.trim()
+                                    : "transparent",
+                                }}
+                              />
+                            }
+                          />
+                        </div>
                         <Button
                           size="slim"
                           variant="plain"
@@ -761,6 +869,7 @@ export default function AssistantRecommendations() {
                 const q = questions.find((qq) => qq.axisKey === axis.key) || {
                   axisKey: axis.key,
                   prompt: "",
+                  helperText: "",
                   options: [],
                 };
                 return (
@@ -781,6 +890,14 @@ export default function AssistantRecommendations() {
                         autoComplete="off"
                         multiline={2}
                         helpText='e.g. "First — does gold or silver jewelry suit you better?"'
+                      />
+                      <TextField
+                        label="Helper text (optional)"
+                        value={q.helperText}
+                        onChange={(v) => updateQuestion(axis.key, { helperText: v })}
+                        autoComplete="off"
+                        placeholder="This helps us pick the right shade for you."
+                        helpText="Sub-line under the question heading on the quiz page. The chat ignores it."
                       />
                       <InlineStack align="space-between" blockAlign="center">
                         <Text as="p" variant="bodySm" fontWeight="semibold">
@@ -844,6 +961,16 @@ export default function AssistantRecommendations() {
                               multiline={2}
                               placeholder="Warm undertones — beautiful..."
                               helpText="Personality line shown after the shopper picks this option. Optional."
+                            />
+                            <TextField
+                              label="Reason shown on result card (optional)"
+                              value={opt.reasonText}
+                              onChange={(v) =>
+                                updateQuestionOption(axis.key, optIdx, { reasonText: v })
+                              }
+                              autoComplete="off"
+                              placeholder="Adds length past your shoulders"
+                              helpText='Reason bullet on quiz result cards when this option was picked. Empty falls back to "{question}: {answer}".'
                             />
                             <InlineStack align="end">
                               <Button
@@ -913,14 +1040,36 @@ export default function AssistantRecommendations() {
                         <InlineStack gap="300" wrap={false}>
                           {Array.from({ length: NUM_RANKS }).map((_, rankIdx) => {
                             const rank = rankIdx + 1;
+                            const target = getRuleTarget(combo, rank);
                             return (
                               <div key={rank} style={{ flex: 1 }}>
-                                <Select
-                                  label={`Rank ${rank}${rank === 1 ? " (Top Match)" : ""}`}
-                                  options={variantOptions}
-                                  value={getRuleTarget(combo, rank)}
-                                  onChange={(v) => setRuleTarget(combo, rank, v)}
-                                />
+                                <InlineStack gap="150" blockAlign="end" wrap={false}>
+                                  <div style={{ flex: 1 }}>
+                                    <Select
+                                      label={`Rank ${rank}${rank === 1 ? " (Top Match)" : ""}`}
+                                      options={variantOptions}
+                                      value={target}
+                                      onChange={(v) => setRuleTarget(combo, rank, v)}
+                                    />
+                                  </div>
+                                  {/* Units recommended per rule ("2 sets") —
+                                      applied to cart adds on both surfaces:
+                                      quiz add-to-bag and the chat bundle.
+                                      Only meaningful once a target is
+                                      assigned. */}
+                                  <div style={{ width: 64 }}>
+                                    <TextField
+                                      label="Qty"
+                                      type="number"
+                                      min={1}
+                                      value={getRuleQuantity(combo, rank)}
+                                      onChange={(v) => setRuleQuantity(combo, rank, v)}
+                                      autoComplete="off"
+                                      disabled={!target}
+                                      helpText="Units added to cart"
+                                    />
+                                  </div>
+                                </InlineStack>
                               </div>
                             );
                           })}

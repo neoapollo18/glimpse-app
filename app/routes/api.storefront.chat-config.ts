@@ -61,6 +61,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return json(
     {
       enabled: config.enabled,
+      // Surface mode (migration 043): the bubble self-disables when the
+      // merchant runs quiz-only. Older widget builds ignore this field.
+      assistantMode: config.assistant_mode,
       assistantName: config.assistant_name,
       avatarUrl: config.avatar_url,
       bubbleColor: config.bubble_color,

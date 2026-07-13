@@ -1,131 +1,28 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import {
-  transformImage,
-  transformImageWithOpenAI,
-  GEMINI_MODEL_FLASH,
-  MODEL_OPENAI,
-  MODEL_OPENAI_2,
-  isOpenAIModel,
-  type ReferenceImagePart,
-} from "../lib/ai.server";
-import { parseReferenceImageUrls } from "../lib/reference-images";
-import {
   findShopByDomain,
   shopHasValidAccess,
-  getConfiguredProducts,
   getChatAssistantConfig,
-  trackTransformationEvent,
-  getVariantsForProducts,
-  pickVariantsByCriteria,
   getPhotoAxes,
 } from "../lib/supabase.server";
+import {
+  buildCandidatePool,
+  orderCandidates,
+  fetchProductHandles,
+  slugifyHandle,
+  extractNumericId,
+  type Candidate,
+} from "../lib/recommendation-engine.server";
+import { transformCandidateImage } from "../lib/tryon-transform.server";
 import { classifyPhotoAxes } from "../lib/photo-axis-classifier.server";
-import { checkRateLimit, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
-import { safeFetch } from "../lib/safe-fetch.server";
-import prisma from "../db.server";
-
-const SHOPIFY_ADMIN_TIMEOUT_MS = 6_000;
+import { checkRateLimit, getClientIP } from "../lib/rate-limiter.server";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, X-Requested-With",
 };
-
-// Best-effort fallback only. Shopify's default product handle is the
-// slugified title, but merchants commonly override it in admin (the
-// "Search engine listing" → URL handle field). Used when the Admin
-// GraphQL handle lookup is unavailable or returns nothing for a GID.
-function slugifyHandle(title: string | null | undefined): string {
-  if (!title) return "";
-  return title
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-function extractNumericId(gid: string | null | undefined): string | null {
-  if (!gid) return null;
-  const last = gid.split("/").pop() || "";
-  return /^\d+$/.test(last) ? last : null;
-}
-
-/**
- * Look up real Shopify product handles for a list of product GIDs. Single
- * batched GraphQL call against Admin API; any GID that fails to resolve
- * is simply absent from the map and the caller falls back to the slugified
- * product name.
- *
- * Why we need this: gleame-chat.js renders the "Shop This" button as
- * <a href="/products/{handle}">. If that handle disagrees with the real
- * Shopify handle (because the merchant customized it), the link 404s and
- * customers can't get to the product page.
- */
-async function fetchProductHandles(
-  shopDomain: string,
-  productGids: string[],
-): Promise<Map<string, string>> {
-  const handles = new Map<string, string>();
-  if (productGids.length === 0) return handles;
-
-  const session = await prisma.session.findFirst({
-    where: { shop: shopDomain, isOnline: false, accessToken: { not: "" } },
-    orderBy: { id: "desc" },
-  });
-  if (!session?.accessToken) {
-    console.warn(`[chat-recommend] no offline token for ${shopDomain}; falling back to slugified handles`);
-    return handles;
-  }
-
-  const query = `
-    query GetProductHandles($ids: [ID!]!) {
-      nodes(ids: $ids) {
-        ... on Product { id handle }
-      }
-    }
-  `;
-
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), SHOPIFY_ADMIN_TIMEOUT_MS);
-  try {
-    const res = await fetch(`https://${shopDomain}/admin/api/2025-07/graphql.json`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Shopify-Access-Token": session.accessToken,
-      },
-      body: JSON.stringify({ query, variables: { ids: productGids } }),
-      signal: ctrl.signal,
-    });
-    if (!res.ok) {
-      console.error(`[chat-recommend] handle lookup HTTP ${res.status} for ${shopDomain}`);
-      return handles;
-    }
-    const data = (await res.json()) as {
-      data?: { nodes?: Array<{ id: string; handle: string } | null> };
-      errors?: Array<{ message: string }>;
-    };
-    if (data.errors?.length) {
-      console.error(`[chat-recommend] handle lookup GraphQL errors for ${shopDomain}:`, data.errors);
-      return handles;
-    }
-    for (const node of data.data?.nodes ?? []) {
-      if (node && node.id && node.handle) handles.set(node.id, node.handle);
-    }
-  } catch (err) {
-    if (err instanceof Error && err.name === "AbortError") {
-      console.error(`[chat-recommend] handle lookup timed out for ${shopDomain}`);
-    } else {
-      console.error(`[chat-recommend] handle lookup threw for ${shopDomain}:`, err);
-    }
-  } finally {
-    clearTimeout(timer);
-  }
-  return handles;
-}
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   if (request.method === "OPTIONS") {
@@ -210,22 +107,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return json({ error: "Chat assistant not enabled" }, { status: 403, headers: CORS_HEADERS });
     }
 
-    // Get eligible products
-    let products = await getConfiguredProducts(verifiedDomain);
-    if (chatConfig.product_scope === "selected") {
-      const selectedIds = chatConfig.selected_product_ids || [];
-      if (selectedIds.length === 0) {
-        return json(
-          { recommendations: [], error: "No products selected for recommendations" },
-          { status: 200, headers: CORS_HEADERS }
-        );
-      }
-      products = products.filter((p: { id: string }) => selectedIds.includes(p.id));
-    }
-
-    if (products.length === 0) {
+    // Eligible products → flat candidate pool (one entry per variant, plus
+    // one per variant-less product).
+    const { pool, emptyReason } = await buildCandidatePool(verifiedDomain, chatConfig);
+    if (!pool) {
       return json(
-        { recommendations: [], error: "No products available for recommendations" },
+        {
+          recommendations: [],
+          error: emptyReason === "no_selected"
+            ? "No products selected for recommendations"
+            : "No products available for recommendations",
+        },
         { status: 200, headers: CORS_HEADERS }
       );
     }
@@ -235,72 +127,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       1,
       Math.min(5, Number(chatConfig.num_recommendations) || 3)
     );
-
-    type Product = {
-      id: string;
-      product_name: string;
-      shopify_id: string;
-      transformation_prompt: string;
-      ai_model?: string | null;
-      reference_image_url?: string | null;
-      reference_image_urls?: string[];
-    };
-
-    type Variant = {
-      id: string;
-      product_id: string;
-      shopify_variant_id: string;
-      variant_title: string;
-      transformation_prompt: string;
-      ai_model?: string | null;
-      reference_image_url?: string | null;
-      reference_image_urls?: string[];
-      // Optional italic copy line shown beneath the variant title on the
-      // chat product card. Migration 032 added the column; widget reads it
-      // as `tagline` on each recommendation.
-      tagline?: string | null;
-    };
-
-    // matrixRank is the merchant's authored rank when this candidate came
-    // from a matrix rule (1 = top match). Undefined for AI-pick candidates.
-    // We surface it on the response so the widget's "Top Match" badge
-    // tracks the merchant's intent rather than the response array index —
-    // important when rank-1 fails to transform and rank-2 takes its place
-    // in the response, but the merchant still wanted their rank-1 badged
-    // (or in this case, just preserves whichever merchant rank actually
-    // succeeded).
-    type Candidate = { product: Product; variant: Variant | null; matrixRank?: number };
-
-    // Build a flat candidate pool: one entry per configured variant, plus one
-    // entry for any product without variants. This lets the assistant recommend
-    // specific shades (e.g. "She's a Wildflower") rather than the parent product.
-    const productList = products as Product[];
-    const variants = (await getVariantsForProducts(productList.map((p) => p.id))) as Variant[];
-    const variantsByProduct = new Map<string, Variant[]>();
-    for (const v of variants) {
-      const arr = variantsByProduct.get(v.product_id);
-      if (arr) arr.push(v);
-      else variantsByProduct.set(v.product_id, [v]);
-    }
-
-    const candidates: Candidate[] = [];
-    for (const product of productList) {
-      const productVariants = variantsByProduct.get(product.id);
-      if (productVariants && productVariants.length > 0) {
-        for (const variant of productVariants) {
-          candidates.push({ product, variant });
-        }
-      } else {
-        candidates.push({ product, variant: null });
-      }
-    }
-
-    if (candidates.length === 0) {
-      return json(
-        { recommendations: [], error: "No products available for recommendations" },
-        { status: 200, headers: CORS_HEADERS }
-      );
-    }
 
     // Convert image to base64 once — used by the photo-axis classifier
     // below and by every transform.
@@ -332,196 +158,49 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     }
 
-    // AI ordering (uniform shuffle + diversity-by-product pass) is computed
-    // unconditionally: it's the full fallback when the matrix doesn't apply,
-    // and the backfill pool when a curated pick fails to transform.
-    const shuffled = [...candidates];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    const seenProducts = new Set<string>();
-    const uniquePassFirst: Candidate[] = [];
-    const uniquePassRest: Candidate[] = [];
-    for (const c of shuffled) {
-      if (seenProducts.has(c.product.id)) {
-        uniquePassRest.push(c);
-      } else {
-        seenProducts.add(c.product.id);
-        uniquePassFirst.push(c);
-      }
-    }
-    const aiOrdered = uniquePassFirst.concat(uniquePassRest);
-
-    // -----------------------------------------------------------------
-    // Matrix path: if the merchant has a recommendation matrix and the
-    // criteria matches a rule, the curated picks come first in rank order
-    // — no shuffle, no diversity pass. AI-ordered candidates are appended
-    // after them purely as a backfill pool, so a curated pick that fails
-    // to transform doesn't shrink the response.
-    //
-    // If the matrix doesn't apply (criteria empty, no matching rule, or
-    // matched targets aren't in the eligible candidate pool), the AI
-    // ordering is used as before — with a log line, since a silent miss
-    // here looks like "the matrix is ignored" to the merchant.
-    // -----------------------------------------------------------------
-    let ordered: Candidate[] = aiOrdered;
-    let matrixApplied = false;
-    let matrixCount = 0;
-    const candidateKey = (c: Candidate) => `${c.product.id}|${c.variant ? c.variant.id : ""}`;
-
-    if (Object.keys(criteria).length > 0) {
-      const matrixHits = await pickVariantsByCriteria(verifiedShop.id, criteria);
-      if (matrixHits && matrixHits.length > 0) {
-        const variantById = new Map<string, Variant>();
-        for (const v of variants) variantById.set(v.id, v);
-        const productById = new Map<string, Product>();
-        for (const p of productList) productById.set(p.id, p);
-
-        const matched: Candidate[] = [];
-        for (const hit of matrixHits) {
-          if (hit.variantInternalId) {
-            const v = variantById.get(hit.variantInternalId);
-            if (!v) continue; // rule references a variant not in scope; skip
-            const p = productById.get(v.product_id);
-            if (!p) continue;
-            matched.push({ product: p, variant: v, matrixRank: hit.rank });
-          } else if (hit.productInternalId) {
-            // Whole-product target (no specific variant) → recommend the
-            // product itself. transformCandidate handles variant:null by
-            // falling back to the product-level prompt.
-            const p = productById.get(hit.productInternalId);
-            if (!p) continue; // rule references a product not in scope; skip
-            matched.push({ product: p, variant: null, matrixRank: hit.rank });
-          }
-        }
-
-        if (matched.length > 0) {
-          matrixApplied = true;
-          matrixCount = matched.length;
-          const used = new Set(matched.map(candidateKey));
-          ordered = matched.concat(aiOrdered.filter((c) => !used.has(candidateKey(c))));
-        } else {
-          console.warn(
-            `[chat-recommend] matrix rule matched but no target in scope for ${verifiedDomain}; ` +
-              `criteria=${JSON.stringify(criteria)} — AI fallback`
-          );
-        }
-      } else {
-        console.log(
-          `[chat-recommend] no matrix rule for ${verifiedDomain}; ` +
-            `criteria=${JSON.stringify(criteria)} — AI fallback`
-        );
-      }
-    }
+    // Matrix path when a rule matches the criteria (curated picks first in
+    // rank order, AI-ordered candidates appended as backfill); AI ordering
+    // (shuffle + diversity pass) otherwise.
+    const { ordered, matrixApplied, matrixCount } = await orderCandidates(
+      verifiedShop.id,
+      criteria,
+      pool,
+      { logTag: "chat-recommend", shopDomain: verifiedDomain },
+    );
 
     const transformCandidate = async (candidate: Candidate) => {
       const { product, variant } = candidate;
-      // Variant config wins over product config when present; fall back per field
-      // so a variant with a missing prompt still uses the product's prompt.
-      const source = variant || product;
       const productName = product.product_name;
       const variantTitle = variant?.variant_title || null;
       const displayTitle = variantTitle
         ? `${productName} — ${variantTitle}`
         : productName;
-      try {
-        const prompt = source.transformation_prompt || product.transformation_prompt;
-        // Reference images: prefer variant's own refs, else product's
-        const referenceUrls = parseReferenceImageUrls(source).length > 0
-          ? parseReferenceImageUrls(source)
-          : parseReferenceImageUrls(product);
-
-        const referenceImages: ReferenceImagePart[] = [];
-        for (const refUrl of referenceUrls) {
-          try {
-            const refResponse = await safeFetch(refUrl);
-            if (refResponse && refResponse.ok) {
-              const refBuffer = await refResponse.arrayBuffer();
-              referenceImages.push({
-                data: Buffer.from(refBuffer).toString("base64"),
-                mimeType: refResponse.headers.get("content-type") || "image/jpeg",
-              });
-            }
-          } catch {
-            // Skip failed reference images
-          }
-        }
-
-        const modelToUse = (variant?.ai_model as string) || (product.ai_model as string) || GEMINI_MODEL_FLASH;
-
-        let result;
-        if (isOpenAIModel(modelToUse)) {
-          result = await transformImageWithOpenAI({
-            inputImage: base64Image,
-            transformationPrompt: prompt,
-            mimeType: imageFile.type,
-            model: modelToUse,
-            referenceImages,
-          });
-          // Degrade gpt-image-2 → gpt-image-1.5 on failure (org verification etc).
-          if (!result.success && modelToUse === MODEL_OPENAI_2) {
-            console.log(`⚠️ ${MODEL_OPENAI_2} failed in chat-recommend, falling back to ${MODEL_OPENAI}`);
-            result = await transformImageWithOpenAI({
-              inputImage: base64Image,
-              transformationPrompt: prompt,
-              mimeType: imageFile.type,
-              model: MODEL_OPENAI,
-              referenceImages,
-            });
-          }
-        } else {
-          result = await transformImage({
-            inputImage: base64Image,
-            transformationPrompt: prompt,
-            mimeType: imageFile.type,
-            model: modelToUse,
-            referenceImages,
-          });
-          if (!result.success && referenceImages.length > 0) {
-            // Defaults to gpt-image-1.5 — cheapest verified OpenAI path.
-            result = await transformImageWithOpenAI({
-              inputImage: base64Image,
-              transformationPrompt: prompt,
-              mimeType: imageFile.type,
-              referenceImages,
-            });
-          }
-        }
-
-        if (result.success) {
-          trackTransformationEvent(verifiedDomain, product.shopify_id, "transformation", "chat").catch(() => {});
-        }
-
-        return {
-          productId: product.shopify_id,
-          variantId: variant?.shopify_variant_id ?? null,
-          productHandle: slugifyHandle(productName),
-          variantNumericId: extractNumericId(variant?.shopify_variant_id),
-          title: displayTitle,
-          productName,
-          variantTitle,
-          tagline: variant?.tagline ?? null,
-          tryOnPreview: result.generatedImage ?? null,
-          error: result.success ? null : (result.error || "Transform failed"),
-          matrixRank: candidate.matrixRank,
-        };
-      } catch (err) {
-        console.error(`Chat recommend transform error for ${product.id}${variant ? `/${variant.id}` : ""}:`, err);
-        return {
-          productId: product.shopify_id,
-          variantId: variant?.shopify_variant_id ?? null,
-          productHandle: slugifyHandle(productName),
-          variantNumericId: extractNumericId(variant?.shopify_variant_id),
-          title: displayTitle,
-          productName,
-          variantTitle,
-          tagline: variant?.tagline ?? null,
-          tryOnPreview: null,
-          error: "Transform failed",
-          matrixRank: candidate.matrixRank,
-        };
-      }
+      const outcome = await transformCandidateImage({
+        product,
+        variant,
+        base64Image,
+        mimeType: imageFile.type,
+        shopDomain: verifiedDomain,
+        widgetType: "chat",
+        logTag: "chat-recommend",
+      });
+      return {
+        productId: product.shopify_id,
+        variantId: variant?.shopify_variant_id ?? null,
+        productHandle: slugifyHandle(productName),
+        variantNumericId: extractNumericId(variant?.shopify_variant_id),
+        title: displayTitle,
+        productName,
+        variantTitle,
+        tagline: variant?.tagline ?? null,
+        tryOnPreview: outcome.tryOnPreview,
+        error: outcome.error,
+        matrixRank: candidate.matrixRank,
+        // Per-rule quantity (migration 043). Additive field: older widget
+        // builds ignore it; current gleame-chat.js uses it for cart adds so
+        // a "2 sets" rule carts the same on chat and quiz.
+        quantity: Math.max(1, candidate.quantity ?? 1),
+      };
     };
 
     // When the matrix applied, the merchant curated exactly matrixCount
@@ -559,6 +238,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const realHandles = await fetchProductHandles(
       verifiedDomain,
       finalSuccessful.map((r) => r.productId).filter((id): id is string => Boolean(id)),
+      "chat-recommend",
     );
     // Annotate each recommendation with rank for the widget's "Top Match"
     // badge. For matrix-applied responses we preserve the merchant's

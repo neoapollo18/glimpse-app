@@ -13,6 +13,7 @@ import {
   RangeSlider,
   Select,
   Checkbox,
+  ChoiceList,
   Tag,
   Banner,
   Box,
@@ -60,6 +61,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (intent === "save") {
     const config = {
       enabled: formData.get("enabled") === "true",
+      assistant_mode: (formData.get("assistant_mode") as "chat" | "quiz" | "both") || "chat",
       assistant_name: formData.get("assistant_name") as string,
       avatar_url: (formData.get("avatar_url") as string) || null,
       bubble_color: formData.get("bubble_color") as string,
@@ -100,7 +102,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       title_font: (formData.get("title_font") as string) === "sans" ? "sans" : "serif",
     };
 
-    await saveChatAssistantConfig(shopDomain, config);
+    try {
+      await saveChatAssistantConfig(shopDomain, config);
+    } catch (err) {
+      return json({
+        error: err instanceof Error ? err.message : "Failed to save assistant settings",
+      }, { status: 500 });
+    }
     return json({ success: true });
   }
 
@@ -114,6 +122,9 @@ export default function AssistantConfig() {
 
   // Form state
   const [enabled, setEnabled] = useState(config.enabled);
+  const [assistantMode, setAssistantMode] = useState<"chat" | "quiz" | "both">(
+    config.assistant_mode,
+  );
   const [assistantName, setAssistantName] = useState(config.assistant_name);
   const [avatarUrl, setAvatarUrl] = useState(config.avatar_url || "");
   const [bubbleColor, setBubbleColor] = useState(config.bubble_color);
@@ -197,6 +208,7 @@ export default function AssistantConfig() {
     const formData = new FormData();
     formData.append("intent", "save");
     formData.append("enabled", String(enabled));
+    formData.append("assistant_mode", assistantMode);
     formData.append("assistant_name", assistantName);
     formData.append("avatar_url", avatarUrl);
     formData.append("bubble_color", bubbleColor);
@@ -236,7 +248,7 @@ export default function AssistantConfig() {
     formData.append("title_font", titleFont);
     fetcher.submit(formData, { method: "POST" });
   }, [
-    fetcher, enabled, assistantName, avatarUrl, bubbleColor, bubbleText, accentColor,
+    fetcher, enabled, assistantMode, assistantName, avatarUrl, bubbleColor, bubbleText, accentColor,
     openingMessage, recommendButtonText, preferenceQuestion,
     preferenceOptions, photoUploadMessage, photoFrameHint, numRecommendations, productScope, selectedProductIds,
     heroEnabled, heroEyebrow, heroHeadline, heroBody, heroCtaLabel, heroFooter,
@@ -291,6 +303,11 @@ export default function AssistantConfig() {
                 Settings saved successfully.
               </Banner>
             )}
+            {fetcher.data?.error && (
+              <Banner tone="critical" onDismiss={() => {}}>
+                {fetcher.data.error}
+              </Banner>
+            )}
 
             {/* Enable/Disable */}
             <Card>
@@ -323,6 +340,67 @@ export default function AssistantConfig() {
                     for it to appear on your storefront.
                   </Banner>
                 )}
+              </BlockStack>
+            </Card>
+
+            {/* Surface — where the assistant runs on the storefront */}
+            <Card>
+              <BlockStack gap="400">
+                <BlockStack gap="100">
+                  <Text as="h2" variant="headingMd">
+                    Surface
+                  </Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Choose where the assistant appears on your storefront.
+                  </Text>
+                </BlockStack>
+                <ChoiceList
+                  title="Surface"
+                  titleHidden
+                  choices={[
+                    {
+                      label: "Floating chat bubble",
+                      value: "chat",
+                      helpText: "The chat pill that appears on every page.",
+                    },
+                    {
+                      label: "Quiz page",
+                      value: "quiz",
+                      helpText:
+                        'A full-page guided quiz. Requires adding the "Gleame Quiz" section to a page in the theme editor. The floating bubble hides automatically.',
+                    },
+                    {
+                      label: "Both",
+                      value: "both",
+                      helpText: "Run the floating chat bubble and the quiz page together.",
+                    },
+                  ]}
+                  selected={[assistantMode]}
+                  onChange={(selected) =>
+                    setAssistantMode((selected[0] as "chat" | "quiz" | "both") || "chat")
+                  }
+                />
+              </BlockStack>
+            </Card>
+
+            {/* Quiz Page — link to dedicated sub-page */}
+            <Card>
+              <BlockStack gap="300">
+                <InlineStack align="space-between" blockAlign="start" gap="400">
+                  <BlockStack gap="100">
+                    <Text as="h2" variant="headingMd">
+                      Quiz Page
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Customize the full-page quiz: landing copy, try-on gate, results,
+                      shade gate, and styling. Used when the surface is set to "Quiz
+                      page" or "Both".
+                    </Text>
+                  </BlockStack>
+                  <Button url="/app/assistant/quiz" variant="primary">
+                    Customize quiz page
+                  </Button>
+                </InlineStack>
               </BlockStack>
             </Card>
 

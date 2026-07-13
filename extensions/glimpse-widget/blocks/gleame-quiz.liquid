@@ -1,0 +1,75 @@
+<!-- Gleame Quiz — "Find My Fit" full-page section block -->
+{%- assign gq_domain = block.settings.manual_shop_domain | default: shop.permanent_domain -%}
+<div id="gleame-quiz-root"
+     data-shop-domain="{{ gq_domain }}"
+     data-cart-token="{{ cart.token }}"
+     style="--gq-max-width: {{ block.settings.content_max_width | default: 1080 }}px;
+            --gq-pad-top: {{ block.settings.section_padding_top | default: 48 }}px;
+            --gq-pad-bottom: {{ block.settings.section_padding_bottom | default: 64 }}px;
+            {%- if block.settings.background_color != blank %} --gq-bg: {{ block.settings.background_color }};{% endif %}">
+  {%- if request.design_mode -%}
+    <div class="gq-editor-hint">
+      <strong>Gleame Quiz</strong>
+      <span>This section renders the Find My Fit quiz. If nothing appears on the live page, enable quiz mode in the Gleame app under Assistant &rarr; Mode.</span>
+    </div>
+  {%- endif -%}
+</div>
+
+{{ 'gleame-quiz.css' | asset_url | stylesheet_tag }}
+{{ 'gleame-camera.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'gleame-camera.js' | asset_url }}" defer></script>
+<script src="{{ 'gleame-quiz.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "Gleame Quiz",
+  "target": "section",
+  "settings": [
+    {
+      "type": "paragraph",
+      "content": "All quiz copy, questions, and colors are managed in the Gleame app (Assistant → Quiz page). These settings only control how the section sits on this page."
+    },
+    {
+      "type": "range",
+      "id": "content_max_width",
+      "label": "Content max width",
+      "min": 720,
+      "max": 1400,
+      "step": 20,
+      "unit": "px",
+      "default": 1080
+    },
+    {
+      "type": "range",
+      "id": "section_padding_top",
+      "label": "Top padding",
+      "min": 0,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "default": 48
+    },
+    {
+      "type": "range",
+      "id": "section_padding_bottom",
+      "label": "Bottom padding",
+      "min": 0,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "default": 64
+    },
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": "Background color"
+    },
+    {
+      "type": "text",
+      "id": "manual_shop_domain",
+      "label": "Shop Domain (Optional)",
+      "info": "Only needed if your storefront uses a custom domain that differs from your .myshopify.com domain."
+    }
+  ]
+}
+{% endschema %}

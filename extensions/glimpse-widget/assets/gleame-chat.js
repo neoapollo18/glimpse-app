@@ -207,6 +207,9 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       var data = results[0];
       var flow = results[1];
       if (!data || !data.enabled) return;
+      // Quiz-only mode: the merchant moved the assistant to the full-page
+      // quiz (gleame-quiz.js); the floating bubble stays hidden.
+      if (data.assistantMode === 'quiz') return;
       config = data;
       recommendationFlow = (flow && flow.configured) ? flow : null;
       root.style.display = '';
@@ -1135,7 +1138,9 @@ console.log('Gleame Chat Assistant v1.0 loaded');
           if (!h) continue;
           var vid = (r.variantNumericId && /^\d+$/.test(String(r.variantNumericId)))
             ? String(r.variantNumericId) : null;
-          endBundle.push({ variantId: vid, handle: h });
+          // quantity: per-rule units (migration 043) — a "2 sets" rule must
+          // cart the same on chat as on the quiz page.
+          endBundle.push({ variantId: vid, handle: h, quantity: Math.max(1, Number(r.quantity) || 1) });
         }
         pushMessage({
           type: 'bot-end-actions',
@@ -1674,7 +1679,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
         }
         if (typeof cents !== 'number') cents = pj.price;
         if (typeof cents !== 'number') return null;
-        return { id: String(id), cents: cents };
+        return { id: String(id), cents: cents, quantity: Math.max(1, Number(item.quantity) || 1) };
       }).catch(function() { return null; });
     });
 
@@ -1691,8 +1696,8 @@ console.log('Gleame Chat Assistant v1.0 loaded');
         ok.push(item);
       }
       if (ok.length < 2) return; // not enough to bundle — leave hidden
-      var ids = ok.map(function(x) { return x.id; });
-      var total = ok.reduce(function(s, x) { return s + x.cents; }, 0);
+      var items = ok.map(function(x) { return { id: x.id, quantity: x.quantity }; });
+      var total = ok.reduce(function(s, x) { return s + x.cents * x.quantity; }, 0);
       var n = ok.length;
 
       titleEl.textContent = (bundleCfg.title || 'Love all {count}?')
@@ -1706,7 +1711,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
         btn.disabled = true;
         btn.classList.add('gleame-chat-bundle-btn-loading');
         btn.textContent = 'Adding…';
-        addItemsToBag(ids)
+        addItemsToBag(items)
           .then(function() {
             btn.classList.remove('gleame-chat-bundle-btn-loading');
             btn.classList.add('gleame-chat-bundle-btn-added');
@@ -1797,10 +1802,14 @@ console.log('Gleame Chat Assistant v1.0 loaded');
 
   // Multi-add for the bundle CTA. Shopify /cart/add.js accepts an `items`
   // array; mirrors addToBag's success / soft-failure handling + cart events.
+  // Accepts plain variant ids (quantity 1) or { id, quantity } objects.
   function addItemsToBag(variantIds) {
     var items = [];
     for (var i = 0; i < variantIds.length; i++) {
-      items.push({ id: Number(variantIds[i]) || variantIds[i], quantity: 1 });
+      var entry = variantIds[i];
+      var id = (entry && typeof entry === 'object') ? entry.id : entry;
+      var qty = (entry && typeof entry === 'object') ? Math.max(1, Number(entry.quantity) || 1) : 1;
+      items.push({ id: Number(id) || id, quantity: qty });
     }
     return fetch('/cart/add.js', {
       method: 'POST',
