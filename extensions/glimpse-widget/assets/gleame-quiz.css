@@ -645,6 +645,23 @@
   font-size: 15px;
 }
 
+/* Gate without a tone rail: single centered column instead of a lopsided
+   two-column grid with a dead right side. */
+#gleame-quiz-root .gq-step--gate-solo .gq-question-title,
+#gleame-quiz-root .gq-step--gate-solo .gq-question-helper {
+  text-align: center;
+}
+#gleame-quiz-root .gq-step--gate-solo .gq-question-helper {
+  margin-left: auto;
+  margin-right: auto;
+}
+#gleame-quiz-root .gq-step--gate-solo .gq-gate-cols {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 560px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
 /* Working indicator + errors */
 #gleame-quiz-root .gq-working {
   display: flex;

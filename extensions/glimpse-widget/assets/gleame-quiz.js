@@ -1252,7 +1252,12 @@
 
   function renderGate() {
     var gate = config.gate || {};
-    var screen = el('div', 'gq-step gq-step--gate');
+    // Without a photo axis there's no tone rail: the two-column wireframe
+    // layout would leave a dead right column and a lopsided page — the solo
+    // variant centers the whole gate instead.
+    var gateAxis = shadeAxis();
+    var hasRail = Boolean(gateAxis && gateAxis.values.length > 0);
+    var screen = el('div', 'gq-step gq-step--gate' + (hasRail ? '' : ' gq-step--gate-solo'));
     screen.appendChild(buildStepHeader(0, true));
 
     var body = el('div', 'gq-step-body');
@@ -1304,9 +1309,9 @@
 
     // Manual fallback rail — pick the closest tone/shade instead of a
     // photo (only when the shop has a photo-sourced axis).
-    var axis = shadeAxis();
+    var axis = gateAxis;
     var sg = config.shadeGate || {};
-    if (axis && axis.values.length > 0) {
+    if (hasRail) {
       var rail = el('div', 'gq-tone-rail');
       rail.appendChild(el('p', 'gq-tone-rail-title', escapeHtml(sg.ctaManual || 'No photo handy?')));
       if (sg.body) rail.appendChild(el('p', 'gq-tone-rail-body', escapeHtml(sg.body)));
