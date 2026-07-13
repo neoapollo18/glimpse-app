@@ -26,7 +26,7 @@ const SHOP_DOMAIN = 'hx5hqt-na.myshopify.com';
 // ---- The demo flows' expected results, by product name ----
 // Swap these names and re-run once the real Glamnetic sets are configured.
 const FLOW_A_TRIO = ['Sapphire', 'Mystic Topaz', 'Pink Tourmaline'];          // Wedding Guest
-const FLOW_B_TRIO = ['Almond Milk', 'A Vibe', 'Anything Goes'];               // Your Nails, But Better (subs for Nude Glazed/Teddy/Velvet French)
+const FLOW_B_TRIO = ['Nude Glazed', 'Teddy', 'Velvet French'];                // Your Nails, But Better
 const GENERIC = ['Star Spangled', 'Blue Tango', 'Bubbly Bombshell', 'Embrace Danger', 'Heart Beet', 'Moments of Bliss - NAIL LACQUER'];
 
 (async () => {
