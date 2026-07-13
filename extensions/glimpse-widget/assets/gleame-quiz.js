@@ -946,6 +946,19 @@
     // Sticky mobile add-to-bag mirroring the hero CTA — resolved matches only.
     if (matches.length > 0 && definitive) screen.appendChild(buildStickyBar(hero, results));
 
+    // Quiet restart under everything — results persist per tab, so without
+    // this a shopper (or a demo) can't run the quiz again with different
+    // answers short of closing the tab.
+    var restartRow = el('div', 'gq-restart-row');
+    var restartBtn = el('button', 'gq-link-btn', escapeHtml(results.restartLabel || 'Try another look'));
+    restartBtn.type = 'button';
+    restartBtn.onclick = function() {
+      trackEvent('quiz_restart');
+      restartQuiz();
+    };
+    restartRow.appendChild(restartBtn);
+    screen.appendChild(restartRow);
+
     return screen;
   }
 

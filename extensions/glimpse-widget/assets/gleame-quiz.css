@@ -944,6 +944,15 @@
   letter-spacing: 0;
 }
 
+/* Restart link under the results */
+#gleame-quiz-root .gq-restart-row {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--gq-space-7);
+  padding-top: var(--gq-space-4);
+  border-top: 1px solid var(--gq-line);
+}
+
 /* Sticky mobile add-to-bag */
 #gleame-quiz-root .gq-sticky-bar { display: none; }
 

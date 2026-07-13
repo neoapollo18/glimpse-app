@@ -93,6 +93,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         addButtonTemplate: config.quiz_add_button_template,
         viewProductLabel: config.quiz_view_product_label,
         retakeLabel: config.quiz_retake_label,
+        // Restart link under the results. Reuses the chat's end-of-flow
+        // restart copy — same meaning, one field for merchants to edit.
+        restartLabel: renderTokens(config.end_restart_label),
       },
       shadeGate: {
         headline: renderTokens(config.quiz_shade_headline),

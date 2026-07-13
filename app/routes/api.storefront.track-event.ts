@@ -75,6 +75,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       'quiz_view_product',
       'quiz_add_to_cart',
       'quiz_retake_photo',
+      'quiz_restart',
     ];
     const isAssistantEvent = allowedAssistantEvents.includes(eventType);
 
