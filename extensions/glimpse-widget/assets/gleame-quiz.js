@@ -141,6 +141,12 @@
     var formData = new FormData();
     formData.append('id', String(variantId));
     formData.append('quantity', String(quantity || 1));
+    // Section Rendering API: ask Shopify to return the re-rendered header
+    // cart badge with the add response. Dawn-family themes name it
+    // 'cart-icon-bubble'; themes without that section just omit it from the
+    // response and we fall back to the generic count update below.
+    formData.append('sections', 'cart-icon-bubble');
+    formData.append('sections_url', window.location.pathname);
     return fetch('/cart/add.js', {
       method: 'POST',
       headers: { 'Accept': 'application/json' },
@@ -158,9 +164,52 @@
           document.dispatchEvent(new CustomEvent('cart:updated', { detail: { source: 'gleame-quiz' } }));
           document.dispatchEvent(new CustomEvent('cart:refresh', { detail: { source: 'gleame-quiz' } }));
         } catch (e) { /* old browsers — ignore */ }
+        refreshCartUi(body);
         return body;
       });
     });
+  }
+
+  // Best-effort header cart refresh after an AJAX add. /cart/add.js changes
+  // the cart but themes only re-render their own badge/drawer on their own
+  // form submits — without this, the count looks stale until a reload.
+  // Three layers, all guarded so unknown themes degrade to nothing breaking:
+  // 1) swap in the re-rendered 'cart-icon-bubble' section when the theme
+  //    provided one (Dawn family), 2) rewrite common count-badge elements
+  //    from /cart.js, 3) the Added state also links to /cart as the
+  //    always-works path.
+  function refreshCartUi(addBody) {
+    try {
+      var sections = addBody && addBody.sections;
+      var html = sections && sections['cart-icon-bubble'];
+      var holder = document.getElementById('cart-icon-bubble');
+      if (html && holder) {
+        var tmp = document.createElement('div');
+        tmp.innerHTML = html;
+        var fresh = tmp.querySelector('#cart-icon-bubble');
+        holder.innerHTML = fresh ? fresh.innerHTML : html;
+        return; // authoritative render — skip the generic pass
+      }
+    } catch (e) { /* fall through to the generic pass */ }
+
+    fetch('/cart.js', { credentials: 'same-origin' })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(cart) {
+        if (!cart || typeof cart.item_count !== 'number') return;
+        var count = String(cart.item_count);
+        var selectors = [
+          '[data-cart-count]', '.cart-count', '.cart__count', '#CartCount',
+          '.cart-count-bubble span[aria-hidden="true"]', '.cart-link__bubble-num',
+        ];
+        for (var i = 0; i < selectors.length; i++) {
+          var nodes = document.querySelectorAll(selectors[i]);
+          for (var j = 0; j < nodes.length; j++) {
+            if (nodes[j].hasAttribute('data-cart-count')) nodes[j].setAttribute('data-cart-count', count);
+            nodes[j].textContent = count;
+          }
+        }
+      })
+      .catch(function() {});
   }
 
   // Cart token for conversion attribution. The Liquid-rendered token can be
@@ -1112,6 +1161,13 @@
           btn.classList.remove('is-working');
           btn.classList.add('is-added');
           btn.textContent = compact ? 'Added ✓' : 'Added to bag ✓';
+          // Guaranteed path to the cart no matter how the theme's header
+          // badge behaves — inserted once, after the first successful add.
+          if (!compact && btn.parentNode && !btn.parentNode.querySelector('.gq-viewbag-link')) {
+            var bagLink = el('a', 'gq-view-link gq-viewbag-link', 'View bag →');
+            bagLink.href = '/cart';
+            btn.parentNode.insertBefore(bagLink, btn.nextSibling);
+          }
           refreshCartToken().then(function() { trackEvent('quiz_add_to_cart'); });
           setTimeout(function() {
             btn.classList.remove('is-added');
