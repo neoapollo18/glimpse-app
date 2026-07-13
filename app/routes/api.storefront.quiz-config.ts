@@ -96,6 +96,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         // Restart link under the results. Reuses the chat's end-of-flow
         // restart copy — same meaning, one field for merchants to edit.
         restartLabel: renderTokens(config.end_restart_label),
+        // Redesign copy (migration 046). Headlines/subtext may carry
+        // {first_name}/{count} — resolved client-side.
+        subtext: renderTokens(config.quiz_results_subtext),
+        showMatchesLabel: config.quiz_show_matches_label,
+      },
+      upsell: {
+        title: renderTokens(config.quiz_upsell_title),
+        body: renderTokens(config.quiz_upsell_body),
+        cta: config.quiz_upsell_cta,
       },
       shadeGate: {
         headline: renderTokens(config.quiz_shade_headline),

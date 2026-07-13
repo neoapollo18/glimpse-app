@@ -3,6 +3,7 @@
 <div id="gleame-quiz-root"
      data-shop-domain="{{ gq_domain }}"
      data-cart-token="{{ cart.token }}"
+     data-customer-first-name="{{ customer.first_name | escape }}"
      style="--gq-max-width: {{ block.settings.content_max_width | default: 1080 }}px;
             --gq-pad-top: {{ block.settings.section_padding_top | default: 48 }}px;
             --gq-pad-bottom: {{ block.settings.section_padding_bottom | default: 64 }}px;

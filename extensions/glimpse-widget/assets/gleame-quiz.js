@@ -80,6 +80,26 @@
       .replace(/"/g, '&quot;');
   }
 
+  // Logged-in customer's first name (Liquid-injected). Empty for guests.
+  var customerFirstName = (root.getAttribute('data-customer-first-name') || '').trim();
+
+  // {first_name} token: "Your matches, {first_name} X" -> "Your matches, Jess X"
+  // for logged-in shoppers; for guests the token AND its leading comma/space
+  // are removed so the copy still reads naturally.
+  function renderName(t) {
+    if (!t) return '';
+    if (t.indexOf('{first_name}') === -1) return t;
+    if (customerFirstName) return t.replace(/\{first_name\}/g, customerFirstName);
+    return t.replace(/,?\s*\{first_name\}/g, '');
+  }
+
+  // **accent** markup in merchant copy renders the wrapped words in the
+  // accent color ("matched in **60 seconds**"). Escapes first, so the
+  // output is safe to assign as innerHTML.
+  function renderAccent(t) {
+    return escapeHtml(t).replace(/\*\*([^*]+)\*\*/g, '<span class="gq-accent">$1</span>');
+  }
+
   function formatMoney(cents) {
     var amount = (Number(cents) || 0) / 100;
     try {
@@ -439,6 +459,8 @@
     target = clampStep(target);
     state.screen = target.screen;
     state.screenIndex = target.screenIndex || 0;
+    // Manual navigation ends an in-flight edit-from-results round trip.
+    if (state.screen === 'results' || state.screen === 'intro') editReturn = false;
     // NO truncation on navigation: answers survive Back/Forward so the
     // shopper's selections re-render (draft seeding) and criteria can't
     // develop holes. Re-ANSWERING a screen truncates downstream at commit.
@@ -611,7 +633,7 @@
     var main = el('div', 'gq-intro-main');
     var copy = el('div', 'gq-intro-copy');
     if (landing.eyebrow) copy.appendChild(el('p', 'gq-eyebrow', escapeHtml(landing.eyebrow)));
-    copy.appendChild(el('h2', 'gq-headline', escapeHtml(landing.headline || '')));
+    copy.appendChild(el('h2', 'gq-headline', renderAccent(landing.headline || '')));
     if (landing.subtext) copy.appendChild(el('p', 'gq-subtext', escapeHtml(landing.subtext)));
 
     // First screen inline on the landing — only when it's a plain
@@ -622,9 +644,9 @@
       var qWrap = el('div', 'gq-intro-question');
       qWrap.appendChild(el('h3', 'gq-intro-question-title', escapeHtml(q0.prompt)));
       if (q0.helperText) qWrap.appendChild(el('p', 'gq-intro-question-helper', escapeHtml(q0.helperText)));
-      var cards = el('div', 'gq-option-cards');
+      var cards = el('div', 'gq-chip-row');
       visibleOptions(q0).forEach(function(opt, i) {
-        var btn = el('button', 'gq-option-card', escapeHtml(opt.label));
+        var btn = el('button', 'gq-chip', escapeHtml(opt.label));
         btn.type = 'button';
         btn.style.setProperty('--gq-stagger', i);
         btn.onclick = function() {
@@ -750,9 +772,13 @@
   }
 
   function markSelected(btn) {
-    if (!btn.parentNode) return;
-    var siblings = btn.parentNode.querySelectorAll('.is-selected');
-    for (var s = 0; s < siblings.length; s++) siblings[s].classList.remove('is-selected');
+    // Radio semantics span the whole option block — the "open to anything"
+    // row lives outside the tile container, so clearing must reach it too.
+    var scope = (btn.closest && btn.closest('.gq-option-block')) || btn.parentNode;
+    if (scope) {
+      var siblings = scope.querySelectorAll('.is-selected');
+      for (var s = 0; s < siblings.length; s++) siblings[s].classList.remove('is-selected');
+    }
     btn.classList.add('is-selected');
   }
 
@@ -858,7 +884,13 @@
     });
 
     if (needsContinue) {
-      continueBtn = el('button', 'gq-add-btn gq-continue-btn', 'Continue');
+      // The last question screen's CTA promises the payoff ("Show my
+      // matches"), not another generic Continue.
+      var isLast = screenIdx === screens.length - 1;
+      var ctaLabel = isLast
+        ? ((config.results && config.results.showMatchesLabel) || 'Show my matches')
+        : 'Continue';
+      continueBtn = el('button', 'gq-add-btn gq-continue-btn', escapeHtml(ctaLabel) + ' \u2192');
       continueBtn.type = 'button';
       continueBtn.onclick = function() { commitScreen(screenIdx); };
       body.appendChild(continueBtn);
@@ -871,65 +903,158 @@
 
   var CHECK_SVG = '<svg class="gq-option-check" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
 
-  function buildOptionList(qi, q, needsContinue, onChange, noAnim) {
-    var opts = visibleOptions(q);
-    var visual = opts.some(function(o) { return Boolean(o.imageUrl); });
-    var list = el('div', (visual ? 'gq-option-grid' : 'gq-option-list') + (noAnim ? ' gq-no-anim' : ''));
+  // Pick a presentation variant for a question from its options' data —
+  // brands style questions purely through content, never through code:
+  //   visual  — any option has an image (on-hand photography grid)
+  //   rich    — tag chips / wear meters (application-system cards)
+  //   vibe    — two-tone swatch style cards
+  //   dotchip — color-dot pill chips
+  //   boxed   — label + sublabel cards
+  //   chip    — short labels, pill chips
+  //   list    — fallback stacked rows
+  function optionVariantFor(q, specific) {
+    var has = function(key) {
+      return specific.some(function(o) { return o.displayMeta && o.displayMeta[key]; });
+    };
+    if (specific.some(function(o) { return o.imageUrl; })) return 'visual';
+    if (has('meterLabel') || has('tag')) return 'rich';
+    if (has('swatch2')) return 'vibe';
+    if (has('swatch')) return 'dotchip';
+    if (has('sublabel')) return 'boxed';
+    var short = specific.every(function(o) { return (o.label || '').length <= 22; });
+    return short ? 'chip' : 'list';
+  }
 
-    opts.forEach(function(opt, idx) {
-      var btn;
-      if (visual) {
-        btn = el('button', 'gq-option gq-option--visual',
-          (opt.imageUrl
+  var VARIANT_CONTAINER = {
+    visual: 'gq-option-grid',
+    rich: 'gq-rich-list',
+    vibe: 'gq-vibe-grid',
+    dotchip: 'gq-chip-row',
+    chip: 'gq-chip-row',
+    boxed: 'gq-option-grid gq-option-grid--boxed',
+    list: 'gq-option-list',
+  };
+
+  function optionButtonHtml(opt, variant) {
+    var meta = opt.displayMeta || {};
+    var label = escapeHtml(opt.label);
+    var sub = meta.sublabel ? '<span class="gq-option-sub">' + escapeHtml(meta.sublabel) + '</span>' : '';
+    switch (variant) {
+      case 'visual':
+        return (opt.imageUrl
             ? '<img class="gq-option-img" src="' + escapeHtml(opt.imageUrl) + '" alt="" loading="lazy">'
             : '<span class="gq-option-img gq-option-img--empty"></span>') +
-          '<span class="gq-option-visual-label">' + escapeHtml(opt.label) + '</span>' + CHECK_SVG);
-      } else {
-        btn = el('button', 'gq-option', '<span>' + escapeHtml(opt.label) + '</span>' + CHECK_SVG);
+          '<span class="gq-option-visual-label">' + label + '</span>' + sub + CHECK_SVG;
+      case 'rich': {
+        var tag = meta.tag ? '<span class="gq-option-tag">' + escapeHtml(meta.tag) + '</span>' : '';
+        var meter = meta.meterLabel
+          ? '<span class="gq-meter"><span class="gq-meter-fill" style="width:' +
+            Math.max(4, Math.min(100, Number(meta.meterPct) || 0)) + '%"></span></span>' +
+            '<span class="gq-meter-label">' + escapeHtml(meta.meterLabel) + '</span>'
+          : '';
+        return tag + '<span class="gq-option-rich-title">' + label + '</span>' + sub + meter + CHECK_SVG;
       }
+      case 'vibe': {
+        var s1 = meta.swatch || '#eee';
+        var s2 = meta.swatch2 || meta.swatch || '#ddd';
+        return '<span class="gq-vibe-tone" style="background:linear-gradient(105deg,' +
+          escapeHtml(s1) + ' 50%,' + escapeHtml(s2) + ' 50%)"></span>' +
+          '<span class="gq-option-visual-label">' + label + '</span>' + sub + CHECK_SVG;
+      }
+      case 'dotchip':
+        return (meta.swatch
+            ? '<span class="gq-chip-dot" style="background:' + escapeHtml(meta.swatch) + '"></span>'
+            : '') + '<span>' + label + '</span>';
+      case 'chip':
+        return '<span>' + label + '</span>';
+      case 'boxed':
+        return '<span class="gq-option-visual-label">' + label + '</span>' + sub + CHECK_SVG;
+      default: // list
+        return '<span>' + label + (meta.sublabel ? '<span class="gq-option-sub gq-option-sub--inline">' + escapeHtml(meta.sublabel) + '</span>' : '') + '</span>' + CHECK_SVG;
+    }
+  }
+
+  var VARIANT_BTN_CLASS = {
+    visual: 'gq-option gq-option--visual',
+    rich: 'gq-option gq-option--rich',
+    vibe: 'gq-option gq-option--vibe',
+    dotchip: 'gq-chip',
+    chip: 'gq-chip',
+    boxed: 'gq-option gq-option--boxed',
+    list: 'gq-option',
+  };
+
+  // Shared selection behavior for every variant (single-radio, multi-toggle,
+  // exclusive "open to anything").
+  function wireOptionClick(btn, qi, q, opt, needsContinue, onChange) {
+    btn.onclick = function() {
+      if (!q.multiSelect) {
+        draft[qi] = { selectAll: opt.selectAll, options: [opt] };
+        markSelected(btn);
+        if (!needsContinue) {
+          commitSingle(state.screenIndex, qi, opt);
+          return;
+        }
+      } else if (opt.selectAll) {
+        draft[qi] = { selectAll: true, options: [opt] };
+        markSelected(btn);
+      } else {
+        var d = draft[qi];
+        if (!d || d.selectAll) {
+          draft[qi] = d = { selectAll: false, options: [] };
+          var all = btn.parentNode ? btn.parentNode.parentNode.querySelectorAll('.is-selected') : [];
+          for (var t = 0; t < all.length; t++) all[t].classList.remove('is-selected');
+        }
+        var at = d.options.indexOf(opt);
+        if (at === -1) {
+          d.options.push(opt);
+          btn.classList.add('is-selected');
+        } else {
+          d.options.splice(at, 1);
+          btn.classList.remove('is-selected');
+          if (d.options.length === 0) delete draft[qi];
+        }
+      }
+      if (onChange) onChange();
+    };
+  }
+
+  function buildOptionList(qi, q, needsContinue, onChange, noAnim) {
+    var opts = visibleOptions(q);
+    var anyOpt = null;
+    var specific = [];
+    opts.forEach(function(o) {
+      if (o.selectAll && !anyOpt) anyOpt = o;
+      else specific.push(o);
+    });
+
+    var variant = optionVariantFor(q, specific.length > 0 ? specific : opts);
+    var block = el('div', 'gq-option-block' + (noAnim ? ' gq-no-anim' : ''));
+    var list = el('div', VARIANT_CONTAINER[variant]);
+
+    specific.forEach(function(opt, idx) {
+      var btn = el('button', VARIANT_BTN_CLASS[variant], optionButtonHtml(opt, variant));
       btn.type = 'button';
       btn.style.setProperty('--gq-stagger', idx);
-
-      // Draft options are references into q.options, so identity suffices.
       var current = draft[qi];
       if (current && current.options.indexOf(opt) !== -1) btn.classList.add('is-selected');
-
-      btn.onclick = function() {
-        if (!q.multiSelect) {
-          // Single-select: radio behavior within the question.
-          draft[qi] = { selectAll: opt.selectAll, options: [opt] };
-          markSelected(btn);
-          if (!needsContinue) {
-            commitSingle(state.screenIndex, qi, opt);
-            return;
-          }
-        } else if (opt.selectAll) {
-          // "Open to anything" is exclusive — it replaces specific picks.
-          draft[qi] = { selectAll: true, options: [opt] };
-          markSelected(btn);
-        } else {
-          var d = draft[qi];
-          if (!d || d.selectAll) {
-            // A specific pick clears a previous "open to anything".
-            draft[qi] = d = { selectAll: false, options: [] };
-            var all = btn.parentNode ? btn.parentNode.querySelectorAll('.is-selected') : [];
-            for (var t = 0; t < all.length; t++) all[t].classList.remove('is-selected');
-          }
-          var at = d.options.indexOf(opt);
-          if (at === -1) {
-            d.options.push(opt);
-            btn.classList.add('is-selected');
-          } else {
-            d.options.splice(at, 1);
-            btn.classList.remove('is-selected');
-            if (d.options.length === 0) delete draft[qi];
-          }
-        }
-        if (onChange) onChange();
-      };
+      wireOptionClick(btn, qi, q, opt, needsContinue, onChange);
       list.appendChild(btn);
     });
-    return list;
+    block.appendChild(list);
+
+    // "Open to anything" renders as a full-width dashed escape hatch,
+    // visually distinct from the tiles — selecting it clears them.
+    if (anyOpt) {
+      var anyBtn = el('button', 'gq-option-any', '<span>' + escapeHtml(anyOpt.label) + '</span>');
+      anyBtn.type = 'button';
+      var cur = draft[qi];
+      if (cur && cur.options.indexOf(anyOpt) !== -1) anyBtn.classList.add('is-selected');
+      wireOptionClick(anyBtn, qi, q, anyOpt, needsContinue, onChange);
+      block.appendChild(anyBtn);
+    }
+
+    return block;
   }
 
   // Resolve a question's draft into criteria values. "Open to anything"
@@ -979,17 +1104,37 @@
     render('forward');
   }
 
+  // After a commit: normal flow advances forward; an edit-from-results
+  // commit re-validates downstream answers (pruneDownstreamAnswers) and
+  // returns straight to re-rendered results when everything still holds —
+  // otherwise the flow continues at the first broken screen, and finishing
+  // THAT screen returns to results (editReturn persists until then).
+  function finishCommit(screenIdx) {
+    fireAnswerEvents();
+    if (editReturn) {
+      var broken = pruneDownstreamAnswers();
+      if (broken === -1 && answeredScreenCount() >= screens.length) {
+        editReturn = false;
+        saveState();
+        goToResults(stageEl ? stageEl.firstElementChild : null);
+        return;
+      }
+    }
+    advanceFrom(screenIdx);
+  }
+
   // Tap-to-advance path for plain single-select screens (and the intro's
   // inline first question). Small selected-state beat before advancing —
   // the tap should feel acknowledged, not teleporting.
   function commitSingle(screenIdx, qi, opt) {
-    truncateToScreen(screenIdx);
+    // Edits from results keep downstream answers (pruned in finishCommit);
+    // normal flow truncates so a changed answer restarts what follows.
+    if (!editReturn) truncateToScreen(screenIdx);
     draft[qi] = { selectAll: opt.selectAll, options: [opt] };
     var answer = draftToAnswer(qi);
     if (!answer) return;
     recordAnswer(qi, answer);
-    fireAnswerEvents();
-    setTimeout(function() { advanceFrom(screenIdx); }, 220);
+    setTimeout(function() { finishCommit(screenIdx); }, 220);
   }
 
   // Continue path for multi-select and grouped screens. Questions whose
@@ -1005,60 +1150,131 @@
       commits.push({ qi: qi, answer: answer });
     }
     if (commits.length === 0) return;
-    truncateToScreen(screenIdx);
+    if (!editReturn) truncateToScreen(screenIdx);
     for (var k = 0; k < commits.length; k++) {
       recordAnswer(commits[k].qi, commits[k].answer);
     }
-    fireAnswerEvents();
-    advanceFrom(screenIdx);
+    finishCommit(screenIdx);
   }
 
-  function buildStepHeader(stepNumber) {
+  function buildStepHeader(stepNumber, isBonus) {
     var header = el('div', 'gq-step-header');
     var back = el('button', 'gq-back',
       '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg><span>Back</span>');
     back.type = 'button';
     back.onclick = function() { history.back(); };
     header.appendChild(back);
-    header.appendChild(el('span', 'gq-step-count', stepNumber + ' of ' + totalSteps()));
-    var track = el('div', 'gq-progress');
-    var fill = el('div', 'gq-progress-fill');
-    fill.style.width = Math.round((stepNumber / totalSteps()) * 100) + '%';
-    track.appendChild(fill);
-    header.appendChild(track);
+
+    // Progress pips — one nail-silhouette per question screen, filling as
+    // the shopper advances. The signature element of the quiz chrome.
+    var right = el('div', 'gq-progress-wrap');
+    right.appendChild(el('span', 'gq-step-count',
+      isBonus ? 'Bonus' : (stepNumber + ' of ' + screens.length)));
+    var pips = el('div', 'gq-pips');
+    for (var i = 0; i < screens.length; i++) {
+      var cls = 'gq-pip';
+      if (!isBonus) {
+        if (i < stepNumber - 1) cls += ' gq-pip--done';
+        else if (i === stepNumber - 1) cls += ' gq-pip--current';
+      } else {
+        cls += ' gq-pip--done';
+      }
+      pips.appendChild(el('span', cls));
+    }
+    right.appendChild(pips);
+    header.appendChild(right);
     return header;
   }
+
 
   // -- Try-on gate (last numbered step) --
 
   function renderGate() {
     var gate = config.gate || {};
-    var screen = el('div', 'gq-step');
-    screen.appendChild(buildStepHeader(totalSteps()));
+    var screen = el('div', 'gq-step gq-step--gate');
+    screen.appendChild(buildStepHeader(0, true));
 
     var body = el('div', 'gq-step-body');
-    body.appendChild(el('h2', 'gq-question-title', escapeHtml(gate.headline || 'Want to see it on you?')));
+    body.appendChild(el('h2', 'gq-question-title', renderAccent(gate.headline || 'Want to see it on you?')));
     if (gate.helper) body.appendChild(el('p', 'gq-question-helper', escapeHtml(gate.helper)));
 
-    var actions = el('div', 'gq-gate-actions');
+    var cols = el('div', 'gq-gate-cols');
 
-    var photoBtn = el('button', 'gq-gate-photo',
-      '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>' +
-      '<span class="gq-gate-photo-label">' + escapeHtml(gate.photoLabel || 'Show my match on me') + '</span>' +
-      (gate.privacyNote ? '<span class="gq-gate-privacy">' + escapeHtml(gate.privacyNote) + '</span>' : ''));
-    photoBtn.type = 'button';
-    photoBtn.onclick = function() { openPhotoCapture(screen); };
-    actions.appendChild(photoBtn);
+    // Dropzone — drag a photo or tap anywhere; mobile taps open the camera
+    // sheet via the file input's capture behavior.
+    var drop = el('div', 'gq-dropzone');
+    drop.innerHTML =
+      '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>' +
+      '<p class="gq-dropzone-title">' + (isMobile() ? 'Tap to add a quick photo' : 'Drag a photo here, or tap to upload') + '</p>';
+    var uploadBtn = el('button', 'gq-dropzone-btn', escapeHtml(gate.photoLabel || 'Upload photo'));
+    uploadBtn.type = 'button';
+    drop.appendChild(uploadBtn);
+    if (gate.privacyNote) {
+      drop.appendChild(el('p', 'gq-dropzone-privacy',
+        '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> ' +
+        escapeHtml(gate.privacyNote)));
+    }
 
-    var skipBtn = el('button', 'gq-gate-skip', escapeHtml(gate.skipLabel || 'Just take me to my results'));
-    skipBtn.type = 'button';
-    skipBtn.onclick = function() {
+    var fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*';
+    fileInput.style.display = 'none';
+    fileInput.onchange = function(e) {
+      var f = e.target.files && e.target.files[0];
+      if (f && validPhoto(f)) onPhotoChosen(f, screen);
+    };
+    drop.appendChild(fileInput);
+    drop.onclick = function() { fileInput.click(); };
+    drop.ondragover = function(e) { e.preventDefault(); drop.classList.add('is-dragover'); };
+    drop.ondragleave = function() { drop.classList.remove('is-dragover'); };
+    drop.ondrop = function(e) {
+      e.preventDefault();
+      drop.classList.remove('is-dragover');
+      var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f && validPhoto(f)) onPhotoChosen(f, screen);
+    };
+    cols.appendChild(drop);
+
+    // Manual fallback rail — pick the closest tone/shade instead of a
+    // photo (only when the shop has a photo-sourced axis).
+    var axis = shadeAxis();
+    var sg = config.shadeGate || {};
+    if (axis && axis.values.length > 0) {
+      var rail = el('div', 'gq-tone-rail');
+      rail.appendChild(el('p', 'gq-tone-rail-title', escapeHtml(sg.ctaManual || 'No photo handy?')));
+      if (sg.body) rail.appendChild(el('p', 'gq-tone-rail-body', escapeHtml(sg.body)));
+      var dots = el('div', 'gq-shade-dots gq-shade-dots--left');
+      axis.values.forEach(function(v) {
+        var dot = el('button', v.swatch ? 'gq-shade-pick' : 'gq-shade-pick gq-shade-pick--chip');
+        dot.type = 'button';
+        dot.title = v.label;
+        dot.setAttribute('aria-label', v.label);
+        if (v.swatch) dot.style.background = v.swatch;
+        else dot.textContent = v.label;
+        dot.onclick = function() {
+          state.criteria[axis.key] = v.value;
+          state.detectedShade = { axisKey: axis.key, value: v.value, label: v.label, source: 'manual' };
+          trackEvent('quiz_shade_manual');
+          saveState();
+          goToResults(screen);
+        };
+        dots.appendChild(dot);
+      });
+      rail.appendChild(dots);
+      cols.appendChild(rail);
+    }
+
+    body.appendChild(cols);
+
+    // Skip is a first-class path, not fine print with guilt attached.
+    var skip = el('button', 'gq-skip-link', escapeHtml(gate.skipLabel || 'Skip — show my matches now') + ' \u2192');
+    skip.type = 'button';
+    skip.onclick = function() {
       trackEvent('quiz_photo_skip');
       goToResults(screen);
     };
-    actions.appendChild(skipBtn);
+    body.appendChild(skip);
 
-    body.appendChild(actions);
     screen.appendChild(body);
     return screen;
   }
@@ -1204,138 +1420,57 @@
 
   // -- Results --
 
-  function renderResults() {
-    var results = config.results || {};
-    var matches = Array.isArray(state.matches) ? state.matches : [];
-    var hasPhotoNow = state.hasPhoto && Boolean(photoFile);
-    // Partial = the shade axis is still unresolved and the server collapsed
-    // matches to product level. The card is provisional: no add-to-bag, no
-    // variant try-on, no "also matched" — the shade gate below is the one
-    // action. This applies on the photo path too (shade classification can
-    // fail), not just when the shopper skipped the photo.
-    var definitive = !state.partial;
-    var showTryon = hasPhotoNow && definitive;
-    var screen = el('div', showTryon ? 'gq-results gq-results--split' : 'gq-results');
+  // Set when the shopper taps an "edit" chip on the results rail: after the
+  // edited screen commits (and downstream answers are re-validated), the
+  // flow returns straight to re-rendered results instead of marching
+  // forward through the remaining questions.
+  var editReturn = false;
 
-    var headline = showTryon
-      ? (results.headlinePhoto || "Here's your match — on you")
-      : (results.headlineNoPhoto || 'We found your fit');
-
-    var head = el('div', 'gq-results-head');
-    head.appendChild(el('p', 'gq-eyebrow', escapeHtml('Your perfect fit')));
-    head.appendChild(el('h2', 'gq-headline', escapeHtml(headline)));
-    screen.appendChild(head);
-
-    if (matches.length === 0) {
-      var none = el('div', 'gq-error',
-        '<p>We couldn’t find a match this time — try adjusting your answers.</p>');
-      var restart = el('button', 'gq-retry', 'Start over');
-      restart.type = 'button';
-      restart.onclick = restartQuiz;
-      none.appendChild(restart);
-      screen.appendChild(none);
-      return screen;
-    }
-
-    var hero = matches[0];
-    var others = matches.slice(1);
-    var grid = el('div', 'gq-results-grid');
-
-    // Left: try-on panel (photo sessions with a resolved match only).
-    if (showTryon) {
-      grid.appendChild(buildTryonPanel(hero, results));
-    }
-
-    // Right (or full-width): cards column.
-    var col = el('div', 'gq-results-col');
-    col.appendChild(buildHeroCard(hero, results, definitive));
-
-    // Shade gate: shown whenever the match is provisional, photo or not —
-    // a failed classification needs the manual picker just as much as a
-    // skipped photo does.
-    if (state.partial && shadeAxis()) {
-      col.appendChild(buildShadeGate());
-    }
-
-    if (others.length > 0 && definitive) {
-      var alsoWrap = el('div', 'gq-also');
-      alsoWrap.appendChild(el('p', 'gq-also-label', escapeHtml(results.alsoMatchedLabel || 'Also matched for you')));
-      others.forEach(function(m) { alsoWrap.appendChild(buildAlsoCard(m, results)); });
-      col.appendChild(alsoWrap);
-    }
-
-    grid.appendChild(col);
-    screen.appendChild(grid);
-
-    // Sticky mobile add-to-bag mirroring the hero CTA — resolved matches only.
-    if (matches.length > 0 && definitive) screen.appendChild(buildStickyBar(hero, results));
-
-    // Quiet restart under everything — results persist per tab, so without
-    // this a shopper (or a demo) can't run the quiz again with different
-    // answers short of closing the tab.
-    var restartRow = el('div', 'gq-restart-row');
-    var restartBtn = el('button', 'gq-link-btn', escapeHtml(results.restartLabel || 'Try another look'));
-    restartBtn.type = 'button';
-    restartBtn.onclick = function() {
-      trackEvent('quiz_restart');
-      restartQuiz();
-    };
-    restartRow.appendChild(restartBtn);
-    screen.appendChild(restartRow);
-
-    return screen;
+  function jumpToScreen(screenIdx) {
+    editReturn = true;
+    draft = {};
+    state.screen = 'question';
+    state.screenIndex = screenIdx;
+    saveState();
+    pushStep();
+    render('back');
   }
 
-  function buildTryonPanel(hero, results) {
-    var panel = el('div', 'gq-tryon-panel');
-    var frame = el('div', 'gq-tryon-frame');
-    frame.appendChild(el('span', 'gq-tryon-chip', 'You + your match'));
-
-    var img = el('img', 'gq-tryon-img gq-tryon-img--pending');
-    img.alt = 'Your match, on you';
-    frame.appendChild(img);
-    frame.appendChild(el('div', 'gq-tryon-shimmer'));
-
-    // Before thumbnail from the in-memory photo.
-    if (photoObjectUrl) {
-      var thumb = el('img', 'gq-tryon-before');
-      thumb.src = photoObjectUrl;
-      thumb.alt = 'Your photo';
-      frame.appendChild(thumb);
-    }
-    panel.appendChild(frame);
-
-    var foot = el('div', 'gq-tryon-foot');
-    var retake = el('button', 'gq-link-btn', escapeHtml(results.retakeLabel || 'Retake photo'));
-    retake.type = 'button';
-    retake.onclick = function() {
-      trackEvent('quiz_retake_photo');
-      openPhotoCapture(null, function() { rerunWithShade(); });
-    };
-    foot.appendChild(retake);
-    panel.appendChild(foot);
-
-    // Kick off the hero try-on immediately; blur-up reveal when it lands.
-    requestTryon(hero).then(function(result) {
-      if (!result || result.rateLimited) {
-        // Soft-fail: keep the product image as the panel visual.
-        var pjPromise = fetchProductJson(hero.productHandle);
-        pjPromise.then(function(pj) {
-          var src = imageForRec(pj, hero);
-          if (src) { img.src = src; img.classList.remove('gq-tryon-img--pending'); }
-          frame.classList.add('gq-tryon-frame--done');
+  // After an edited answer changes, downstream answers may reference
+  // options that are no longer visible (showIf) — drop just those values
+  // instead of wiping every later answer. Returns the first screen index
+  // left unanswered by the pruning, or -1 when everything still holds.
+  function pruneDownstreamAnswers() {
+    draft = {};
+    var broken = -1;
+    for (var s = 0; s < screens.length; s++) {
+      for (var j = 0; j < screens[s].length; j++) {
+        var qi = screens[s][j];
+        var a = state.answers[qi];
+        if (!a || !a.values || a.values.length === 0) continue;
+        var q = flow.questions[qi];
+        var vis = visibleOptions(q);
+        var visValues = {};
+        var visAny = false;
+        vis.forEach(function(o) {
+          if (o.selectAll) visAny = true;
+          else visValues[o.axisValue] = true;
         });
-        return;
+        var kept = a.values.filter(function(v) {
+          return v === ANY_VALUE ? visAny : Boolean(visValues[v]);
+        });
+        if (kept.length === a.values.length) continue;
+        if (kept.length === 0) {
+          delete state.criteria[a.axisKey];
+          state.answers[qi] = undefined;
+          if (broken === -1) broken = s;
+        } else {
+          a.values = kept;
+          state.criteria[a.axisKey] = q.multiSelect ? kept : kept[0];
+        }
       }
-      img.src = 'data:image/jpeg;base64,' + result;
-      img.onload = function() {
-        img.classList.remove('gq-tryon-img--pending');
-        frame.classList.add('gq-tryon-frame--done');
-        trackEvent('quiz_tryon_shown');
-      };
-    });
-
-    return panel;
+    }
+    return broken;
   }
 
   function shadeReasonLine() {
@@ -1355,137 +1490,279 @@
   }
 
   function buildAddLabel(template, quantity, totalCents) {
-    var t = template || 'Add {count} to bag · {total}';
+    var t = template || 'Add {count} to bag \u00b7 {total}';
     return t
       .replace(/\{count\}/g, String(quantity))
       .replace(/\{set_word\}/g, quantity === 1 ? 'set' : 'sets')
       .replace(/\{total\}/g, totalCents != null ? formatMoney(totalCents) : '');
   }
 
-  function buildHeroCard(hero, results, definitive) {
-    var card = el('div', 'gq-card gq-card--hero');
-    var head = el('div', 'gq-card-head');
-    head.appendChild(el('h3', 'gq-card-title', escapeHtml(hero.title || hero.productName)));
-    head.appendChild(el('span', 'gq-pill', escapeHtml(results.bestMatchPill || 'Best match')));
-    card.appendChild(head);
+  function renderResults() {
+    var results = config.results || {};
+    var matches = Array.isArray(state.matches) ? state.matches : [];
+    var hasPhotoNow = state.hasPhoto && Boolean(photoFile);
+    var definitive = !state.partial;
+    var screen = el('div', 'gq-results');
 
-    // Shade line with swatch dot.
+    var headline = (hasPhotoNow && definitive)
+      ? (results.headlinePhoto || "Here's your match \u2014 on you")
+      : (results.headlineNoPhoto || 'Your matches');
+
+    var head = el('div', 'gq-results-head');
+    head.appendChild(el('h2', 'gq-headline gq-results-headline', renderAccent(renderName(headline))));
+    if (results.subtext) {
+      head.appendChild(el('p', 'gq-results-subtext',
+        escapeHtml(renderName(results.subtext).replace(/\{count\}/g, String(matches.length)))));
+    }
+    screen.appendChild(head);
+
+    if (matches.length === 0) {
+      var none = el('div', 'gq-error',
+        '<p>We couldn\u2019t find a match this time \u2014 try adjusting your answers.</p>');
+      var restart = el('button', 'gq-retry', 'Start over');
+      restart.type = 'button';
+      restart.onclick = restartQuiz;
+      none.appendChild(restart);
+      screen.appendChild(none);
+      return screen;
+    }
+
+    var layout = el('div', 'gq-results-layout');
+    layout.appendChild(buildAnswersRail());
+
+    var main = el('div', 'gq-results-main');
+    var grid = el('div', 'gq-match-grid');
+    matches.forEach(function(m, i) {
+      grid.appendChild(buildMatchCard(m, i, definitive, hasPhotoNow, results));
+    });
+    main.appendChild(grid);
+
+    if (state.partial && shadeAxis()) {
+      main.appendChild(buildShadeGate());
+    }
+    if (definitive && !hasPhotoNow && config.upsell && config.upsell.cta) {
+      main.appendChild(buildUpsellBanner());
+    }
+    layout.appendChild(main);
+    screen.appendChild(layout);
+
+    if (definitive) screen.appendChild(buildStickyBar(matches[0], results));
+
+    var restartRow = el('div', 'gq-restart-row');
+    var restartBtn = el('button', 'gq-link-btn', escapeHtml(results.restartLabel || 'Try another look'));
+    restartBtn.type = 'button';
+    restartBtn.onclick = function() {
+      trackEvent('quiz_restart');
+      restartQuiz();
+    };
+    restartRow.appendChild(restartBtn);
+    screen.appendChild(restartRow);
+
+    return screen;
+  }
+
+  // "YOUR ANSWERS · TAP TO EDIT" — one chip per answered question; edit
+  // jumps back to that screen and returns straight here after the change.
+  function buildAnswersRail() {
+    var rail = el('aside', 'gq-answers-rail');
+    rail.appendChild(el('p', 'gq-rail-title', 'Your answers \u00b7 tap to edit'));
+
+    screens.forEach(function(qIdxs, s) {
+      qIdxs.forEach(function(qi) {
+        var a = state.answers[qi];
+        if (!a || !a.values || a.values.length === 0) return;
+        var q = flow.questions[qi];
+        var labels = [];
+        if (a.selectAll || a.values.indexOf(ANY_VALUE) !== -1) {
+          var anyOpt = q.options.filter(function(o) { return o.selectAll; })[0];
+          labels.push(anyOpt ? anyOpt.label : 'Open to anything');
+        } else {
+          a.values.forEach(function(v) {
+            var opt = q.options.filter(function(o) { return o.axisValue === v; })[0];
+            labels.push(opt ? opt.label : v);
+          });
+        }
+        var chip = el('div', 'gq-rail-chip');
+        chip.appendChild(el('span', 'gq-rail-axis', escapeHtml(q.axisLabel)));
+        chip.appendChild(el('span', 'gq-rail-value', escapeHtml(labels.join(', '))));
+        var edit = el('button', 'gq-rail-edit', 'edit');
+        edit.type = 'button';
+        edit.onclick = function() { jumpToScreen(s); };
+        chip.appendChild(edit);
+        rail.appendChild(chip);
+      });
+    });
+
+    // Shade/tone answer (photo axis) — editable via retake or manual pick.
     var shade = shadeReasonLine();
     if (shade) {
-      var shadeLine = el('p', 'gq-shade-line');
+      var axis = shadeAxis();
+      var chip = el('div', 'gq-rail-chip');
+      chip.appendChild(el('span', 'gq-rail-axis', escapeHtml(axis.label)));
+      var val = el('span', 'gq-rail-value');
       if (shade.swatch) {
         var dot = el('span', 'gq-shade-dot');
         dot.style.background = shade.swatch;
-        shadeLine.appendChild(dot);
+        val.appendChild(dot);
       }
-      shadeLine.appendChild(document.createTextNode(shade.label + ' — ' + shade.source));
-      card.appendChild(shadeLine);
+      val.appendChild(document.createTextNode(shade.label));
+      chip.appendChild(val);
+      rail.appendChild(chip);
     }
-
-    // Reason bullets.
-    if (Array.isArray(hero.reasons) && hero.reasons.length > 0) {
-      var ul = el('ul', 'gq-reasons');
-      hero.reasons.forEach(function(r) {
-        var li = el('li', 'gq-reason');
-        li.innerHTML =
-          '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' +
-          '<span>' + escapeHtml(r) + '</span>';
-        ul.appendChild(li);
-      });
-      card.appendChild(ul);
-    }
-    if (hero.tagline) card.appendChild(el('p', 'gq-tagline', escapeHtml(hero.tagline)));
-
-    // CTA row — price resolved from the storefront. Provisional (partial)
-    // matches get no add-to-bag at all: the specific variant isn't known
-    // yet, and the shade gate below the card is the intended action.
-    if (definitive) {
-      var addBtn = el('button', 'gq-add-btn', escapeHtml(buildAddLabel(results.addButtonTemplate, hero.quantity || 1, null)));
-      addBtn.type = 'button';
-      addBtn.disabled = true;
-      card.appendChild(addBtn);
-
-      fetchProductJson(hero.productHandle).then(function(pj) {
-        var unit = priceCentsForRec(pj, hero);
-        var qty = Math.max(1, hero.quantity || 1);
-        var cartVariant = variantIdForCart(pj, hero);
-        addBtn.textContent = buildAddLabel(results.addButtonTemplate, qty, unit != null ? unit * qty : null);
-        if (!cartVariant) return; // leave disabled — nothing addable
-        addBtn.disabled = false;
-        wireAddButton(addBtn, cartVariant, qty);
-      });
-    }
-
-    var view = el('a', 'gq-view-link', escapeHtml(results.viewProductLabel || 'View full product') + ' →');
-    view.href = '/products/' + encodeURIComponent(hero.productHandle) +
-      (hero.variantNumericId ? '?variant=' + encodeURIComponent(hero.variantNumericId) : '');
-    view.onclick = function() { trackEvent('quiz_view_product'); saveState(); };
-    card.appendChild(view);
-
-    return card;
+    return rail;
   }
 
-  function buildAlsoCard(m, results) {
-    var card = el('div', 'gq-card gq-card--also');
-    var media = el('div', 'gq-also-media');
-    var img = el('img', 'gq-also-img');
+  // Swap a match card's media to the generated try-on with a blur-up
+  // reveal; falls back silently (product image stays) on failure.
+  function applyTryonToMedia(media, img, match, onDone) {
+    requestTryon(match).then(function(result) {
+      if (!result || result.rateLimited) {
+        if (onDone) onDone(false, result && result.rateLimited);
+        return;
+      }
+      img.classList.add('gq-media-img--pending');
+      img.src = 'data:image/jpeg;base64,' + result;
+      img.onload = function() {
+        img.classList.remove('gq-media-img--pending');
+        media.classList.add('gq-media--tryon');
+        trackEvent(match.rank === 1 ? 'quiz_tryon_shown' : 'quiz_tryon_secondary');
+        if (onDone) onDone(true, false);
+      };
+    });
+  }
+
+  function buildMatchCard(m, idx, definitive, hasPhotoNow, results) {
+    var card = el('div', 'gq-match-card' + (idx === 0 ? ' gq-match-card--top' : ''));
+
+    card.appendChild(el('span', 'gq-pill' + (idx === 0 ? ' gq-pill--top' : ''),
+      escapeHtml(idx === 0 ? (results.bestMatchPill || 'Top match') : 'Match ' + (idx + 1))));
+
+    // Media: product image, upgraded to a try-on when a photo exists —
+    // automatically for the top match, on demand for the others.
+    var media = el('div', 'gq-media');
+    var img = el('img', 'gq-media-img');
     img.alt = m.title || m.productName;
     img.loading = 'lazy';
     media.appendChild(img);
     card.appendChild(media);
 
-    var body = el('div', 'gq-also-body');
-    var title = el('a', 'gq-also-title', escapeHtml(m.title || m.productName));
-    title.href = '/products/' + encodeURIComponent(m.productHandle) +
-      (m.variantNumericId ? '?variant=' + encodeURIComponent(m.variantNumericId) : '');
-    title.onclick = function() { trackEvent('quiz_view_product'); saveState(); };
-    body.appendChild(title);
-    var priceLine = el('p', 'gq-also-price', '');
-    body.appendChild(priceLine);
-    if (m.tagline) body.appendChild(el('p', 'gq-also-tagline', escapeHtml(m.tagline)));
+    var body = el('div', 'gq-match-body');
+    body.appendChild(el('h3', 'gq-match-title', escapeHtml(m.productName)));
+    var specBits = [];
+    if (m.variantTitle) specBits.push(m.variantTitle);
+    if (m.quantity > 1) specBits.push(m.quantity + ' sets');
+    if (specBits.length > 0) body.appendChild(el('p', 'gq-match-spec', escapeHtml(specBits.join(' \u00b7 '))));
 
-    // On-demand try-on for secondary cards.
-    if (state.hasPhoto && photoFile) {
-      var seeBtn = el('button', 'gq-link-btn gq-see-btn', 'See it on you');
-      seeBtn.type = 'button';
-      seeBtn.onclick = function() {
-        seeBtn.disabled = true;
-        seeBtn.textContent = 'Working…';
-        requestTryon(m).then(function(result) {
-          if (result && !result.rateLimited) {
-            img.src = 'data:image/jpeg;base64,' + result;
-            media.classList.add('gq-also-media--tryon');
-            seeBtn.textContent = 'That’s you ✨';
-            trackEvent('quiz_tryon_secondary');
-          } else {
-            seeBtn.disabled = false;
-            seeBtn.textContent = result && result.rateLimited
-              ? 'One moment — try again shortly'
-              : 'See it on you';
-          }
-        });
-      };
-      body.appendChild(seeBtn);
+    // Shade line on the top match when a shade is resolved.
+    if (idx === 0) {
+      var shade = shadeReasonLine();
+      if (shade && definitive) {
+        var line = el('p', 'gq-shade-line');
+        if (shade.swatch) {
+          var dot = el('span', 'gq-shade-dot');
+          dot.style.background = shade.swatch;
+          line.appendChild(dot);
+        }
+        line.appendChild(document.createTextNode(shade.label + ' \u2014 ' + shade.source));
+        body.appendChild(line);
+      }
     }
+
+    // Reasons on the top match; taglines everywhere they exist.
+    if (idx === 0 && Array.isArray(m.reasons) && m.reasons.length > 0) {
+      var ul = el('ul', 'gq-reasons');
+      m.reasons.forEach(function(r) {
+        var li = el('li', 'gq-reason');
+        li.innerHTML =
+          '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' +
+          '<span>' + escapeHtml(r) + '</span>';
+        ul.appendChild(li);
+      });
+      body.appendChild(ul);
+    }
+    if (m.tagline) body.appendChild(el('p', 'gq-tagline', escapeHtml(m.tagline)));
+
+    var price = el('p', 'gq-match-price', '');
+    body.appendChild(price);
+
+    if (definitive) {
+      var addBtn = el('button', 'gq-add-btn gq-add-btn--card', escapeHtml(buildAddLabel(results.addButtonTemplate, m.quantity || 1, null)));
+      addBtn.type = 'button';
+      addBtn.disabled = true;
+      body.appendChild(addBtn);
+    }
+
+    var view = el('a', 'gq-view-link', escapeHtml(results.viewProductLabel || 'View full product') + ' \u2192');
+    view.href = '/products/' + encodeURIComponent(m.productHandle) +
+      (m.variantNumericId ? '?variant=' + encodeURIComponent(m.variantNumericId) : '');
+    view.onclick = function() { trackEvent('quiz_view_product'); saveState(); };
+    body.appendChild(view);
     card.appendChild(body);
 
-    var addBtn = el('button', 'gq-also-add', 'Add');
-    addBtn.type = 'button';
-    addBtn.disabled = true;
-    card.appendChild(addBtn);
-
     fetchProductJson(m.productHandle).then(function(pj) {
-      var unit = priceCentsForRec(pj, m);
       var src = imageForRec(pj, m);
-      if (src) img.src = src;
-      if (unit != null) priceLine.textContent = formatMoney(unit);
-      var cartVariant = variantIdForCart(pj, m);
-      if (!cartVariant) return;
-      addBtn.disabled = false;
-      wireAddButton(addBtn, cartVariant, Math.max(1, m.quantity || 1), true);
+      var cached = tryonCache[matchKey(m)];
+      if (cached) {
+        img.src = 'data:image/jpeg;base64,' + cached;
+        media.classList.add('gq-media--tryon');
+      } else if (src) {
+        img.src = src;
+      }
+      var unit = priceCentsForRec(pj, m);
+      var qty = Math.max(1, m.quantity || 1);
+      if (unit != null) price.textContent = formatMoney(unit * qty);
+      if (definitive && addBtn) {
+        var cartVariant = variantIdForCart(pj, m);
+        addBtn.textContent = buildAddLabel(results.addButtonTemplate, qty, unit != null ? unit * qty : null);
+        if (cartVariant) {
+          addBtn.disabled = false;
+          wireAddButton(addBtn, cartVariant, qty);
+        }
+      }
+
+      if (hasPhotoNow && !cached) {
+        if (idx === 0) {
+          media.classList.add('gq-media--working');
+          applyTryonToMedia(media, img, m, function() { media.classList.remove('gq-media--working'); });
+        } else {
+          var seeBtn = el('button', 'gq-media-see', 'See on me \u2728');
+          seeBtn.type = 'button';
+          seeBtn.onclick = function(e) {
+            e.stopPropagation();
+            seeBtn.disabled = true;
+            seeBtn.textContent = 'Working\u2026';
+            applyTryonToMedia(media, img, m, function(ok, limited) {
+              if (ok) { if (seeBtn.parentNode) seeBtn.parentNode.removeChild(seeBtn); }
+              else {
+                seeBtn.disabled = false;
+                seeBtn.textContent = limited ? 'One moment\u2026' : 'See on me \u2728';
+              }
+            });
+          };
+          media.appendChild(seeBtn);
+        }
+      }
     });
 
     return card;
+  }
+
+  // Post-results photo upsell — the second chance at try-on for shoppers
+  // who skipped the gate.
+  function buildUpsellBanner() {
+    var upsell = config.upsell || {};
+    var banner = el('div', 'gq-upsell');
+    var copy = el('div', 'gq-upsell-copy');
+    if (upsell.title) copy.appendChild(el('p', 'gq-upsell-title', escapeHtml(upsell.title)));
+    if (upsell.body) copy.appendChild(el('p', 'gq-upsell-body', escapeHtml(upsell.body)));
+    banner.appendChild(copy);
+    var cta = el('button', 'gq-upsell-cta', escapeHtml(upsell.cta || 'Try them on me'));
+    cta.type = 'button';
+    cta.onclick = function() {
+      openPhotoCapture(null, function() { rerunWithShade(); });
+    };
+    banner.appendChild(cta);
+    return banner;
   }
 
   function wireAddButton(btn, variantId, quantity, compact) {
@@ -1497,11 +1774,9 @@
         .then(function() {
           btn.classList.remove('is-working');
           btn.classList.add('is-added');
-          btn.textContent = compact ? 'Added ✓' : 'Added to bag ✓';
-          // Guaranteed path to the cart no matter how the theme's header
-          // badge behaves — inserted once, after the first successful add.
+          btn.textContent = compact ? 'Added \u2713' : 'Added to bag \u2713';
           if (!compact && btn.parentNode && !btn.parentNode.querySelector('.gq-viewbag-link')) {
-            var bagLink = el('a', 'gq-view-link gq-viewbag-link', 'View bag →');
+            var bagLink = el('a', 'gq-view-link gq-viewbag-link', 'View bag \u2192');
             bagLink.href = '/cart';
             btn.parentNode.insertBefore(bagLink, btn.nextSibling);
           }
@@ -1514,7 +1789,7 @@
         })
         .catch(function() {
           btn.classList.remove('is-working');
-          btn.textContent = 'Couldn’t add — try again';
+          btn.textContent = 'Couldn\u2019t add \u2014 try again';
           setTimeout(function() {
             btn.textContent = original;
             btn.disabled = false;
@@ -1523,7 +1798,7 @@
     };
   }
 
-  // Shade gate ("Now let's nail your shade") for no-photo partial results.
+  // Shade gate ("Now let's nail your shade") for partial results.
   function buildShadeGate() {
     var sg = config.shadeGate || {};
     var axis = shadeAxis();
@@ -1531,17 +1806,15 @@
     wrap.appendChild(el('h3', 'gq-shade-headline', escapeHtml(sg.headline || "Now let's nail your shade")));
     if (sg.body) wrap.appendChild(el('p', 'gq-shade-body', escapeHtml(sg.body)));
 
-    // Path 1 — photo.
     var photoBtn = el('button', 'gq-shade-photo-btn',
       '<span class="gq-shade-photo-label">' + escapeHtml(sg.ctaPhoto || 'Match my shade for me') + '</span>' +
-      '<span class="gq-shade-photo-sub">' + escapeHtml((config.gate && config.gate.privacyNote) || 'Processed instantly · never stored') + '</span>');
+      '<span class="gq-shade-photo-sub">' + escapeHtml((config.gate && config.gate.privacyNote) || 'Processed instantly \u00b7 never stored') + '</span>');
     photoBtn.type = 'button';
     photoBtn.onclick = function() {
       openPhotoCapture(null, function() { rerunWithShade(); });
     };
     wrap.appendChild(photoBtn);
 
-    // Path 2 — manual swatch row.
     var manual = el('div', 'gq-shade-manual');
     manual.appendChild(el('p', 'gq-shade-manual-label', escapeHtml(sg.ctaManual || 'I know my shade')));
     var dots = el('div', 'gq-shade-dots');
@@ -1591,6 +1864,7 @@
       matrixApplied: false, partial: false,
     };
     draft = {}; // ghost selections must not leak into intro option visibility
+    editReturn = false;
     photoFile = null;
     if (photoObjectUrl) { try { URL.revokeObjectURL(photoObjectUrl); } catch (e) {} photoObjectUrl = null; }
     tryonCache = {};

@@ -113,6 +113,16 @@ type EditorQuestionOption = {
   // "Open to anything" option — stands for every value of the axis and
   // deselects specific picks on the quiz.
   selectAll: boolean;
+  // Optional card-display metadata (migration 046). Held as plain strings
+  // ('' = unset; meterPct parsed on save) so the TextFields can bind
+  // directly; serialized on save into a single `displayMeta` object with
+  // only the non-empty keys, or null when everything is empty.
+  displaySublabel: string;
+  displayTag: string;
+  displayMeterLabel: string;
+  displayMeterPct: string;
+  displaySwatch: string;
+  displaySwatch2: string;
 };
 type EditorQuestion = {
   axisKey: string;
@@ -171,6 +181,41 @@ function isValidIdentifier(s: string): boolean {
   return /^[a-z_][a-z0-9_]*$/.test(s);
 }
 
+// Lenient hex check shared by the swatch fields — #rgb through #rrggbbaa.
+// Not a DB constraint, just sanity so the quiz renders a real color.
+const HEX_RE = /^#[0-9a-fA-F]{3,8}$/;
+
+// Live color-dot preview for swatch TextFields (same treatment as the
+// axis-value swatch field). Invalid/empty hex shows a transparent dot.
+function swatchDotPrefix(value: string) {
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        width: 14,
+        height: 14,
+        borderRadius: "50%",
+        border: "1px solid rgba(0,0,0,0.2)",
+        background: HEX_RE.test(value.trim()) ? value.trim() : "transparent",
+      }}
+    />
+  );
+}
+
+// Collapse the six per-option card-display strings into the wire object.
+// Only non-empty keys are included; all-empty collapses to null so the RPC
+// stores NULL instead of an empty jsonb object.
+function buildDisplayMeta(o: EditorQuestionOption): Record<string, string | number> | null {
+  const meta: Record<string, string | number> = {};
+  if (o.displaySublabel.trim()) meta.sublabel = o.displaySublabel.trim();
+  if (o.displayTag.trim()) meta.tag = o.displayTag.trim();
+  if (o.displayMeterLabel.trim()) meta.meterLabel = o.displayMeterLabel.trim();
+  if (o.displayMeterPct.trim()) meta.meterPct = parseInt(o.displayMeterPct.trim(), 10);
+  if (o.displaySwatch.trim()) meta.swatch = o.displaySwatch.trim();
+  if (o.displaySwatch2.trim()) meta.swatch2 = o.displaySwatch2.trim();
+  return Object.keys(meta).length > 0 ? meta : null;
+}
+
 // ---------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------
@@ -216,6 +261,17 @@ export default function AssistantRecommendations() {
             showIfAxisKey: opt.showIf?.axisKey || "",
             showIfAxisValue: opt.showIf?.axisValue || "",
             selectAll: opt.selectAll || false,
+            // AdminQuestionOption.displayMeta (already type-checked per key
+            // on read) — split into the six TextField binding strings.
+            displaySublabel: opt.displayMeta?.sublabel || "",
+            displayTag: opt.displayMeta?.tag || "",
+            displayMeterLabel: opt.displayMeta?.meterLabel || "",
+            displayMeterPct:
+              typeof opt.displayMeta?.meterPct === "number"
+                ? String(opt.displayMeta.meterPct)
+                : "",
+            displaySwatch: opt.displayMeta?.swatch || "",
+            displaySwatch2: opt.displayMeta?.swatch2 || "",
           };
         }),
       };
@@ -479,6 +535,12 @@ export default function AssistantRecommendations() {
         showIfAxisKey: "",
         showIfAxisValue: "",
         selectAll: false,
+        displaySublabel: "",
+        displayTag: "",
+        displayMeterLabel: "",
+        displayMeterPct: "",
+        displaySwatch: "",
+        displaySwatch2: "",
       };
       if (idx === -1) {
         return [
@@ -698,6 +760,24 @@ export default function AssistantRecommendations() {
             return;
           }
         }
+        // Card display: meter fill must be a whole number 0-100 (empty is
+        // fine — meaningful only alongside a meter label anyway), and the
+        // swatches must be hex colors so the quiz renders real chips.
+        const meterPct = o.displayMeterPct.trim();
+        if (meterPct !== "" && !(/^\d{1,3}$/.test(meterPct) && parseInt(meterPct, 10) <= 100)) {
+          setValidationError(`Option "${o.label}" for axis "${axis.key}": meter fill must be a whole number from 0 to 100 (or left empty)`);
+          return;
+        }
+        for (const [swatchName, swatchValue] of [
+          ["Swatch", o.displaySwatch],
+          ["Second swatch", o.displaySwatch2],
+        ] as const) {
+          const s = swatchValue.trim();
+          if (s && !HEX_RE.test(s)) {
+            setValidationError(`Option "${o.label}" for axis "${axis.key}": ${swatchName.toLowerCase()} must be a hex color like #e8b4c8 (or left empty)`);
+            return;
+          }
+        }
       }
     }
 
@@ -774,6 +854,9 @@ export default function AssistantRecommendations() {
                   ? { axis_key: o.showIfAxisKey, axis_value: o.showIfAxisValue }
                   : null,
               selectAll: o.selectAll,
+              // Camelcase object stored verbatim as jsonb by the RPC; only
+              // non-empty keys ship, all-empty collapses to null.
+              displayMeta: buildDisplayMeta(o),
               position: i,
             })),
         })),
@@ -981,24 +1064,8 @@ export default function AssistantRecommendations() {
                             autoComplete="off"
                             placeholder="#8b5a2b"
                             // Live preview dot so the merchant can eyeball the
-                            // hex without leaving the field. Invalid/empty hex
-                            // shows a transparent dot.
-                            prefix={
-                              <span
-                                style={{
-                                  display: "inline-block",
-                                  width: 14,
-                                  height: 14,
-                                  borderRadius: "50%",
-                                  border: "1px solid rgba(0,0,0,0.2)",
-                                  background: /^#[0-9a-fA-F]{3,8}$/.test(
-                                    v.swatchColor.trim(),
-                                  )
-                                    ? v.swatchColor.trim()
-                                    : "transparent",
-                                }}
-                              />
-                            }
+                            // hex without leaving the field.
+                            prefix={swatchDotPrefix(v.swatchColor)}
                           />
                         </div>
                         <Button
@@ -1232,6 +1299,93 @@ export default function AssistantRecommendations() {
                                 />
                               </div>
                             </InlineStack>
+                            {/* Card display (migration 046): optional richer
+                                option-card rendering on the quiz — sublabel,
+                                tag chip, wear meter, swatch chips. All empty
+                                = plain card, saved as displayMeta: null. */}
+                            <BlockStack gap="150">
+                              <Text as="p" variant="bodySm" fontWeight="semibold">
+                                Card display (optional)
+                              </Text>
+                              <InlineStack gap="300" wrap={false}>
+                                <div style={{ flex: 1 }}>
+                                  <TextField
+                                    label="Sublabel"
+                                    value={opt.displaySublabel}
+                                    onChange={(v) =>
+                                      updateQuestionOption(axis.key, optIdx, { displaySublabel: v })
+                                    }
+                                    autoComplete="off"
+                                    placeholder="Everyday sweet spot"
+                                    helpText="Second line on the option card."
+                                  />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                  <TextField
+                                    label="Tag"
+                                    value={opt.displayTag}
+                                    onChange={(v) =>
+                                      updateQuestionOption(axis.key, optIdx, { displayTag: v })
+                                    }
+                                    autoComplete="off"
+                                    placeholder="NO GLUE"
+                                    helpText="Small chip on the card."
+                                  />
+                                </div>
+                              </InlineStack>
+                              <InlineStack gap="300" wrap={false} blockAlign="start">
+                                <div style={{ flex: 1 }}>
+                                  <TextField
+                                    label="Meter label"
+                                    value={opt.displayMeterLabel}
+                                    onChange={(v) =>
+                                      updateQuestionOption(axis.key, optIdx, { displayMeterLabel: v })
+                                    }
+                                    autoComplete="off"
+                                    placeholder="UP TO 2 WEEKS"
+                                  />
+                                </div>
+                                <div style={{ width: 90 }}>
+                                  <TextField
+                                    label="Meter fill %"
+                                    type="number"
+                                    min={0}
+                                    max={100}
+                                    value={opt.displayMeterPct}
+                                    onChange={(v) =>
+                                      updateQuestionOption(axis.key, optIdx, { displayMeterPct: v })
+                                    }
+                                    autoComplete="off"
+                                    placeholder="60"
+                                  />
+                                </div>
+                                <div style={{ width: 140 }}>
+                                  <TextField
+                                    label="Swatch"
+                                    value={opt.displaySwatch}
+                                    onChange={(v) =>
+                                      updateQuestionOption(axis.key, optIdx, { displaySwatch: v })
+                                    }
+                                    autoComplete="off"
+                                    placeholder="#e8b4c8"
+                                    prefix={swatchDotPrefix(opt.displaySwatch)}
+                                    helpText="One swatch = color chip dot; two = two-tone style card."
+                                  />
+                                </div>
+                                <div style={{ width: 140 }}>
+                                  <TextField
+                                    label="Second swatch"
+                                    value={opt.displaySwatch2}
+                                    onChange={(v) =>
+                                      updateQuestionOption(axis.key, optIdx, { displaySwatch2: v })
+                                    }
+                                    autoComplete="off"
+                                    placeholder="#2b2b33"
+                                    prefix={swatchDotPrefix(opt.displaySwatch2)}
+                                  />
+                                </div>
+                              </InlineStack>
+                            </BlockStack>
                             <Checkbox
                               label='"Open to anything" option'
                               checked={opt.selectAll}

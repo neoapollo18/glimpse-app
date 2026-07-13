@@ -13,6 +13,7 @@ Already done for production — needed only for a fresh environment.
    - `supabase-migrations/043_quiz_experience.sql` — quiz config columns + `assistant_mode`
    - `supabase-migrations/044_quiz_rules_rpc.sql` — save RPC with quiz fields
    - `supabase-migrations/045_quiz_question_features.sql` — multi-select / screen groups / conditional + visual options + RPC update
+   - `supabase-migrations/046_quiz_glamnetic_design.sql` — option display metadata (sublabels/tags/meters/swatches) + results/upsell copy + RPC update
 
    ⚠ **Migrations always run BEFORE deploying app code that references their columns.**
    Deploying first makes `getRecommendationFlow` / rule matching silently degrade on live shops.

@@ -76,9 +76,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       quiz_gate_photo_label: formData.get("quiz_gate_photo_label") as string,
       quiz_gate_skip_label: formData.get("quiz_gate_skip_label") as string,
       quiz_privacy_note: formData.get("quiz_privacy_note") as string,
-      // Results
+      // Results (subtext / show-matches / upsell are non-nullable with code
+      // defaults, so they save as plain strings like the other copy fields)
       quiz_results_headline_photo: formData.get("quiz_results_headline_photo") as string,
       quiz_results_headline_nophoto: formData.get("quiz_results_headline_nophoto") as string,
+      quiz_results_subtext: formData.get("quiz_results_subtext") as string,
+      quiz_show_matches_label: formData.get("quiz_show_matches_label") as string,
+      quiz_upsell_title: formData.get("quiz_upsell_title") as string,
+      quiz_upsell_body: formData.get("quiz_upsell_body") as string,
+      quiz_upsell_cta: formData.get("quiz_upsell_cta") as string,
       quiz_best_match_pill: formData.get("quiz_best_match_pill") as string,
       quiz_also_matched_label: formData.get("quiz_also_matched_label") as string,
       quiz_add_button_template: formData.get("quiz_add_button_template") as string,
@@ -128,6 +134,11 @@ type QuizFormState = {
   quiz_privacy_note: string;
   quiz_results_headline_photo: string;
   quiz_results_headline_nophoto: string;
+  quiz_results_subtext: string;
+  quiz_show_matches_label: string;
+  quiz_upsell_title: string;
+  quiz_upsell_body: string;
+  quiz_upsell_cta: string;
   quiz_best_match_pill: string;
   quiz_also_matched_label: string;
   quiz_add_button_template: string;
@@ -164,6 +175,11 @@ export default function AssistantQuiz() {
     quiz_privacy_note: config.quiz_privacy_note,
     quiz_results_headline_photo: config.quiz_results_headline_photo,
     quiz_results_headline_nophoto: config.quiz_results_headline_nophoto,
+    quiz_results_subtext: config.quiz_results_subtext,
+    quiz_show_matches_label: config.quiz_show_matches_label,
+    quiz_upsell_title: config.quiz_upsell_title,
+    quiz_upsell_body: config.quiz_upsell_body,
+    quiz_upsell_cta: config.quiz_upsell_cta,
     quiz_best_match_pill: config.quiz_best_match_pill,
     quiz_also_matched_label: config.quiz_also_matched_label,
     quiz_add_button_template: config.quiz_add_button_template,
@@ -488,7 +504,7 @@ export default function AssistantQuiz() {
                   value={form.quiz_results_headline_photo}
                   onChange={setField("quiz_results_headline_photo")}
                   autoComplete="off"
-                  helpText="Shown when the shopper added a photo"
+                  helpText="Shown when the shopper added a photo. Supports {first_name} — resolved from the logged-in customer, removed cleanly for guests."
                 />
               </div>
               <div style={{ flex: 1 }}>
@@ -497,7 +513,27 @@ export default function AssistantQuiz() {
                   value={form.quiz_results_headline_nophoto}
                   onChange={setField("quiz_results_headline_nophoto")}
                   autoComplete="off"
-                  helpText="Shown when the shopper skipped the photo"
+                  helpText="Shown when the shopper skipped the photo. Supports {first_name} — resolved from the logged-in customer, removed cleanly for guests."
+                />
+              </div>
+            </InlineStack>
+            <InlineStack gap="400" wrap={false}>
+              <div style={{ flex: 1 }}>
+                <TextField
+                  label="Subtext"
+                  value={form.quiz_results_subtext}
+                  onChange={setField("quiz_results_subtext")}
+                  autoComplete="off"
+                  helpText="Sub-line under the results headline. Supports {count} (number of matches)."
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <TextField
+                  label="Show Matches Label"
+                  value={form.quiz_show_matches_label}
+                  onChange={setField("quiz_show_matches_label")}
+                  autoComplete="off"
+                  helpText="CTA on the last question screen, leading to the results."
                 />
               </div>
             </InlineStack>
@@ -548,6 +584,41 @@ export default function AssistantQuiz() {
                 />
               </div>
             </InlineStack>
+          </BlockStack>
+        </Card>
+
+        {/* Try-on upsell */}
+        <Card>
+          <BlockStack gap="400">
+            <BlockStack gap="100">
+              <Text as="h2" variant="headingMd">
+                Try-On Upsell
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Banner on the results screen inviting shoppers who skipped the
+                photo to add one and see their matches on themselves.
+              </Text>
+            </BlockStack>
+            <TextField
+              label="Title"
+              value={form.quiz_upsell_title}
+              onChange={setField("quiz_upsell_title")}
+              autoComplete="off"
+            />
+            <TextField
+              label="Body"
+              value={form.quiz_upsell_body}
+              onChange={setField("quiz_upsell_body")}
+              autoComplete="off"
+              multiline={2}
+            />
+            <TextField
+              label="CTA"
+              value={form.quiz_upsell_cta}
+              onChange={setField("quiz_upsell_cta")}
+              autoComplete="off"
+              helpText="Button that opens the photo upload"
+            />
           </BlockStack>
         </Card>
 

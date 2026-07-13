@@ -2369,6 +2369,14 @@ export interface ChatAssistantConfig {
   quiz_add_button_template: string;
   quiz_view_product_label: string;
   quiz_retake_label: string;
+  // Redesign fields (migration 046). Headlines may carry {first_name}
+  // (resolved client-side from the logged-in customer); subtext supports
+  // {count}. quiz_show_matches_label is the LAST question screen's CTA.
+  quiz_results_subtext: string;
+  quiz_show_matches_label: string;
+  quiz_upsell_title: string;
+  quiz_upsell_body: string;
+  quiz_upsell_cta: string;
   quiz_shade_headline: string;
   quiz_shade_body: string;
   quiz_shade_cta_photo: string;
@@ -2448,6 +2456,11 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   quiz_add_button_template: 'Add {count} to bag · {total}',
   quiz_view_product_label: 'View full product',
   quiz_retake_label: 'Retake photo',
+  quiz_results_subtext: '{count} picks made for your answers.',
+  quiz_show_matches_label: 'Show my matches',
+  quiz_upsell_title: 'See these on you ✨',
+  quiz_upsell_body: "One quick photo — we'll re-render your matches on you.",
+  quiz_upsell_cta: 'Try them on me',
   quiz_shade_headline: "Now let's nail your shade",
   quiz_shade_body: 'Both paths unlock your complete match.',
   quiz_shade_cta_photo: 'Match my shade for me',
@@ -2549,6 +2562,11 @@ function mapChatAssistantRow(data: any): ChatAssistantConfig {
     quiz_add_button_template: data.quiz_add_button_template ?? CHAT_ASSISTANT_DEFAULTS.quiz_add_button_template,
     quiz_view_product_label: data.quiz_view_product_label ?? CHAT_ASSISTANT_DEFAULTS.quiz_view_product_label,
     quiz_retake_label: data.quiz_retake_label ?? CHAT_ASSISTANT_DEFAULTS.quiz_retake_label,
+    quiz_results_subtext: data.quiz_results_subtext ?? CHAT_ASSISTANT_DEFAULTS.quiz_results_subtext,
+    quiz_show_matches_label: data.quiz_show_matches_label ?? CHAT_ASSISTANT_DEFAULTS.quiz_show_matches_label,
+    quiz_upsell_title: data.quiz_upsell_title ?? CHAT_ASSISTANT_DEFAULTS.quiz_upsell_title,
+    quiz_upsell_body: data.quiz_upsell_body ?? CHAT_ASSISTANT_DEFAULTS.quiz_upsell_body,
+    quiz_upsell_cta: data.quiz_upsell_cta ?? CHAT_ASSISTANT_DEFAULTS.quiz_upsell_cta,
     quiz_shade_headline: data.quiz_shade_headline ?? CHAT_ASSISTANT_DEFAULTS.quiz_shade_headline,
     quiz_shade_body: data.quiz_shade_body ?? CHAT_ASSISTANT_DEFAULTS.quiz_shade_body,
     quiz_shade_cta_photo: data.quiz_shade_cta_photo ?? CHAT_ASSISTANT_DEFAULTS.quiz_shade_cta_photo,
@@ -2711,6 +2729,17 @@ export interface RecommendationFlow {
       showIf: { axisKey: string; axisValue: string } | null;
       // "Open to anything": stands for every value of the axis.
       selectAll: boolean;
+      // Presentation metadata (migration 046): sublabel, tag chip, meter
+      // bar, swatch colors. The widget picks a card variant from what's
+      // present; null = plain rendering.
+      displayMeta: {
+        sublabel?: string;
+        tag?: string;
+        meterLabel?: string;
+        meterPct?: number;
+        swatch?: string;
+        swatch2?: string;
+      } | null;
     }>;
   }>;
   photoAxes: string[];
@@ -2755,7 +2784,8 @@ export async function getRecommendationFlow(shopId: string): Promise<Recommendat
           reason_text,
           image_url,
           show_if,
-          select_all
+          select_all,
+          display_meta
         )
       )
     `)
@@ -2794,6 +2824,17 @@ export async function getRecommendationFlow(shopId: string): Promise<Recommendat
           const showIf = rawShowIf && typeof rawShowIf.axis_key === 'string' && typeof rawShowIf.axis_value === 'string'
             ? { axisKey: rawShowIf.axis_key, axisValue: rawShowIf.axis_value }
             : null;
+          const rawMeta = opt.display_meta;
+          const displayMeta = rawMeta && typeof rawMeta === 'object' && !Array.isArray(rawMeta)
+            ? {
+                sublabel: typeof rawMeta.sublabel === 'string' ? rawMeta.sublabel : undefined,
+                tag: typeof rawMeta.tag === 'string' ? rawMeta.tag : undefined,
+                meterLabel: typeof rawMeta.meterLabel === 'string' ? rawMeta.meterLabel : undefined,
+                meterPct: typeof rawMeta.meterPct === 'number' ? Math.max(0, Math.min(100, rawMeta.meterPct)) : undefined,
+                swatch: typeof rawMeta.swatch === 'string' ? rawMeta.swatch : undefined,
+                swatch2: typeof rawMeta.swatch2 === 'string' ? rawMeta.swatch2 : undefined,
+              }
+            : null;
           return {
             label: opt.label as string,
             axisValue: valueIdToKey.get(opt.axis_value_id as string) ?? '',
@@ -2802,6 +2843,7 @@ export async function getRecommendationFlow(shopId: string): Promise<Recommendat
             imageUrl: (opt.image_url as string | null) ?? null,
             showIf,
             selectAll: Boolean(opt.select_all),
+            displayMeta,
           };
         })
         .filter((opt: any) => opt.axisValue);
@@ -3054,6 +3096,17 @@ export interface AdminQuestionOption {
   // "Open to anything" option — stands for every value of the axis and
   // deselects specific picks on the quiz.
   selectAll: boolean;
+  // Optional card-display metadata (migration 046): sublabel, tag chip,
+  // wear-time meter, and swatch colors. Stored verbatim as jsonb; all keys
+  // optional — the quiz picks a card variant from what's present.
+  displayMeta: {
+    sublabel?: string;
+    tag?: string;
+    meterLabel?: string;
+    meterPct?: number;
+    swatch?: string;
+    swatch2?: string;
+  } | null;
   position: number;
 }
 
@@ -3118,7 +3171,7 @@ export async function getRecommendationAdminConfig(
   const questionsRes = axisIds.length > 0
     ? await supabase
         .from('recommendation_questions')
-        .select('id, axis_id, prompt, helper_text, multi_select, screen_group, recommendation_question_options ( id, label, axis_value_id, bot_response, position, reason_text, image_url, show_if, select_all )')
+        .select('id, axis_id, prompt, helper_text, multi_select, screen_group, recommendation_question_options ( id, label, axis_value_id, bot_response, position, reason_text, image_url, show_if, select_all, display_meta )')
         .in('axis_id', axisIds)
     : { data: [], error: null };
 
@@ -3168,6 +3221,20 @@ export async function getRecommendationAdminConfig(
         const showIf = rawShowIf && typeof rawShowIf.axis_key === 'string' && typeof rawShowIf.axis_value === 'string'
           ? { axisKey: rawShowIf.axis_key, axisValue: rawShowIf.axis_value }
           : null;
+        // display_meta is free-form jsonb — per-key type checks so a
+        // malformed blob degrades to plain rendering, mirroring the
+        // storefront mapper in getRecommendationFlow.
+        const rawMeta = opt.display_meta;
+        const displayMeta = rawMeta && typeof rawMeta === 'object' && !Array.isArray(rawMeta)
+          ? {
+              sublabel: typeof rawMeta.sublabel === 'string' ? rawMeta.sublabel : undefined,
+              tag: typeof rawMeta.tag === 'string' ? rawMeta.tag : undefined,
+              meterLabel: typeof rawMeta.meterLabel === 'string' ? rawMeta.meterLabel : undefined,
+              meterPct: typeof rawMeta.meterPct === 'number' ? Math.max(0, Math.min(100, rawMeta.meterPct)) : undefined,
+              swatch: typeof rawMeta.swatch === 'string' ? rawMeta.swatch : undefined,
+              swatch2: typeof rawMeta.swatch2 === 'string' ? rawMeta.swatch2 : undefined,
+            }
+          : null;
         return {
           id: opt.id,
           label: opt.label,
@@ -3177,6 +3244,7 @@ export async function getRecommendationAdminConfig(
           imageUrl: (opt.image_url as string | null) ?? null,
           showIf,
           selectAll: (opt.select_all as boolean | null) ?? false,
+          displayMeta,
           position: opt.position ?? 0,
         };
       }),
@@ -3332,6 +3400,17 @@ export async function saveRecommendationConfig(
         showIf?: { axis_key: string; axis_value: string } | null;
         // "Open to anything" option. Omitted → false in the RPC.
         selectAll?: boolean;
+        // Optional card-display metadata (migration 046), camelCase — the
+        // RPC stores opt->'displayMeta' verbatim when it's a jsonb object.
+        // Omit/null when there's nothing to show.
+        displayMeta?: {
+          sublabel?: string;
+          tag?: string;
+          meterLabel?: string;
+          meterPct?: number;
+          swatch?: string;
+          swatch2?: string;
+        } | null;
         position: number;
       }>;
     }>;
@@ -3372,6 +3451,10 @@ export async function saveRecommendationConfig(
       seenValues.add(v.value);
     }
   }
+  // Lenient hex check for card swatches — #rgb through #rrggbbaa. Matches
+  // the editor's swatchColor rule: not a DB constraint, just sanity so the
+  // quiz never renders a broken color chip.
+  const HEX_RE = /^#[0-9a-fA-F]{3,8}$/;
   for (const question of input.questions || []) {
     for (const opt of question.options || []) {
       // showIf is stored verbatim as jsonb and read back by the storefront
@@ -3386,6 +3469,30 @@ export async function saveRecommendationConfig(
             ok: false,
             error: `Option "${opt.label}" has an invalid "show only if" condition — both the axis and value must be lower snake_case identifiers`,
           };
+        }
+      }
+      // displayMeta is also stored verbatim as jsonb — validate the two
+      // fields the quiz interprets numerically/visually so a bad value
+      // can't render a broken meter or color chip.
+      if (opt.displayMeta != null) {
+        const meta = opt.displayMeta;
+        if (
+          meta.meterPct !== undefined &&
+          !(typeof meta.meterPct === 'number' && Number.isFinite(meta.meterPct) && meta.meterPct >= 0 && meta.meterPct <= 100)
+        ) {
+          return {
+            ok: false,
+            error: `Option "${opt.label}" has an invalid meter fill — it must be a number from 0 to 100`,
+          };
+        }
+        for (const key of ['swatch', 'swatch2'] as const) {
+          const swatch = meta[key];
+          if (swatch !== undefined && swatch !== '' && !HEX_RE.test(swatch)) {
+            return {
+              ok: false,
+              error: `Option "${opt.label}" has an invalid card ${key === 'swatch' ? 'swatch' : 'second swatch'} — it must be a hex color like #e8b4c8 (or left empty)`,
+            };
+          }
         }
       }
     }
