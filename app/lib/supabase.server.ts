@@ -2972,26 +2972,27 @@ export async function fetchAllRules(
 }
 
 /**
- * Matrix lookup for the quiz, supporting multi-select answers. Criteria
- * values may be a single string (single-select) or an array (multi-select,
- * e.g. lengths: ["short","medium"]). Rules stay ONE value per axis; a rule
- * value satisfies an axis when it is AMONG the shopper's selections — so a
- * shopper picking two lengths reaches both lengths' rule cells and hits are
- * deduped by target keeping the best rank. The ANY_VALUE marker ("open to
- * anything") satisfies every rule value on its axis.
+ * Scored matrix lookup — rules may be keyed on ANY SUBSET of axes, and the
+ * most specific applicable rules win. This is what makes multi-question
+ * flows authorable: "occasion=event → these sets" covers a whole slab in
+ * one row instead of a cartesian cell per combination.
  *
- * Two phases, mirroring the previous exact/partial split:
- * - exact: the rule covers exactly the answered axes (same key set) and
- *   every rule value is among the selections. With single-value criteria
- *   this is identical to the old strict-equality lookup.
- * - partial (`partial: true`): every ANSWERED axis is covered and
- *   satisfied but the rule carries extra axes (typically a photo-sourced
- *   shade not yet resolved). Deduped by target keeping best rank across ALL
- *   satisfying rows — same as exact — so every selection competes on rank.
- *   (Callers present partial matches at product level, so the specific
- *   variant inside a rule row doesn't matter.)
+ * Semantics per rule:
+ * - conflict: any rule axis the shopper answered with a non-matching value
+ *   (ANY_VALUE matches everything) → rule is inapplicable.
+ * - matched: count of rule axes answered-and-satisfied. Rules matching
+ *   nothing the shopper said (matched = 0) never fire.
+ * - extras: rule axes the shopper hasn't answered yet (e.g. a photo-sourced
+ *   shade before the photo). Rules WITHOUT extras are definitive; rules
+ *   WITH extras only fire when no extra-free rule applies, and mark the
+ *   result `partial: true` (drives the quiz's shade gate).
  *
- * Returns null when nothing matches — callers fall back to AI-pick.
+ * Ordering: specificity (matched desc) then authored rank; dedupe by target
+ * keeps the most specific hit. Exact-cell rules therefore behave exactly as
+ * before — they simply outrank broader rules instead of being the only
+ * thing that can match. Multi-select values reach every cell they cover.
+ *
+ * Returns null when nothing applies — callers fall back to AI-pick.
  */
 export async function matchRecommendationRules(
   shopId: string,
@@ -3007,34 +3008,43 @@ export async function matchRecommendationRules(
   const { rows, error } = await fetchAllRules(shopId, 'criteria, variant_id, product_id, rank, quantity');
   if (error) {
     // Tagged with the shop so a DB failure is distinguishable in logs from
-    // a genuinely sparse matrix (both end in the caller's AI fallback).
+    // a sparse matrix (both end in the caller's AI fallback).
     console.error(`[matchRecommendationRules] rules fetch failed for shop ${shopId} — AI fallback will mask this:`, error);
     return null;
   }
   if (rows.length === 0) return null;
 
-  const satisfies = (ruleCriteria: Record<string, string>, requireExactKeys: boolean): boolean => {
-    const ruleKeys = Object.keys(ruleCriteria);
-    // Every answered axis must be covered by the rule. hasOwnProperty, NOT
-    // `in`: this is a public endpoint and prototype-chain names like
-    // "constructor" pass the identifier regex — `in` would count them as
-    // covered on every rule and turn junk criteria into full-matrix hits.
-    for (const key of selections.keys()) {
-      if (!Object.prototype.hasOwnProperty.call(ruleCriteria, key)) return false;
-    }
-    // …and every covered axis satisfied by the selections.
-    for (const key of ruleKeys) {
+  type Scored = { row: any; matched: number; extras: number };
+  const scored: Scored[] = [];
+  for (const row of rows) {
+    const rc = (row.criteria ?? {}) as Record<string, string>;
+    let matched = 0;
+    let extras = 0;
+    let conflict = false;
+    // Iterate RULE keys only and look answers up in the Map — rule criteria
+    // comes from the merchant's own saves, and Map.get is immune to the
+    // prototype-chain key tricks a plain-object lookup would be exposed to
+    // on this public path.
+    for (const key of Object.keys(rc)) {
       const selected = selections.get(key);
       if (!selected) {
-        if (requireExactKeys) return false; // rule keys must not exceed answers
-        continue; // partial phase: extra (unanswered) axes are allowed
+        extras++;
+        continue;
       }
-      // "Open to anything" satisfies any rule value on this axis.
-      if (selected.has(ANY_VALUE)) continue;
-      if (!selected.has(ruleCriteria[key])) return false;
+      if (selected.has(ANY_VALUE) || selected.has(rc[key])) matched++;
+      else { conflict = true; break; }
     }
-    return true;
-  };
+    if (conflict || matched === 0) continue;
+    scored.push({ row, matched, extras });
+  }
+  if (scored.length === 0) return null;
+
+  // Definitive rules (no unresolved axes) always beat pending ones.
+  const definitive = scored.filter((s) => s.extras === 0);
+  const pool = definitive.length > 0 ? definitive : scored;
+  const partial = definitive.length === 0;
+
+  pool.sort((a, b) => (b.matched - a.matched) || (a.row.rank - b.row.rank));
 
   const toHit = (r: any): RuleHit => ({
     variantInternalId: (r.variant_id as string | null) ?? null,
@@ -3042,32 +3052,17 @@ export async function matchRecommendationRules(
     rank: r.rank as number,
     quantity: Math.max(1, Number(r.quantity) || 1),
   });
-
   const targetKey = (r: any) => `${r.variant_id ?? ''}|${r.product_id ?? ''}`;
 
-  // Dedupe by target keeping the best rank (several selected values can
-  // reach cells that share a target). Used by both phases so partial
-  // results reflect every selection's rank, not one arbitrary rule group.
-  const collect = (requireExactKeys: boolean): RuleHit[] => {
-    const byTarget = new Map<string, any>();
-    for (const row of rows) {
-      const rc = (row.criteria ?? {}) as Record<string, string>;
-      if (!satisfies(rc, requireExactKeys)) continue;
-      const key = targetKey(row);
-      const prev = byTarget.get(key);
-      if (!prev || (row.rank as number) < (prev.rank as number)) byTarget.set(key, row);
-    }
-    return [...byTarget.values()]
-      .sort((a, b) => (a.rank as number) - (b.rank as number))
-      .map(toHit);
-  };
-
-  const exact = collect(true);
-  if (exact.length > 0) return { hits: exact, partial: false };
-
-  const partialHits = collect(false);
-  if (partialHits.length === 0) return null;
-  return { hits: partialHits, partial: true };
+  const seen = new Set<string>();
+  const hits: RuleHit[] = [];
+  for (const s of pool) {
+    const key = targetKey(s.row);
+    if (seen.has(key)) continue; // most specific hit for this target wins
+    seen.add(key);
+    hits.push(toHit(s.row));
+  }
+  return { hits, partial };
 }
 
 /**

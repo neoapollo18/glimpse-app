@@ -604,7 +604,11 @@ export default function AssistantRecommendations() {
   // num_recommendations conceptually, but we let the merchant pick here so
   // the matrix editor doesn't have to round-trip another config field. Cap
   // at 5 to match the chat-config slider.
-  const NUM_RANKS = 3;
+  // Above this many cartesian combinations the cell grid is hidden (it
+// renders eagerly and would freeze the tab); scored matching covers big
+// flows from partial rules instead.
+const GRID_RENDER_CAP = 300;
+const NUM_RANKS = 3;
 
   const setRuleTarget = useCallback(
     (criteria: Record<string, string>, rank: number, target: string) => {
@@ -838,7 +842,7 @@ export default function AssistantRecommendations() {
     const droppedRuleCount = rules.filter((r) => {
       if (!r.target) return false;
       const keys = Object.keys(r.criteria);
-      if (keys.length !== axes.length) return true;
+      if (keys.length === 0) return true;
       return !keys.every((k) => {
         const axis = axes.find((a) => a.key === k);
         return !!axis && axis.values.some((v) => v.value === r.criteria[k]);
@@ -847,7 +851,7 @@ export default function AssistantRecommendations() {
     if (droppedRuleCount > 0 && !confirmedRuleDrop) {
       setConfirmedRuleDrop(true);
       setValidationError(
-        `This save will remove ${droppedRuleCount} rule(s) authored under a different axis set (axes were added, removed, or renamed since they were created). Click Save again to confirm.`,
+        `This save will remove ${droppedRuleCount} rule(s) whose criteria reference axes or values that no longer exist. Click Save again to confirm.`,
       );
       return;
     }
@@ -902,13 +906,15 @@ export default function AssistantRecommendations() {
         })),
       rules: rules
         .filter((r) => r.target)
-        // Drop rules whose criteria no longer line up with the current
-        // axes/values (stale rows from before rename-propagation existed,
-        // or hand-edited data). They'd never match at runtime and would
-        // silently accumulate in the DB otherwise.
+        // Keep any rule whose criteria fully resolves against the current
+        // axes/values — INCLUDING subset rules (fewer keys than axes),
+        // which are first-class under scored matching ("occasion=event →
+        // these sets"). Only truly orphaned criteria (unknown axis or
+        // value) are dropped, and the confirmation guard above counts
+        // those. Keep this predicate in sync with droppedRuleCount.
         .filter((r) => {
           const keys = Object.keys(r.criteria);
-          if (keys.length !== axes.length) return false;
+          if (keys.length === 0) return false;
           return keys.every((k) => {
             const axis = axes.find((a) => a.key === k);
             return !!axis && axis.values.some((v) => v.value === r.criteria[k]);
@@ -1498,7 +1504,23 @@ export default function AssistantRecommendations() {
                 first, then come back to assign them here.
               </Banner>
             )}
-            {combinations.length > 0 && variants.length > 0 && (
+            {/* The cartesian grid renders every combination eagerly — past a
+                few hundred cells the page becomes unusable (and no merchant
+                fills thousands of cells anyway). Larger flows are matched by
+                the scored engine from partial rules; the grid hides itself
+                rather than freezing the tab. Existing rules are preserved
+                on save either way. */}
+            {combinations.length > GRID_RENDER_CAP && (
+              <Banner tone="info">
+                This flow has {combinations.length.toLocaleString()} possible
+                answer combinations — too many to edit cell-by-cell, so the
+                grid is hidden. Recommendations still work: rules covering
+                part of the answers (for example a single question's value)
+                match automatically, with the most specific rule winning.
+                Any previously saved rules are preserved when you save.
+              </Banner>
+            )}
+            {combinations.length > 0 && combinations.length <= GRID_RENDER_CAP && variants.length > 0 && (
               <Box
                 background="bg-surface-secondary"
                 padding="300"
