@@ -18,7 +18,7 @@ import {
   Badge,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import {
   findShopByDomain,
@@ -290,6 +290,23 @@ export default function AssistantRecommendations() {
   const [questions, setQuestions] = useState<EditorQuestion[]>(initialQuestions);
   const [rules, setRules] = useState<EditorRule[]>(initialRules);
   const [validationError, setValidationError] = useState<string | null>(null);
+  // Armed when the merchant has been warned that saving will drop rules
+  // authored under a different axis set (see the guard in handleSave). The
+  // NEXT save click proceeds; any further edit or a successful save disarms.
+  const [confirmedRuleDrop, setConfirmedRuleDrop] = useState(false);
+
+  // Any edit invalidates an armed confirmation — the count/copy the merchant
+  // confirmed may no longer describe what the save would actually drop.
+  useEffect(() => {
+    setConfirmedRuleDrop(false);
+  }, [axes, questions, rules]);
+
+  // A successful save consumed the confirmation; the next save re-checks.
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data?.success) {
+      setConfirmedRuleDrop(false);
+    }
+  }, [fetcher.state, fetcher.data]);
 
   // -----------------------------------------------------------------
   // Derived: matrix combinations + a lookup from criteria → rules
@@ -812,6 +829,29 @@ export default function AssistantRecommendations() {
       }
     }
 
+    // Silent-data-loss guard: the payload filter below drops assigned rules
+    // whose criteria key-set doesn't exactly match the CURRENT axes (or whose
+    // values no longer exist). Combined with the RPC's wipe-and-rewrite,
+    // those rules are permanently deleted — so if any would be dropped, block
+    // the first save with a warning and make the merchant confirm. Same
+    // predicate as the payload filter, inverted; keep the two in sync.
+    const droppedRuleCount = rules.filter((r) => {
+      if (!r.target) return false;
+      const keys = Object.keys(r.criteria);
+      if (keys.length !== axes.length) return true;
+      return !keys.every((k) => {
+        const axis = axes.find((a) => a.key === k);
+        return !!axis && axis.values.some((v) => v.value === r.criteria[k]);
+      });
+    }).length;
+    if (droppedRuleCount > 0 && !confirmedRuleDrop) {
+      setConfirmedRuleDrop(true);
+      setValidationError(
+        `This save will remove ${droppedRuleCount} rule(s) authored under a different axis set (axes were added, removed, or renamed since they were created). Click Save again to confirm.`,
+      );
+      return;
+    }
+
     // Build the wire payload. Positions are derived from array order so the
     // merchant doesn't have to manage position numbers manually. The quiz
     // fields (swatchColor / helperText / reasonText) send null when empty —
@@ -892,7 +932,7 @@ export default function AssistantRecommendations() {
     const fd = new FormData();
     fd.append("payload", JSON.stringify(payload));
     fetcher.submit(fd, { method: "POST" });
-  }, [axes, questions, rules, fetcher]);
+  }, [axes, questions, rules, fetcher, confirmedRuleDrop]);
 
   // -----------------------------------------------------------------
   // Render

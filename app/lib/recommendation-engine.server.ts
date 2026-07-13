@@ -215,6 +215,14 @@ export function orderByMatrix(
     );
     return { ordered: aiOrdered, matrixApplied: false, matrixCount: 0 };
   }
+  if (matched.length < hits.length) {
+    // Partial scope-skips silently shrink the curated set — log so a
+    // merchant report of "only 2 picks showed" is diagnosable.
+    console.warn(
+      `[${opts.logTag}] ${hits.length - matched.length}/${hits.length} matrix hits out of scope for ${opts.shopDomain}; ` +
+        `criteria=${JSON.stringify(opts.criteria)}`
+    );
+  }
 
   const used = new Set(matched.map(candidateKey));
   return {
@@ -256,7 +264,7 @@ export async function orderCandidates(
 // Per-shop gid → handle cache. Handles change rarely (merchant edits the
 // URL slug in admin); a 10-minute TTL keeps the 6s Admin API call off the
 // hot path for busy shops while staying fresh enough in practice.
-const handleCache = new Map<string, { handles: Map<string, string>; fetchedAt: number }>();
+const handleCache = new Map<string, { handles: Map<string, string>; misses: Map<string, number>; fetchedAt: number }>();
 
 /**
  * Look up real Shopify product handles for a list of product GIDs. Single
@@ -276,12 +284,21 @@ export async function fetchProductHandles(
   if (productGids.length === 0) return result;
 
   const cached = handleCache.get(shopDomain);
-  const fresh = cached && Date.now() - cached.fetchedAt < HANDLE_CACHE_TTL_MS;
+  const now = Date.now();
+  const fresh = cached && now - cached.fetchedAt < HANDLE_CACHE_TTL_MS;
   const missing: string[] = [];
   for (const gid of productGids) {
     const hit = fresh ? cached!.handles.get(gid) : undefined;
-    if (hit) result.set(gid, hit);
-    else missing.push(gid);
+    if (hit) {
+      result.set(gid, hit);
+      continue;
+    }
+    // Negative cache: a GID that recently failed to resolve (deleted
+    // product) would otherwise force an Admin API round trip on EVERY
+    // recommendation for this shop. Skip it until its entry ages out.
+    const missedAt = fresh ? cached!.misses.get(gid) : undefined;
+    if (missedAt && now - missedAt < HANDLE_CACHE_TTL_MS) continue;
+    missing.push(gid);
   }
   if (missing.length === 0) return result;
 
@@ -327,13 +344,22 @@ export async function fetchProductHandles(
       return result;
     }
     const store = fresh ? cached!.handles : new Map<string, string>();
+    const misses = fresh ? cached!.misses : new Map<string, number>();
+    const resolved = new Set<string>();
     for (const node of data.data?.nodes ?? []) {
       if (node && node.id && node.handle) {
         result.set(node.id, node.handle);
         store.set(node.id, node.handle);
+        misses.delete(node.id);
+        resolved.add(node.id);
       }
     }
-    handleCache.set(shopDomain, { handles: store, fetchedAt: fresh ? cached!.fetchedAt : Date.now() });
+    for (const gid of missing) {
+      if (!resolved.has(gid)) misses.set(gid, Date.now());
+    }
+    // Refresh the window on every successful merge — entries added late in
+    // a window used to expire almost immediately.
+    handleCache.set(shopDomain, { handles: store, misses, fetchedAt: Date.now() });
   } catch (err) {
     if (err instanceof Error && err.name === "AbortError") {
       console.error(`[${logTag}] handle lookup timed out for ${shopDomain}`);

@@ -1745,8 +1745,11 @@
   function buildMatchCard(m, idx, definitive, hasPhotoNow, results) {
     var card = el('div', 'gq-match-card' + (idx === 0 ? ' gq-match-card--top' : ''));
 
-    card.appendChild(el('span', 'gq-pill' + (idx === 0 ? ' gq-pill--top' : ''),
-      escapeHtml(idx === 0 ? (results.bestMatchPill || 'Top match') : 'Match ' + (idx + 1))));
+    // "Top match" is a curation claim — only make it when the matrix
+    // actually matched. AI-fallback picks get neutral position pills.
+    var isCuratedTop = idx === 0 && state.matrixApplied;
+    card.appendChild(el('span', 'gq-pill' + (isCuratedTop ? ' gq-pill--top' : ''),
+      escapeHtml(isCuratedTop ? (results.bestMatchPill || 'Top match') : 'Match ' + (idx + 1))));
 
     // Media: product image, upgraded to a try-on when a photo exists —
     // automatically for the top match, on demand for the others.

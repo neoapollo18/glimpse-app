@@ -58,17 +58,26 @@ export async function getConfiguredProducts(shopDomain: string) {
 
   if (!shop) return [];
 
-  const { data: products, error } = await supabase
-    .from('products')
-    .select('*')
-    .eq('shop_id', shop.id);
-
-  if (error) {
-    console.error('Error fetching configured products:', error);
-    return [];
+  // Page past PostgREST's silent 1000-row response cap — a truncated
+  // product list silently shrinks the recommendation candidate pool and
+  // makes matrix rules targeting the tail unreachable.
+  const PAGE = 1000;
+  const products: any[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('shop_id', shop.id)
+      .order('created_at', { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) {
+      console.error('Error fetching configured products:', error);
+      return products;
+    }
+    products.push(...(data ?? []));
+    if (!data || data.length < PAGE) break;
   }
-
-  return products || [];
+  return products;
 }
 
 export async function getProductConfiguration(shopDomain: string, shopifyId: string) {
@@ -1126,17 +1135,31 @@ export async function getProductVariants(productId: string) {
 export async function getVariantsForProducts(productIds: string[]) {
   if (productIds.length === 0) return [];
 
-  const { data: variants, error } = await supabase
-    .from('product_variants')
-    .select('*')
-    .in('product_id', productIds);
-
-  if (error) {
-    console.error('Error bulk-fetching product variants:', error);
-    return [];
+  // Chunk the .in() list (it's serialized into the GET querystring — a few
+  // hundred UUIDs blows past proxy URL limits) and page each chunk past the
+  // 1000-row cap. A failed variants fetch used to silently degrade every
+  // variant-targeted matrix rule to AI fallback.
+  const CHUNK = 100;
+  const PAGE = 1000;
+  const variants: any[] = [];
+  for (let i = 0; i < productIds.length; i += CHUNK) {
+    const chunk = productIds.slice(i, i + CHUNK);
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from('product_variants')
+        .select('*')
+        .in('product_id', chunk)
+        .order('created_at', { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) {
+        console.error('Error bulk-fetching product variants:', error);
+        return variants;
+      }
+      variants.push(...(data ?? []));
+      if (!data || data.length < PAGE) break;
+    }
   }
-
-  return variants || [];
+  return variants;
 }
 
 /**
@@ -2983,16 +3006,21 @@ export async function matchRecommendationRules(
 
   const { rows, error } = await fetchAllRules(shopId, 'criteria, variant_id, product_id, rank, quantity');
   if (error) {
-    console.error('matchRecommendationRules error:', error);
+    // Tagged with the shop so a DB failure is distinguishable in logs from
+    // a genuinely sparse matrix (both end in the caller's AI fallback).
+    console.error(`[matchRecommendationRules] rules fetch failed for shop ${shopId} — AI fallback will mask this:`, error);
     return null;
   }
   if (rows.length === 0) return null;
 
   const satisfies = (ruleCriteria: Record<string, string>, requireExactKeys: boolean): boolean => {
     const ruleKeys = Object.keys(ruleCriteria);
-    // Every answered axis must be covered by the rule…
+    // Every answered axis must be covered by the rule. hasOwnProperty, NOT
+    // `in`: this is a public endpoint and prototype-chain names like
+    // "constructor" pass the identifier regex — `in` would count them as
+    // covered on every rule and turn junk criteria into full-matrix hits.
     for (const key of selections.keys()) {
-      if (!(key in ruleCriteria)) return false;
+      if (!Object.prototype.hasOwnProperty.call(ruleCriteria, key)) return false;
     }
     // …and every covered axis satisfied by the selections.
     for (const key of ruleKeys) {

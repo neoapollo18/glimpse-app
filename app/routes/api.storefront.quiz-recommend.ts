@@ -73,13 +73,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     // Defensive criteria validation, extended for multi-select: keys must be
     // lower snake_case identifiers; values a matching string OR an array of
-    // them (deduped, capped). Anything else is dropped.
-    const criteria: MultiCriteria = {};
+    // them (deduped, capped). Anything else is dropped. Null prototype +
+    // explicit blocklist: "__proto__"/"constructor"/"prototype" pass the
+    // identifier regex, and on a plain object `criteria["__proto__"] = [...]`
+    // is a setter call, not a key write — this is a public endpoint.
+    const criteria: MultiCriteria = Object.create(null);
     if (rawCriteria && typeof rawCriteria === "object" && !Array.isArray(rawCriteria)) {
       const ID_RE = /^[a-z_][a-z0-9_]*$/;
+      const PROTO_KEYS = new Set(["__proto__", "constructor", "prototype"]);
       const MAX_VALUES_PER_AXIS = 16;
       for (const [k, v] of Object.entries(rawCriteria as Record<string, unknown>)) {
-        if (!ID_RE.test(k)) continue;
+        if (!ID_RE.test(k) || PROTO_KEYS.has(k)) continue;
         if (typeof v === "string" && ID_RE.test(v)) {
           criteria[k] = v;
         } else if (Array.isArray(v)) {
@@ -189,7 +193,31 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     }
 
-    const picks = ordered.slice(0, targetCount);
+    // Build the pick list with product-level dedupe BEFORE slicing, so the
+    // response isn't short-changed:
+    // - partial: matches collapse to product level on the wire, so sibling
+    //   variants of one product must count as ONE pick (dedupe after the
+    //   slice used to eat card slots).
+    // - exact: a merchant can author both a variant rule and a whole-product
+    //   rule for the same product in one cell — keep the variant-level pick
+    //   and drop the product-level duplicate.
+    const matrixSegment = matrixApplied ? ordered.slice(0, matrixCount) : ordered;
+    const picks: Candidate[] = [];
+    const seenProducts = new Set<string>();
+    const productsWithVariantPick = new Set(
+      matrixSegment.filter((c) => c.variant).map((c) => c.product.id)
+    );
+    for (const c of matrixSegment) {
+      if (picks.length >= targetCount) break;
+      if (partial) {
+        if (seenProducts.has(c.product.id)) continue;
+        seenProducts.add(c.product.id);
+      } else if (!c.variant && productsWithVariantPick.has(c.product.id)) {
+        continue; // product-level duplicate of a variant-level pick
+      }
+      picks.push(c);
+    }
+
     const realHandles = await fetchProductHandles(
       verifiedDomain,
       picks.map((c) => c.product.shopify_id).filter(Boolean),
@@ -224,13 +252,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       };
     });
 
-    // Collapsing partial picks to product level can make two ranks that
-    // targeted sibling variants identical — keep the first (best rank).
-    const uniqueMatches = partial
-      ? matches.filter((m, i) => matches.findIndex((o) => o.productId === m.productId) === i)
-      : matches;
-
-    return json({ matches: uniqueMatches, matrixApplied, partial }, { headers: CORS_HEADERS });
+    return json({ matches, matrixApplied, partial }, { headers: CORS_HEADERS });
   } catch (err) {
     console.error("Quiz recommend error:", err);
     return json({ error: "Internal server error" }, { status: 500, headers: CORS_HEADERS });
