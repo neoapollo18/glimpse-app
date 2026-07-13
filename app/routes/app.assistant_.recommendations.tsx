@@ -10,6 +10,7 @@ import {
   Button,
   TextField,
   Select,
+  Checkbox,
   Tag,
   Banner,
   Divider,
@@ -100,12 +101,29 @@ type EditorQuestionOption = {
   botResponse: string;
   // Optional reason bullet on quiz result cards when this option was picked.
   reasonText: string;
+  // Optional image URL — options with images render as visual cards on the quiz.
+  imageUrl: string;
+  // Optional render condition: only show this option when a prior answer for
+  // showIfAxisKey was showIfAxisValue. Held as two plain strings ('' = always
+  // shown) so the pair of Selects can bind directly; serialized on save as
+  // snake_case {"axis_key","axis_value"} — the shape the RPC stores verbatim
+  // and the storefront quiz reads back.
+  showIfAxisKey: string;
+  showIfAxisValue: string;
+  // "Open to anything" option — stands for every value of the axis and
+  // deselects specific picks on the quiz.
+  selectAll: boolean;
 };
 type EditorQuestion = {
   axisKey: string;
   prompt: string;
   // Optional sub-line under the question heading on the quiz page.
   helperText: string;
+  // Shopper may pick several options; the quiz shows a Continue button.
+  multiSelect: boolean;
+  // Optional group key — consecutive questions with the same group render
+  // together on one quiz screen. '' = its own screen.
+  screenGroup: string;
   options: EditorQuestionOption[];
 };
 type EditorRule = {
@@ -182,6 +200,8 @@ export default function AssistantRecommendations() {
         axisKey,
         prompt: q.prompt,
         helperText: q.helperText || "",
+        multiSelect: q.multiSelect || false,
+        screenGroup: q.screenGroup || "",
         options: q.options.map((opt: any) => {
           const av = owningAxis?.values.find((v: any) => v.id === opt.axisValueId);
           return {
@@ -189,6 +209,13 @@ export default function AssistantRecommendations() {
             axisValueValue: av?.value || "",
             botResponse: opt.botResponse || "",
             reasonText: opt.reasonText || "",
+            imageUrl: opt.imageUrl || "",
+            // AdminQuestionOption.showIf arrives camelCase (already parsed
+            // from the stored snake_case jsonb) — split into the two Select
+            // binding fields.
+            showIfAxisKey: opt.showIf?.axisKey || "",
+            showIfAxisValue: opt.showIf?.axisValue || "",
+            selectAll: opt.selectAll || false,
           };
         }),
       };
@@ -257,7 +284,19 @@ export default function AssistantRecommendations() {
         const oldKey = old.key;
         const newKey = patch.key;
         setQuestions((qs) =>
-          qs.map((q) => (q.axisKey === oldKey ? { ...q, axisKey: newKey } : q)),
+          qs.map((q) => {
+            const renamed = q.axisKey === oldKey ? { ...q, axisKey: newKey } : q;
+            // "Show only if" conditions on ANY question's options reference
+            // axes by key too — follow the rename so conditional options
+            // don't silently orphan (they'd save fine but never render).
+            if (!renamed.options.some((o) => o.showIfAxisKey === oldKey)) return renamed;
+            return {
+              ...renamed,
+              options: renamed.options.map((o) =>
+                o.showIfAxisKey === oldKey ? { ...o, showIfAxisKey: newKey } : o,
+              ),
+            };
+          }),
         );
         setRules((rs) =>
           rs.map((r) => {
@@ -277,8 +316,24 @@ export default function AssistantRecommendations() {
       const next = prev.filter((_, i) => i !== idx);
       // Also drop any question + any rule referencing this axis key, so the
       // state stays internally consistent without the merchant having to
-      // hunt down orphans.
-      setQuestions((qs) => qs.filter((q) => q.axisKey !== removed.key));
+      // hunt down orphans. Surviving options whose "Show only if" condition
+      // pointed at the removed axis fall back to always-shown.
+      setQuestions((qs) =>
+        qs
+          .filter((q) => q.axisKey !== removed.key)
+          .map((q) =>
+            q.options.some((o) => o.showIfAxisKey === removed.key)
+              ? {
+                  ...q,
+                  options: q.options.map((o) =>
+                    o.showIfAxisKey === removed.key
+                      ? { ...o, showIfAxisKey: "", showIfAxisValue: "" }
+                      : o,
+                  ),
+                }
+              : q,
+          ),
+      );
       setRules((rs) => rs.filter((r) => !(removed.key in r.criteria)));
       return next;
     });
@@ -307,16 +362,22 @@ export default function AssistantRecommendations() {
           const oldValue = old.value;
           const newValue = patch.value;
           setQuestions((qs) =>
-            qs.map((q) =>
-              q.axisKey === axisKey
-                ? {
-                    ...q,
-                    options: q.options.map((o) =>
-                      o.axisValueValue === oldValue ? { ...o, axisValueValue: newValue } : o,
-                    ),
-                  }
-                : q,
-            ),
+            qs.map((q) => ({
+              ...q,
+              options: q.options.map((o) => {
+                let next = o;
+                if (q.axisKey === axisKey && o.axisValueValue === oldValue) {
+                  next = { ...next, axisValueValue: newValue };
+                }
+                // "Show only if" conditions on OTHER questions' options can
+                // reference this value too — rename follows through there as
+                // well, or the condition would never match again.
+                if (o.showIfAxisKey === axisKey && o.showIfAxisValue === oldValue) {
+                  next = { ...next, showIfAxisValue: newValue };
+                }
+                return next;
+              }),
+            })),
           );
           setRules((rs) =>
             rs.map((r) =>
@@ -346,13 +407,24 @@ export default function AssistantRecommendations() {
       const nextAxes = prev.map((a, i) =>
         i === axisIdx ? { ...a, values: a.values.filter((_, j) => j !== valueIdx) } : a,
       );
-      // Prune options + rules that referenced this value.
+      // Prune options + rules that referenced this value. Options elsewhere
+      // whose "Show only if" condition pointed at the removed value fall
+      // back to always-shown rather than dangling.
       setQuestions((qs) =>
-        qs.map((q) =>
-          q.axisKey === axis.key
-            ? { ...q, options: q.options.filter((o) => o.axisValueValue !== removed.value) }
-            : q,
-        ),
+        qs.map((q) => {
+          const pruned =
+            q.axisKey === axis.key
+              ? q.options.filter((o) => o.axisValueValue !== removed.value)
+              : q.options;
+          return {
+            ...q,
+            options: pruned.map((o) =>
+              o.showIfAxisKey === axis.key && o.showIfAxisValue === removed.value
+                ? { ...o, showIfAxisKey: "", showIfAxisValue: "" }
+                : o,
+            ),
+          };
+        }),
       );
       setRules((rs) => rs.filter((r) => r.criteria[axis.key] !== removed.value));
       return nextAxes;
@@ -368,7 +440,14 @@ export default function AssistantRecommendations() {
     (axisKey: string): EditorQuestion => {
       const existing = questions.find((q) => q.axisKey === axisKey);
       if (existing) return existing;
-      const newQ: EditorQuestion = { axisKey, prompt: "", helperText: "", options: [] };
+      const newQ: EditorQuestion = {
+        axisKey,
+        prompt: "",
+        helperText: "",
+        multiSelect: false,
+        screenGroup: "",
+        options: [],
+      };
       setQuestions((prev) => [...prev, newQ]);
       return newQ;
     },
@@ -378,7 +457,12 @@ export default function AssistantRecommendations() {
   const updateQuestion = useCallback((axisKey: string, patch: Partial<EditorQuestion>) => {
     setQuestions((prev) => {
       const idx = prev.findIndex((q) => q.axisKey === axisKey);
-      if (idx === -1) return [...prev, { axisKey, prompt: "", helperText: "", options: [], ...patch }];
+      if (idx === -1) {
+        return [
+          ...prev,
+          { axisKey, prompt: "", helperText: "", multiSelect: false, screenGroup: "", options: [], ...patch },
+        ];
+      }
       return prev.map((q, i) => (i === idx ? { ...q, ...patch } : q));
     });
   }, []);
@@ -391,8 +475,17 @@ export default function AssistantRecommendations() {
         axisValueValue: "",
         botResponse: "",
         reasonText: "",
+        imageUrl: "",
+        showIfAxisKey: "",
+        showIfAxisValue: "",
+        selectAll: false,
       };
-      if (idx === -1) return [...prev, { axisKey, prompt: "", helperText: "", options: [newOpt] }];
+      if (idx === -1) {
+        return [
+          ...prev,
+          { axisKey, prompt: "", helperText: "", multiSelect: false, screenGroup: "", options: [newOpt] },
+        ];
+      }
       return prev.map((q, i) =>
         i === idx ? { ...q, options: [...q.options, newOpt] } : q,
       );
@@ -551,6 +644,13 @@ export default function AssistantRecommendations() {
         setValidationError(`Axis "${axis.key}" needs a question prompt — without it the chat can't collect this axis and no matrix rule can match`);
         return;
       }
+      // Screen group is optional; when set it must be a snake_case
+      // identifier like the axis keys, so grouped questions compare cleanly.
+      const group = q.screenGroup.trim();
+      if (group && !isValidIdentifier(group)) {
+        setValidationError(`Screen group "${group}" for axis "${axis.key}" must be lower snake_case (e.g. "style_screen") or left empty`);
+        return;
+      }
       const validOptions = q.options.filter((o) => o.label.trim() && o.axisValueValue);
       if (validOptions.length === 0) {
         setValidationError(`The question for axis "${axis.key}" needs at least one answer option with a label and a mapped value`);
@@ -564,6 +664,22 @@ export default function AssistantRecommendations() {
         if (!o.label.trim() && o.axisValueValue) {
           setValidationError(`An option for axis "${axis.key}" is missing its button label`);
           return;
+        }
+        // "Show only if" must be complete AND reference a live axis + value.
+        // The Selects enforce this in the UI, and the axis/value cascades
+        // clear conditions on rename/delete — but stale state from older
+        // saves still deserves a friendly message over a silent never-shown
+        // option in the quiz.
+        if (o.showIfAxisKey || o.showIfAxisValue) {
+          if (!o.showIfAxisKey || !o.showIfAxisValue) {
+            setValidationError(`Option "${o.label}" for axis "${axis.key}" has an incomplete "Show only if" condition — pick both an axis and a value, or set it back to Always shown`);
+            return;
+          }
+          const condAxis = axes.find((a) => a.key === o.showIfAxisKey);
+          if (!condAxis || !condAxis.values.some((v) => v.value === o.showIfAxisValue)) {
+            setValidationError(`Option "${o.label}" for axis "${axis.key}" has a "Show only if" condition pointing at "${o.showIfAxisKey}: ${o.showIfAxisValue}", which no longer exists`);
+            return;
+          }
         }
       }
     }
@@ -603,6 +719,8 @@ export default function AssistantRecommendations() {
           prompt: q.prompt,
           position: qi,
           helperText: q.helperText || null,
+          multiSelect: q.multiSelect,
+          screenGroup: q.screenGroup.trim() || null,
           options: q.options
             .filter((o) => o.label.trim() && o.axisValueValue)
             .map((o, i) => ({
@@ -610,6 +728,15 @@ export default function AssistantRecommendations() {
               axisValueValue: o.axisValueValue,
               botResponse: o.botResponse || null,
               reasonText: o.reasonText || null,
+              imageUrl: o.imageUrl.trim() || null,
+              // Serialize the two editor fields back into the snake_case
+              // object the RPC stores verbatim and the storefront reads
+              // (rawShowIf in getRecommendationFlow). Incomplete = none.
+              showIf:
+                o.showIfAxisKey && o.showIfAxisValue
+                  ? { axis_key: o.showIfAxisKey, axis_value: o.showIfAxisValue }
+                  : null,
+              selectAll: o.selectAll,
               position: i,
             })),
         })),
@@ -870,7 +997,9 @@ export default function AssistantRecommendations() {
                   axisKey: axis.key,
                   prompt: "",
                   helperText: "",
-                  options: [],
+                  multiSelect: false,
+                  screenGroup: "",
+                  options: [] as EditorQuestionOption[],
                 };
                 return (
                   <Box
@@ -899,6 +1028,26 @@ export default function AssistantRecommendations() {
                         placeholder="This helps us pick the right shade for you."
                         helpText="Sub-line under the question heading on the quiz page. The chat ignores it."
                       />
+                      <InlineStack gap="400" blockAlign="start" wrap={false}>
+                        <div style={{ flex: 1 }}>
+                          <Checkbox
+                            label="Multi-select"
+                            checked={q.multiSelect}
+                            onChange={(v) => updateQuestion(axis.key, { multiSelect: v })}
+                            helpText="Shopper can pick several options; the quiz shows a Continue button instead of auto-advancing."
+                          />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <TextField
+                            label="Screen group (optional)"
+                            value={q.screenGroup}
+                            onChange={(v) => updateQuestion(axis.key, { screenGroup: v })}
+                            autoComplete="off"
+                            placeholder="style_screen"
+                            helpText="Questions with the same group render together on one quiz screen (e.g. style_screen)"
+                          />
+                        </div>
+                      </InlineStack>
                       <InlineStack align="space-between" blockAlign="center">
                         <Text as="p" variant="bodySm" fontWeight="semibold">
                           Answer options
@@ -971,6 +1120,72 @@ export default function AssistantRecommendations() {
                               autoComplete="off"
                               placeholder="Adds length past your shoulders"
                               helpText='Reason bullet on quiz result cards when this option was picked. Empty falls back to "{question}: {answer}".'
+                            />
+                            <InlineStack gap="300" wrap={false} blockAlign="start">
+                              <div style={{ flex: 1 }}>
+                                <TextField
+                                  label="Image URL (optional)"
+                                  value={opt.imageUrl}
+                                  onChange={(v) =>
+                                    updateQuestionOption(axis.key, optIdx, { imageUrl: v })
+                                  }
+                                  autoComplete="off"
+                                  placeholder="https://cdn.shopify.com/..."
+                                  helpText="Options with images render as visual cards on the quiz."
+                                />
+                              </div>
+                              {/* Conditional render: only offer OTHER axes —
+                                  an option can't depend on an answer to its
+                                  own question. Changing the axis resets the
+                                  value so a stale pairing can't survive. */}
+                              <div style={{ flex: 1 }}>
+                                <Select
+                                  label="Show only if (optional)"
+                                  options={[
+                                    { label: "Always shown", value: "" },
+                                    ...axes
+                                      .filter((a) => a.key && a.key !== axis.key)
+                                      .map((a) => ({ label: a.label || a.key, value: a.key })),
+                                  ]}
+                                  value={opt.showIfAxisKey}
+                                  onChange={(v) =>
+                                    updateQuestionOption(axis.key, optIdx, {
+                                      showIfAxisKey: v,
+                                      showIfAxisValue: "",
+                                    })
+                                  }
+                                  helpText="Only show this option after a matching prior answer."
+                                />
+                              </div>
+                              <div style={{ flex: 1 }}>
+                                <Select
+                                  label="Required answer"
+                                  options={[
+                                    { label: "— Pick a value —", value: "" },
+                                    ...(
+                                      axes.find((a) => a.key === opt.showIfAxisKey)?.values || []
+                                    ).map((v) => ({
+                                      label: v.label || v.value,
+                                      value: v.value,
+                                    })),
+                                  ]}
+                                  value={opt.showIfAxisValue}
+                                  disabled={!opt.showIfAxisKey}
+                                  onChange={(v) =>
+                                    updateQuestionOption(axis.key, optIdx, {
+                                      showIfAxisValue: v,
+                                    })
+                                  }
+                                />
+                              </div>
+                            </InlineStack>
+                            <Checkbox
+                              label='"Open to anything" option'
+                              checked={opt.selectAll}
+                              onChange={(v) =>
+                                updateQuestionOption(axis.key, optIdx, { selectAll: v })
+                              }
+                              helpText="Picking it stands for every value of this axis and clears specific picks."
                             />
                             <InlineStack align="end">
                               <Button

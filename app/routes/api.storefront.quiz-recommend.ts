@@ -5,8 +5,8 @@ import {
   shopHasValidAccess,
   getChatAssistantConfig,
   getRecommendationFlow,
-  pickVariantsByCriteria,
-  pickVariantsByPartialCriteria,
+  matchRecommendationRules,
+  type MultiCriteria,
 } from "../lib/supabase.server";
 import {
   buildCandidatePool,
@@ -31,7 +31,8 @@ const CORS_HEADERS = {
  * imagery (fetched client-side via /products/{handle}.js) and streams
  * try-on previews in separately via /api/storefront/quiz-tryon.
  *
- * Request:  JSON { shopDomain, criteria: { axis_key: axis_value, ... } }
+ * Request:  JSON { shopDomain, criteria: { axis_key: axis_value | [axis_value, ...] } }
+ *           (arrays come from multi-select questions)
  * Response: {
  *   matches: [{ productId, variantId, variantNumericId, productHandle,
  *               productName, variantTitle, title, tagline, rank,
@@ -69,14 +70,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return json({ error: "Missing required field: shopDomain" }, { status: 400, headers: CORS_HEADERS });
     }
 
-    // Same defensive criteria validation as chat-recommend: keys and values
-    // must be lower snake_case identifiers; anything else is dropped.
-    const criteria: Record<string, string> = {};
+    // Defensive criteria validation, extended for multi-select: keys must be
+    // lower snake_case identifiers; values a matching string OR an array of
+    // them (deduped, capped). Anything else is dropped.
+    const criteria: MultiCriteria = {};
     if (rawCriteria && typeof rawCriteria === "object" && !Array.isArray(rawCriteria)) {
       const ID_RE = /^[a-z_][a-z0-9_]*$/;
+      const MAX_VALUES_PER_AXIS = 16;
       for (const [k, v] of Object.entries(rawCriteria as Record<string, unknown>)) {
-        if (typeof v === "string" && ID_RE.test(k) && ID_RE.test(v)) {
+        if (!ID_RE.test(k)) continue;
+        if (typeof v === "string" && ID_RE.test(v)) {
           criteria[k] = v;
+        } else if (Array.isArray(v)) {
+          const values = [...new Set(v.filter(
+            (s): s is string => typeof s === "string" && ID_RE.test(s)
+          ))].slice(0, MAX_VALUES_PER_AXIS);
+          if (values.length > 0) criteria[k] = values;
         }
       }
     }
@@ -122,23 +131,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     const desiredCount = Math.max(1, Math.min(5, Number(chatConfig.num_recommendations) || 3));
 
-    // Exact rule first; containment (partial) when the shopper hasn't
-    // answered every axis yet (e.g. shade pending) — the quiz shows a
-    // provisional best match plus the shade gate in that state.
+    // Rule matching (multi-select aware). Exact coverage first; partial when
+    // the shopper hasn't answered every rule axis yet (e.g. shade pending) —
+    // the quiz shows a provisional best match plus the shade gate then.
     const aiOrdered = aiOrderCandidates(pool.candidates);
-    let hits = Object.keys(criteria).length > 0
-      ? await pickVariantsByCriteria(verifiedShop.id, criteria)
+    const match = Object.keys(criteria).length > 0
+      ? await matchRecommendationRules(verifiedShop.id, criteria)
       : null;
-    let partial = false;
-    if ((!hits || hits.length === 0) && Object.keys(criteria).length > 0) {
-      hits = await pickVariantsByPartialCriteria(verifiedShop.id, criteria);
-      partial = Boolean(hits && hits.length > 0);
-    }
+    let partial = Boolean(match?.partial);
 
-    const { ordered, matrixApplied, matrixCount } = orderByMatrix(hits, pool, aiOrdered, {
+    // orderByMatrix logs criteria on misses; flatten arrays for readability.
+    const logCriteria: Record<string, string> = {};
+    for (const [k, v] of Object.entries(criteria)) {
+      logCriteria[k] = Array.isArray(v) ? v.join("|") : v;
+    }
+    const { ordered, matrixApplied, matrixCount } = orderByMatrix(match?.hits ?? null, pool, aiOrdered, {
       logTag: "quiz-recommend",
       shopDomain: verifiedDomain,
-      criteria,
+      criteria: logCriteria,
     });
     if (!matrixApplied) partial = false;
 
@@ -159,9 +169,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       for (const q of flow.questions) {
         const answered = criteria[q.axisKey];
         if (!answered) continue;
-        const opt = q.options.find((o) => o.axisValue === answered);
-        if (!opt) continue;
-        reasons.push(opt.reasonText || `${q.axisLabel}: ${opt.label}`);
+        const selected = new Set(Array.isArray(answered) ? answered : [answered]);
+        // First selected option with authored reason copy wins; otherwise a
+        // readable fallback listing what they picked.
+        const selectedOpts = q.options.filter((o) => selected.has(o.axisValue));
+        if (selectedOpts.length === 0) continue;
+        const withReason = selectedOpts.find((o) => o.reasonText);
+        reasons.push(
+          withReason?.reasonText ||
+          `${q.axisLabel}: ${selectedOpts.map((o) => o.label).join(", ")}`
+        );
         if (reasons.length >= 3) break;
       }
     }

@@ -2694,11 +2694,23 @@ export interface RecommendationFlow {
     axisLabel: string;
     prompt: string;
     helperText: string | null;
+    // Multi-select: shopper picks several options; the quiz shows Continue
+    // instead of auto-advancing and criteria carries an array for the axis.
+    multiSelect: boolean;
+    // Consecutive questions sharing a screenGroup render on ONE quiz screen.
+    screenGroup: string | null;
     options: Array<{
       label: string;
       axisValue: string;
       botResponse: string | null;
       reasonText: string | null;
+      // Visual option card image (on-hand shots etc.). Null = text card.
+      imageUrl: string | null;
+      // Render condition: only show when that answer was given (or is among
+      // a multi-select). Null = always shown.
+      showIf: { axisKey: string; axisValue: string } | null;
+      // "Open to anything": stands for every value of the axis.
+      selectAll: boolean;
     }>;
   }>;
   photoAxes: string[];
@@ -2732,13 +2744,18 @@ export async function getRecommendationFlow(shopId: string): Promise<Recommendat
         prompt,
         position,
         helper_text,
+        multi_select,
+        screen_group,
         recommendation_question_options (
           id,
           label,
           axis_value_id,
           bot_response,
           position,
-          reason_text
+          reason_text,
+          image_url,
+          show_if,
+          select_all
         )
       )
     `)
@@ -2772,12 +2789,21 @@ export async function getRecommendationFlow(shopId: string): Promise<Recommendat
       const options = (q.recommendation_question_options || [])
         .slice()
         .sort((x: any, y: any) => (x.position ?? 0) - (y.position ?? 0))
-        .map((opt: any) => ({
-          label: opt.label as string,
-          axisValue: valueIdToKey.get(opt.axis_value_id as string) ?? '',
-          botResponse: (opt.bot_response as string | null) ?? null,
-          reasonText: (opt.reason_text as string | null) ?? null,
-        }))
+        .map((opt: any) => {
+          const rawShowIf = opt.show_if as { axis_key?: string; axis_value?: string } | null;
+          const showIf = rawShowIf && typeof rawShowIf.axis_key === 'string' && typeof rawShowIf.axis_value === 'string'
+            ? { axisKey: rawShowIf.axis_key, axisValue: rawShowIf.axis_value }
+            : null;
+          return {
+            label: opt.label as string,
+            axisValue: valueIdToKey.get(opt.axis_value_id as string) ?? '',
+            botResponse: (opt.bot_response as string | null) ?? null,
+            reasonText: (opt.reason_text as string | null) ?? null,
+            imageUrl: (opt.image_url as string | null) ?? null,
+            showIf,
+            selectAll: Boolean(opt.select_all),
+          };
+        })
         .filter((opt: any) => opt.axisValue);
       // Drop questions whose options were all invalidated by deleted axis
       // values — the widget would otherwise render the prompt with no
@@ -2788,6 +2814,8 @@ export async function getRecommendationFlow(shopId: string): Promise<Recommendat
         axisLabel: a.label as string,
         prompt: q.prompt as string,
         helperText: (q.helper_text as string | null) ?? null,
+        multiSelect: Boolean(q.multi_select),
+        screenGroup: (q.screen_group as string | null) ?? null,
         options,
       }];
     });
@@ -2858,72 +2886,129 @@ export async function pickVariantsByCriteria(
   }));
 }
 
-/**
- * Partial matrix lookup for the quiz's "best match before shade" state:
- * returns rules whose criteria CONTAINS every provided key/value pair —
- * the rule may carry extra axes (typically the photo-sourced shade) that
- * the shopper hasn't answered yet.
- *
- * Multiple rule groups can match (one per unanswered-axis combination, e.g.
- * ten shades of the same clip-in). We pick ONE group deterministically:
- * fewest extra criteria keys first (closest match), then lowest sorted
- * criteria JSON as a stable tiebreaker. Rules within the group come back in
- * rank order. Returns null when nothing matches — callers fall back to
- * AI-pick, exactly like the strict lookup.
- */
-export async function pickVariantsByPartialCriteria(
-  shopId: string,
-  criteria: Record<string, string>,
-): Promise<Array<{ variantInternalId: string | null; productInternalId: string | null; rank: number; quantity: number }> | null> {
-  if (Object.keys(criteria).length === 0) return null;
+export type MultiCriteria = Record<string, string | string[]>;
 
-  // JSONB containment (criteria @> provided). Same supabase-js stringify
-  // requirement as the strict lookup — a raw object becomes
-  // "[object Object]" and silently never matches.
+type RuleHit = {
+  variantInternalId: string | null;
+  productInternalId: string | null;
+  rank: number;
+  quantity: number;
+};
+
+/**
+ * Matrix lookup for the quiz, supporting multi-select answers. Criteria
+ * values may be a single string (single-select) or an array (multi-select,
+ * e.g. lengths: ["short","medium"]). Rules stay ONE value per axis; a rule
+ * value satisfies an axis when it is AMONG the shopper's selections — so a
+ * shopper picking two lengths reaches both lengths' rule cells and hits are
+ * deduped by target keeping the best rank.
+ *
+ * Two phases, mirroring the previous exact/partial split:
+ * - exact: the rule covers exactly the answered axes (same key set) and
+ *   every rule value is among the selections. With single-value criteria
+ *   this is identical to the old strict-equality lookup.
+ * - partial (`partial: true`): every ANSWERED axis is covered and
+ *   satisfied but the rule carries extra axes (typically a photo-sourced
+ *   shade not yet resolved). One rule GROUP is chosen deterministically:
+ *   fewest extra keys, then lowest sorted criteria JSON.
+ *
+ * Returns null when nothing matches — callers fall back to AI-pick.
+ */
+export async function matchRecommendationRules(
+  shopId: string,
+  criteria: MultiCriteria,
+): Promise<{ hits: RuleHit[]; partial: boolean } | null> {
+  const selections = new Map<string, Set<string>>();
+  for (const [k, v] of Object.entries(criteria)) {
+    const values = (Array.isArray(v) ? v : [v]).filter((s) => typeof s === 'string' && s.length > 0);
+    if (values.length > 0) selections.set(k, new Set(values));
+  }
+  if (selections.size === 0) return null;
+
+  // One fetch of the shop's whole rule set; matching happens here. Rule
+  // counts are small (a matrix of hand-authored cells), and multi-select
+  // semantics don't map onto a single JSONB operator.
   const { data, error } = await supabase
     .from('recommendation_rules')
     .select('criteria, variant_id, product_id, rank, quantity')
     .eq('shop_id', shopId)
-    .contains('criteria', JSON.stringify(criteria))
     .order('rank', { ascending: true });
 
   if (error) {
-    console.error('pickVariantsByPartialCriteria error:', error.message);
+    console.error('matchRecommendationRules error:', error.message);
     return null;
   }
   if (!data || data.length === 0) return null;
 
-  // Group rules by their full criteria object; pick the closest group.
+  const satisfies = (ruleCriteria: Record<string, string>, requireExactKeys: boolean): boolean => {
+    const ruleKeys = Object.keys(ruleCriteria);
+    // Every answered axis must be covered by the rule…
+    for (const key of selections.keys()) {
+      if (!(key in ruleCriteria)) return false;
+    }
+    // …and every covered axis satisfied by the selections.
+    for (const key of ruleKeys) {
+      const selected = selections.get(key);
+      if (!selected) {
+        if (requireExactKeys) return false; // rule keys must not exceed answers
+        continue; // partial phase: extra (unanswered) axes are allowed
+      }
+      if (!selected.has(ruleCriteria[key])) return false;
+    }
+    return true;
+  };
+
+  const toHit = (r: any): RuleHit => ({
+    variantInternalId: (r.variant_id as string | null) ?? null,
+    productInternalId: (r.product_id as string | null) ?? null,
+    rank: r.rank as number,
+    quantity: Math.max(1, Number(r.quantity) || 1),
+  });
+
+  const targetKey = (r: any) => `${r.variant_id ?? ''}|${r.product_id ?? ''}`;
+
+  // Phase 1 — exact coverage. Dedupe by target keeping the best rank (two
+  // selected values can reach two cells that share a target).
+  const exactByTarget = new Map<string, any>();
+  for (const row of data) {
+    const rc = (row.criteria ?? {}) as Record<string, string>;
+    if (!satisfies(rc, true)) continue;
+    const key = targetKey(row);
+    const prev = exactByTarget.get(key);
+    if (!prev || (row.rank as number) < (prev.rank as number)) exactByTarget.set(key, row);
+  }
+  if (exactByTarget.size > 0) {
+    const hits = [...exactByTarget.values()]
+      .sort((a, b) => (a.rank as number) - (b.rank as number))
+      .map(toHit);
+    return { hits, partial: false };
+  }
+
+  // Phase 2 — partial coverage (extra axes on the rule). Group by the full
+  // rule criteria and pick the closest group deterministically.
   const groupKey = (c: Record<string, string>) =>
     JSON.stringify(Object.keys(c).sort().map((k) => [k, c[k]]));
   const groups = new Map<string, { extraKeys: number; rows: any[] }>();
   for (const row of data) {
-    const rowCriteria = (row.criteria ?? {}) as Record<string, string>;
-    const key = groupKey(rowCriteria);
+    const rc = (row.criteria ?? {}) as Record<string, string>;
+    if (!satisfies(rc, false)) continue;
+    const key = groupKey(rc);
     let group = groups.get(key);
     if (!group) {
-      group = {
-        extraKeys: Math.max(0, Object.keys(rowCriteria).length - Object.keys(criteria).length),
-        rows: [],
-      };
+      group = { extraKeys: Math.max(0, Object.keys(rc).length - selections.size), rows: [] };
       groups.set(key, group);
     }
     group.rows.push(row);
   }
+  if (groups.size === 0) return null;
 
   const bestKey = [...groups.entries()]
     .sort((a, b) => (a[1].extraKeys - b[1].extraKeys) || (a[0] < b[0] ? -1 : 1))[0][0];
-  const best = groups.get(bestKey)!;
-
-  return best.rows
+  const hits = groups.get(bestKey)!.rows
     .slice()
     .sort((a, b) => (a.rank as number) - (b.rank as number))
-    .map((r: any) => ({
-      variantInternalId: (r.variant_id as string | null) ?? null,
-      productInternalId: (r.product_id as string | null) ?? null,
-      rank: r.rank as number,
-      quantity: Math.max(1, Number(r.quantity) || 1),
-    }));
+    .map(toHit);
+  return { hits, partial: true };
 }
 
 /**
@@ -2990,6 +3075,16 @@ export interface AdminQuestionOption {
   botResponse: string | null;
   // Optional reason bullet for quiz result cards when this option was picked.
   reasonText: string | null;
+  // Optional image for the option card — options with images render in a
+  // visual grid on the quiz.
+  imageUrl: string | null;
+  // Optional render condition: the option only shows when a prior answer
+  // matched. Stored in the DB as snake_case jsonb ({"axis_key","axis_value"});
+  // exposed camelCase here to match the rest of the admin shapes.
+  showIf: { axisKey: string; axisValue: string } | null;
+  // "Open to anything" option — stands for every value of the axis and
+  // deselects specific picks on the quiz.
+  selectAll: boolean;
   position: number;
 }
 
@@ -2999,6 +3094,11 @@ export interface AdminQuestion {
   prompt: string;
   // Optional sub-line under the question heading on the quiz page.
   helperText: string | null;
+  // Shopper may pick several options; the quiz shows a Continue button.
+  multiSelect: boolean;
+  // Optional group key — consecutive questions sharing it render on one
+  // quiz screen with a single Continue.
+  screenGroup: string | null;
   options: AdminQuestionOption[];
 }
 
@@ -3050,7 +3150,7 @@ export async function getRecommendationAdminConfig(
   const questionsRes = axisIds.length > 0
     ? await supabase
         .from('recommendation_questions')
-        .select('id, axis_id, prompt, helper_text, recommendation_question_options ( id, label, axis_value_id, bot_response, position, reason_text )')
+        .select('id, axis_id, prompt, helper_text, multi_select, screen_group, recommendation_question_options ( id, label, axis_value_id, bot_response, position, reason_text, image_url, show_if, select_all )')
         .in('axis_id', axisIds)
     : { data: [], error: null };
 
@@ -3088,17 +3188,30 @@ export async function getRecommendationAdminConfig(
     axisId: q.axis_id,
     prompt: q.prompt,
     helperText: (q.helper_text as string | null) ?? null,
+    multiSelect: (q.multi_select as boolean | null) ?? false,
+    screenGroup: (q.screen_group as string | null) ?? null,
     options: ((q.recommendation_question_options || []) as any[])
       .slice()
       .sort((x, y) => (x.position ?? 0) - (y.position ?? 0))
-      .map((opt) => ({
-        id: opt.id,
-        label: opt.label,
-        axisValueId: opt.axis_value_id,
-        botResponse: opt.bot_response,
-        reasonText: (opt.reason_text as string | null) ?? null,
-        position: opt.position ?? 0,
-      })),
+      .map((opt) => {
+        // show_if is stored as snake_case jsonb ({"axis_key","axis_value"});
+        // surface it camelCase, and treat a malformed blob as "no condition".
+        const rawShowIf = opt.show_if as { axis_key?: string; axis_value?: string } | null;
+        const showIf = rawShowIf && typeof rawShowIf.axis_key === 'string' && typeof rawShowIf.axis_value === 'string'
+          ? { axisKey: rawShowIf.axis_key, axisValue: rawShowIf.axis_value }
+          : null;
+        return {
+          id: opt.id,
+          label: opt.label,
+          axisValueId: opt.axis_value_id,
+          botResponse: opt.bot_response,
+          reasonText: (opt.reason_text as string | null) ?? null,
+          imageUrl: (opt.image_url as string | null) ?? null,
+          showIf,
+          selectAll: (opt.select_all as boolean | null) ?? false,
+          position: opt.position ?? 0,
+        };
+      }),
   }));
 
   const rules: AdminRule[] = (rulesRes.data || []).map((r: any) => ({
@@ -3233,12 +3346,24 @@ export async function saveRecommendationConfig(
       prompt: string;
       // Optional quiz sub-line under the question heading. '' → NULL in the RPC.
       helperText?: string | null;
+      // Shopper may pick several options. Omitted → false in the RPC.
+      multiSelect?: boolean;
+      // Optional screen-group key — consecutive questions sharing it render
+      // on one quiz screen. '' → NULL in the RPC.
+      screenGroup?: string | null;
       options: Array<{
         label: string;
         axisValueValue: string;
         botResponse: string | null;
         // Optional quiz result-card reason bullet. '' → NULL in the RPC.
         reasonText?: string | null;
+        // Optional option-card image. '' → NULL in the RPC.
+        imageUrl?: string | null;
+        // Optional render condition, snake_case to match what the RPC stores
+        // verbatim as jsonb and what getRecommendationFlow reads back.
+        showIf?: { axis_key: string; axis_value: string } | null;
+        // "Open to anything" option. Omitted → false in the RPC.
+        selectAll?: boolean;
         position: number;
       }>;
     }>;
@@ -3277,6 +3402,24 @@ export async function saveRecommendationConfig(
         return { ok: false, error: `Duplicate value "${v.value}" in axis "${axis.key}"` };
       }
       seenValues.add(v.value);
+    }
+  }
+  for (const question of input.questions || []) {
+    for (const opt of question.options || []) {
+      // showIf is stored verbatim as jsonb and read back by the storefront
+      // quiz, so a malformed condition would silently hide the option
+      // forever. Require both keys as identifiers when the object is present.
+      if (opt.showIf != null) {
+        if (
+          !ID_RE.test(opt.showIf.axis_key || '') ||
+          !ID_RE.test(opt.showIf.axis_value || '')
+        ) {
+          return {
+            ok: false,
+            error: `Option "${opt.label}" has an invalid "show only if" condition — both the axis and value must be lower snake_case identifiers`,
+          };
+        }
+      }
     }
   }
   for (const rule of input.rules || []) {

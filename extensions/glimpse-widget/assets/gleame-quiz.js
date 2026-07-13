@@ -19,7 +19,8 @@
   'use strict';
 
   var SHOPIFY_APP_URL = 'https://glimpse-app-charles.onrender.com';
-  var STORAGE_KEY = 'gleame-quiz-state-v1';
+  // v2: screen-based steps + multi-select answers — v1 states don't restore.
+  var STORAGE_KEY = 'gleame-quiz-state-v2';
   var TRYON_SESSION_CAP = 10;
 
   var root = document.getElementById('gleame-quiz-root');
@@ -37,12 +38,18 @@
   var stageEl = null;
   var quizStarted = false;
 
+  // Screens: array of arrays of question indexes. Consecutive questions
+  // sharing a non-empty screenGroup render together on one screen (e.g.
+  // "style" part A + "colors" part B); everything else is one question per
+  // screen. Built once from flow.questions at boot.
+  var screens = [];
+
   // Persisted (sessionStorage) — everything EXCEPT images.
   var state = {
     screen: 'intro',        // 'intro' | 'question' | 'gate' | 'results'
-    questionIndex: 0,       // current question when screen === 'question'
-    criteria: {},           // axisKey -> axisValue
-    answers: [],            // parallel to flow.questions: {axisKey, axisValue, label} | undefined
+    screenIndex: 0,         // current screen when screen === 'question'
+    criteria: {},           // axisKey -> axisValue | [axisValue, ...] (arrays = multi-select)
+    answers: [],            // parallel to flow.questions: {axisKey, values[], labels[]} | undefined
     hasPhoto: false,        // photo was provided this session (File itself is NOT persisted)
     detectedShade: null,    // {axisKey, value, label, source: 'photo'|'manual'}
     matches: null,          // quiz-recommend matches (no images — safe to persist)
@@ -319,57 +326,98 @@
   // control is literally history.back(), so browser back and UI back are
   // one code path (the popstate handler).
 
+  // ---- Screen helpers ----
+
+  function buildScreens() {
+    screens = [];
+    var currentGroup = null;
+    for (var i = 0; i < flow.questions.length; i++) {
+      var g = flow.questions[i].screenGroup || null;
+      if (g && currentGroup === g) {
+        screens[screens.length - 1].push(i);
+      } else {
+        screens.push([i]);
+      }
+      currentGroup = g;
+    }
+  }
+
+  // Number of contiguously answered screens from the start. A screen counts
+  // as answered only when EVERY question on it has an answer.
+  function answeredScreenCount() {
+    for (var s = 0; s < screens.length; s++) {
+      for (var j = 0; j < screens[s].length; j++) {
+        var a = state.answers[screens[s][j]];
+        if (!a || !a.values || a.values.length === 0) return s;
+      }
+    }
+    return screens.length;
+  }
+
+  // The first screen renders inline on the intro ONLY when it's a single
+  // plain single-select question — multi-select and grouped screens need a
+  // Continue button and their own space.
+  function introHostsFirstScreen() {
+    if (screens.length === 0) return false;
+    var s0 = screens[0];
+    return s0.length === 1 && !flow.questions[s0[0]].multiSelect;
+  }
+
   function stepSlug() {
-    if (state.screen === 'question') return 'q' + (state.questionIndex + 1);
+    if (state.screen === 'question') return 'q' + (state.screenIndex + 1);
     return state.screen;
   }
 
   function pushStep() {
     try {
-      history.pushState({ gq: { screen: state.screen, questionIndex: state.questionIndex } },
+      history.pushState({ gq: { screen: state.screen, screenIndex: state.screenIndex } },
         '', '#gq-' + stepSlug());
     } catch (e) {}
   }
 
   function replaceStep() {
     try {
-      history.replaceState({ gq: { screen: state.screen, questionIndex: state.questionIndex } },
+      history.replaceState({ gq: { screen: state.screen, screenIndex: state.screenIndex } },
         '', '#gq-' + stepSlug());
     } catch (e) {}
   }
 
-  // Rewind answers/criteria when navigating back to an earlier step. Answers
-  // at index >= keepCount are undone (their axis removed from criteria).
-  function truncateAnswers(keepCount) {
-    for (var i = keepCount; i < state.answers.length; i++) {
+  // Rewind answers/criteria for every question from screen `keepScreens` on.
+  function truncateToScreen(keepScreens) {
+    var firstQ = keepScreens >= screens.length
+      ? flow.questions.length
+      : screens[keepScreens][0];
+    for (var i = firstQ; i < state.answers.length; i++) {
       var a = state.answers[i];
       if (a && a.axisKey) delete state.criteria[a.axisKey];
     }
-    state.answers.length = Math.min(state.answers.length, keepCount);
+    state.answers.length = Math.min(state.answers.length, firstQ);
   }
 
   // History entries can outlive the state that made them valid: Back pops
-  // an answer out of criteria but the Forward entry survives, and "Start
+  // answers out of criteria but the Forward entry survives, and "Start
   // over" resets state while old gate/question entries remain below. Clamp
   // every popped target to what the current answers actually support, so a
   // stale entry can never reach the gate/results with a criteria hole.
   function clampStep(target) {
-    var total = flow.questions.length;
-    var answered = state.answers.length; // answers is always a contiguous prefix
+    var total = screens.length;
+    var answered = answeredScreenCount();
 
     if (target.screen === 'results' &&
         !(answered >= total && Array.isArray(state.matches) && state.matches.length > 0)) {
-      target = { screen: 'gate', questionIndex: 0 };
+      target = { screen: 'gate', screenIndex: 0 };
     }
     if (target.screen === 'gate' && answered < total) {
-      target = { screen: 'question', questionIndex: answered };
+      target = { screen: 'question', screenIndex: answered };
     }
     if (target.screen === 'question') {
-      var idx = target.questionIndex || 0;
-      if (idx > answered) idx = answered;            // can't skip unanswered questions
+      var idx = target.screenIndex || 0;
+      if (idx > answered) idx = answered;            // can't skip unanswered screens
       if (idx >= total) idx = total - 1;
-      if (idx <= 0) return { screen: 'intro', questionIndex: 0 }; // q0 lives on the intro
-      target = { screen: 'question', questionIndex: idx };
+      if (idx <= 0 && introHostsFirstScreen()) {
+        return { screen: 'intro', screenIndex: 0 };  // screen 0 lives on the intro
+      }
+      target = { screen: 'question', screenIndex: Math.max(0, idx) };
     }
     return target;
   }
@@ -380,17 +428,17 @@
       // Entry state (before our first pushState) — only relevant if the
       // hash still looks like ours; otherwise the user navigated away.
       if ((location.hash || '').indexOf('#gq-') !== 0) return;
-      target = { screen: 'intro', questionIndex: 0 };
+      target = { screen: 'intro', screenIndex: 0 };
     }
     var original = target;
     target = clampStep(target);
     state.screen = target.screen;
-    state.questionIndex = target.questionIndex || 0;
-    if (state.screen === 'intro') truncateAnswers(0);
-    else if (state.screen === 'question') truncateAnswers(state.questionIndex);
+    state.screenIndex = target.screenIndex || 0;
+    if (state.screen === 'intro') truncateToScreen(0);
+    else if (state.screen === 'question') truncateToScreen(state.screenIndex);
     // If the popped entry was stale, rewrite it in place so Forward from
     // here lands on the corrected step too.
-    if (target.screen !== original.screen || (target.questionIndex || 0) !== (original.questionIndex || 0)) {
+    if (target.screen !== original.screen || (target.screenIndex || 0) !== (original.screenIndex || 0)) {
       replaceStep();
     }
     saveState();
@@ -488,7 +536,7 @@
     var seq = ++renderSeq;
     var next;
     switch (state.screen) {
-      case 'question': next = renderQuestion(); break;
+      case 'question': next = renderScreen(); break;
       case 'gate':     next = renderGate(); break;
       case 'results':  next = renderResults(); break;
       case 'intro':
@@ -535,7 +583,7 @@
   }
 
   function totalSteps() {
-    return (flow && flow.questions ? flow.questions.length : 0) + 1; // + try-on gate
+    return screens.length + 1; // + try-on gate
   }
 
   function el(tag, className, html) {
@@ -557,24 +605,40 @@
     copy.appendChild(el('h2', 'gq-headline', escapeHtml(landing.headline || '')));
     if (landing.subtext) copy.appendChild(el('p', 'gq-subtext', escapeHtml(landing.subtext)));
 
-    // Question 1, inline on the landing.
-    var q0 = flow && flow.questions && flow.questions[0];
-    if (q0) {
+    // First screen inline on the landing — only when it's a plain
+    // single-select question. Multi-select / grouped first screens get a
+    // Start button instead (they need Continue semantics and room).
+    if (introHostsFirstScreen()) {
+      var q0 = flow.questions[screens[0][0]];
       var qWrap = el('div', 'gq-intro-question');
       qWrap.appendChild(el('h3', 'gq-intro-question-title', escapeHtml(q0.prompt)));
+      if (q0.helperText) qWrap.appendChild(el('p', 'gq-intro-question-helper', escapeHtml(q0.helperText)));
       var cards = el('div', 'gq-option-cards');
-      q0.options.forEach(function(opt, i) {
+      visibleOptions(q0).forEach(function(opt, i) {
         var btn = el('button', 'gq-option-card', escapeHtml(opt.label));
         btn.type = 'button';
         btn.style.setProperty('--gq-stagger', i);
-        btn.onclick = function() { answerQuestion(0, opt, btn); };
+        btn.onclick = function() {
+          markSelected(btn);
+          commitSingle(0, screens[0][0], opt);
+        };
         cards.appendChild(btn);
       });
       qWrap.appendChild(cards);
       copy.appendChild(qWrap);
+    } else if (screens.length > 0) {
+      var startBtn = el('button', 'gq-add-btn gq-start-btn', escapeHtml('Start the quiz'));
+      startBtn.type = 'button';
+      startBtn.onclick = function() {
+        state.screen = 'question';
+        state.screenIndex = 0;
+        saveState();
+        pushStep();
+        render('forward');
+      };
+      copy.appendChild(startBtn);
     } else {
-      var empty = el('p', 'gq-subtext', 'This quiz isn’t configured yet.');
-      copy.appendChild(empty);
+      copy.appendChild(el('p', 'gq-subtext', 'This quiz isn’t configured yet.'));
     }
 
     if (landing.altAudienceLabel && landing.altAudienceUrl) {
@@ -628,34 +692,239 @@
     return screen;
   }
 
-  // -- Question step --
+  // -- Question screens --
 
-  function renderQuestion() {
-    var i = state.questionIndex;
-    var q = flow.questions[i];
+  // Draft selections for the screen being rendered — committed to
+  // criteria/answers only on advance (tap for single-select, Continue for
+  // multi-select and grouped screens). qIdx -> {options: [opt], selectAll}
+  var draft = {};
+
+  // Options whose showIf condition is met by committed answers or by the
+  // current screen's draft (so a same-screen dependency also works).
+  function conditionMet(showIf) {
+    if (!showIf) return true;
+    var v = state.criteria[showIf.axisKey];
+    if (Array.isArray(v) && v.indexOf(showIf.axisValue) !== -1) return true;
+    if (typeof v === 'string' && v === showIf.axisValue) return true;
+    for (var qi in draft) {
+      var q = flow.questions[qi];
+      if (!q || q.axisKey !== showIf.axisKey) continue;
+      var opts = draft[qi].options || [];
+      for (var i = 0; i < opts.length; i++) {
+        if (opts[i].axisValue === showIf.axisValue) return true;
+      }
+    }
+    return false;
+  }
+
+  function visibleOptions(q) {
+    return q.options.filter(function(opt) { return conditionMet(opt.showIf); });
+  }
+
+  function markSelected(btn) {
+    var siblings = btn.parentNode ? btn.parentNode.querySelectorAll('.is-selected') : [];
+    for (var s = 0; s < siblings.length; s++) siblings[s].classList.remove('is-selected');
+    btn.classList.add('is-selected');
+  }
+
+  function renderScreen() {
+    var screenIdx = state.screenIndex;
+    var qIdxs = screens[screenIdx];
     var screen = el('div', 'gq-step');
-    if (!q) return screen;
+    if (!qIdxs) return screen;
 
-    screen.appendChild(buildStepHeader(i + 1));
-
-    var body = el('div', 'gq-step-body');
-    body.appendChild(el('h2', 'gq-question-title', escapeHtml(q.prompt)));
-    if (q.helperText) body.appendChild(el('p', 'gq-question-helper', escapeHtml(q.helperText)));
-
-    var list = el('div', 'gq-option-list');
-    q.options.forEach(function(opt, idx) {
-      var btn = el('button', 'gq-option', '<span>' + escapeHtml(opt.label) + '</span>' +
-        '<svg class="gq-option-check" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>');
-      btn.type = 'button';
-      btn.style.setProperty('--gq-stagger', idx);
-      var prev = state.answers[i];
-      if (prev && prev.axisValue === opt.axisValue) btn.classList.add('is-selected');
-      btn.onclick = function() { answerQuestion(i, opt, btn); };
-      list.appendChild(btn);
+    // Seed drafts from committed answers so back-nav re-renders selections.
+    draft = {};
+    qIdxs.forEach(function(qi) {
+      var a = state.answers[qi];
+      if (a && a.values && a.values.length > 0) {
+        var q = flow.questions[qi];
+        draft[qi] = {
+          selectAll: Boolean(a.selectAll),
+          options: q.options.filter(function(o) {
+            return a.selectAll ? o.selectAll : a.values.indexOf(o.axisValue) !== -1;
+          }),
+        };
+      }
     });
-    body.appendChild(list);
+
+    screen.appendChild(buildStepHeader(screenIdx + 1));
+    var body = el('div', 'gq-step-body');
+
+    // Continue appears for multi-select or grouped screens; plain
+    // single-select keeps the tap-and-advance rhythm.
+    var needsContinue = qIdxs.length > 1 || flow.questions[qIdxs[0]].multiSelect;
+    var continueBtn = null;
+
+    function refreshContinue() {
+      if (!continueBtn) return;
+      var ready = qIdxs.every(function(qi) {
+        return draft[qi] && draft[qi].options.length > 0;
+      });
+      continueBtn.disabled = !ready;
+    }
+
+    qIdxs.forEach(function(qi, part) {
+      var q = flow.questions[qi];
+      if (part === 0) {
+        body.appendChild(el('h2', 'gq-question-title', escapeHtml(q.prompt)));
+      } else {
+        body.appendChild(el('h3', 'gq-question-subtitle', escapeHtml(q.prompt)));
+      }
+      if (q.helperText) body.appendChild(el('p', 'gq-question-helper', escapeHtml(q.helperText)));
+      body.appendChild(buildOptionList(qi, q, needsContinue, refreshContinue));
+    });
+
+    if (needsContinue) {
+      continueBtn = el('button', 'gq-add-btn gq-continue-btn', 'Continue');
+      continueBtn.type = 'button';
+      continueBtn.onclick = function() { commitScreen(screenIdx); };
+      body.appendChild(continueBtn);
+      refreshContinue();
+    }
+
     screen.appendChild(body);
     return screen;
+  }
+
+  function buildOptionList(qi, q, needsContinue, refreshContinue) {
+    var opts = visibleOptions(q);
+    var visual = opts.some(function(o) { return Boolean(o.imageUrl); });
+    var list = el('div', visual ? 'gq-option-grid' : 'gq-option-list');
+
+    opts.forEach(function(opt, idx) {
+      var btn;
+      if (visual) {
+        btn = el('button', 'gq-option gq-option--visual',
+          (opt.imageUrl
+            ? '<img class="gq-option-img" src="' + escapeHtml(opt.imageUrl) + '" alt="" loading="lazy">'
+            : '<span class="gq-option-img gq-option-img--empty"></span>') +
+          '<span class="gq-option-visual-label">' + escapeHtml(opt.label) + '</span>' +
+          '<svg class="gq-option-check" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>');
+      } else {
+        btn = el('button', 'gq-option', '<span>' + escapeHtml(opt.label) + '</span>' +
+          '<svg class="gq-option-check" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>');
+      }
+      btn.type = 'button';
+      btn.style.setProperty('--gq-stagger', idx);
+
+      var current = draft[qi];
+      var isSelected = current && current.options.some(function(o) { return o === opt || o.axisValue === opt.axisValue && o.label === opt.label; });
+      if (isSelected) btn.classList.add('is-selected');
+
+      btn.onclick = function() {
+        if (!q.multiSelect) {
+          // Single-select: radio behavior within the question.
+          draft[qi] = { selectAll: opt.selectAll, options: [opt] };
+          markSelected(btn);
+          if (!needsContinue) {
+            commitSingle(state.screenIndex, qi, opt);
+            return;
+          }
+        } else if (opt.selectAll) {
+          // "Open to anything" is exclusive — it replaces specific picks.
+          draft[qi] = { selectAll: true, options: [opt] };
+          var sel = btn.parentNode.querySelectorAll('.is-selected');
+          for (var s = 0; s < sel.length; s++) sel[s].classList.remove('is-selected');
+          btn.classList.add('is-selected');
+        } else {
+          var d = draft[qi];
+          if (!d || d.selectAll) {
+            // A specific pick clears a previous "open to anything".
+            d = draft[qi] = { selectAll: false, options: [] };
+            var all = btn.parentNode.querySelectorAll('.is-selected');
+            for (var t = 0; t < all.length; t++) all[t].classList.remove('is-selected');
+          }
+          var at = d.options.indexOf(opt);
+          if (at === -1) {
+            d.options.push(opt);
+            btn.classList.add('is-selected');
+          } else {
+            d.options.splice(at, 1);
+            btn.classList.remove('is-selected');
+            if (d.options.length === 0) delete draft[qi];
+          }
+        }
+        if (refreshContinue) refreshContinue();
+      };
+      list.appendChild(btn);
+    });
+    return list;
+  }
+
+  // Resolve a question's draft into criteria values. "Open to anything"
+  // expands to every value the question's specific options map to, so it
+  // matches any rule on that axis.
+  function draftToAnswer(qi) {
+    var q = flow.questions[qi];
+    var d = draft[qi];
+    if (!d || d.options.length === 0) return null;
+    var values, labels;
+    if (d.selectAll) {
+      var expanded = [];
+      q.options.forEach(function(o) {
+        if (!o.selectAll && expanded.indexOf(o.axisValue) === -1) expanded.push(o.axisValue);
+      });
+      values = expanded.length > 0 ? expanded : [d.options[0].axisValue];
+      labels = [d.options[0].label];
+    } else {
+      values = [];
+      labels = [];
+      d.options.forEach(function(o) {
+        if (values.indexOf(o.axisValue) === -1) values.push(o.axisValue);
+        labels.push(o.label);
+      });
+    }
+    return { axisKey: q.axisKey, values: values, labels: labels, selectAll: Boolean(d.selectAll) };
+  }
+
+  function recordAnswer(qi, answer) {
+    var q = flow.questions[qi];
+    state.answers[qi] = answer;
+    state.criteria[q.axisKey] = q.multiSelect ? answer.values : answer.values[0];
+  }
+
+  function advanceFrom(screenIdx) {
+    if (!quizStarted) { quizStarted = true; trackEvent('quiz_start'); }
+    trackEvent('quiz_question_answered');
+    if (screenIdx + 1 < screens.length) {
+      state.screen = 'question';
+      state.screenIndex = screenIdx + 1;
+    } else {
+      state.screen = 'gate';
+      trackEvent('quiz_gate_view');
+    }
+    saveState();
+    pushStep();
+    render('forward');
+  }
+
+  // Tap-to-advance path for plain single-select screens (and the intro's
+  // inline first question). Small selected-state beat before advancing —
+  // the tap should feel acknowledged, not teleporting.
+  function commitSingle(screenIdx, qi, opt) {
+    truncateToScreen(screenIdx);
+    draft[qi] = { selectAll: opt.selectAll, options: [opt] };
+    var answer = draftToAnswer(qi);
+    if (!answer) return;
+    recordAnswer(qi, answer);
+    setTimeout(function() { advanceFrom(screenIdx); }, 220);
+  }
+
+  // Continue path for multi-select and grouped screens.
+  function commitScreen(screenIdx) {
+    var qIdxs = screens[screenIdx];
+    var answers = [];
+    for (var j = 0; j < qIdxs.length; j++) {
+      var answer = draftToAnswer(qIdxs[j]);
+      if (!answer) return; // Continue was enabled prematurely — refuse
+      answers.push(answer);
+    }
+    truncateToScreen(screenIdx);
+    for (var k = 0; k < qIdxs.length; k++) {
+      recordAnswer(qIdxs[k], answers[k]);
+    }
+    advanceFrom(screenIdx);
   }
 
   function buildStepHeader(stepNumber) {
@@ -672,37 +941,6 @@
     track.appendChild(fill);
     header.appendChild(track);
     return header;
-  }
-
-  function answerQuestion(qIndex, opt, btn) {
-    var q = flow.questions[qIndex];
-    if (!q) return;
-    if (btn) {
-      var siblings = btn.parentNode.querySelectorAll('.is-selected');
-      for (var s = 0; s < siblings.length; s++) siblings[s].classList.remove('is-selected');
-      btn.classList.add('is-selected');
-    }
-    truncateAnswers(qIndex);
-    state.criteria[q.axisKey] = opt.axisValue;
-    state.answers[qIndex] = { axisKey: q.axisKey, axisValue: opt.axisValue, label: opt.label };
-
-    if (!quizStarted) { quizStarted = true; trackEvent('quiz_start'); }
-    trackEvent('quiz_question_answered');
-
-    // Small selected-state beat before advancing — the tap should feel
-    // acknowledged, not teleporting.
-    setTimeout(function() {
-      if (qIndex + 1 < flow.questions.length) {
-        state.screen = 'question';
-        state.questionIndex = qIndex + 1;
-      } else {
-        state.screen = 'gate';
-        trackEvent('quiz_gate_view');
-      }
-      saveState();
-      pushStep();
-      render('forward');
-    }, 220);
   }
 
   // -- Try-on gate (last numbered step) --
@@ -1262,7 +1500,7 @@
 
   function restartQuiz() {
     state = {
-      screen: 'intro', questionIndex: 0, criteria: {}, answers: [],
+      screen: 'intro', screenIndex: 0, criteria: {}, answers: [],
       hasPhoto: false, detectedShade: null, matches: null,
       matrixApplied: false, partial: false,
     };
@@ -1292,6 +1530,7 @@
       if (!config || !config.enabled) return;          // quiz mode off — section stays empty
       if (!flow || !flow.configured || !Array.isArray(flow.questions) || flow.questions.length === 0) return;
 
+      buildScreens();
       detectThemeTypography();
       applyStyleConfig();
 
@@ -1311,12 +1550,13 @@
         if (state.screen === 'results' && (!state.matches || state.matches.length === 0)) {
           state.screen = 'gate';
         }
-        // Guard restored indices against a changed question set.
-        if (state.screen === 'question' && state.questionIndex >= flow.questions.length) {
-          state.screen = 'intro';
-          state.questionIndex = 0;
-          truncateAnswers(0);
-        }
+        // Guard restored indices against a changed question set — clampStep
+        // covers both a shorter quiz and answers invalidated by edits.
+        var restored = clampStep({ screen: state.screen, screenIndex: state.screenIndex || 0 });
+        state.screen = restored.screen;
+        state.screenIndex = restored.screenIndex || 0;
+        if (state.screen === 'intro') truncateToScreen(0);
+        else if (state.screen === 'question') truncateToScreen(state.screenIndex);
       }
 
       replaceStep();

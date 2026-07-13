@@ -344,6 +344,23 @@
   color: var(--gq-ink-soft);
   text-align: center;
 }
+/* Part B heading on grouped screens ("Any colors calling your name?") */
+#gleame-quiz-root .gq-question-subtitle {
+  margin: var(--gq-space-7) 0 var(--gq-space-2);
+  font-family: var(--gq-font-heading);
+  font-weight: var(--gq-heading-weight);
+  font-size: clamp(19px, 2.4vw, 24px);
+  line-height: 1.2;
+  color: var(--gq-ink);
+  text-align: center;
+  text-transform: none;
+  letter-spacing: -0.01em;
+}
+#gleame-quiz-root .gq-intro-question-helper {
+  margin: -6px 0 var(--gq-space-4);
+  font-size: 14px;
+  color: var(--gq-ink-soft);
+}
 
 #gleame-quiz-root .gq-option-list {
   display: flex;
@@ -398,6 +415,59 @@
 #gleame-quiz-root .gq-option.is-selected .gq-option-check {
   opacity: 1;
   transform: scale(1);
+}
+
+/* Visual option grid (on-hand imagery per option) */
+#gleame-quiz-root .gq-option-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--gq-space-3);
+}
+#gleame-quiz-root .gq-option--visual {
+  position: relative;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
+  gap: var(--gq-space-2);
+  padding: var(--gq-space-2);
+  text-align: center;
+}
+#gleame-quiz-root .gq-option-img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: calc(var(--gq-radius-btn) - 4px);
+  background: #f3f1ee;
+  border: 0;
+}
+#gleame-quiz-root .gq-option-img--empty {
+  background: linear-gradient(135deg, #f3f1ee, #e9e5e0);
+}
+#gleame-quiz-root .gq-option-visual-label {
+  font-size: 14px;
+  font-weight: 550;
+  padding: 0 var(--gq-space-1) var(--gq-space-1);
+}
+#gleame-quiz-root .gq-option--visual .gq-option-check {
+  position: absolute;
+  top: var(--gq-space-2);
+  right: var(--gq-space-2);
+  background: #ffffff;
+  border-radius: 50%;
+  padding: 3px;
+  box-shadow: var(--gq-shadow-card);
+}
+
+/* Continue (multi-select / grouped screens) + intro Start */
+#gleame-quiz-root .gq-continue-btn {
+  margin-top: var(--gq-space-6);
+}
+#gleame-quiz-root .gq-start-btn {
+  width: auto;
+  margin-top: var(--gq-space-5);
+  padding-left: var(--gq-space-7);
+  padding-right: var(--gq-space-7);
 }
 
 /* Try-on gate */
@@ -993,6 +1063,7 @@
   }
   #gleame-quiz-root .gq-option-cards { flex-direction: column; }
   #gleame-quiz-root .gq-option-card { width: 100%; }
+  #gleame-quiz-root .gq-option-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   #gleame-quiz-root .gq-trust-row {
     flex-direction: column;
     align-items: flex-start;
