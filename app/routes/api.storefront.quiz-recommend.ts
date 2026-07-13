@@ -41,10 +41,14 @@ const CORS_HEADERS = {
  *                      // still unanswered) — the quiz shows the shade gate
  * }
  */
+// CORS preflight — Remix routes OPTIONS to the LOADER, not the action (same
+// pattern as track-event). The quiz widget posts JSON, so unlike the chat's
+// FormData posts, every browser call here is preceded by a preflight.
+export const loader = async () => {
+  return new Response(null, { status: 204, headers: CORS_HEADERS });
+};
+
 export const action = async ({ request }: ActionFunctionArgs) => {
-  if (request.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: CORS_HEADERS });
-  }
   if (request.method !== "POST") {
     return json({ error: "Method not allowed" }, { status: 405, headers: CORS_HEADERS });
   }
