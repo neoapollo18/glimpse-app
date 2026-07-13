@@ -2754,6 +2754,36 @@ export interface RecommendationFlow {
   configured: boolean;
 }
 
+// Swatch values end up inside a string-built style="" attribute on the
+// storefront, where escapeHtml alone doesn't stop CSS injection (';' and
+// 'url(' survive it). Whatever the write path was — admin save, SQL
+// console, a future importer — only strict hex ever leaves this mapper.
+const SWATCH_HEX_RE = /^#[0-9a-fA-F]{3,8}$/;
+const hexOrUndefined = (v: unknown): string | undefined =>
+  typeof v === 'string' && SWATCH_HEX_RE.test(v) ? v : undefined;
+
+// Single defensive mapper for the display_meta jsonb, shared by the
+// storefront flow and the admin editor so the two can't drift on what a
+// saved option looks like. Malformed blobs degrade to plain rendering.
+function mapDisplayMeta(raw: any): {
+  sublabel?: string;
+  tag?: string;
+  meterLabel?: string;
+  meterPct?: number;
+  swatch?: string;
+  swatch2?: string;
+} | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  return {
+    sublabel: typeof raw.sublabel === 'string' ? raw.sublabel : undefined,
+    tag: typeof raw.tag === 'string' ? raw.tag : undefined,
+    meterLabel: typeof raw.meterLabel === 'string' ? raw.meterLabel : undefined,
+    meterPct: typeof raw.meterPct === 'number' ? Math.max(0, Math.min(100, raw.meterPct)) : undefined,
+    swatch: hexOrUndefined(raw.swatch),
+    swatch2: hexOrUndefined(raw.swatch2),
+  };
+}
+
 export async function getRecommendationFlow(shopId: string): Promise<RecommendationFlow> {
   // Single query fetches axes + their values + (for user_question axes)
   // the question prompt + its options. Postgres handles the joins; we
@@ -2824,17 +2854,7 @@ export async function getRecommendationFlow(shopId: string): Promise<Recommendat
           const showIf = rawShowIf && typeof rawShowIf.axis_key === 'string' && typeof rawShowIf.axis_value === 'string'
             ? { axisKey: rawShowIf.axis_key, axisValue: rawShowIf.axis_value }
             : null;
-          const rawMeta = opt.display_meta;
-          const displayMeta = rawMeta && typeof rawMeta === 'object' && !Array.isArray(rawMeta)
-            ? {
-                sublabel: typeof rawMeta.sublabel === 'string' ? rawMeta.sublabel : undefined,
-                tag: typeof rawMeta.tag === 'string' ? rawMeta.tag : undefined,
-                meterLabel: typeof rawMeta.meterLabel === 'string' ? rawMeta.meterLabel : undefined,
-                meterPct: typeof rawMeta.meterPct === 'number' ? Math.max(0, Math.min(100, rawMeta.meterPct)) : undefined,
-                swatch: typeof rawMeta.swatch === 'string' ? rawMeta.swatch : undefined,
-                swatch2: typeof rawMeta.swatch2 === 'string' ? rawMeta.swatch2 : undefined,
-              }
-            : null;
+          const displayMeta = mapDisplayMeta(opt.display_meta);
           return {
             label: opt.label as string,
             axisValue: valueIdToKey.get(opt.axis_value_id as string) ?? '',
@@ -3221,20 +3241,7 @@ export async function getRecommendationAdminConfig(
         const showIf = rawShowIf && typeof rawShowIf.axis_key === 'string' && typeof rawShowIf.axis_value === 'string'
           ? { axisKey: rawShowIf.axis_key, axisValue: rawShowIf.axis_value }
           : null;
-        // display_meta is free-form jsonb — per-key type checks so a
-        // malformed blob degrades to plain rendering, mirroring the
-        // storefront mapper in getRecommendationFlow.
-        const rawMeta = opt.display_meta;
-        const displayMeta = rawMeta && typeof rawMeta === 'object' && !Array.isArray(rawMeta)
-          ? {
-              sublabel: typeof rawMeta.sublabel === 'string' ? rawMeta.sublabel : undefined,
-              tag: typeof rawMeta.tag === 'string' ? rawMeta.tag : undefined,
-              meterLabel: typeof rawMeta.meterLabel === 'string' ? rawMeta.meterLabel : undefined,
-              meterPct: typeof rawMeta.meterPct === 'number' ? Math.max(0, Math.min(100, rawMeta.meterPct)) : undefined,
-              swatch: typeof rawMeta.swatch === 'string' ? rawMeta.swatch : undefined,
-              swatch2: typeof rawMeta.swatch2 === 'string' ? rawMeta.swatch2 : undefined,
-            }
-          : null;
+        const displayMeta = mapDisplayMeta(opt.display_meta);
         return {
           id: opt.id,
           label: opt.label,

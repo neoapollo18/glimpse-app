@@ -354,6 +354,7 @@ export default function AssistantQuiz() {
             />
             <TextField
               label="Headline"
+              helpText="Wrap a phrase in **stars** to color it in the accent (e.g. matched in **60 seconds**)."
               value={form.quiz_headline}
               onChange={setField("quiz_headline")}
               autoComplete="off"
@@ -504,7 +505,7 @@ export default function AssistantQuiz() {
                   value={form.quiz_results_headline_photo}
                   onChange={setField("quiz_results_headline_photo")}
                   autoComplete="off"
-                  helpText="Shown when the shopper added a photo. Supports {first_name} — resolved from the logged-in customer, removed cleanly for guests."
+                  helpText="Shown when the shopper added a photo. Supports {first_name} (logged-in customer, removed cleanly for guests) and **word** to color a phrase in the accent."
                 />
               </div>
               <div style={{ flex: 1 }}>
@@ -513,7 +514,7 @@ export default function AssistantQuiz() {
                   value={form.quiz_results_headline_nophoto}
                   onChange={setField("quiz_results_headline_nophoto")}
                   autoComplete="off"
-                  helpText="Shown when the shopper skipped the photo. Supports {first_name} — resolved from the logged-in customer, removed cleanly for guests."
+                  helpText="Shown when the shopper skipped the photo. Supports {first_name} (logged-in customer, removed cleanly for guests) and **word** to color a phrase in the accent."
                 />
               </div>
             </InlineStack>
@@ -574,15 +575,10 @@ export default function AssistantQuiz() {
                   autoComplete="off"
                 />
               </div>
-              <div style={{ flex: 1 }}>
-                <TextField
-                  label="Retake Label"
-                  value={form.quiz_retake_label}
-                  onChange={setField("quiz_retake_label")}
-                  autoComplete="off"
-                  helpText="Button to retake the try-on photo"
-                />
-              </div>
+              {/* quiz_retake_label intentionally has no field: the results
+                  redesign edits the shade via the answers rail's uniform
+                  'edit' chips, so a separate retake label has nothing to
+                  drive. The column/config field remain for compatibility. */}
             </InlineStack>
           </BlockStack>
         </Card>

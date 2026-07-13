@@ -55,6 +55,17 @@
   position: relative;
 }
 
+/* Keyboard focus: an explicit ring on every interactive element. Themes
+   commonly strip UA outlines globally; without this the all-button quiz is
+   untraversable non-visually. */
+#gleame-quiz-root button:focus-visible,
+#gleame-quiz-root a:focus-visible,
+#gleame-quiz-root input:focus-visible {
+  outline: 2px solid var(--gq-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 /* Theme-editor hint (design mode only) */
 #gleame-quiz-root .gq-editor-hint {
   max-width: 560px;
@@ -183,6 +194,18 @@
   background: var(--gq-tint);
   color: var(--gq-accent);
   font-weight: 650;
+}
+#gleame-quiz-root .gq-chip-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  gap: 1px;
+}
+#gleame-quiz-root .gq-chip-sub {
+  font-size: 11.5px;
+  font-weight: 450;
+  color: var(--gq-ink-soft);
 }
 #gleame-quiz-root .gq-chip-dot {
   width: 14px;
@@ -615,6 +638,11 @@
   padding-right: var(--gq-space-7);
   background: var(--gq-accent);
   border-radius: 999px;
+  /* Navigation voice: sentence case like the gate/upsell accent pills —
+     uppercase tracking stays reserved for commerce (add-to-bag). */
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-size: 15px;
 }
 
 /* Working indicator + errors */
@@ -722,8 +750,9 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 12px;
-  color: var(--gq-ink-faint);
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--gq-ink-soft);
 }
 #gleame-quiz-root .gq-tone-rail {
   padding: var(--gq-space-5);
@@ -908,8 +937,7 @@
   transition: filter 600ms var(--gq-ease), opacity 600ms var(--gq-ease);
 }
 #gleame-quiz-root .gq-media-img--pending { filter: blur(22px); opacity: 0.4; }
-#gleame-quiz-root .gq-media--tryon::after {
-  content: 'On you';
+#gleame-quiz-root .gq-media-badge {
   position: absolute;
   top: var(--gq-space-2);
   left: var(--gq-space-2);
@@ -1273,7 +1301,9 @@
     border-top: 1px solid var(--gq-line);
   }
   #gleame-quiz-root .gq-add-btn--sticky { margin: 0; }
-  #gleame-quiz-root .gq-results { padding-bottom: 84px; }
+  /* Reserve the bar's REAL height (padding + button + safe area) so the
+     restart link and upsell banner stay tappable above it. */
+  #gleame-quiz-root .gq-results { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
 }
 
 /* Reduced motion */

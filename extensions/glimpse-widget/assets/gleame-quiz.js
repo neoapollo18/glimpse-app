@@ -59,7 +59,6 @@
 
   // Memory only — the "never stored" promise.
   var photoFile = null;
-  var photoObjectUrl = null;
   var tryonCache = {};     // matchKey -> base64
   var tryonPending = {};
   var tryonCount = 0;
@@ -90,7 +89,13 @@
     if (!t) return '';
     if (t.indexOf('{first_name}') === -1) return t;
     if (customerFirstName) return t.replace(/\{first_name\}/g, customerFirstName);
-    return t.replace(/,?\s*\{first_name\}/g, '');
+    // Guests: remove the token plus whichever comma flanks it, then tidy
+    // whitespace — works for leading, trailing, and mid-sentence placement.
+    return t
+      .replace(/,\s*\{first_name\}/g, '')
+      .replace(/\{first_name\}\s*,?\s*/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
   }
 
   // **accent** markup in merchant copy renders the wrapped words in the
@@ -366,6 +371,10 @@
   // as answered only when EVERY question on it has an answer.
   function answeredScreenCount() {
     for (var s = 0; s < screens.length; s++) {
+      // Fully-hidden screens are auto-skipped by navigation — they can't be
+      // answered and must not block "quiz complete" (results clamp,
+      // edit-return) for everyone downstream of a showIf.
+      if (screenFullyHidden(s)) continue;
       for (var j = 0; j < screens[s].length; j++) {
         var a = state.answers[screens[s][j]];
         if (!a || !a.values || a.values.length === 0) return s;
@@ -526,14 +535,16 @@
       return res.json();
     }).then(function(data) {
       delete tryonPending[key];
-      if (data && data.rateLimited) return { rateLimited: true };
+      if (data && data.rateLimited) { tryonCount--; return { rateLimited: true }; }
       if (data && data.tryOnPreview) {
         tryonCache[key] = data.tryOnPreview;
         return data.tryOnPreview;
       }
+      tryonCount--; // failed attempt — don't burn the session cap
       return null;
     }).catch(function() {
       delete tryonPending[key];
+      tryonCount--;
       return null;
     });
     tryonPending[key] = p;
@@ -541,6 +552,29 @@
   }
 
   // ---- Shade axis helpers ----
+
+  // Manual shade/tone dot row, shared by the gate's "no photo handy?" rail
+  // and the results shade gate — only the terminal action differs.
+  function buildShadeDots(axis, extraClass, onPicked) {
+    var dots = el('div', 'gq-shade-dots' + (extraClass ? ' ' + extraClass : ''));
+    axis.values.forEach(function(v) {
+      var dot = el('button', v.swatch ? 'gq-shade-pick' : 'gq-shade-pick gq-shade-pick--chip');
+      dot.type = 'button';
+      dot.title = v.label;
+      dot.setAttribute('aria-label', v.label);
+      if (v.swatch) dot.style.background = v.swatch;
+      else dot.textContent = v.label;
+      dot.onclick = function() {
+        state.criteria[axis.key] = v.value;
+        state.detectedShade = { axisKey: axis.key, value: v.value, label: v.label, source: 'manual' };
+        trackEvent('quiz_shade_manual');
+        saveState();
+        onPicked();
+      };
+      dots.appendChild(dot);
+    });
+    return dots;
+  }
 
   function shadeAxis() {
     if (!flow || !Array.isArray(flow.photoAxisDetails) || flow.photoAxisDetails.length === 0) return null;
@@ -608,10 +642,6 @@
       var rect = root.getBoundingClientRect();
       if (rect.top < 0) root.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
     }, 180);
-  }
-
-  function totalSteps() {
-    return screens.length + 1; // + try-on gate
   }
 
   function el(tag, className, html) {
@@ -687,7 +717,7 @@
       var frames = el('div', 'gq-ba-frames');
       if (landing.beforeImageUrl) {
         var b = el('figure', 'gq-ba-frame');
-        b.appendChild(el('span', 'gq-ba-tag', 'Before'));
+        b.appendChild(el('span', 'gq-ba-tag', escapeHtml(landing.beforeTag || 'Before')));
         var bImg = el('img', 'gq-ba-img');
         bImg.src = landing.beforeImageUrl; bImg.alt = 'Before'; bImg.loading = 'lazy';
         b.appendChild(bImg);
@@ -695,7 +725,7 @@
       }
       if (landing.afterImageUrl) {
         var a = el('figure', 'gq-ba-frame gq-ba-frame-after');
-        a.appendChild(el('span', 'gq-ba-tag gq-ba-tag-after', 'After'));
+        a.appendChild(el('span', 'gq-ba-tag gq-ba-tag-after', escapeHtml(landing.afterTag || 'After')));
         var aImg = el('img', 'gq-ba-img');
         aImg.src = landing.afterImageUrl; aImg.alt = 'After'; aImg.loading = 'lazy';
         a.appendChild(aImg);
@@ -955,18 +985,29 @@
         return tag + '<span class="gq-option-rich-title">' + label + '</span>' + sub + meter + CHECK_SVG;
       }
       case 'vibe': {
-        var s1 = meta.swatch || '#eee';
-        var s2 = meta.swatch2 || meta.swatch || '#ddd';
+        // Swatch-less options in a vibe question fall back to a plain boxed
+        // card — a defaulted gray gradient would read as a real colorway.
+        if (!meta.swatch && !meta.swatch2) {
+          return '<span class="gq-option-visual-label">' + label + '</span>' + sub + CHECK_SVG;
+        }
+        var s1 = meta.swatch || meta.swatch2;
+        var s2 = meta.swatch2 || meta.swatch;
         return '<span class="gq-vibe-tone" style="background:linear-gradient(105deg,' +
           escapeHtml(s1) + ' 50%,' + escapeHtml(s2) + ' 50%)"></span>' +
           '<span class="gq-option-visual-label">' + label + '</span>' + sub + CHECK_SVG;
       }
       case 'dotchip':
-        return (meta.swatch
+      case 'chip': {
+        // Chips keep authored sublabels as a stacked second line rather
+        // than silently dropping them when a sibling's swatch flips the
+        // question into chip rendering.
+        var chipText = meta.sublabel
+          ? '<span class="gq-chip-text"><span>' + label + '</span><span class="gq-chip-sub">' + escapeHtml(meta.sublabel) + '</span></span>'
+          : '<span>' + label + '</span>';
+        return (variant === 'dotchip' && meta.swatch
             ? '<span class="gq-chip-dot" style="background:' + escapeHtml(meta.swatch) + '"></span>'
-            : '') + '<span>' + label + '</span>';
-      case 'chip':
-        return '<span>' + label + '</span>';
+            : '') + chipText;
+      }
       case 'boxed':
         return '<span class="gq-option-visual-label">' + label + '</span>' + sub + CHECK_SVG;
       default: // list
@@ -1116,7 +1157,27 @@
       if (broken === -1 && answeredScreenCount() >= screens.length) {
         editReturn = false;
         saveState();
+        // Re-committing the same answer changes nothing — skip the server
+        // round trip and re-render the results already in state.
+        if (editSnapshot === JSON.stringify(state.criteria) &&
+            Array.isArray(state.matches) && state.matches.length > 0) {
+          state.screen = 'results';
+          pushStep();
+          render('forward');
+          return;
+        }
         goToResults(stageEl ? stageEl.firstElementChild : null);
+        return;
+      }
+      if (broken !== -1) {
+        // Land the shopper directly on the invalidated screen (it can sit
+        // anywhere relative to the edited one) — editReturn stays true, so
+        // completing it returns to results.
+        saveState();
+        state.screen = 'question';
+        state.screenIndex = broken;
+        pushStep();
+        render('forward');
         return;
       }
     }
@@ -1224,7 +1285,13 @@
       if (f && validPhoto(f)) onPhotoChosen(f, screen);
     };
     drop.appendChild(fileInput);
-    drop.onclick = function() { fileInput.click(); };
+    drop.onclick = function() {
+      if (!isMobile() && window.gleameCamera) {
+        openPhotoCapture(screen);
+      } else {
+        fileInput.click();
+      }
+    };
     drop.ondragover = function(e) { e.preventDefault(); drop.classList.add('is-dragover'); };
     drop.ondragleave = function() { drop.classList.remove('is-dragover'); };
     drop.ondrop = function(e) {
@@ -1243,24 +1310,7 @@
       var rail = el('div', 'gq-tone-rail');
       rail.appendChild(el('p', 'gq-tone-rail-title', escapeHtml(sg.ctaManual || 'No photo handy?')));
       if (sg.body) rail.appendChild(el('p', 'gq-tone-rail-body', escapeHtml(sg.body)));
-      var dots = el('div', 'gq-shade-dots gq-shade-dots--left');
-      axis.values.forEach(function(v) {
-        var dot = el('button', v.swatch ? 'gq-shade-pick' : 'gq-shade-pick gq-shade-pick--chip');
-        dot.type = 'button';
-        dot.title = v.label;
-        dot.setAttribute('aria-label', v.label);
-        if (v.swatch) dot.style.background = v.swatch;
-        else dot.textContent = v.label;
-        dot.onclick = function() {
-          state.criteria[axis.key] = v.value;
-          state.detectedShade = { axisKey: axis.key, value: v.value, label: v.label, source: 'manual' };
-          trackEvent('quiz_shade_manual');
-          saveState();
-          goToResults(screen);
-        };
-        dots.appendChild(dot);
-      });
-      rail.appendChild(dots);
+      rail.appendChild(buildShadeDots(axis, 'gq-shade-dots--left', function() { goToResults(screen); }));
       cols.appendChild(rail);
     }
 
@@ -1316,8 +1366,6 @@
   function onPhotoChosen(file, screenEl, onDone) {
     if (!validPhoto(file)) return;
     photoFile = file;
-    if (photoObjectUrl) { try { URL.revokeObjectURL(photoObjectUrl); } catch (e) {} }
-    photoObjectUrl = URL.createObjectURL(file);
     state.hasPhoto = true;
     tryonCache = {};
     tryonCount = 0;
@@ -1354,7 +1402,11 @@
       : Promise.resolve();
 
     classify.then(function() {
-      if (onDone) return onDone();
+      // shadeChanged tells results-side callers whether criteria moved —
+      // when it didn't (no photo axis, or same detection), a re-recommend
+      // would return byte-identical matches.
+      var shadeChanged = Boolean(needsShade);
+      if (onDone) return onDone(shadeChanged);
       return goToResults(screenEl);
     });
   }
@@ -1406,16 +1458,25 @@
 
   // Re-run recommend after the shade resolves (photo or manual pick) and
   // re-render results in place.
+  var rerunPending = false;
   function rerunWithShade() {
+    if (rerunPending) return; // double-tap guard — one recommend in flight
+    rerunPending = true;
+    // The results screen is live behind this call — show the standard
+    // working spinner instead of freezing silently for the round trip.
+    showWorking(stageEl ? stageEl.firstElementChild : null, 'Updating your matches\u2026');
     quizRecommend()
       .then(function(data) {
         state.matches = (data && data.matches) || [];
         state.matrixApplied = Boolean(data && data.matrixApplied);
         state.partial = Boolean(data && data.partial);
         saveState();
-        render('forward');
       })
-      .catch(function() { render('forward'); });
+      .catch(function() {})
+      .then(function() {
+        rerunPending = false;
+        render('forward');
+      });
   }
 
   // -- Results --
@@ -1425,9 +1486,13 @@
   // flow returns straight to re-rendered results instead of marching
   // forward through the remaining questions.
   var editReturn = false;
+  // Criteria snapshot at edit time — lets an unchanged re-commit skip the
+  // recommend round trip entirely.
+  var editSnapshot = null;
 
   function jumpToScreen(screenIdx) {
     editReturn = true;
+    editSnapshot = JSON.stringify(state.criteria);
     draft = {};
     state.screen = 'question';
     state.screenIndex = screenIdx;
@@ -1508,15 +1573,10 @@
       ? (results.headlinePhoto || "Here's your match \u2014 on you")
       : (results.headlineNoPhoto || 'Your matches');
 
-    var head = el('div', 'gq-results-head');
-    head.appendChild(el('h2', 'gq-headline gq-results-headline', renderAccent(renderName(headline))));
-    if (results.subtext) {
-      head.appendChild(el('p', 'gq-results-subtext',
-        escapeHtml(renderName(results.subtext).replace(/\{count\}/g, String(matches.length)))));
-    }
-    screen.appendChild(head);
-
+    // Empty state stands alone — a personalized headline plus "0 picks
+    // made for your answers" above the apology reads as a contradiction.
     if (matches.length === 0) {
+      screen.appendChild(el('div', 'gq-results-head'));
       var none = el('div', 'gq-error',
         '<p>We couldn\u2019t find a match this time \u2014 try adjusting your answers.</p>');
       var restart = el('button', 'gq-retry', 'Start over');
@@ -1526,6 +1586,14 @@
       screen.appendChild(none);
       return screen;
     }
+
+    var head = el('div', 'gq-results-head');
+    head.appendChild(el('h2', 'gq-headline gq-results-headline', renderAccent(renderName(headline))));
+    if (results.subtext) {
+      head.appendChild(el('p', 'gq-results-subtext',
+        escapeHtml(renderName(results.subtext).replace(/\{count\}/g, String(matches.length)))));
+    }
+    screen.appendChild(head);
 
     var layout = el('div', 'gq-results-layout');
     layout.appendChild(buildAnswersRail());
@@ -1607,6 +1675,21 @@
       }
       val.appendChild(document.createTextNode(shade.label));
       chip.appendChild(val);
+      // Editable like every other answer: clearing the shade drops results
+      // to the partial state, whose shade gate offers a fresh photo AND the
+      // manual picker — the recovery path for a wrong detection.
+      var editShade = el('button', 'gq-rail-edit', 'edit');
+      editShade.type = 'button';
+      editShade.onclick = function() {
+        if (state.detectedShade && state.detectedShade.source === 'photo') {
+          trackEvent('quiz_retake_photo');
+        }
+        delete state.criteria[axis.key];
+        state.detectedShade = null;
+        saveState();
+        rerunWithShade();
+      };
+      chip.appendChild(editShade);
       rail.appendChild(chip);
     }
     return rail;
@@ -1614,21 +1697,49 @@
 
   // Swap a match card's media to the generated try-on with a blur-up
   // reveal; falls back silently (product image stays) on failure.
-  function applyTryonToMedia(media, img, match, onDone) {
+  function applyTryonToMedia(media, img, match, isHero, onDone) {
+    var prevSrc = img.src;
     requestTryon(match).then(function(result) {
+      // Card torn down by a re-render while the transform ran: the fresh
+      // card resolves the same cached promise; don't decode or double-track
+      // on the detached copy.
+      var connected = media.isConnected !== undefined ? media.isConnected : document.contains(media);
+      if (!connected) { if (onDone) onDone(false, false); return; }
       if (!result || result.rateLimited) {
-        if (onDone) onDone(false, result && result.rateLimited);
+        if (onDone) onDone(false, Boolean(result && result.rateLimited));
         return;
       }
       img.classList.add('gq-media-img--pending');
-      img.src = 'data:image/jpeg;base64,' + result;
       img.onload = function() {
+        img.onload = null;
+        img.onerror = null;
         img.classList.remove('gq-media-img--pending');
         media.classList.add('gq-media--tryon');
-        trackEvent(match.rank === 1 ? 'quiz_tryon_shown' : 'quiz_tryon_secondary');
+        setMediaBadge(media);
+        // Analytics keyed on card POSITION — merchant matrix ranks can
+        // legitimately start above 1, so rank is the wrong key.
+        trackEvent(isHero ? 'quiz_tryon_shown' : 'quiz_tryon_secondary');
         if (onDone) onDone(true, false);
       };
+      img.onerror = function() {
+        // Corrupt payload — restore the product image instead of leaving
+        // the card blurred under a shimmer forever.
+        img.onload = null;
+        img.onerror = null;
+        img.classList.remove('gq-media-img--pending');
+        if (prevSrc) img.src = prevSrc;
+        if (onDone) onDone(false, false);
+      };
+      img.src = 'data:image/jpeg;base64,' + result;
     });
+  }
+
+  // "On you" badge lives in JS (not CSS content) so it's configurable and
+  // translatable like its sibling pills.
+  function setMediaBadge(media) {
+    if (media.querySelector('.gq-media-badge')) return;
+    var results = config.results || {};
+    media.appendChild(el('span', 'gq-media-badge', escapeHtml(results.onYouBadge || 'On you')));
   }
 
   function buildMatchCard(m, idx, definitive, hasPhotoNow, results) {
@@ -1680,7 +1791,19 @@
       });
       body.appendChild(ul);
     }
-    if (m.tagline) body.appendChild(el('p', 'gq-tagline', escapeHtml(m.tagline)));
+    if (m.tagline) {
+      body.appendChild(el('p', 'gq-tagline', escapeHtml(m.tagline)));
+    } else if (idx > 0 && Array.isArray(m.reasons) && m.reasons.length > 0) {
+      // No authored tagline: borrow one criteria reason so non-top cards
+      // aren't bare name/price stubs next to the rich top match.
+      var mini = el('ul', 'gq-reasons');
+      var li = el('li', 'gq-reason');
+      li.innerHTML =
+        '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' +
+        '<span>' + escapeHtml(m.reasons[0]) + '</span>';
+      mini.appendChild(li);
+      body.appendChild(mini);
+    }
 
     var price = el('p', 'gq-match-price', '');
     body.appendChild(price);
@@ -1688,8 +1811,8 @@
     if (definitive) {
       var addBtn = el('button', 'gq-add-btn gq-add-btn--card', escapeHtml(buildAddLabel(results.addButtonTemplate, m.quantity || 1, null)));
       addBtn.type = 'button';
-      addBtn.disabled = true;
       body.appendChild(addBtn);
+      wirePricedAddButton(addBtn, m, results);
     }
 
     var view = el('a', 'gq-view-link', escapeHtml(results.viewProductLabel || 'View full product') + ' \u2192');
@@ -1705,25 +1828,18 @@
       if (cached) {
         img.src = 'data:image/jpeg;base64,' + cached;
         media.classList.add('gq-media--tryon');
+        setMediaBadge(media);
       } else if (src) {
         img.src = src;
       }
       var unit = priceCentsForRec(pj, m);
       var qty = Math.max(1, m.quantity || 1);
       if (unit != null) price.textContent = formatMoney(unit * qty);
-      if (definitive && addBtn) {
-        var cartVariant = variantIdForCart(pj, m);
-        addBtn.textContent = buildAddLabel(results.addButtonTemplate, qty, unit != null ? unit * qty : null);
-        if (cartVariant) {
-          addBtn.disabled = false;
-          wireAddButton(addBtn, cartVariant, qty);
-        }
-      }
 
       if (hasPhotoNow && !cached) {
         if (idx === 0) {
           media.classList.add('gq-media--working');
-          applyTryonToMedia(media, img, m, function() { media.classList.remove('gq-media--working'); });
+          applyTryonToMedia(media, img, m, true, function() { media.classList.remove('gq-media--working'); });
         } else {
           var seeBtn = el('button', 'gq-media-see', 'See on me \u2728');
           seeBtn.type = 'button';
@@ -1731,11 +1847,18 @@
             e.stopPropagation();
             seeBtn.disabled = true;
             seeBtn.textContent = 'Working\u2026';
-            applyTryonToMedia(media, img, m, function(ok, limited) {
+            applyTryonToMedia(media, img, m, false, function(ok, limited) {
               if (ok) { if (seeBtn.parentNode) seeBtn.parentNode.removeChild(seeBtn); }
-              else {
+              else if (limited) {
+                // Rate-limited: soft copy for a beat, then invite a retry.
+                seeBtn.textContent = 'One moment\u2026';
+                setTimeout(function() {
+                  seeBtn.disabled = false;
+                  seeBtn.textContent = 'See on me \u2728';
+                }, 4000);
+              } else {
                 seeBtn.disabled = false;
-                seeBtn.textContent = limited ? 'One moment\u2026' : 'See on me \u2728';
+                seeBtn.textContent = 'See on me \u2728';
               }
             });
           };
@@ -1759,7 +1882,17 @@
     var cta = el('button', 'gq-upsell-cta', escapeHtml(upsell.cta || 'Try them on me'));
     cta.type = 'button';
     cta.onclick = function() {
-      openPhotoCapture(null, function() { rerunWithShade(); });
+      if (cta.disabled) return;
+      cta.disabled = true;
+      openPhotoCapture(null, function(shadeChanged) {
+        // No shade movement (e.g. shop without a photo axis): the matches
+        // can't change — just re-render so the try-on kicks in from the
+        // photo now held in memory.
+        if (shadeChanged) rerunWithShade();
+        else render('forward');
+      });
+      // Re-enable after a beat in case the shopper cancels the picker.
+      setTimeout(function() { cta.disabled = false; }, 4000);
     };
     banner.appendChild(cta);
     return banner;
@@ -1817,43 +1950,34 @@
 
     var manual = el('div', 'gq-shade-manual');
     manual.appendChild(el('p', 'gq-shade-manual-label', escapeHtml(sg.ctaManual || 'I know my shade')));
-    var dots = el('div', 'gq-shade-dots');
-    (axis ? axis.values : []).forEach(function(v) {
-      var dot = el('button', v.swatch ? 'gq-shade-pick' : 'gq-shade-pick gq-shade-pick--chip');
-      dot.type = 'button';
-      dot.title = v.label;
-      dot.setAttribute('aria-label', v.label);
-      if (v.swatch) dot.style.background = v.swatch;
-      else dot.textContent = v.label;
-      dot.onclick = function() {
-        state.criteria[axis.key] = v.value;
-        state.detectedShade = { axisKey: axis.key, value: v.value, label: v.label, source: 'manual' };
-        trackEvent('quiz_shade_manual');
-        saveState();
-        rerunWithShade();
-      };
-      dots.appendChild(dot);
-    });
-    manual.appendChild(dots);
+    if (axis) manual.appendChild(buildShadeDots(axis, '', rerunWithShade));
     wrap.appendChild(manual);
     return wrap;
+  }
+
+  // Resolve price/variant from the storefront and arm an add-to-bag button.
+  // Shared by the match cards and the mobile sticky bar so their labels and
+  // cart behavior can never disagree (fetchProductJson is promise-cached —
+  // no extra request).
+  function wirePricedAddButton(btn, match, results) {
+    btn.disabled = true;
+    fetchProductJson(match.productHandle).then(function(pj) {
+      var unit = priceCentsForRec(pj, match);
+      var qty = Math.max(1, match.quantity || 1);
+      var cartVariant = variantIdForCart(pj, match);
+      btn.textContent = buildAddLabel(results.addButtonTemplate, qty, unit != null ? unit * qty : null);
+      if (!cartVariant) return;
+      btn.disabled = false;
+      wireAddButton(btn, cartVariant, qty);
+    });
   }
 
   function buildStickyBar(hero, results) {
     var bar = el('div', 'gq-sticky-bar');
     var btn = el('button', 'gq-add-btn gq-add-btn--sticky', escapeHtml(buildAddLabel(results.addButtonTemplate, hero.quantity || 1, null)));
     btn.type = 'button';
-    btn.disabled = true;
     bar.appendChild(btn);
-    fetchProductJson(hero.productHandle).then(function(pj) {
-      var unit = priceCentsForRec(pj, hero);
-      var qty = Math.max(1, hero.quantity || 1);
-      var cartVariant = variantIdForCart(pj, hero);
-      btn.textContent = buildAddLabel(results.addButtonTemplate, qty, unit != null ? unit * qty : null);
-      if (!cartVariant) return;
-      btn.disabled = false;
-      wireAddButton(btn, cartVariant, qty);
-    });
+    wirePricedAddButton(btn, hero, results);
     return bar;
   }
 
@@ -1866,7 +1990,6 @@
     draft = {}; // ghost selections must not leak into intro option visibility
     editReturn = false;
     photoFile = null;
-    if (photoObjectUrl) { try { URL.revokeObjectURL(photoObjectUrl); } catch (e) {} photoObjectUrl = null; }
     tryonCache = {};
     tryonCount = 0;
     quizStarted = false; // the restarted run gets its own quiz_start event
