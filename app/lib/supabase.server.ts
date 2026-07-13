@@ -64,11 +64,14 @@ export async function getConfiguredProducts(shopDomain: string) {
   const PAGE = 1000;
   const products: any[] = [];
   for (let from = 0; ; from += PAGE) {
+    // Order by id (uuid PK): products has NO created_at column — ordering
+    // by it errors the whole query and empties every shop's candidate pool.
+    // id isn't chronological, but paging only needs a stable total order.
     const { data, error } = await supabase
       .from('products')
       .select('*')
       .eq('shop_id', shop.id)
-      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
       .range(from, from + PAGE - 1);
     if (error) {
       console.error('Error fetching configured products:', error);
@@ -1149,7 +1152,7 @@ export async function getVariantsForProducts(productIds: string[]) {
         .from('product_variants')
         .select('*')
         .in('product_id', chunk)
-        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
         .range(from, from + PAGE - 1);
       if (error) {
         console.error('Error bulk-fetching product variants:', error);
