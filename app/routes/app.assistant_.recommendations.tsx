@@ -187,17 +187,32 @@ const HEX_RE = /^#[0-9a-fA-F]{3,8}$/;
 
 // Live color-dot preview for swatch TextFields (same treatment as the
 // axis-value swatch field). Invalid/empty hex shows a transparent dot.
-function swatchDotPrefix(value: string) {
+// A real color picker, not a decorative dot: clicking the swatch opens the
+// native picker and writes #rrggbb back into the hex field it prefixes.
+function swatchPickerPrefix(value: string, onPick: (hex: string) => void) {
+  const trimmed = value.trim();
+  // <input type="color"> only accepts 7-char #rrggbb — expand #rgb, default
+  // to a neutral when empty/invalid so the picker opens somewhere sane.
+  let pickerValue = "#dddddd";
+  if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) pickerValue = trimmed;
+  else if (/^#[0-9a-fA-F]{3}$/.test(trimmed)) {
+    pickerValue = "#" + trimmed.slice(1).split("").map((c) => c + c).join("");
+  }
   return (
-    <span
+    <input
+      type="color"
+      value={pickerValue}
+      onChange={(e) => onPick(e.target.value)}
       style={{
-        display: "inline-block",
-        width: 14,
-        height: 14,
-        borderRadius: "50%",
+        width: 22,
+        height: 22,
+        padding: 0,
         border: "1px solid rgba(0,0,0,0.2)",
-        background: HEX_RE.test(value.trim()) ? value.trim() : "transparent",
+        borderRadius: "50%",
+        background: "transparent",
+        cursor: "pointer",
       }}
+      aria-label="Pick a color"
     />
   );
 }
@@ -1111,7 +1126,9 @@ const NUM_RANKS = 3;
                             placeholder="#8b5a2b"
                             // Live preview dot so the merchant can eyeball the
                             // hex without leaving the field.
-                            prefix={swatchDotPrefix(v.swatchColor)}
+                            prefix={swatchPickerPrefix(v.swatchColor, (hex) =>
+                              updateAxisValue(axisIdx, valueIdx, { swatchColor: hex }),
+                            )}
                           />
                         </div>
                         <Button
@@ -1437,7 +1454,9 @@ const NUM_RANKS = 3;
                                     }
                                     autoComplete="off"
                                     placeholder="#e8b4c8"
-                                    prefix={swatchDotPrefix(opt.displaySwatch)}
+                                    prefix={swatchPickerPrefix(opt.displaySwatch, (hex) =>
+                                      updateQuestionOption(axis.key, optIdx, { displaySwatch: hex }),
+                                    )}
                                     helpText="One swatch = color chip dot; two = two-tone style card."
                                   />
                                 </div>
@@ -1450,7 +1469,9 @@ const NUM_RANKS = 3;
                                     }
                                     autoComplete="off"
                                     placeholder="#2b2b33"
-                                    prefix={swatchDotPrefix(opt.displaySwatch2)}
+                                    prefix={swatchPickerPrefix(opt.displaySwatch2, (hex) =>
+                                      updateQuestionOption(axis.key, optIdx, { displaySwatch2: hex }),
+                                    )}
                                   />
                                 </div>
                               </InlineStack>
