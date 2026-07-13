@@ -1296,7 +1296,15 @@ export default function AssistantRecommendations() {
                                   showIfAxisOptions above) — anything else could
                                   never be satisfied when this option renders.
                                   Changing the axis resets the value so a stale
-                                  pairing can't survive. */}
+                                  pairing can't survive.
+
+                                  CRITICAL: if the STORED condition references an
+                                  axis/value the dropdown no longer offers (axis
+                                  reordered, question moved, old config reused),
+                                  it must still render — visibly marked broken —
+                                  or the Select falsely shows "Always shown"
+                                  while validation rejects invisible state the
+                                  merchant can't see or clear. */}
                               <div style={{ flex: 1 }}>
                                 <Select
                                   label="Show only if (optional)"
@@ -1306,6 +1314,13 @@ export default function AssistantRecommendations() {
                                       label: a.label || a.key,
                                       value: a.key,
                                     })),
+                                    ...(opt.showIfAxisKey &&
+                                    !showIfAxisOptions.some((a) => a.key === opt.showIfAxisKey)
+                                      ? [{
+                                          label: `⚠ ${opt.showIfAxisKey} (unavailable — switch to Always shown)`,
+                                          value: opt.showIfAxisKey,
+                                        }]
+                                      : []),
                                   ]}
                                   value={opt.showIfAxisKey}
                                   onChange={(v) =>
@@ -1328,6 +1343,14 @@ export default function AssistantRecommendations() {
                                       label: v.label || v.value,
                                       value: v.value,
                                     })),
+                                    ...(opt.showIfAxisValue &&
+                                    !(axes.find((a) => a.key === opt.showIfAxisKey)?.values || [])
+                                      .some((v) => v.value === opt.showIfAxisValue)
+                                      ? [{
+                                          label: `⚠ ${opt.showIfAxisValue} (unavailable)`,
+                                          value: opt.showIfAxisValue,
+                                        }]
+                                      : []),
                                   ]}
                                   value={opt.showIfAxisValue}
                                   disabled={!opt.showIfAxisKey}
