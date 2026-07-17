@@ -14,6 +14,7 @@ import {
   aiOrderCandidates,
   orderByMatrix,
   fetchProductHandles,
+  fetchAvailability,
   slugifyHandle,
   extractNumericId,
   type Candidate,
@@ -140,22 +141,85 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // the shopper hasn't answered every rule axis yet (e.g. shade pending) —
     // the quiz shows a provisional best match plus the shade gate then.
     const aiOrdered = aiOrderCandidates(pool.candidates);
-    const match = Object.keys(criteria).length > 0
-      ? await matchRecommendationRules(verifiedShop.id, criteria)
-      : null;
-    let partial = Boolean(match?.partial);
 
-    // orderByMatrix logs criteria on misses; flatten arrays for readability.
-    const logCriteria: Record<string, string> = {};
-    for (const [k, v] of Object.entries(criteria)) {
-      logCriteria[k] = Array.isArray(v) ? v.join("|") : v;
+    const attemptMatch = async (attemptCriteria: MultiCriteria) => {
+      const match = Object.keys(attemptCriteria).length > 0
+        ? await matchRecommendationRules(verifiedShop.id, attemptCriteria)
+        : null;
+      // orderByMatrix logs criteria on misses; flatten arrays for readability.
+      const logCriteria: Record<string, string> = {};
+      for (const [k, v] of Object.entries(attemptCriteria)) {
+        logCriteria[k] = Array.isArray(v) ? v.join("|") : v;
+      }
+      const orderedResult = orderByMatrix(match?.hits ?? null, pool, aiOrdered, {
+        logTag: "quiz-recommend",
+        shopDomain: verifiedDomain,
+        criteria: logCriteria,
+      });
+      return { ...orderedResult, partial: orderedResult.matrixApplied && Boolean(match?.partial) };
+    };
+
+    let outcome = await attemptMatch(criteria);
+
+    // Stock-aware filtering (migration 047, opt-in per shop): drop matrix
+    // targets that aren't purchasable right now. When that empties a shade's
+    // matches, walk the merchant's nearest-shade adjacency list and re-match.
+    // Every failure path keeps the UNFILTERED outcome — an availability
+    // hiccup or a fully out-of-stock family must never blank the results.
+    if (chatConfig.quiz_availability_filter && outcome.matrixApplied) {
+      const filterByStock = async (o: typeof outcome) => {
+        const segment = o.ordered.slice(0, o.matrixCount);
+        const gids = segment.map((c) => c.variant?.shopify_variant_id || c.product.shopify_id);
+        const avail = await fetchAvailability(verifiedDomain, gids, "quiz-recommend");
+        if (avail === null) return null; // probe failed → fail open
+        const inStock = segment.filter(
+          (c) => avail.get(c.variant?.shopify_variant_id || c.product.shopify_id) !== false
+        );
+        if (inStock.length < segment.length) {
+          console.log(
+            `[quiz-recommend] availability filter dropped ${segment.length - inStock.length}/${segment.length} matrix picks for ${verifiedDomain}`
+          );
+        }
+        return { ...o, ordered: inStock.concat(o.ordered.slice(o.matrixCount)), matrixCount: inStock.length };
+      };
+
+      const filtered = await filterByStock(outcome);
+      if (filtered && filtered.matrixCount > 0) {
+        outcome = filtered;
+      } else if (filtered) {
+        // Everything for this shade is out of stock — try adjacent shades.
+        const fallbacks = chatConfig.quiz_shade_fallbacks ?? {};
+        const MAX_FALLBACK_ATTEMPTS = 4;
+        let recovered = false;
+        for (const [axisKey, byValue] of Object.entries(fallbacks)) {
+          const current = criteria[axisKey];
+          if (typeof current !== "string" || current === ANY_VALUE) continue;
+          for (const adjacent of (byValue[current] ?? []).slice(0, MAX_FALLBACK_ATTEMPTS)) {
+            const substituted: MultiCriteria = { ...criteria, [axisKey]: adjacent };
+            const attempt = await attemptMatch(substituted);
+            if (!attempt.matrixApplied) continue;
+            const attemptFiltered = await filterByStock(attempt);
+            if (attemptFiltered && attemptFiltered.matrixCount > 0) {
+              console.log(
+                `[quiz-recommend] shade fallback ${axisKey}: ${current} → ${adjacent} for ${verifiedDomain}`
+              );
+              outcome = attemptFiltered;
+              recovered = true;
+              break;
+            }
+          }
+          break; // one fallback axis per shop; nested loops don't compose
+        }
+        if (!recovered) {
+          console.warn(
+            `[quiz-recommend] availability filter left 0 picks and no fallback recovered for ${verifiedDomain} — serving unfiltered matrix picks`
+          );
+        }
+      }
     }
-    const { ordered, matrixApplied, matrixCount } = orderByMatrix(match?.hits ?? null, pool, aiOrdered, {
-      logTag: "quiz-recommend",
-      shopDomain: verifiedDomain,
-      criteria: logCriteria,
-    });
-    if (!matrixApplied) partial = false;
+
+    const { ordered, matrixApplied, matrixCount } = outcome;
+    const partial = outcome.partial;
 
     const targetCount = matrixApplied ? Math.min(desiredCount, matrixCount) : desiredCount;
 

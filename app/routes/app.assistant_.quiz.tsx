@@ -525,7 +525,7 @@ export default function AssistantQuiz() {
                   value={form.quiz_results_subtext}
                   onChange={setField("quiz_results_subtext")}
                   autoComplete="off"
-                  helpText="Sub-line under the results headline. Supports {count} (number of matches)."
+                  helpText="Sub-line under the results headline. Supports {count} (number of matches) and {match_word} (match/matches, pluralized)."
                 />
               </div>
               <div style={{ flex: 1 }}>

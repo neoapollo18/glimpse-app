@@ -134,6 +134,12 @@ type EditorQuestion = {
   // Optional group key — consecutive questions with the same group render
   // together on one quiz screen. '' = its own screen.
   screenGroup: string;
+  // Optional condition for asking the WHOLE question (migration 047): only
+  // shown when a prior answer for showIfAxisKey was showIfAxisValue. Same
+  // two-string binding pattern as the option-level condition ('' = always
+  // asked); serialized on save as snake_case {"axis_key","axis_value"}.
+  showIfAxisKey: string;
+  showIfAxisValue: string;
   options: EditorQuestionOption[];
 };
 type EditorRule = {
@@ -262,6 +268,8 @@ export default function AssistantRecommendations() {
         helperText: q.helperText || "",
         multiSelect: q.multiSelect || false,
         screenGroup: q.screenGroup || "",
+        showIfAxisKey: q.showIf?.axisKey || "",
+        showIfAxisValue: q.showIf?.axisValue || "",
         options: q.options.map((opt: any) => {
           const av = owningAxis?.values.find((v: any) => v.id === opt.axisValueId);
           return {
@@ -373,7 +381,12 @@ export default function AssistantRecommendations() {
         const newKey = patch.key;
         setQuestions((qs) =>
           qs.map((q) => {
-            const renamed = q.axisKey === oldKey ? { ...q, axisKey: newKey } : q;
+            let renamed = q.axisKey === oldKey ? { ...q, axisKey: newKey } : q;
+            // Question-level "Ask only if" conditions reference axes by key
+            // — follow the rename like the option-level ones below.
+            if (renamed.showIfAxisKey === oldKey) {
+              renamed = { ...renamed, showIfAxisKey: newKey };
+            }
             // "Show only if" conditions on ANY question's options reference
             // axes by key too — follow the rename so conditional options
             // don't silently orphan (they'd save fine but never render).
@@ -409,18 +422,24 @@ export default function AssistantRecommendations() {
       setQuestions((qs) =>
         qs
           .filter((q) => q.axisKey !== removed.key)
-          .map((q) =>
-            q.options.some((o) => o.showIfAxisKey === removed.key)
+          .map((q) => {
+            // A question gated on the removed axis falls back to always
+            // asked, same as options below.
+            const base =
+              q.showIfAxisKey === removed.key
+                ? { ...q, showIfAxisKey: "", showIfAxisValue: "" }
+                : q;
+            return base.options.some((o) => o.showIfAxisKey === removed.key)
               ? {
-                  ...q,
-                  options: q.options.map((o) =>
+                  ...base,
+                  options: base.options.map((o) =>
                     o.showIfAxisKey === removed.key
                       ? { ...o, showIfAxisKey: "", showIfAxisValue: "" }
                       : o,
                   ),
                 }
-              : q,
-          ),
+              : base;
+          }),
       );
       setRules((rs) => rs.filter((r) => !(removed.key in r.criteria)));
       return next;
@@ -452,6 +471,10 @@ export default function AssistantRecommendations() {
           setQuestions((qs) =>
             qs.map((q) => ({
               ...q,
+              // Question-level "Ask only if" can reference this value too.
+              ...(q.showIfAxisKey === axisKey && q.showIfAxisValue === oldValue
+                ? { showIfAxisValue: newValue }
+                : null),
               options: q.options.map((o) => {
                 let next = o;
                 if (q.axisKey === axisKey && o.axisValueValue === oldValue) {
@@ -506,6 +529,10 @@ export default function AssistantRecommendations() {
               : q.options;
           return {
             ...q,
+            // A question gated on the removed value falls back to always asked.
+            ...(q.showIfAxisKey === axis.key && q.showIfAxisValue === removed.value
+              ? { showIfAxisKey: "", showIfAxisValue: "" }
+              : null),
             options: pruned.map((o) =>
               o.showIfAxisKey === axis.key && o.showIfAxisValue === removed.value
                 ? { ...o, showIfAxisKey: "", showIfAxisValue: "" }
@@ -534,6 +561,8 @@ export default function AssistantRecommendations() {
         helperText: "",
         multiSelect: false,
         screenGroup: "",
+        showIfAxisKey: "",
+        showIfAxisValue: "",
         options: [],
       };
       setQuestions((prev) => [...prev, newQ]);
@@ -548,7 +577,7 @@ export default function AssistantRecommendations() {
       if (idx === -1) {
         return [
           ...prev,
-          { axisKey, prompt: "", helperText: "", multiSelect: false, screenGroup: "", options: [], ...patch },
+          { axisKey, prompt: "", helperText: "", multiSelect: false, screenGroup: "", showIfAxisKey: "", showIfAxisValue: "", options: [], ...patch },
         ];
       }
       return prev.map((q, i) => (i === idx ? { ...q, ...patch } : q));
@@ -577,7 +606,7 @@ export default function AssistantRecommendations() {
       if (idx === -1) {
         return [
           ...prev,
-          { axisKey, prompt: "", helperText: "", multiSelect: false, screenGroup: "", options: [newOpt] },
+          { axisKey, prompt: "", helperText: "", multiSelect: false, screenGroup: "", showIfAxisKey: "", showIfAxisValue: "", options: [newOpt] },
         ];
       }
       return prev.map((q, i) =>
@@ -754,6 +783,31 @@ const NUM_RANKS = 3;
         setValidationError(`The question for axis "${axis.key}" needs at least one answer option with a label and a mapped value`);
         return;
       }
+      // Question-level "Ask only if" gets the same three checks as the
+      // option-level condition: complete pair, live axis + value, and an
+      // EARLIER shopper question (a later or photo-sourced reference would
+      // save fine but permanently hide the question for every shopper).
+      if (q.showIfAxisKey || q.showIfAxisValue) {
+        if (!q.showIfAxisKey || !q.showIfAxisValue) {
+          setValidationError(`The question for axis "${axis.key}" has an incomplete "Ask only if" condition — pick both an axis and a value, or set it back to Always asked`);
+          return;
+        }
+        const condAxis = axes.find((a) => a.key === q.showIfAxisKey);
+        if (!condAxis || !condAxis.values.some((v) => v.value === q.showIfAxisValue)) {
+          setValidationError(`The question for axis "${axis.key}" has an "Ask only if" condition pointing at "${q.showIfAxisKey}: ${q.showIfAxisValue}", which no longer exists`);
+          return;
+        }
+        const qFlowIdx = questions.findIndex((qq) => qq.axisKey === axis.key);
+        const condFlowIdx = questions.findIndex((qq) => qq.axisKey === q.showIfAxisKey);
+        if (
+          condAxis.source !== "user_question" ||
+          condFlowIdx === -1 ||
+          condFlowIdx >= qFlowIdx
+        ) {
+          setValidationError(`Question ${qFlowIdx + 1} (axis "${axis.key}"): "Ask only if" must reference an earlier question's answer — photo-based traits and later questions aren't known yet when this question would render`);
+          return;
+        }
+      }
       for (const o of q.options) {
         if (o.label.trim() && !o.axisValueValue) {
           setValidationError(`Option "${o.label}" for axis "${axis.key}" isn't mapped to a value`);
@@ -897,6 +951,12 @@ const NUM_RANKS = 3;
           helperText: q.helperText || null,
           multiSelect: q.multiSelect,
           screenGroup: q.screenGroup.trim() || null,
+          // Same snake_case serialization as the option-level condition;
+          // incomplete = always asked.
+          showIf:
+            q.showIfAxisKey && q.showIfAxisValue
+              ? { axis_key: q.showIfAxisKey, axis_value: q.showIfAxisValue }
+              : null,
           options: q.options
             .filter((o) => o.label.trim() && o.axisValueValue)
             .map((o, i) => ({
@@ -1166,6 +1226,8 @@ const NUM_RANKS = 3;
                   helperText: "",
                   multiSelect: false,
                   screenGroup: "",
+                  showIfAxisKey: "",
+                  showIfAxisValue: "",
                   options: [] as EditorQuestionOption[],
                 };
                 // "Show only if" can only reference an answer that exists when
@@ -1225,6 +1287,67 @@ const NUM_RANKS = 3;
                             autoComplete="off"
                             placeholder="style_screen"
                             helpText="Consecutive questions with the same group render together on one quiz screen (e.g. style_screen)"
+                          />
+                        </div>
+                      </InlineStack>
+                      {/* Question-level branch (migration 047): skip the WHOLE
+                          question unless an earlier answer matches — e.g. only
+                          ask fit questions when category=extensions. Same
+                          offer/broken-state rules as the option-level "Show
+                          only if" below. */}
+                      <InlineStack gap="300" wrap={false}>
+                        <div style={{ flex: 1 }}>
+                          <Select
+                            label="Ask only if (optional)"
+                            options={[
+                              { label: "Always asked", value: "" },
+                              ...showIfAxisOptions.map((a) => ({
+                                label: a.label || a.key,
+                                value: a.key,
+                              })),
+                              ...(q.showIfAxisKey &&
+                              !showIfAxisOptions.some((a) => a.key === q.showIfAxisKey)
+                                ? [{
+                                    label: `⚠ ${q.showIfAxisKey} (unavailable — switch to Always asked)`,
+                                    value: q.showIfAxisKey,
+                                  }]
+                                : []),
+                            ]}
+                            value={q.showIfAxisKey}
+                            onChange={(v) =>
+                              updateQuestion(axis.key, {
+                                showIfAxisKey: v,
+                                showIfAxisValue: "",
+                              })
+                            }
+                            helpText="Only ask this question after a matching answer to an earlier question. The quiz skips it otherwise."
+                          />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <Select
+                            label="Required answer"
+                            options={[
+                              { label: "— Pick a value —", value: "" },
+                              ...(
+                                axes.find((a) => a.key === q.showIfAxisKey)?.values || []
+                              ).map((v) => ({
+                                label: v.label || v.value,
+                                value: v.value,
+                              })),
+                              ...(q.showIfAxisValue &&
+                              !(axes.find((a) => a.key === q.showIfAxisKey)?.values || [])
+                                .some((v) => v.value === q.showIfAxisValue)
+                                ? [{
+                                    label: `⚠ ${q.showIfAxisValue} (unavailable)`,
+                                    value: q.showIfAxisValue,
+                                  }]
+                                : []),
+                            ]}
+                            value={q.showIfAxisValue}
+                            disabled={!q.showIfAxisKey}
+                            onChange={(v) =>
+                              updateQuestion(axis.key, { showIfAxisValue: v })
+                            }
                           />
                         </div>
                       </InlineStack>

@@ -15,6 +15,9 @@ import type { ChatAssistantConfig } from "./supabase.server";
 
 const SHOPIFY_ADMIN_TIMEOUT_MS = 6_000;
 const HANDLE_CACHE_TTL_MS = 10 * 60_000;
+// Stock changes much faster than handles — keep this short so a restock
+// shows up quickly, but long enough to keep the Admin call off most requests.
+const AVAILABILITY_CACHE_TTL_MS = 2 * 60_000;
 
 export type EngineProduct = {
   id: string;
@@ -255,6 +258,136 @@ export async function orderCandidates(
     : null;
   const hits = match && !match.partial ? match.hits : null;
   return orderByMatrix(hits, pool, aiOrdered, { ...opts, criteria });
+}
+
+// ---------------------------------------------------------------------
+// Catalog availability (Admin GraphQL) with an in-memory cache.
+// ---------------------------------------------------------------------
+
+// Per-shop gid → available cache. Shared across requests in this process,
+// same lifecycle pattern as handleCache below.
+const availabilityCache = new Map<string, { avail: Map<string, boolean>; fetchedAt: number }>();
+
+/**
+ * Look up whether products/variants are purchasable right now. Accepts a
+ * mixed list of Product and ProductVariant GIDs and returns gid → available:
+ * a variant is available when Shopify says availableForSale; a whole product
+ * when it is ACTIVE and any of its variants is availableForSale.
+ *
+ * Returns NULL on any failure (no offline token, HTTP/GraphQL error,
+ * timeout) — callers must FAIL OPEN and skip filtering entirely. Dropping
+ * recommendations because an availability probe hiccuped would be strictly
+ * worse than occasionally recommending an out-of-stock item, which is all
+ * that happened before this filter existed.
+ *
+ * GIDs Shopify doesn't return (deleted targets) are treated as available for
+ * the same reason: that matches pre-filter behavior exactly.
+ */
+export async function fetchAvailability(
+  shopDomain: string,
+  gids: string[],
+  logTag = "recommendation-engine",
+): Promise<Map<string, boolean> | null> {
+  const result = new Map<string, boolean>();
+  const unique = [...new Set(gids.filter(Boolean))];
+  if (unique.length === 0) return result;
+
+  const cached = availabilityCache.get(shopDomain);
+  const now = Date.now();
+  const fresh = cached && now - cached.fetchedAt < AVAILABILITY_CACHE_TTL_MS;
+  const missing: string[] = [];
+  for (const gid of unique) {
+    const hit = fresh ? cached!.avail.get(gid) : undefined;
+    if (hit !== undefined) result.set(gid, hit);
+    else missing.push(gid);
+  }
+  if (missing.length === 0) return result;
+
+  const session = await prisma.session.findFirst({
+    where: { shop: shopDomain, isOnline: false, accessToken: { not: "" } },
+    orderBy: { id: "desc" },
+  });
+  if (!session?.accessToken) {
+    console.warn(`[${logTag}] no offline token for ${shopDomain}; skipping availability filter`);
+    return null;
+  }
+
+  // First 50 variants is plenty to answer "is anything purchasable" for a
+  // whole-product target; a product with more still answers correctly unless
+  // ONLY variants past 50 are in stock, which fails toward showing the item.
+  const query = `
+    query GetAvailability($ids: [ID!]!) {
+      nodes(ids: $ids) {
+        ... on ProductVariant { id availableForSale }
+        ... on Product { id status variants(first: 50) { nodes { availableForSale } } }
+      }
+    }
+  `;
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), SHOPIFY_ADMIN_TIMEOUT_MS);
+  try {
+    const res = await fetch(`https://${shopDomain}/admin/api/2025-07/graphql.json`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": session.accessToken,
+      },
+      body: JSON.stringify({ query, variables: { ids: missing } }),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) {
+      console.error(`[${logTag}] availability lookup HTTP ${res.status} for ${shopDomain}`);
+      return null;
+    }
+    const data = (await res.json()) as {
+      data?: {
+        nodes?: Array<
+          | { id: string; availableForSale: boolean }
+          | { id: string; status: string; variants?: { nodes?: Array<{ availableForSale: boolean }> } }
+          | null
+        >;
+      };
+      errors?: Array<{ message: string }>;
+    };
+    if (data.errors?.length) {
+      console.error(`[${logTag}] availability lookup GraphQL errors for ${shopDomain}:`, data.errors);
+      return null;
+    }
+    const store = fresh ? cached!.avail : new Map<string, boolean>();
+    const resolved = new Set<string>();
+    for (const node of data.data?.nodes ?? []) {
+      if (!node || !("id" in node)) continue;
+      let available: boolean;
+      if ("status" in node) {
+        available =
+          node.status === "ACTIVE" &&
+          (node.variants?.nodes ?? []).some((v) => v.availableForSale);
+      } else {
+        available = Boolean(node.availableForSale);
+      }
+      result.set(node.id, available);
+      store.set(node.id, available);
+      resolved.add(node.id);
+    }
+    for (const gid of missing) {
+      if (!resolved.has(gid)) {
+        result.set(gid, true); // unresolved (deleted?) = pre-filter behavior
+        store.set(gid, true);
+      }
+    }
+    availabilityCache.set(shopDomain, { avail: store, fetchedAt: Date.now() });
+    return result;
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      console.error(`[${logTag}] availability lookup timed out for ${shopDomain}`);
+    } else {
+      console.error(`[${logTag}] availability lookup threw for ${shopDomain}:`, err);
+    }
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // ---------------------------------------------------------------------

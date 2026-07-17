@@ -2413,6 +2413,14 @@ export interface ChatAssistantConfig {
   quiz_button_radius: number | null;
   quiz_heading_font_override: string | null;
   quiz_body_font_override: string | null;
+  // Stock-aware recommendations (migration 047). Opt-in per shop: when true,
+  // quiz-recommend drops matrix targets that are unavailable on Shopify
+  // (fail-open on Admin API errors). Off = matching is untouched.
+  quiz_availability_filter: boolean;
+  // Nearest-shade adjacency map per axis, consulted only when the
+  // availability filter leaves zero matrix matches:
+  // { hair_shade: { jet_black: ['soft_black', 'darkest_brown'] } }.
+  quiz_shade_fallbacks: Record<string, Record<string, string[]>> | null;
 }
 
 const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
@@ -2495,7 +2503,28 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   quiz_button_radius: null,
   quiz_heading_font_override: null,
   quiz_body_font_override: null,
+  quiz_availability_filter: false,
+  quiz_shade_fallbacks: null,
 };
+
+// Defensive parse of the quiz_shade_fallbacks jsonb: keep only
+// axis → value → [string values] entries; anything malformed degrades to
+// "no fallback for that entry" rather than poisoning the whole map.
+function mapShadeFallbacks(raw: any): Record<string, Record<string, string[]>> | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const out: Record<string, Record<string, string[]>> = {};
+  for (const [axisKey, byValue] of Object.entries(raw)) {
+    if (!byValue || typeof byValue !== 'object' || Array.isArray(byValue)) continue;
+    const axisMap: Record<string, string[]> = {};
+    for (const [value, adjacents] of Object.entries(byValue as Record<string, unknown>)) {
+      if (!Array.isArray(adjacents)) continue;
+      const clean = adjacents.filter((s): s is string => typeof s === 'string' && s.length > 0);
+      if (clean.length > 0) axisMap[value] = clean;
+    }
+    if (Object.keys(axisMap).length > 0) out[axisKey] = axisMap;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
 
 export async function getChatAssistantConfig(shopDomain: string): Promise<ChatAssistantConfig> {
   const { data, error } = await supabase
@@ -2601,6 +2630,8 @@ function mapChatAssistantRow(data: any): ChatAssistantConfig {
     quiz_button_radius: data.quiz_button_radius ?? CHAT_ASSISTANT_DEFAULTS.quiz_button_radius,
     quiz_heading_font_override: data.quiz_heading_font_override ?? CHAT_ASSISTANT_DEFAULTS.quiz_heading_font_override,
     quiz_body_font_override: data.quiz_body_font_override ?? CHAT_ASSISTANT_DEFAULTS.quiz_body_font_override,
+    quiz_availability_filter: data.quiz_availability_filter ?? CHAT_ASSISTANT_DEFAULTS.quiz_availability_filter,
+    quiz_shade_fallbacks: mapShadeFallbacks(data.quiz_shade_fallbacks),
   };
 }
 
@@ -2743,6 +2774,10 @@ export interface RecommendationFlow {
     multiSelect: boolean;
     // Consecutive questions sharing a screenGroup render on ONE quiz screen.
     screenGroup: string | null;
+    // Render condition for the WHOLE question (migration 047): only asked
+    // when that prior answer was given — e.g. extension-fit questions only
+    // when category=extensions. Null = always asked.
+    showIf: { axisKey: string; axisValue: string } | null;
     options: Array<{
       label: string;
       axisValue: string;
@@ -2831,6 +2866,7 @@ export async function getRecommendationFlow(shopId: string): Promise<Recommendat
         helper_text,
         multi_select,
         screen_group,
+        show_if,
         recommendation_question_options (
           id,
           label,
@@ -2897,6 +2933,12 @@ export async function getRecommendationFlow(shopId: string): Promise<Recommendat
       // values — the widget would otherwise render the prompt with no
       // buttons and the shopper would be stranded.
       if (options.length === 0) return [];
+      // Question-level show_if shares the option-level snake_case shape;
+      // malformed blobs degrade to "always asked".
+      const rawQShowIf = q.show_if as { axis_key?: string; axis_value?: string } | null;
+      const qShowIf = rawQShowIf && typeof rawQShowIf.axis_key === 'string' && typeof rawQShowIf.axis_value === 'string'
+        ? { axisKey: rawQShowIf.axis_key, axisValue: rawQShowIf.axis_value }
+        : null;
       return [{
         axisKey: a.key as string,
         axisLabel: a.label as string,
@@ -2904,6 +2946,7 @@ export async function getRecommendationFlow(shopId: string): Promise<Recommendat
         helperText: (q.helper_text as string | null) ?? null,
         multiSelect: Boolean(q.multi_select),
         screenGroup: (q.screen_group as string | null) ?? null,
+        showIf: qShowIf,
         options,
       }];
     });
@@ -3167,6 +3210,9 @@ export interface AdminQuestion {
   // Optional group key — consecutive questions sharing it render on one
   // quiz screen with a single Continue.
   screenGroup: string | null;
+  // Optional render condition for the WHOLE question (migration 047) —
+  // same stored shape as the option-level one, camelCase here.
+  showIf: { axisKey: string; axisValue: string } | null;
   options: AdminQuestionOption[];
 }
 
@@ -3217,7 +3263,7 @@ export async function getRecommendationAdminConfig(
   const questionsRes = axisIds.length > 0
     ? await supabase
         .from('recommendation_questions')
-        .select('id, axis_id, prompt, helper_text, multi_select, screen_group, recommendation_question_options ( id, label, axis_value_id, bot_response, position, reason_text, image_url, show_if, select_all, display_meta )')
+        .select('id, axis_id, prompt, helper_text, multi_select, screen_group, show_if, recommendation_question_options ( id, label, axis_value_id, bot_response, position, reason_text, image_url, show_if, select_all, display_meta )')
         .in('axis_id', axisIds)
     : { data: [], error: null };
 
@@ -3250,13 +3296,21 @@ export async function getRecommendationAdminConfig(
       })),
   }));
 
-  const questions: AdminQuestion[] = (questionsRes.data || []).map((q: any) => ({
+  const questions: AdminQuestion[] = (questionsRes.data || []).map((q: any) => {
+    // Question-level show_if (migration 047): same snake_case jsonb shape as
+    // the option-level condition; malformed = "always asked".
+    const rawQShowIf = q.show_if as { axis_key?: string; axis_value?: string } | null;
+    const qShowIf = rawQShowIf && typeof rawQShowIf.axis_key === 'string' && typeof rawQShowIf.axis_value === 'string'
+      ? { axisKey: rawQShowIf.axis_key, axisValue: rawQShowIf.axis_value }
+      : null;
+    return {
     id: q.id,
     axisId: q.axis_id,
     prompt: q.prompt,
     helperText: (q.helper_text as string | null) ?? null,
     multiSelect: (q.multi_select as boolean | null) ?? false,
     screenGroup: (q.screen_group as string | null) ?? null,
+    showIf: qShowIf,
     options: ((q.recommendation_question_options || []) as any[])
       .slice()
       .sort((x, y) => (x.position ?? 0) - (y.position ?? 0))
@@ -3281,7 +3335,8 @@ export async function getRecommendationAdminConfig(
           position: opt.position ?? 0,
         };
       }),
-  }));
+    };
+  });
 
   const rules: AdminRule[] = (rulesRes.rows || []).map((r: any) => ({
     id: r.id,
@@ -3420,6 +3475,9 @@ export async function saveRecommendationConfig(
       // Optional screen-group key — consecutive questions sharing it render
       // on one quiz screen. '' → NULL in the RPC.
       screenGroup?: string | null;
+      // Optional render condition for the WHOLE question (migration 047),
+      // snake_case to match what the RPC stores verbatim as jsonb.
+      showIf?: { axis_key: string; axis_value: string } | null;
       options: Array<{
         label: string;
         axisValueValue: string;
@@ -3489,6 +3547,20 @@ export async function saveRecommendationConfig(
   // quiz never renders a broken color chip.
   const HEX_RE = /^#[0-9a-fA-F]{3,8}$/;
   for (const question of input.questions || []) {
+    // Question-level showIf is stored verbatim as jsonb and read back by the
+    // storefront quiz — a malformed condition would silently hide the whole
+    // question forever. Same identifier rule as the option-level condition.
+    if (question.showIf != null) {
+      if (
+        !ID_RE.test(question.showIf.axis_key || '') ||
+        !ID_RE.test(question.showIf.axis_value || '')
+      ) {
+        return {
+          ok: false,
+          error: `Question "${question.prompt}" has an invalid "ask only if" condition — both the axis and value must be lower snake_case identifiers`,
+        };
+      }
+    }
     for (const opt of question.options || []) {
       // showIf is stored verbatim as jsonb and read back by the storefront
       // quiz, so a malformed condition would silently hide the option

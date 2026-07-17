@@ -47,7 +47,7 @@ const GENERIC = ['Star Spangled', 'Blue Tango', 'Bubbly Bombshell', 'Embrace Dan
     .eq('shop_id', shopId).order('position');
   const axes = axesRes.data;
   const qRes = await sb.from('recommendation_questions')
-    .select('id, axis_id, prompt, position, helper_text, multi_select, screen_group, recommendation_question_options ( label, axis_value_id, bot_response, position, reason_text, image_url, show_if, select_all, display_meta )')
+    .select('id, axis_id, prompt, position, helper_text, multi_select, screen_group, show_if, recommendation_question_options ( label, axis_value_id, bot_response, position, reason_text, image_url, show_if, select_all, display_meta )')
     .in('axis_id', axes.map(a => a.id));
   const valueById = new Map();
   for (const a of axes) for (const v of a.recommendation_axis_values) valueById.set(v.id, v.value);
@@ -65,6 +65,8 @@ const GENERIC = ['Star Spangled', 'Blue Tango', 'Bubbly Bombshell', 'Embrace Dan
     helperText: q.helper_text || null,
     multiSelect: !!q.multi_select,
     screenGroup: q.screen_group || null,
+    showIf: q.show_if || null, // question-level condition (047) — preserve verbatim
+
     options: (q.recommendation_question_options || []).sort((x, y) => x.position - y.position)
       .map((o, i) => {
         let showIf = o.show_if || null;

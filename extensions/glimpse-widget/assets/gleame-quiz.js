@@ -787,6 +787,13 @@
   }
 
   function visibleOptions(q) {
+    // Question-level showIf: an unmet condition hides the WHOLE question.
+    // Returning [] here routes it through every existing "no visible
+    // options" path — screen skipping (screenFullyHidden), progress
+    // counting (answeredScreenCount), and answer pruning
+    // (pruneDownstreamAnswers) — so a gated question behaves exactly like
+    // one whose options are all conditional.
+    if (q.showIf && !conditionMet(q.showIf)) return [];
     return q.options.filter(function(opt) { return conditionMet(opt.showIf); });
   }
 
@@ -1595,8 +1602,12 @@
     var head = el('div', 'gq-results-head');
     head.appendChild(el('h2', 'gq-headline gq-results-headline', renderAccent(renderName(headline))));
     if (results.subtext) {
+      // {match_word} pluralizes for brands whose rules return one or two
+      // picks (e.g. a lone clip-in) — "{count} {match_word} made for you".
       head.appendChild(el('p', 'gq-results-subtext',
-        escapeHtml(renderName(results.subtext).replace(/\{count\}/g, String(matches.length)))));
+        escapeHtml(renderName(results.subtext)
+          .replace(/\{count\}/g, String(matches.length))
+          .replace(/\{match_word\}/g, matches.length === 1 ? 'match' : 'matches'))));
     }
     screen.appendChild(head);
 
@@ -1604,7 +1615,10 @@
     layout.appendChild(buildAnswersRail());
 
     var main = el('div', 'gq-results-main');
-    var grid = el('div', 'gq-match-grid');
+    // Column count follows the match count (capped at 3) so one or two
+    // curated picks render centered at card width instead of rattling
+    // around the left of a fixed 3-column grid.
+    var grid = el('div', 'gq-match-grid gq-match-grid--' + Math.min(matches.length, 3));
     matches.forEach(function(m, i) {
       grid.appendChild(buildMatchCard(m, i, definitive, hasPhotoNow, results));
     });

@@ -907,6 +907,24 @@
   gap: var(--gq-space-4);
   align-items: stretch;
 }
+/* Fewer matches than columns (brands whose rules return 1-2 picks): shrink
+   the grid to the match count and center it, so a lone hero card doesn't
+   sit in the left third of an empty row. Double-class selectors outrank the
+   3-column rules in the responsive block below. */
+#gleame-quiz-root .gq-match-grid.gq-match-grid--1 {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 480px;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+}
+#gleame-quiz-root .gq-match-grid.gq-match-grid--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 780px;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+}
 #gleame-quiz-root .gq-match-card {
   display: flex;
   flex-direction: column;
@@ -1292,6 +1310,9 @@
   #gleame-quiz-root .gq-intro-visual { order: -1; max-width: 460px; margin: 0 auto; }
   #gleame-quiz-root .gq-gate-cols { grid-template-columns: minmax(0, 1fr); }
   #gleame-quiz-root .gq-match-grid { grid-template-columns: minmax(0, 1fr); max-width: 480px; margin: 0 auto; width: 100%; }
+  /* Mobile stacks everything single-column, including the 2-match grid
+     (its double-class desktop rule would otherwise win over this one). */
+  #gleame-quiz-root .gq-match-grid.gq-match-grid--2 { grid-template-columns: minmax(0, 1fr); max-width: 480px; }
   #gleame-quiz-root .gq-rich-list { grid-template-columns: minmax(0, 1fr); }
 }
 
