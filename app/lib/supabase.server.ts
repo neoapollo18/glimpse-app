@@ -2778,6 +2778,10 @@ export interface RecommendationFlow {
     // when that prior answer was given — e.g. extension-fit questions only
     // when category=extensions. Null = always asked.
     showIf: { axisKey: string; axisValue: string } | null;
+    // Explicit render style for the answer buttons (migration 048). Null =
+    // auto — the widget picks a variant from the options' content, exactly
+    // as before the column existed.
+    optionStyle: QuestionOptionStyle | null;
     options: Array<{
       label: string;
       axisValue: string;
@@ -2814,6 +2818,16 @@ export interface RecommendationFlow {
   }>;
   configured: boolean;
 }
+
+// Per-question option render styles (migration 048). Mirrors the DB CHECK
+// constraint; anything else read back degrades to null = auto so a stray
+// value can never break the quiz.
+export const QUESTION_OPTION_STYLES = ['chips', 'boxed', 'list', 'visual', 'rich', 'vibe'] as const;
+export type QuestionOptionStyle = (typeof QUESTION_OPTION_STYLES)[number];
+const optionStyleOrNull = (v: unknown): QuestionOptionStyle | null =>
+  typeof v === 'string' && (QUESTION_OPTION_STYLES as readonly string[]).includes(v)
+    ? (v as QuestionOptionStyle)
+    : null;
 
 // Swatch values end up inside a string-built style="" attribute on the
 // storefront, where escapeHtml alone doesn't stop CSS injection (';' and
@@ -2867,6 +2881,7 @@ export async function getRecommendationFlow(shopId: string): Promise<Recommendat
         multi_select,
         screen_group,
         show_if,
+        option_style,
         recommendation_question_options (
           id,
           label,
@@ -2947,6 +2962,7 @@ export async function getRecommendationFlow(shopId: string): Promise<Recommendat
         multiSelect: Boolean(q.multi_select),
         screenGroup: (q.screen_group as string | null) ?? null,
         showIf: qShowIf,
+        optionStyle: optionStyleOrNull(q.option_style),
         options,
       }];
     });
@@ -3213,6 +3229,8 @@ export interface AdminQuestion {
   // Optional render condition for the WHOLE question (migration 047) —
   // same stored shape as the option-level one, camelCase here.
   showIf: { axisKey: string; axisValue: string } | null;
+  // Explicit answer-button render style (migration 048). Null = auto.
+  optionStyle: QuestionOptionStyle | null;
   options: AdminQuestionOption[];
 }
 
@@ -3263,7 +3281,7 @@ export async function getRecommendationAdminConfig(
   const questionsRes = axisIds.length > 0
     ? await supabase
         .from('recommendation_questions')
-        .select('id, axis_id, prompt, helper_text, multi_select, screen_group, show_if, recommendation_question_options ( id, label, axis_value_id, bot_response, position, reason_text, image_url, show_if, select_all, display_meta )')
+        .select('id, axis_id, prompt, helper_text, multi_select, screen_group, show_if, option_style, recommendation_question_options ( id, label, axis_value_id, bot_response, position, reason_text, image_url, show_if, select_all, display_meta )')
         .in('axis_id', axisIds)
     : { data: [], error: null };
 
@@ -3311,6 +3329,7 @@ export async function getRecommendationAdminConfig(
     multiSelect: (q.multi_select as boolean | null) ?? false,
     screenGroup: (q.screen_group as string | null) ?? null,
     showIf: qShowIf,
+    optionStyle: optionStyleOrNull(q.option_style),
     options: ((q.recommendation_question_options || []) as any[])
       .slice()
       .sort((x, y) => (x.position ?? 0) - (y.position ?? 0))
@@ -3478,6 +3497,9 @@ export async function saveRecommendationConfig(
       // Optional render condition for the WHOLE question (migration 047),
       // snake_case to match what the RPC stores verbatim as jsonb.
       showIf?: { axis_key: string; axis_value: string } | null;
+      // Optional answer-button render style (migration 048). ''/omitted →
+      // NULL in the RPC = auto.
+      optionStyle?: string | null;
       options: Array<{
         label: string;
         axisValueValue: string;
@@ -3547,6 +3569,18 @@ export async function saveRecommendationConfig(
   // quiz never renders a broken color chip.
   const HEX_RE = /^#[0-9a-fA-F]{3,8}$/;
   for (const question of input.questions || []) {
+    // Option style has a DB CHECK constraint — catch a bad value here with
+    // a friendly message instead of a raw constraint error.
+    if (
+      question.optionStyle != null &&
+      question.optionStyle !== '' &&
+      !(QUESTION_OPTION_STYLES as readonly string[]).includes(question.optionStyle)
+    ) {
+      return {
+        ok: false,
+        error: `Question "${question.prompt}" has an invalid option style "${question.optionStyle}"`,
+      };
+    }
     // Question-level showIf is stored verbatim as jsonb and read back by the
     // storefront quiz — a malformed condition would silently hide the whole
     // question forever. Same identifier rule as the option-level condition.

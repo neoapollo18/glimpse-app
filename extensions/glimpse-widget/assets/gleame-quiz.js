@@ -674,9 +674,14 @@
       var qWrap = el('div', 'gq-intro-question');
       qWrap.appendChild(el('h3', 'gq-intro-question-title', escapeHtml(q0.prompt)));
       if (q0.helperText) qWrap.appendChild(el('p', 'gq-intro-question-helper', escapeHtml(q0.helperText)));
-      var cards = el('div', 'gq-chip-row');
+      // The intro's inline question defaults to the classic compact chip
+      // row regardless of content — but an explicit merchant style
+      // (question.optionStyle) wins here too, so "make question 1 boxed"
+      // works whether it renders on the intro or its own screen.
+      var introVariant = (q0.optionStyle && STYLE_TO_VARIANT[q0.optionStyle]) || 'chip';
+      var cards = el('div', VARIANT_CONTAINER[introVariant]);
       visibleOptions(q0).forEach(function(opt, i) {
-        var btn = el('button', 'gq-chip', escapeHtml(opt.label));
+        var btn = el('button', VARIANT_BTN_CLASS[introVariant], optionButtonHtml(opt, introVariant));
         btn.type = 'button';
         btn.style.setProperty('--gq-stagger', i);
         btn.onclick = function() {
@@ -940,8 +945,21 @@
 
   var CHECK_SVG = '<svg class="gq-option-check" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
 
-  // Pick a presentation variant for a question from its options' data —
-  // brands style questions purely through content, never through code:
+  // Merchant-facing style names (question.optionStyle, migration 048) →
+  // render variants. 'chips' maps to dotchip: the color dot only renders
+  // per-option when a swatch exists, so it degrades to a plain chip.
+  var STYLE_TO_VARIANT = {
+    chips: 'dotchip',
+    boxed: 'boxed',
+    list: 'list',
+    visual: 'visual',
+    rich: 'rich',
+    vibe: 'vibe',
+  };
+
+  // Pick a presentation variant for a question. An explicit optionStyle
+  // from the quiz config wins; otherwise (the default) it's inferred from
+  // the options' data — brands style questions purely through content:
   //   visual  — any option has an image (on-hand photography grid)
   //   rich    — tag chips / wear meters (application-system cards)
   //   vibe    — two-tone swatch style cards
@@ -950,6 +968,9 @@
   //   chip    — short labels, pill chips
   //   list    — fallback stacked rows
   function optionVariantFor(q, specific) {
+    if (q.optionStyle && STYLE_TO_VARIANT[q.optionStyle]) {
+      return STYLE_TO_VARIANT[q.optionStyle];
+    }
     var has = function(key) {
       return specific.some(function(o) { return o.displayMeta && o.displayMeta[key]; });
     };

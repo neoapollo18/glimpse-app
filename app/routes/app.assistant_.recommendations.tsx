@@ -140,8 +140,23 @@ type EditorQuestion = {
   // asked); serialized on save as snake_case {"axis_key","axis_value"}.
   showIfAxisKey: string;
   showIfAxisValue: string;
+  // How the answer buttons render on the quiz (migration 048). '' = auto —
+  // the widget picks a style from the options' content, the pre-048 default.
+  optionStyle: string;
   options: EditorQuestionOption[];
 };
+
+// Choices for the per-question "Option style" Select. Values mirror the DB
+// CHECK constraint (QUESTION_OPTION_STYLES server-side); '' = auto.
+const OPTION_STYLE_CHOICES = [
+  { label: "Auto — match the options' content (default)", value: "" },
+  { label: "Pill chips — compact, side by side", value: "chips" },
+  { label: "Boxed cards — full-width grid of big boxes", value: "boxed" },
+  { label: "List rows — full-width, stacked", value: "list" },
+  { label: "Image cards — photo grid", value: "visual" },
+  { label: "Rich cards — tag chip + meter", value: "rich" },
+  { label: "Two-tone swatch cards", value: "vibe" },
+];
 type EditorRule = {
   criteria: Record<string, string>;
   // Encoded target from the picker: "v:<variantId>" or "p:<productId>".
@@ -270,6 +285,7 @@ export default function AssistantRecommendations() {
         screenGroup: q.screenGroup || "",
         showIfAxisKey: q.showIf?.axisKey || "",
         showIfAxisValue: q.showIf?.axisValue || "",
+        optionStyle: q.optionStyle || "",
         options: q.options.map((opt: any) => {
           const av = owningAxis?.values.find((v: any) => v.id === opt.axisValueId);
           return {
@@ -563,6 +579,7 @@ export default function AssistantRecommendations() {
         screenGroup: "",
         showIfAxisKey: "",
         showIfAxisValue: "",
+        optionStyle: "",
         options: [],
       };
       setQuestions((prev) => [...prev, newQ]);
@@ -577,7 +594,7 @@ export default function AssistantRecommendations() {
       if (idx === -1) {
         return [
           ...prev,
-          { axisKey, prompt: "", helperText: "", multiSelect: false, screenGroup: "", showIfAxisKey: "", showIfAxisValue: "", options: [], ...patch },
+          { axisKey, prompt: "", helperText: "", multiSelect: false, screenGroup: "", showIfAxisKey: "", showIfAxisValue: "", optionStyle: "", options: [], ...patch },
         ];
       }
       return prev.map((q, i) => (i === idx ? { ...q, ...patch } : q));
@@ -606,7 +623,7 @@ export default function AssistantRecommendations() {
       if (idx === -1) {
         return [
           ...prev,
-          { axisKey, prompt: "", helperText: "", multiSelect: false, screenGroup: "", showIfAxisKey: "", showIfAxisValue: "", options: [newOpt] },
+          { axisKey, prompt: "", helperText: "", multiSelect: false, screenGroup: "", showIfAxisKey: "", showIfAxisValue: "", optionStyle: "", options: [newOpt] },
         ];
       }
       return prev.map((q, i) =>
@@ -957,6 +974,8 @@ const NUM_RANKS = 3;
             q.showIfAxisKey && q.showIfAxisValue
               ? { axis_key: q.showIfAxisKey, axis_value: q.showIfAxisValue }
               : null,
+          // '' → NULL in the RPC = auto (widget picks from option content).
+          optionStyle: q.optionStyle || null,
           options: q.options
             .filter((o) => o.label.trim() && o.axisValueValue)
             .map((o, i) => ({
@@ -1228,6 +1247,7 @@ const NUM_RANKS = 3;
                   screenGroup: "",
                   showIfAxisKey: "",
                   showIfAxisValue: "",
+                  optionStyle: "",
                   options: [] as EditorQuestionOption[],
                 };
                 // "Show only if" can only reference an answer that exists when
@@ -1290,6 +1310,13 @@ const NUM_RANKS = 3;
                           />
                         </div>
                       </InlineStack>
+                      <Select
+                        label="Option style"
+                        options={OPTION_STYLE_CHOICES}
+                        value={q.optionStyle}
+                        onChange={(v) => updateQuestion(axis.key, { optionStyle: v })}
+                        helpText='How this question&apos;s answer buttons render on the quiz. "Auto" picks from the options&apos; content: images → image cards, tag/meter → rich cards, two swatches → two-tone cards, one swatch → chips with a color dot, sublabels → boxed cards, short labels → pill chips, else list rows. Pick "Boxed cards" to force full-width big boxes.'
+                      />
                       {/* Question-level branch (migration 047): skip the WHOLE
                           question unless an earlier answer matches — e.g. only
                           ask fit questions when category=extensions. Same
