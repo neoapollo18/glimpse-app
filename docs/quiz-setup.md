@@ -84,6 +84,14 @@ All optional — sensible defaults exist. Groups:
   tap-to-advance.
 - **Screen group** — consecutive questions sharing a group key render on ONE
   screen (e.g. style + colors). Must be consecutive; the editor validates.
+- **Option style** — how the answer buttons render. **Auto** (default) picks
+  from the options' content: images → image cards, tag/meter → rich cards,
+  two swatches → two-tone cards, one swatch → chips with a color dot,
+  sublabels → boxed cards, short labels → pill chips, else list rows. Or
+  force one: **Pill chips**, **Boxed cards** (full-width grid of big boxes),
+  **List rows**, **Image cards**, **Rich cards**, **Two-tone swatch cards**.
+  An explicit style also restyles question 1 when it renders inline on the
+  landing screen (which otherwise always uses compact chips).
 - **Options**: label (emoji fine) → axis value, plus optionally:
   - **Image URL** — options with images render as a visual grid (on-hand shots)
   - **Reason shown on result card** — the checkmark bullet when picked

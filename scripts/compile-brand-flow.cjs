@@ -259,6 +259,9 @@ for (const s of shades) {
       multiSelect: !!q.multiSelect,
       screenGroup: q.screenGroup || null,
       showIf: q.showIf || null,
+      // Optional per-question render style (migration 048): chips | boxed |
+      // list | visual | rich | vibe. Omitted/null = auto.
+      optionStyle: q.optionStyle || null,
       options: optionList.map((o, i) => ({
         label: o.label,
         axisValueValue: o.value,
