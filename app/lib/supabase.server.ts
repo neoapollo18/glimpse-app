@@ -2413,6 +2413,16 @@ export interface ChatAssistantConfig {
   quiz_button_radius: number | null;
   quiz_heading_font_override: string | null;
   quiz_body_font_override: string | null;
+  // Design tokens (migration 049). All NULL = the widget stylesheet's
+  // defaults — the shipped design is untouched until a merchant opts in.
+  quiz_ink_color: string | null;
+  quiz_card_bg_color: string | null;
+  quiz_line_color: string | null;
+  quiz_cta_color: string | null;
+  quiz_card_radius: number | null;
+  quiz_progress_style: 'pips' | 'bar' | 'counter' | 'none' | null;
+  quiz_intro_layout: 'split' | 'centered' | null;
+  quiz_animation_style: 'full' | 'minimal' | 'off' | null;
   // Stock-aware recommendations (migration 047). Opt-in per shop: when true,
   // quiz-recommend drops matrix targets that are unavailable on Shopify
   // (fail-open on Admin API errors). Off = matching is untouched.
@@ -2503,6 +2513,14 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   quiz_button_radius: null,
   quiz_heading_font_override: null,
   quiz_body_font_override: null,
+  quiz_ink_color: null,
+  quiz_card_bg_color: null,
+  quiz_line_color: null,
+  quiz_cta_color: null,
+  quiz_card_radius: null,
+  quiz_progress_style: null,
+  quiz_intro_layout: null,
+  quiz_animation_style: null,
   quiz_availability_filter: false,
   quiz_shade_fallbacks: null,
 };
@@ -2630,6 +2648,20 @@ function mapChatAssistantRow(data: any): ChatAssistantConfig {
     quiz_button_radius: data.quiz_button_radius ?? CHAT_ASSISTANT_DEFAULTS.quiz_button_radius,
     quiz_heading_font_override: data.quiz_heading_font_override ?? CHAT_ASSISTANT_DEFAULTS.quiz_heading_font_override,
     quiz_body_font_override: data.quiz_body_font_override ?? CHAT_ASSISTANT_DEFAULTS.quiz_body_font_override,
+    quiz_ink_color: data.quiz_ink_color ?? CHAT_ASSISTANT_DEFAULTS.quiz_ink_color,
+    quiz_card_bg_color: data.quiz_card_bg_color ?? CHAT_ASSISTANT_DEFAULTS.quiz_card_bg_color,
+    quiz_line_color: data.quiz_line_color ?? CHAT_ASSISTANT_DEFAULTS.quiz_line_color,
+    quiz_cta_color: data.quiz_cta_color ?? CHAT_ASSISTANT_DEFAULTS.quiz_cta_color,
+    quiz_card_radius: data.quiz_card_radius ?? CHAT_ASSISTANT_DEFAULTS.quiz_card_radius,
+    quiz_progress_style:
+      (data.quiz_progress_style as ChatAssistantConfig['quiz_progress_style'] | undefined) ??
+      CHAT_ASSISTANT_DEFAULTS.quiz_progress_style,
+    quiz_intro_layout:
+      (data.quiz_intro_layout as ChatAssistantConfig['quiz_intro_layout'] | undefined) ??
+      CHAT_ASSISTANT_DEFAULTS.quiz_intro_layout,
+    quiz_animation_style:
+      (data.quiz_animation_style as ChatAssistantConfig['quiz_animation_style'] | undefined) ??
+      CHAT_ASSISTANT_DEFAULTS.quiz_animation_style,
     quiz_availability_filter: data.quiz_availability_filter ?? CHAT_ASSISTANT_DEFAULTS.quiz_availability_filter,
     quiz_shade_fallbacks: mapShadeFallbacks(data.quiz_shade_fallbacks),
   };
@@ -3251,6 +3283,43 @@ export interface AdminRecommendationConfig {
   axes: AdminAxis[];
   questions: AdminQuestion[];
   rules: AdminRule[];
+}
+
+/**
+ * Head-only counts of the matrix tables for status displays (the quiz hub).
+ * Deliberately NOT getRecommendationAdminConfig: that fetch pages through
+ * every rule row (thousands for compiled brands) and throws to protect the
+ * editor's wipe-and-rewrite save — both wrong for a read-only counts page.
+ * Throws on query errors; callers degrade (catch → "status unavailable").
+ */
+export async function getRecommendationCounts(
+  shopId: string,
+): Promise<{ axes: number; questions: number; rules: number }> {
+  const [axesRes, questionsRes, rulesRes] = await Promise.all([
+    supabase
+      .from('recommendation_axes')
+      .select('id', { count: 'exact', head: true })
+      .eq('shop_id', shopId),
+    // Questions scope to the shop through their axis.
+    supabase
+      .from('recommendation_questions')
+      .select('id, recommendation_axes!inner(id)', { count: 'exact', head: true })
+      .eq('recommendation_axes.shop_id', shopId),
+    supabase
+      .from('recommendation_rules')
+      .select('id', { count: 'exact', head: true })
+      .eq('shop_id', shopId),
+  ]);
+
+  const failed = axesRes.error || questionsRes.error || rulesRes.error;
+  if (failed) {
+    throw new Error(`Failed to count recommendation config: ${failed.message}`);
+  }
+  return {
+    axes: axesRes.count ?? 0,
+    questions: questionsRes.count ?? 0,
+    rules: rulesRes.count ?? 0,
+  };
 }
 
 /**

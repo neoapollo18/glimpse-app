@@ -11,6 +11,7 @@ import {
   TextField,
   Tag,
   Banner,
+  Select,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { useState, useCallback, useRef } from "react";
@@ -56,8 +57,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       const v = (formData.get(name) as string) || "";
       return v.trim() === "" ? null : v;
     };
-    const radiusRaw = ((formData.get("quiz_button_radius") as string) || "").trim();
-    const radius = radiusRaw === "" ? null : parseInt(radiusRaw, 10);
+    // Numeric fields: blank or garbage → NULL ("inherit").
+    const intOrNull = (name: string) => {
+      const n = parseInt(((formData.get(name) as string) || "").trim(), 10);
+      return Number.isNaN(n) ? null : n;
+    };
+    // Enum fields: anything outside the allowed values degrades to NULL —
+    // an out-of-enum value (stale tab, crafted POST) would otherwise trip
+    // the DB CHECK and discard the whole row-wide save.
+    const oneOf = <T extends string>(name: string, values: readonly T[]): T | null => {
+      const v = orNull(name);
+      return v !== null && (values as readonly string[]).includes(v) ? (v as T) : null;
+    };
+    // Clamped to the DB CHECK range (migration 049) for the same reason.
+    const cardRadius = intOrNull("quiz_card_radius");
 
     const config = {
       // Landing
@@ -98,9 +111,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       // Style — NULL means inherit (accent → assistant accent, radius →
       // widget default, fonts → runtime theme detection)
       quiz_accent_color: orNull("quiz_accent_color"),
-      quiz_button_radius: radius !== null && Number.isNaN(radius) ? null : radius,
+      quiz_button_radius: intOrNull("quiz_button_radius"),
       quiz_heading_font_override: orNull("quiz_heading_font_override"),
       quiz_body_font_override: orNull("quiz_body_font_override"),
+      // Design tokens (migration 049) — NULL means the widget's shipped
+      // design, so an untouched section saves as all-NULL.
+      quiz_ink_color: orNull("quiz_ink_color"),
+      quiz_card_bg_color: orNull("quiz_card_bg_color"),
+      quiz_line_color: orNull("quiz_line_color"),
+      quiz_cta_color: orNull("quiz_cta_color"),
+      quiz_card_radius: cardRadius === null ? null : Math.min(60, Math.max(0, cardRadius)),
+      quiz_progress_style: oneOf("quiz_progress_style", ["pips", "bar", "counter", "none"]),
+      quiz_intro_layout: oneOf("quiz_intro_layout", ["split", "centered"]),
+      quiz_animation_style: oneOf("quiz_animation_style", ["full", "minimal", "off"]),
     };
 
     try {
@@ -152,6 +175,14 @@ type QuizFormState = {
   quiz_button_radius: string;
   quiz_heading_font_override: string;
   quiz_body_font_override: string;
+  quiz_ink_color: string;
+  quiz_card_bg_color: string;
+  quiz_line_color: string;
+  quiz_cta_color: string;
+  quiz_card_radius: string;
+  quiz_progress_style: string;
+  quiz_intro_layout: string;
+  quiz_animation_style: string;
 };
 
 export default function AssistantQuiz() {
@@ -196,6 +227,17 @@ export default function AssistantQuiz() {
         : "",
     quiz_heading_font_override: config.quiz_heading_font_override || "",
     quiz_body_font_override: config.quiz_body_font_override || "",
+    quiz_ink_color: config.quiz_ink_color || "",
+    quiz_card_bg_color: config.quiz_card_bg_color || "",
+    quiz_line_color: config.quiz_line_color || "",
+    quiz_cta_color: config.quiz_cta_color || "",
+    quiz_card_radius:
+      config.quiz_card_radius !== null && config.quiz_card_radius !== undefined
+        ? String(config.quiz_card_radius)
+        : "",
+    quiz_progress_style: config.quiz_progress_style || "",
+    quiz_intro_layout: config.quiz_intro_layout || "",
+    quiz_animation_style: config.quiz_animation_style || "",
   });
 
   const setField = useCallback(
@@ -263,6 +305,41 @@ export default function AssistantQuiz() {
     formData.append("quiz_trust_items", JSON.stringify(trustItems));
     fetcher.submit(formData, { method: "POST" });
   }, [fetcher, form, trustItems]);
+
+  // Optional color token: blank = the widget's shipped default (shown in
+  // the swatch so merchants see what "inherit" looks like).
+  const renderColorField = (
+    label: string,
+    key: keyof QuizFormState,
+    defaultHex: string,
+    helpText: string,
+    placeholder = "Blank = default",
+  ) => (
+    <TextField
+      label={label}
+      value={form[key]}
+      onChange={setField(key)}
+      autoComplete="off"
+      placeholder={placeholder}
+      connectedLeft={
+        <input
+          type="color"
+          value={form[key] || defaultHex}
+          onChange={(e) => setField(key)(e.target.value)}
+          style={{
+            width: 34,
+            height: 34,
+            padding: 2,
+            border: "1px solid #c9cccf",
+            borderRadius: "8px 0 0 8px",
+            cursor: "pointer",
+            background: "#fff",
+          }}
+        />
+      }
+      helpText={helpText}
+    />
+  );
 
   const renderImageField = (
     label: string,
@@ -680,30 +757,13 @@ export default function AssistantQuiz() {
             </BlockStack>
             <InlineStack gap="400" wrap={false}>
               <div style={{ flex: 1 }}>
-                <TextField
-                  label="Accent Color"
-                  value={form.quiz_accent_color}
-                  onChange={setField("quiz_accent_color")}
-                  autoComplete="off"
-                  placeholder="Blank = assistant accent"
-                  connectedLeft={
-                    <input
-                      type="color"
-                      value={form.quiz_accent_color || config.accent_color}
-                      onChange={(e) => setField("quiz_accent_color")(e.target.value)}
-                      style={{
-                        width: 34,
-                        height: 34,
-                        padding: 2,
-                        border: "1px solid #c9cccf",
-                        borderRadius: "8px 0 0 8px",
-                        cursor: "pointer",
-                        background: "#fff",
-                      }}
-                    />
-                  }
-                  helpText="Buttons, pills, and highlights on the quiz page"
-                />
+                {renderColorField(
+                  "Accent Color",
+                  "quiz_accent_color",
+                  config.accent_color,
+                  "Buttons, pills, and highlights on the quiz page",
+                  "Blank = assistant accent",
+                )}
               </div>
               <div style={{ flex: 1 }}>
                 <TextField
@@ -737,6 +797,114 @@ export default function AssistantQuiz() {
                   autoComplete="off"
                   placeholder='e.g. "Inter", sans-serif'
                   helpText="CSS font-family for body text. Empty = inherit the storefront theme's fonts."
+                />
+              </div>
+            </InlineStack>
+          </BlockStack>
+        </Card>
+
+        {/* Design */}
+        <Card>
+          <BlockStack gap="400">
+            <BlockStack gap="100">
+              <Text as="h2" variant="headingMd">
+                Design
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Deeper visual controls. Every field left at its default keeps
+                the quiz exactly as designed — change only what you want.
+              </Text>
+            </BlockStack>
+            <InlineStack gap="400" wrap={false}>
+              <div style={{ flex: 1 }}>
+                {renderColorField(
+                  "Text Color",
+                  "quiz_ink_color",
+                  "#16161a",
+                  "Headlines and body text. Secondary text is derived automatically.",
+                )}
+              </div>
+              <div style={{ flex: 1 }}>
+                {renderColorField(
+                  "Card Background",
+                  "quiz_card_bg_color",
+                  "#ffffff",
+                  "Answer buttons, result cards, and modals.",
+                )}
+              </div>
+            </InlineStack>
+            <InlineStack gap="400" wrap={false}>
+              <div style={{ flex: 1 }}>
+                {renderColorField(
+                  "Border Color",
+                  "quiz_line_color",
+                  "#eae7e4",
+                  "Borders and dividers throughout the quiz.",
+                )}
+              </div>
+              <div style={{ flex: 1 }}>
+                {renderColorField(
+                  "Buy Button Color",
+                  "quiz_cta_color",
+                  "#16161a",
+                  "Add to Bag and Continue buttons (default is near-black).",
+                )}
+              </div>
+            </InlineStack>
+            <InlineStack gap="400" wrap={false}>
+              <div style={{ flex: 1 }}>
+                <TextField
+                  label="Card Radius"
+                  value={form.quiz_card_radius}
+                  onChange={setField("quiz_card_radius")}
+                  autoComplete="off"
+                  type="number"
+                  min={0}
+                  max={60}
+                  suffix="px"
+                  placeholder="Blank = 18"
+                  helpText="Corner radius for cards and media wells (0–60)"
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <Select
+                  label="Progress Indicator"
+                  options={[
+                    { label: "Default (nail pips)", value: "" },
+                    { label: "Progress bar", value: "bar" },
+                    { label: "Step counter only", value: "counter" },
+                    { label: "None", value: "none" },
+                  ]}
+                  value={form.quiz_progress_style}
+                  onChange={setField("quiz_progress_style")}
+                  helpText="How quiz progress is shown next to the Back button"
+                />
+              </div>
+            </InlineStack>
+            <InlineStack gap="400" wrap={false}>
+              <div style={{ flex: 1 }}>
+                <Select
+                  label="Landing Layout"
+                  options={[
+                    { label: "Default (split two-column)", value: "" },
+                    { label: "Centered", value: "centered" },
+                  ]}
+                  value={form.quiz_intro_layout}
+                  onChange={setField("quiz_intro_layout")}
+                  helpText="Centered stacks the copy and visual in one centered column"
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <Select
+                  label="Animations"
+                  options={[
+                    { label: "Default (full)", value: "" },
+                    { label: "Minimal (fades only)", value: "minimal" },
+                    { label: "Off", value: "off" },
+                  ]}
+                  value={form.quiz_animation_style}
+                  onChange={setField("quiz_animation_style")}
+                  helpText="Entrance animations and screen transitions"
                 />
               </div>
             </InlineStack>

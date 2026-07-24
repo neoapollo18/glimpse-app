@@ -63,6 +63,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       buttonRadius: config.quiz_button_radius,
       headingFontOverride: config.quiz_heading_font_override,
       bodyFontOverride: config.quiz_body_font_override,
+      // Design tokens (migration 049). Null = the widget stylesheet's
+      // defaults — the shipped design, unchanged.
+      inkColor: config.quiz_ink_color,
+      cardBgColor: config.quiz_card_bg_color,
+      lineColor: config.quiz_line_color,
+      ctaColor: config.quiz_cta_color,
+      cardRadius: config.quiz_card_radius,
+      progressStyle: config.quiz_progress_style,
+      introLayout: config.quiz_intro_layout,
+      animationStyle: config.quiz_animation_style,
       numRecommendations: config.num_recommendations,
       // Framing hint reused by the camera modal on the try-on gate.
       photoFrameHint: config.photo_frame_hint,

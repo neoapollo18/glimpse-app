@@ -163,6 +163,7 @@ export default function App() {
           <Link to="/app" rel="home">
             Dashboard
           </Link>
+          <Link to="/app/quiz">Quiz</Link>
           <Link to="/app/widgets">Widgets</Link>
           <Link to="/app/products">Products</Link>
           <Link to="/app/assistant">AI Assistant</Link>

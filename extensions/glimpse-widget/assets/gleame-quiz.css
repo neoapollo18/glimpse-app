@@ -138,6 +138,26 @@
   align-items: center;
 }
 #gleame-quiz-root .gq-intro-copy { min-width: 0; }
+
+/* Centered landing variant (quiz_intro_layout='centered'): single column,
+   copy centered, visual below. The default split layout is untouched. */
+#gleame-quiz-root .gq-intro--centered .gq-intro-main {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--gq-space-6);
+  justify-items: center;
+  text-align: center;
+}
+#gleame-quiz-root .gq-intro--centered .gq-subtext {
+  margin-left: auto;
+  margin-right: auto;
+}
+#gleame-quiz-root .gq-intro--centered .gq-chip-row { justify-content: center; }
+#gleame-quiz-root .gq-intro--centered .gq-intro-visual {
+  order: 0;
+  max-width: 460px;
+  margin: 0 auto;
+}
+#gleame-quiz-root .gq-intro--centered .gq-trust-row { justify-content: center; }
 #gleame-quiz-root .gq-intro-question { margin-top: var(--gq-space-6); }
 #gleame-quiz-root .gq-intro-question-title {
   margin: 0 0 var(--gq-space-2);
@@ -363,6 +383,23 @@
   border-color: var(--gq-accent);
   background: var(--gq-tint-strong);
   transform: translateY(-2px);
+}
+
+/* Progress bar variant (quiz_progress_style='bar') — alternative to the
+   default nail pips. */
+#gleame-quiz-root .gq-progress-bar {
+  width: 120px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--gq-line);
+  overflow: hidden;
+}
+#gleame-quiz-root .gq-progress-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--gq-accent);
+  transition: width 240ms var(--gq-ease);
 }
 
 #gleame-quiz-root .gq-question-title {
@@ -1354,3 +1391,30 @@
   #gleame-quiz-root .gq-enter.gq-enter-active,
   #gleame-quiz-root .gq-enter-back.gq-enter-active { transition: none; }
 }
+
+/* Animation intensity (quiz_animation_style, migration 049). Default is the
+   full choreography above; 'minimal' keeps fades but drops movement and the
+   per-item stagger; 'off' mirrors the reduced-motion block. */
+@keyframes gq-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+#gleame-quiz-root.gq-anim-minimal .gq-option,
+#gleame-quiz-root.gq-anim-minimal .gq-chip {
+  animation-name: gq-fade;
+  animation-delay: 0ms;
+}
+#gleame-quiz-root.gq-anim-minimal .gq-enter,
+#gleame-quiz-root.gq-anim-minimal .gq-enter-back,
+#gleame-quiz-root.gq-anim-minimal .gq-leave,
+#gleame-quiz-root.gq-anim-minimal .gq-leave-back { transform: none; }
+
+#gleame-quiz-root.gq-anim-off .gq-option,
+#gleame-quiz-root.gq-anim-off .gq-chip { animation: none; }
+#gleame-quiz-root.gq-anim-off .gq-media--working::before { animation: none; }
+#gleame-quiz-root.gq-anim-off .gq-media-img,
+#gleame-quiz-root.gq-anim-off .gq-pip,
+#gleame-quiz-root.gq-anim-off .gq-leave,
+#gleame-quiz-root.gq-anim-off .gq-leave-back,
+#gleame-quiz-root.gq-anim-off .gq-enter.gq-enter-active,
+#gleame-quiz-root.gq-anim-off .gq-enter-back.gq-enter-active { transition: none; }

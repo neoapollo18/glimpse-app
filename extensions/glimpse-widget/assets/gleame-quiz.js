@@ -343,6 +343,24 @@
     if (typeof config.buttonRadius === 'number') {
       root.style.setProperty('--gq-radius-btn', config.buttonRadius + 'px');
     }
+    // Design tokens (migration 049). Every field is optional; unset fields
+    // leave the stylesheet defaults — the shipped design — untouched.
+    if (config.inkColor) {
+      root.style.setProperty('--gq-ink', config.inkColor);
+      // Soft/faint text derive from the ink so a light-on-dark palette
+      // stays readable without two more merchant fields.
+      root.style.setProperty('--gq-ink-soft', 'color-mix(in srgb, ' + config.inkColor + ' 62%, transparent)');
+      root.style.setProperty('--gq-ink-faint', 'color-mix(in srgb, ' + config.inkColor + ' 42%, transparent)');
+    }
+    if (config.cardBgColor) root.style.setProperty('--gq-card-bg', config.cardBgColor);
+    if (config.lineColor) root.style.setProperty('--gq-line', config.lineColor);
+    if (config.ctaColor) root.style.setProperty('--gq-dark', config.ctaColor);
+    if (typeof config.cardRadius === 'number') {
+      root.style.setProperty('--gq-radius-card', config.cardRadius + 'px');
+    }
+    if (config.animationStyle === 'minimal' || config.animationStyle === 'off') {
+      root.classList.add('gq-anim-' + config.animationStyle);
+    }
   }
 
   // ---- History / step routing ----
@@ -658,7 +676,10 @@
     // option visibility (conditionMet consults draft).
     draft = {};
     var landing = config.landing || {};
-    var screen = el('div', 'gq-intro');
+    // Centered landing variant (quiz_intro_layout, migration 049). Default
+    // stays the split two-column layout.
+    var screen = el('div', 'gq-intro' +
+      (config.introLayout === 'centered' ? ' gq-intro--centered' : ''));
 
     var main = el('div', 'gq-intro-main');
     var copy = el('div', 'gq-intro-copy');
@@ -1254,23 +1275,39 @@
     back.onclick = function() { history.back(); };
     header.appendChild(back);
 
-    // Progress pips — one nail-silhouette per question screen, filling as
-    // the shopper advances. The signature element of the quiz chrome.
+    // Progress indicator. Default is the nail pips — the signature element
+    // of the quiz chrome; merchants can switch to a bar, a bare counter, or
+    // nothing (quiz_progress_style, migration 049).
+    var progressStyle = (config && config.progressStyle) || 'pips';
     var right = el('div', 'gq-progress-wrap');
-    right.appendChild(el('span', 'gq-step-count',
-      isBonus ? 'Bonus' : (stepNumber + ' of ' + screens.length)));
-    var pips = el('div', 'gq-pips');
-    for (var i = 0; i < screens.length; i++) {
-      var cls = 'gq-pip';
-      if (!isBonus) {
-        if (i < stepNumber - 1) cls += ' gq-pip--done';
-        else if (i === stepNumber - 1) cls += ' gq-pip--current';
-      } else {
-        cls += ' gq-pip--done';
-      }
-      pips.appendChild(el('span', cls));
+    if (progressStyle !== 'none') {
+      right.appendChild(el('span', 'gq-step-count',
+        isBonus ? 'Bonus' : (stepNumber + ' of ' + screens.length)));
     }
-    right.appendChild(pips);
+    if (progressStyle === 'pips') {
+      var pips = el('div', 'gq-pips');
+      for (var i = 0; i < screens.length; i++) {
+        var cls = 'gq-pip';
+        if (!isBonus) {
+          if (i < stepNumber - 1) cls += ' gq-pip--done';
+          else if (i === stepNumber - 1) cls += ' gq-pip--current';
+        } else {
+          cls += ' gq-pip--done';
+        }
+        pips.appendChild(el('span', cls));
+      }
+      right.appendChild(pips);
+    } else if (progressStyle === 'bar') {
+      var bar = el('div', 'gq-progress-bar');
+      // Completed steps only — the current step is in progress, matching
+      // the pips' done/current semantics (a 1-question quiz starts at 0%,
+      // not 100%).
+      var pct = isBonus ? 100 : Math.round(((stepNumber - 1) / screens.length) * 100);
+      var fill = el('span', 'gq-progress-bar-fill');
+      fill.style.width = pct + '%';
+      bar.appendChild(fill);
+      right.appendChild(bar);
+    }
     header.appendChild(right);
     return header;
   }
