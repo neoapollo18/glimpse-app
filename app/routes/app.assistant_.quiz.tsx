@@ -812,7 +812,7 @@ export default function AssistantQuiz() {
               </Text>
               <Text as="p" variant="bodySm" tone="subdued">
                 Deeper visual controls. Every field left at its default keeps
-                the quiz exactly as designed — change only what you want.
+                the quiz exactly as designed; change only what you want.
               </Text>
             </BlockStack>
             <InlineStack gap="400" wrap={false}>

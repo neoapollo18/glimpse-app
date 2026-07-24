@@ -124,7 +124,7 @@ export default function QuizHub() {
         )}
         {!quizLive && (
           <Banner tone="warning" title="Your quiz is not live yet">
-            Work through the steps below — the quiz shows on your storefront
+            Work through the steps below. The quiz shows on your storefront
             once the surface is on, the logic has questions and rules, and the
             section is added to a page in your theme.
           </Banner>
@@ -215,7 +215,7 @@ export default function QuizHub() {
             <Text as="p" variant="bodySm" tone="subdued">
               Landing headline, trust items, results copy, colors, fonts,
               progress style, and layout. Everything ships with polished
-              defaults — customize as much or as little as you want.
+              defaults, so customize as much or as little as you want.
             </Text>
             <InlineStack>
               <Button url="/app/assistant/quiz">Customize quiz page</Button>

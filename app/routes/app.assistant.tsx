@@ -19,9 +19,10 @@ import {
   Box,
   Divider,
   Badge,
+  Collapsible,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useMemo, useRef, type ReactNode } from "react";
 import { authenticate } from "../shopify.server";
 import {
   getChatAssistantConfig,
@@ -115,9 +116,74 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   return json({ error: "Unknown intent" }, { status: 400 });
 };
 
+// Chat-only sections collapse behind an Edit toggle so the quiz-first
+// setup isn't buried in bubble settings. Nothing is removed — collapsed
+// fields still live in component state and save exactly as before.
+function CollapsibleCard({
+  title,
+  subtitle,
+  badge,
+  defaultOpen,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  badge?: ReactNode;
+  defaultOpen: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const id = `collapsible-${title.toLowerCase().replace(/\s+/g, "-")}`;
+  return (
+    <Card>
+      <BlockStack gap="200">
+        <InlineStack align="space-between" blockAlign="center" gap="400" wrap={false}>
+          <BlockStack gap="100">
+            <InlineStack gap="200" blockAlign="center">
+              <Text as="h2" variant="headingMd">
+                {title}
+              </Text>
+              {badge}
+            </InlineStack>
+            {subtitle && (
+              <Text as="p" variant="bodySm" tone="subdued">
+                {subtitle}
+              </Text>
+            )}
+          </BlockStack>
+          <div style={{ flexShrink: 0 }}>
+            <Button
+              variant="tertiary"
+              disclosure={open ? "up" : "down"}
+              onClick={() => setOpen(!open)}
+              accessibilityLabel={`${open ? "Hide" : "Show"} ${title} settings`}
+            >
+              {open ? "Hide" : "Edit"}
+            </Button>
+          </div>
+        </InlineStack>
+        <Collapsible
+          open={open}
+          id={id}
+          transition={{ duration: "150ms", timingFunction: "ease" }}
+        >
+          <Box paddingBlockStart="300">
+            <BlockStack gap="400">{children}</BlockStack>
+          </Box>
+        </Collapsible>
+      </BlockStack>
+    </Card>
+  );
+}
+
 export default function AssistantConfig() {
   const { config, products } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<{ success?: boolean; error?: string }>();
+
+  // Quiz-first: chat-only sections start collapsed unless the shop actually
+  // runs chat-only. Evaluated once from the saved mode so cards don't jump
+  // while the merchant is mid-edit on the Surface picker.
+  const chatSectionsDefaultOpen = config.assistant_mode === "chat";
   const isSaving = fetcher.state !== "idle";
 
   // Form state
@@ -318,8 +384,9 @@ export default function AssistantConfig() {
                       AI Shopping Assistant
                     </Text>
                     <Text as="p" variant="bodySm" tone="subdued">
-                      A branded chat assistant that appears on every page of your store.
-                      Shoppers can get personalized product recommendations with AI try-on previews.
+                      Personalized product matching for your storefront: the full-page
+                      Find My Fit quiz, an optional floating chat bubble, and AI try-on
+                      previews.
                     </Text>
                   </BlockStack>
                   <div style={{ flexShrink: 0 }}>
@@ -336,8 +403,9 @@ export default function AssistantConfig() {
                 </InlineStack>
                 {enabled && (
                   <Banner tone="info">
-                    Make sure to enable the "Gleame AI Assistant" app embed in your theme editor
-                    for it to appear on your storefront.
+                    {assistantMode === "quiz"
+                      ? 'The quiz renders through the "Gleame Quiz" section. Add it to a page in the theme editor; the app embed is only needed for the chat bubble.'
+                      : 'Make sure to enable the "Gleame AI Assistant" app embed in your theme editor for the chat bubble to appear on your storefront.'}
                   </Banner>
                 )}
               </BlockStack>
@@ -404,12 +472,92 @@ export default function AssistantConfig() {
               </BlockStack>
             </Card>
 
-            {/* Appearance */}
+            {/* Recommendation Logic — link to dedicated sub-page */}
+            <Card>
+              <BlockStack gap="300">
+                <InlineStack align="space-between" blockAlign="start" gap="400">
+                  <BlockStack gap="100">
+                    <Text as="h2" variant="headingMd">
+                      Recommendation Logic
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      The question flow and the answer-to-product matrix. This powers
+                      the quiz's questions and matches (and the chat bubble's, when it
+                      runs). When unconfigured, the chat falls back to the single
+                      preference question under Chat Conversation.
+                    </Text>
+                  </BlockStack>
+                  <Button url="/app/assistant/recommendations" variant="primary">
+                    Edit recommendation logic
+                  </Button>
+                </InlineStack>
+              </BlockStack>
+            </Card>
+
+            {/* Recommendations — shared by quiz + chat */}
             <Card>
               <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">
-                  Appearance
-                </Text>
+                <BlockStack gap="100">
+                  <Text as="h2" variant="headingMd">
+                    Recommendations
+                  </Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Shared by the quiz and the chat bubble.
+                  </Text>
+                </BlockStack>
+                <RangeSlider
+                  label={`Number of recommendations: ${numRecommendations}`}
+                  value={numRecommendations}
+                  min={1}
+                  max={5}
+                  step={1}
+                  onChange={(val) => setNumRecommendations(val as number)}
+                  output
+                />
+                <Select
+                  label="Which products can be recommended?"
+                  options={[
+                    { label: "All configured products", value: "all_configured" },
+                    { label: "Selected products only", value: "selected" },
+                  ]}
+                  value={productScope}
+                  onChange={setProductScope}
+                />
+                {productScope === "selected" && (
+                  <BlockStack gap="200">
+                    {products.length === 0 ? (
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        No products configured yet. Go to the Products page to set up products first.
+                      </Text>
+                    ) : (
+                      products.map((product: { id: string; product_name: string }) => (
+                        <Checkbox
+                          key={product.id}
+                          label={product.product_name || product.id}
+                          checked={selectedProductIds.includes(product.id)}
+                          onChange={() => toggleProduct(product.id)}
+                        />
+                      ))
+                    )}
+                  </BlockStack>
+                )}
+                <TextField
+                  label="Camera Framing Hint"
+                  value={photoFrameHint}
+                  onChange={setPhotoFrameHint}
+                  autoComplete="off"
+                  placeholder="Position your face in the frame"
+                  helpText="Instruction inside the camera modal, used on the quiz try-on gate and in chat (e.g. “Position your nails in the frame”)"
+                />
+              </BlockStack>
+            </Card>
+
+            {/* Chat appearance */}
+            <CollapsibleCard
+              title="Chat Appearance"
+              subtitle="Name, avatar, and colors for the floating chat bubble."
+              defaultOpen={chatSectionsDefaultOpen}
+            >
                 <TextField
                   label="Assistant Name"
                   value={assistantName}
@@ -525,21 +673,19 @@ export default function AssistantConfig() {
                     />
                   </div>
                 </InlineStack>
-              </BlockStack>
-            </Card>
+            </CollapsibleCard>
 
             {/* Hero Popup */}
-            <Card>
-              <BlockStack gap="400">
-                <InlineStack align="space-between" blockAlign="start" gap="500">
-                  <BlockStack gap="100">
-                    <Text as="h2" variant="headingMd">
-                      Hero Popup
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      A larger entry point that previews what shoppers get before they click. Appears directly above the chat pill on desktop only; on mobile the chat pill is the entry point. When dismissed, the pill bubble takes over.
-                    </Text>
-                  </BlockStack>
+            <CollapsibleCard
+              title="Hero Popup"
+              subtitle="A larger desktop entry point above the chat pill that previews what shoppers get. On mobile the pill is the entry point; when dismissed, the pill takes over."
+              badge={heroEnabled ? <Badge tone="success">Enabled</Badge> : undefined}
+              defaultOpen={chatSectionsDefaultOpen}
+            >
+                <InlineStack align="space-between" blockAlign="center" gap="400">
+                  <Text as="p" variant="bodyMd">
+                    Show the hero popup on desktop
+                  </Text>
                   <div style={{ flexShrink: 0 }}>
                     <Button
                       role="switch"
@@ -807,37 +953,14 @@ export default function AssistantConfig() {
                     />
                   </BlockStack>
                 )}
-              </BlockStack>
-            </Card>
+            </CollapsibleCard>
 
-            {/* Recommendation Logic — link to dedicated sub-page */}
-            <Card>
-              <BlockStack gap="300">
-                <InlineStack align="space-between" blockAlign="start" gap="400">
-                  <BlockStack gap="100">
-                    <Text as="h2" variant="headingMd">
-                      Recommendation Logic
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Configure the multi-step question flow and the variant matrix the
-                      assistant uses to pick recommendations. Replaces the single
-                      preference question below when configured — the legacy fields stay
-                      as a fallback for shoppers who hit an unmatched combination.
-                    </Text>
-                  </BlockStack>
-                  <Button url="/app/assistant/recommendations" variant="primary">
-                    Edit recommendation logic
-                  </Button>
-                </InlineStack>
-              </BlockStack>
-            </Card>
-
-            {/* Conversation Flow */}
-            <Card>
-              <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">
-                  Conversation Flow
-                </Text>
+            {/* Chat conversation — legacy fallback flow */}
+            <CollapsibleCard
+              title="Chat Conversation"
+              subtitle="The chat bubble's fallback flow, used when recommendation logic isn't configured."
+              defaultOpen={chatSectionsDefaultOpen}
+            >
                 <TextField
                   label="Recommend Button Text"
                   value={recommendButtonText}
@@ -887,69 +1010,14 @@ export default function AssistantConfig() {
                   multiline={2}
                   helpText="Shown after the shopper picks a preference, prompting them to upload a selfie"
                 />
-                <TextField
-                  label="Camera Framing Hint"
-                  value={photoFrameHint}
-                  onChange={setPhotoFrameHint}
-                  autoComplete="off"
-                  placeholder="Position your face in the frame"
-                  helpText="Instruction shown inside the desktop camera (e.g. “Position your nails in the frame”)"
-                />
-                <RangeSlider
-                  label={`Number of recommendations: ${numRecommendations}`}
-                  value={numRecommendations}
-                  min={1}
-                  max={5}
-                  step={1}
-                  onChange={(val) => setNumRecommendations(val as number)}
-                  output
-                />
-              </BlockStack>
-            </Card>
+            </CollapsibleCard>
 
-            {/* Product Selection */}
-            <Card>
-              <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">
-                  Product Selection
-                </Text>
-                <Select
-                  label="Which products can be recommended?"
-                  options={[
-                    { label: "All configured products", value: "all_configured" },
-                    { label: "Selected products only", value: "selected" },
-                  ]}
-                  value={productScope}
-                  onChange={setProductScope}
-                />
-                {productScope === "selected" && (
-                  <BlockStack gap="200">
-                    {products.length === 0 ? (
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        No products configured yet. Go to the Products page to set up products first.
-                      </Text>
-                    ) : (
-                      products.map((product: { id: string; product_name: string }) => (
-                        <Checkbox
-                          key={product.id}
-                          label={product.product_name || product.id}
-                          checked={selectedProductIds.includes(product.id)}
-                          onChange={() => toggleProduct(product.id)}
-                        />
-                      ))
-                    )}
-                  </BlockStack>
-                )}
-              </BlockStack>
-            </Card>
-
-            {/* Recommendation Cards — card styling + bundle CTA */}
-            <Card>
-              <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">
-                  Recommendation Cards
-                </Text>
-
+            {/* Chat result cards — styling + bundle CTA */}
+            <CollapsibleCard
+              title="Chat Result Cards"
+              subtitle="Styling for the product cards the chat bubble shows."
+              defaultOpen={chatSectionsDefaultOpen}
+            >
                 <Select
                   label="Title font"
                   options={[
@@ -1016,8 +1084,7 @@ export default function AssistantConfig() {
                   </BlockStack>
                 )}
                 */}
-              </BlockStack>
-            </Card>
+            </CollapsibleCard>
 
             {/* Save */}
             <InlineStack align="end">
