@@ -240,7 +240,21 @@ export async function transformImage(
       console.log(`Image compressed to max ${maxPx}px for model ${modelToUse}`);
     }
     
+    // Part order matters to Gemini: the person's photo goes FIRST so the
+    // model anchors on it as the image being edited, with reference product
+    // images after. Reference-first made the model anchor on the reference
+    // instead, skewing quiz try-on results.
     const prompt: any[] = [];
+
+    prompt.push({
+      text: request.transformationPrompt
+    });
+    prompt.push({
+      inlineData: {
+        mimeType: compressedMimeType,
+        data: compressedBase64
+      }
+    });
 
     const refParts = resolveReferenceParts(request);
     for (let i = 0; i < refParts.length; i++) {
@@ -256,16 +270,6 @@ export async function transformImage(
         },
       });
     }
-
-    prompt.push({ 
-      text: request.transformationPrompt
-    });
-    prompt.push({
-      inlineData: {
-        mimeType: compressedMimeType,
-        data: compressedBase64
-      }
-    });
 
     const generatedImageData = await callGeminiWithRetry(prompt, modelToUse);
 
