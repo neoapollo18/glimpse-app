@@ -1,20 +1,11 @@
 {
-  "$comment": "Locks & Mane brand config for compile-brand-flow.cjs. Everything brand-specific lives HERE; the compiler and the runtime engine are generic. Encodes the 2026-07 spec: Rule Set 1 (accessory branch by style intent), Rule Set 2 (sets count from layers/thickness/length), Rule Set 3 (length matrix), Rule Set 4 (shade maps). Remaining TODOs: real shop domain, exact Gleame product names once the catalog is imported, Jenn's real 10 shades + pony shade map + fallback adjacencies. Product/variant names must match the Gleame-configured names exactly.",
+  "$comment": "Locks & Mane flow adapted for the glimpsetesting.myshopify.com dev store (demo/QA). Differences from locks-and-mane.json: real testing shop domain; extensions-only (no category axis, no accessory branch — accessories per style intent are still pending from Christa, and the demoed flow starts at the goal question); product names match the catalog created by backfill-lm-testing-catalog.cjs; availabilityFilter off (dev store inventory isn't managed). Question order mirrors the demoed flow: goal, style intent, current length, thickness, layers, then the quiz's built-in photo gate for shade.",
 
-  "shopDomain": "TODO-locksandmane.myshopify.com",
+  "shopDomain": "glimpsetesting.myshopify.com",
 
-  "availabilityFilter": true,
+  "availabilityFilter": false,
 
   "axes": [
-    {
-      "key": "category",
-      "label": "Shopping for",
-      "source": "user_question",
-      "values": [
-        { "value": "extensions", "label": "Extensions" },
-        { "value": "accessories", "label": "Accessories" }
-      ]
-    },
     {
       "key": "goal",
       "label": "Hair goal",
@@ -29,7 +20,7 @@
       "key": "style_intent",
       "label": "The look",
       "source": "user_question",
-      "$comment": "Drives accessory picks (Rule Set 1). Filler for extensions — no extension rule keys on it.",
+      "$comment": "Filler for extensions (no rule keys on it) — kept so the flow matches the L&M spec and future accessory rules can key on it.",
       "values": [
         { "value": "everyday", "label": "Everyday wear" },
         { "value": "special_event", "label": "A special event" },
@@ -72,7 +63,6 @@
       "key": "hair_shade",
       "label": "Natural hair shade",
       "source": "photo",
-      "$comment": "L&M's real 10-shade range, lightest to darkest. TODO Jenn: confirm swatch hexes.",
       "values": [
         { "value": "vanilla", "label": "Vanilla", "swatchColor": "#f3d6b7" },
         { "value": "toastedmarshmallow", "label": "Toasted Marshmallow", "swatchColor": "#e8dac6" },
@@ -90,13 +80,8 @@
 
   "questions": [
     {
-      "axisKey": "category",
-      "prompt": "What are you looking for today?"
-    },
-    {
       "axisKey": "goal",
-      "prompt": "What are you hoping to change about your hair?",
-      "showIf": { "axis_key": "category", "axis_value": "extensions" }
+      "prompt": "What are you hoping to change about your hair?"
     },
     {
       "axisKey": "style_intent",
@@ -104,18 +89,15 @@
     },
     {
       "axisKey": "current_length",
-      "prompt": "Where does your hair fall right now?",
-      "showIf": { "axis_key": "category", "axis_value": "extensions" }
+      "prompt": "Where does your hair fall right now?"
     },
     {
       "axisKey": "thickness",
-      "prompt": "How thick is your hair?",
-      "showIf": { "axis_key": "category", "axis_value": "extensions" }
+      "prompt": "How thick is your hair?"
     },
     {
       "axisKey": "layers",
       "prompt": "Do you have layers?",
-      "showIf": { "axis_key": "category", "axis_value": "extensions" },
       "options": [
         { "label": "Yes", "value": "yes" },
         { "label": "No", "value": "no" },
@@ -125,17 +107,16 @@
   ],
 
   "products": {
-    "$comment": "Gleame product names (must match products.product_name exactly). TODO: confirm once the L&M catalog is configured. pony_14 kept because Example Response 2 references a 14″ ponytail even though the matrix only uses 18″.",
-    "clip_12": "12\" Clip-In",
-    "clip_16": "16\" Clip-In",
-    "clip_18": "18\" Clip-In",
-    "clip_20": "20\" Clip-In",
-    "pony_14": "14\" Ponytail",
-    "pony_18": "18\" Ponytail"
+    "$comment": "Names match products created by backfill-lm-testing-catalog.cjs (and Gleame's products.product_name) exactly.",
+    "clip_12": "12\" Clip-In Extensions",
+    "clip_16": "16\" Clip-In Extensions",
+    "clip_18": "18\" Clip-In Extensions",
+    "clip_20": "20\" Clip-In Extensions",
+    "pony_18": "18\" Clip-In Ponytail"
   },
 
   "shadeVariantMap": {
-    "$comment": "hair_shade axis value → variant_title per product family (Rule Set 4). clip_in is identity (clip-ins use the AI shade directly); ponytail is Jenn's lookup map — TODO Jenn: real mapping, placeholders are identity for now.",
+    "$comment": "clip_in is identity (AI shade used directly). ponytail is identity until Jenn's real lookup map lands.",
     "clip_in": {
       "vanilla": "Vanilla", "toastedmarshmallow": "Toasted Marshmallow", "cinnamonbun": "Cinnamon Bun",
       "butterpecan": "Butter Pecan", "butterscotch": "Butterscotch", "peanutbuttercup": "Peanut Butter Cup",
@@ -151,7 +132,7 @@
   },
 
   "shadeFallbacks": {
-    "$comment": "TODO Jenn: nearest-shade adjacencies (used only when the availability filter finds a shade fully out of stock). Written to chat_assistant_config.quiz_shade_fallbacks. Placeholder = simple neighbors in the depth scale above.",
+    "$comment": "Placeholder nearest-neighbor adjacencies until Jenn's real ones land. Only consulted when availabilityFilter is on, so inert on the dev store — kept so the testing config exercises the same write path.",
     "hair_shade": {
       "vanilla": ["toastedmarshmallow", "cinnamonbun"],
       "toastedmarshmallow": ["vanilla", "cinnamonbun"],
@@ -167,7 +148,7 @@
   },
 
   "setsTable": {
-    "$comment": "Rule Set 2 — how many sets, first matching row wins. 'lengths' restricts a row to specific current_length values (omitted = any). The compiled quantity is max(this table, the matrix cell's own sets) — so goal=both keeps 2 sets even for layered/thin hair. OPEN QUESTION flagged to Christa/Jenn: should Rule Set 2 be able to LOWER a both-goal cell to 1 set instead?",
+    "$comment": "Rule Set 2 — first matching row wins; compiled quantity is max(this table, matrix cell sets).",
     "rows": [
       { "layers": "yes", "sets": 1 },
       { "layers": "no", "thickness": "thin", "sets": 1 },
@@ -178,7 +159,7 @@
   },
 
   "matrix": {
-    "$comment": "Rule Set 3 — current_length × goal → hero clip-in (+sets) and optional complementary ponytail. 'pony' omitted = single-recommendation cell (above-shoulders row and at-shoulders+volume have no ponytail in Christa's table). Above-shoulders row: the source table shows one entry spanning all goals — encoded as 16″ × 2 sets for every goal; FLAGGED for confirmation.",
+    "$comment": "Rule Set 3 — same 12 cells as the production config (Christa's table).",
     "cells": [
       { "current_length": "above_shoulders", "goal": "length", "clipIn": "clip_16", "sets": 2 },
       { "current_length": "above_shoulders", "goal": "volume", "clipIn": "clip_16", "sets": 2 },
@@ -193,36 +174,5 @@
       { "current_length": "mid_back",        "goal": "volume", "clipIn": "clip_18", "sets": 1, "pony": "pony_18" },
       { "current_length": "mid_back",        "goal": "both",   "clipIn": "clip_20", "sets": 2, "pony": "pony_18" }
     ]
-  },
-
-  "accessories": {
-    "$comment": "Rule Set 1 — top 3 accessories per style intent; category=accessories exits here (extension questions are showIf-hidden). Names derived from the locksandmane.com handles provided 2026-07-15, ASSUMING the 15-URL list reads column-by-column (3 per intent) — confirm with Jenn. 'handle' is reference only; the compiler resolves by name.",
-    "byStyleIntent": {
-      "everyday": [
-        { "name": "Denim Headband", "handle": "denim-headband" },
-        { "name": "Flourette Gem Stone Headband", "handle": "flourette-gem-stone-headband" },
-        { "name": "Embroidered Floral Headband", "handle": "embroidered-floral-headband" }
-      ],
-      "special_event": [
-        { "name": "Lavish Gemstone Headband", "handle": "lavish-gemstone-headband" },
-        { "name": "3 Hearts Barrette Set", "handle": "3-hearts-barrette-set" },
-        { "name": "Mini Gem Skinny Headband Gold", "handle": "mini-gem-skinny-headband-gold" }
-      ],
-      "vacation": [
-        { "name": "Diamond Veil Headband", "handle": "diamond-veil-headband" },
-        { "name": "Cozumel Headband", "handle": "cozumel-headband" },
-        { "name": "Midsummer Nights Dream Headband", "handle": "midsummer-nights-dream-headband" }
-      ],
-      "photoshoot": [
-        { "name": "Vintage Gem Headband Mint Green", "handle": "vintage-gem-headband-mint-green" },
-        { "name": "So 90s Barrette Set", "handle": "so-90s-barrette-set" },
-        { "name": "Pearl Laurel Headband", "handle": "pearl-laurel-headband" }
-      ],
-      "choose_for_me": [
-        { "name": "Soft Touch Braided Headband In Blue", "handle": "soft-touch-braided-headband-in-blue" },
-        { "name": "Blue Gemstone Barrette Set", "handle": "blue-gemstone-barrette-set" },
-        { "name": "Tawny Diamond Headband", "handle": "tawny-diamond-headband" }
-      ]
-    }
   }
 }

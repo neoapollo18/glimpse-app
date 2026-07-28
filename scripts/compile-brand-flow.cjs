@@ -80,7 +80,10 @@ const shadeAxis = (brand.axes || []).find((a) => a.source === 'photo');
 if (!shadeAxis) fail('no photo-sourced shade axis defined');
 const shades = shadeAxis.values.map((v) => v.value);
 
-const productKeys = brand.products || {};
+// $comment is documentation, not a product key.
+const productKeys = Object.fromEntries(
+  Object.entries(brand.products || {}).filter(([k]) => k !== '$comment')
+);
 const cells = (brand.matrix && brand.matrix.cells) || [];
 for (const cell of cells) {
   requireAxisValue('current_length', cell.current_length, 'matrix cell');
@@ -195,8 +198,11 @@ for (const s of shades) {
   };
 
   for (const cell of cells) {
+    // The category key only exists for brands with an accessory branch
+    // (extensions-only configs define no category axis — keying rules on
+    // one would leave every match permanently partial).
     const cellCriteria = {
-      category: 'extensions',
+      ...(axisByKey.has('category') ? { category: 'extensions' } : {}),
       current_length: cell.current_length,
       goal: cell.goal,
     };
@@ -323,6 +329,48 @@ for (const s of shades) {
   if (dryRun) {
     console.log('dry run — nothing saved. Sample rule:', JSON.stringify(rules[0], null, 2));
     return;
+  }
+
+  // ---- Destructive-save guard (added after the 2026-07-27 incident where a
+  // recompile silently destroyed hours of admin-editor quiz styling). The
+  // RPC is wipe-and-rewrite: anything on the live questions/options that
+  // this config does not reproduce is lost. Refuse unless --force.
+  if (!args.includes('--force')) {
+    const cfgQByAxis = new Map(questionsPayload.map((q) => [q.axisKey, q]));
+    const axRes = await sb.from('recommendation_axes').select('id, key').eq('shop_id', shopId);
+    const keyByAxisId = new Map((axRes.data || []).map((a) => [a.id, a.key]));
+    const doomed = [];
+    if (keyByAxisId.size > 0) {
+      const qRes = await sb.from('recommendation_questions')
+        .select('id, axis_id, prompt, option_style, helper_text, screen_group')
+        .in('axis_id', [...keyByAxisId.keys()]);
+      const liveQs = qRes.data || [];
+      for (const q of liveQs) {
+        const cfgQ = cfgQByAxis.get(keyByAxisId.get(q.axis_id)) || {};
+        if (q.option_style && q.option_style !== cfgQ.optionStyle) doomed.push(`question "${q.prompt}": option_style=${q.option_style}`);
+        if (q.helper_text && q.helper_text !== cfgQ.helperText) doomed.push(`question "${q.prompt}": helper_text`);
+        if (q.screen_group && q.screen_group !== cfgQ.screenGroup) doomed.push(`question "${q.prompt}": screen_group=${q.screen_group}`);
+      }
+      if (liveQs.length > 0) {
+        const oRes = await sb.from('recommendation_question_options')
+          .select('question_id, label, image_url, display_meta, bot_response')
+          .in('question_id', liveQs.map((q) => q.id));
+        // The compiler never emits these option fields — if set, they are
+        // admin-editor work by definition.
+        for (const o of oRes.data || []) {
+          if (o.image_url) doomed.push(`option "${o.label}": image_url`);
+          if (o.display_meta) doomed.push(`option "${o.label}": display_meta`);
+          if (o.bot_response) doomed.push(`option "${o.label}": bot_response`);
+        }
+      }
+    }
+    if (doomed.length > 0) {
+      console.error('\nREFUSING TO SAVE — the live flow has admin-made styling this config does not reproduce.');
+      console.error('Saving would permanently destroy:');
+      for (const d of [...new Set(doomed)]) console.error('  - ' + d);
+      console.error('Merge these into the brand config first, or re-run with --force to destroy them.');
+      process.exit(1);
+    }
   }
 
   const { error } = await sb.rpc('save_recommendation_config', { p_shop_id: shopId, p_payload: payload });
