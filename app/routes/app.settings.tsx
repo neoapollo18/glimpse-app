@@ -158,7 +158,7 @@ export default function Settings() {
               <Card background="bg-surface-secondary">
                 <BlockStack gap="400">
                   <Text as="p" variant="bodyMd">
-                    If widgets aren't appearing, use the troubleshooting tools below.
+                    If the quiz or chat isn't appearing on your storefront, use the troubleshooting tools below.
                   </Text>
                   
                   <InlineStack gap="300" wrap={true}>

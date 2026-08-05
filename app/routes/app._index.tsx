@@ -674,27 +674,28 @@ function Step6GoLive({
   onNext,
   onBack,
   onSkip,
-  onNavigateToWidgets,
+  onNavigateToQuizSetup,
 }: {
   onNext: () => void;
   onBack: () => void;
   onSkip: () => void;
-  onNavigateToWidgets: () => void;
+  onNavigateToQuizSetup: () => void;
 }) {
   return (
     <BlockStack gap="600">
       <BlockStack gap="200" inlineAlign="center">
         <Text as="h2" variant="headingLg" alignment="center">
-          Get it live on your storefront
+          Get your quiz live on your storefront
         </Text>
         <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
-          Add the Gleame widget to your theme so customers can try on products
+          Add the Find My Fit quiz to your theme so shoppers get matched to the
+          right products
         </Text>
       </BlockStack>
 
       <InlineStack align="center">
-        <Button onClick={onNavigateToWidgets}>
-          View Widgets
+        <Button onClick={onNavigateToQuizSetup}>
+          Open Quiz Setup
         </Button>
       </InlineStack>
 
@@ -742,16 +743,13 @@ function Step6GoLive({
           </Text>
           <BlockStack gap="200">
             <Text as="p" variant="bodyMd">
-              1. Click "Add to Theme" button above
+              1. Open Quiz Setup and finish the checklist (questions, copy, design)
             </Text>
             <Text as="p" variant="bodyMd">
-              2. In the theme editor, find the "Gleame Widget" block
+              2. In the theme editor, add the "Gleame Quiz" section to a page
             </Text>
             <Text as="p" variant="bodyMd">
-              3. Drag it to your desired location on the product page
-            </Text>
-            <Text as="p" variant="bodyMd">
-              4. Click "Save" in the theme editor
+              3. Click "Save" in the theme editor
             </Text>
           </BlockStack>
         </BlockStack>
@@ -810,7 +808,7 @@ function Step7Complete({
               • Track performance in Analytics
             </Text>
             <Text as="p" variant="bodyMd">
-              • Customize widget styles in the Widgets page
+              • Fine-tune your quiz copy and design from the Quiz page
             </Text>
           </BlockStack>
         </BlockStack>
@@ -1057,9 +1055,9 @@ function OnboardingWizard({
               onNext={() => goToStep(7)}
               onBack={() => goToStep(5)}
               onSkip={() => goToStep(7)}
-              onNavigateToWidgets={() => {
+              onNavigateToQuizSetup={() => {
                 persistToServer({ intent: "updateStep", step: "6" });
-                setPendingNav("/app/widgets");
+                setPendingNav("/app/quiz");
               }}
             />
           )}

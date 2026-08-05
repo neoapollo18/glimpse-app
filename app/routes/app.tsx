@@ -164,12 +164,10 @@ export default function App() {
             Dashboard
           </Link>
           <Link to="/app/quiz">Quiz</Link>
-          <Link to="/app/widgets">Widgets</Link>
           <Link to="/app/products">Products</Link>
           <Link to="/app/assistant">AI Assistant</Link>
           {isSkinAnalysisEnabled && <Link to="/app/skin-analysis">Skin Analysis</Link>}
           <Link to="/app/analytics">Analytics</Link>
-          <Link to="/app/placeholders">Placeholders</Link>
           <Link to="/app/billing">Billing</Link>
         </NavMenu>
       )}
