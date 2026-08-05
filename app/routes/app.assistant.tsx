@@ -3,7 +3,6 @@ import { json } from "@remix-run/node";
 import { useLoaderData, useFetcher } from "@remix-run/react";
 import {
   Page,
-  Layout,
   Card,
   Text,
   BlockStack,
@@ -22,12 +21,16 @@ import {
   Collapsible,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
-import { useState, useCallback, useMemo, useRef, type ReactNode } from "react";
+import { useState, useCallback, useRef, type ReactNode } from "react";
 import { authenticate } from "../shopify.server";
 import {
   getChatAssistantConfig,
   saveChatAssistantConfig,
   getConfiguredProducts,
+  mapRecommendationTuning,
+  oneOf,
+  type ChatAssistantConfig,
+  type RecommendationTuning,
 } from "../lib/supabase.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -101,7 +104,40 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       bundle_subtext: formData.get("bundle_subtext") as string,
       bundle_button: formData.get("bundle_button") as string,
       title_font: (formData.get("title_font") as string) === "sans" ? "sans" : "serif",
-    };
+    } satisfies Partial<ChatAssistantConfig> as Partial<ChatAssistantConfig>;
+
+    // LLM engine fields (migrations 050/051) are written ONLY when the
+    // posting client sent them. A stale admin tab from a pre-deploy bundle
+    // omits them entirely; writing defaults in that case would silently
+    // wipe the shop's saved engine settings on an unrelated edit. Malformed
+    // JSON (only reachable via crafted requests) likewise skips the write
+    // rather than wiping or 500ing the whole save.
+    if (formData.get("recommendation_mode") !== null) {
+      config.recommendation_mode = oneOf(
+        formData.get("recommendation_mode"),
+        ["matrix", "ai", "hybrid"] as const,
+        "matrix",
+      );
+      config.ai_guidance = (formData.get("ai_guidance") as string) ?? "";
+      try {
+        const parsed = JSON.parse(formData.get("priority_product_ids") as string || "[]");
+        config.priority_product_ids = Array.isArray(parsed)
+          ? parsed.filter((s): s is string => typeof s === "string")
+          : [];
+      } catch {
+        // keep the stored value
+      }
+    }
+    if (formData.get("recommendation_tuning") !== null) {
+      try {
+        // Same mapper as the read path — write-side validation can't drift.
+        config.recommendation_tuning = mapRecommendationTuning(
+          JSON.parse(formData.get("recommendation_tuning") as string || "{}"),
+        );
+      } catch {
+        // keep the stored value
+      }
+    }
 
     try {
       await saveChatAssistantConfig(shopDomain, config);
@@ -205,6 +241,18 @@ export default function AssistantConfig() {
   const [numRecommendations, setNumRecommendations] = useState(config.num_recommendations);
   const [productScope, setProductScope] = useState(config.product_scope);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>(config.selected_product_ids);
+  const [recommendationMode, setRecommendationMode] = useState<"matrix" | "ai" | "hybrid">(
+    config.recommendation_mode,
+  );
+  const [priorityProductIds, setPriorityProductIds] = useState<string[]>(config.priority_product_ids);
+  const [aiGuidance, setAiGuidance] = useState(config.ai_guidance);
+  // One state object mirroring the server's RecommendationTuning shape —
+  // a new knob costs one mapper field, one control, and nothing else.
+  const [tuning, setTuning] = useState<RecommendationTuning>(config.recommendation_tuning);
+  const setTuningField = useCallback(
+    (patch: Partial<RecommendationTuning>) => setTuning((prev) => ({ ...prev, ...patch })),
+    [],
+  );
   const [newOption, setNewOption] = useState("");
   const [uploading, setUploading] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -289,6 +337,10 @@ export default function AssistantConfig() {
     formData.append("num_recommendations", String(numRecommendations));
     formData.append("product_scope", productScope);
     formData.append("selected_product_ids", JSON.stringify(selectedProductIds));
+    formData.append("recommendation_mode", recommendationMode);
+    formData.append("priority_product_ids", JSON.stringify(priorityProductIds));
+    formData.append("ai_guidance", aiGuidance);
+    formData.append("recommendation_tuning", JSON.stringify(tuning));
     formData.append("hero_enabled", String(heroEnabled));
     formData.append("hero_eyebrow", heroEyebrow);
     formData.append("hero_headline", heroHeadline);
@@ -317,6 +369,7 @@ export default function AssistantConfig() {
     fetcher, enabled, assistantMode, assistantName, avatarUrl, bubbleColor, bubbleText, accentColor,
     openingMessage, recommendButtonText, preferenceQuestion,
     preferenceOptions, photoUploadMessage, photoFrameHint, numRecommendations, productScope, selectedProductIds,
+    recommendationMode, priorityProductIds, aiGuidance, tuning,
     heroEnabled, heroEyebrow, heroHeadline, heroBody, heroCtaLabel, heroFooter,
     heroSampleLabel, heroTrustItems, heroShowDelay, heroSampleCount,
     heroAccentColor, heroBackgroundColor, heroTextColor, heroSampleImages,
@@ -349,6 +402,14 @@ export default function AssistantConfig() {
 
   const toggleProduct = useCallback((productId: string) => {
     setSelectedProductIds((prev) =>
+      prev.includes(productId)
+        ? prev.filter((id) => id !== productId)
+        : [...prev, productId]
+    );
+  }, []);
+
+  const togglePriorityProduct = useCallback((productId: string) => {
+    setPriorityProductIds((prev) =>
       prev.includes(productId)
         ? prev.filter((id) => id !== productId)
         : [...prev, productId]
@@ -539,6 +600,129 @@ export default function AssistantConfig() {
                         />
                       ))
                     )}
+                  </BlockStack>
+                )}
+                <Divider />
+                <Select
+                  label="Ranking engine"
+                  options={[
+                    { label: "Rule matrix only (classic)", value: "matrix" },
+                    { label: "Hybrid — your rules first, AI ranks the rest", value: "hybrid" },
+                    { label: "AI ranking only", value: "ai" },
+                  ]}
+                  value={recommendationMode}
+                  onChange={(v) => setRecommendationMode(v as "matrix" | "ai" | "hybrid")}
+                  helpText="AI ranking scores every eligible product against the shopper's answers — no rule authoring needed. Hybrid keeps your matrix rules in charge and uses AI only where no rule matches (instead of a random pick)."
+                />
+                {recommendationMode !== "matrix" && (
+                  <BlockStack gap="400">
+                    <TextField
+                      label="AI guidance"
+                      value={aiGuidance}
+                      onChange={setAiGuidance}
+                      multiline={3}
+                      autoComplete="off"
+                      placeholder={'e.g. "Our hero product is the Silk Set — suggest it to first-timers. Push bundles over singles."'}
+                      helpText="Optional notes the AI follows when ranking (positioning, what to push, what to avoid)."
+                    />
+                    <Select
+                      label="Color matching filter"
+                      options={[
+                        { label: "Off — rank everything", value: "off" },
+                        { label: "Loose — drop clearly different colors", value: "loose" },
+                        { label: "Normal — keep the same color neighborhood", value: "normal" },
+                        { label: "Strict — same color family only", value: "strict" },
+                      ]}
+                      value={tuning.colorFilter}
+                      onChange={(v) => setTuningField({ colorFilter: v as RecommendationTuning["colorFilter"] })}
+                      helpText="Removes variants whose swatch color is perceptually far from the shade the shopper picked, before the AI ranks. Needs display colors on your variants; variants without one always pass."
+                    />
+                    <Checkbox
+                      label="Mismatch guard"
+                      checked={tuning.mismatchGuard}
+                      onChange={(v) => setTuningField({ mismatchGuard: v })}
+                      helpText="Safety net that blocks obviously wrong colors (shopper picks purple, product is white) even with the color filter off. Recommended on."
+                    />
+                    <Select
+                      label="Priority style"
+                      options={[
+                        { label: "Boost — nudge priority products up a few spots", value: "boost" },
+                        { label: "Pin — suitable priority products always go first", value: "pin" },
+                      ]}
+                      value={tuning.priorityStyle}
+                      onChange={(v) => setTuningField({ priorityStyle: v as RecommendationTuning["priorityStyle"] })}
+                      helpText="Pin still requires the AI to judge the product suitable for the shopper — it can't force a bad match to the top."
+                    />
+                    {tuning.priorityStyle === "boost" && (
+                      <RangeSlider
+                        label={`Boost strength: ${tuning.priorityBoostSlots} position${tuning.priorityBoostSlots === 1 ? "" : "s"}`}
+                        value={tuning.priorityBoostSlots}
+                        min={1}
+                        max={10}
+                        step={1}
+                        onChange={(v) => setTuningField({ priorityBoostSlots: v as number })}
+                        output
+                      />
+                    )}
+                    <Select
+                      label="AI model"
+                      options={[
+                        { label: "Fastest — lightest model, snappiest results", value: "lite" },
+                        { label: "Fast (recommended) — ranks in about a second", value: "flash" },
+                        { label: "Precise — slower, better with nuanced guidance", value: "pro" },
+                      ]}
+                      value={tuning.rankerModel}
+                      onChange={(v) => setTuningField({ rankerModel: v as RecommendationTuning["rankerModel"] })}
+                    />
+                    <InlineStack gap="400">
+                      <Checkbox
+                        label="Show 'why we picked this' on cards"
+                        checked={tuning.llmReasons}
+                        onChange={(v) => setTuningField({ llmReasons: v })}
+                      />
+                      <Checkbox
+                        label="Prefer variety across products"
+                        checked={tuning.productDiversity}
+                        onChange={(v) => setTuningField({ productDiversity: v })}
+                      />
+                    </InlineStack>
+                    <BlockStack gap="200">
+                      <BlockStack gap="050">
+                        <Text as="p" variant="bodySm" fontWeight="semibold">
+                          Priority products
+                        </Text>
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          Surfaced first when they suit the shopper equally well. A gentle boost — a
+                          clearly better match still wins.
+                        </Text>
+                      </BlockStack>
+                      {(() => {
+                        // Only in-scope products can ever be recommended, so
+                        // only they can meaningfully be prioritized — an
+                        // out-of-scope checkbox would look boosted while
+                        // being silently absent from the candidate pool.
+                        const eligible = productScope === "selected"
+                          ? products.filter((p: { id: string }) => selectedProductIds.includes(p.id))
+                          : products;
+                        if (eligible.length === 0) {
+                          return (
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              {productScope === "selected"
+                                ? "Select products above first — priority picks come from the selected set."
+                                : "No products configured yet."}
+                            </Text>
+                          );
+                        }
+                        return eligible.map((product: { id: string; product_name: string }) => (
+                          <Checkbox
+                            key={`priority-${product.id}`}
+                            label={product.product_name || product.id}
+                            checked={priorityProductIds.includes(product.id)}
+                            onChange={() => togglePriorityProduct(product.id)}
+                          />
+                        ));
+                      })()}
+                    </BlockStack>
                   </BlockStack>
                 )}
                 <TextField

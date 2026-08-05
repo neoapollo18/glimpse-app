@@ -19,6 +19,7 @@ import {
   extractNumericId,
   type Candidate,
 } from "../lib/recommendation-engine.server";
+import { llmOrderCandidates, guardAndPrioritize } from "../lib/llm-recommender.server";
 import { checkRateLimit, getClientIP } from "../lib/rate-limiter.server";
 
 const CORS_HEADERS = {
@@ -80,10 +81,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // is a setter call, not a key write — this is a public endpoint.
     const criteria: MultiCriteria = Object.create(null);
     if (rawCriteria && typeof rawCriteria === "object" && !Array.isArray(rawCriteria)) {
-      const ID_RE = /^[a-z_][a-z0-9_]*$/;
+      // Length-capped: identifiers here can reach an LLM prompt (as lookup
+      // keys only, but a megabyte "identifier" would still be a paid-token
+      // amplifier) and unbounded keys would bloat the rules matcher.
+      const ID_RE = /^[a-z_][a-z0-9_]{0,63}$/;
       const PROTO_KEYS = new Set(["__proto__", "constructor", "prototype"]);
       const MAX_VALUES_PER_AXIS = 16;
+      const MAX_AXES = 32;
       for (const [k, v] of Object.entries(rawCriteria as Record<string, unknown>)) {
+        if (Object.keys(criteria).length >= MAX_AXES) break;
         if (!ID_RE.test(k) || PROTO_KEYS.has(k)) continue;
         if (typeof v === "string" && ID_RE.test(v)) {
           criteria[k] = v;
@@ -109,9 +115,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return json({ error: "Subscription inactive" }, { status: 403, headers: CORS_HEADERS });
     }
 
-    // Rate limit — cheap endpoint (no AI calls), so a looser cap than
-    // chat-recommend. The shade merge-and-rerun flow legitimately calls
-    // this twice per session.
+    // Rate limit. The shade merge-and-rerun flow legitimately calls this
+    // twice per session. Note: in ai/hybrid modes this endpoint can make a
+    // Gemini call — that path has its own tighter limiter below which
+    // degrades to the shuffle fallback instead of erroring.
     const clientIP = getClientIP(request);
     const ipLimit = checkRateLimit(`quiz-recommend:ip:${clientIP}:minute`, 20, 60_000);
     if (!ipLimit.allowed) {
@@ -137,13 +144,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     const desiredCount = Math.max(1, Math.min(5, Number(chatConfig.num_recommendations) || 3));
 
+    // The flow is needed by both the LLM ranker (answer labels, swatch
+    // colors) and the matrix reason bullets — fetch at most once.
+    let flowCache: Awaited<ReturnType<typeof getRecommendationFlow>> | null = null;
+    const getFlow = async () => (flowCache ??= await getRecommendationFlow(verifiedShop.id));
+
+    const mode = chatConfig.recommendation_mode;
+    let aiOrdered = aiOrderCandidates(pool.candidates);
+    let llmReasons: Map<Candidate, string> | null = null;
+
     // Rule matching (multi-select aware). Exact coverage first; partial when
     // the shopper hasn't answered every rule axis yet (e.g. shade pending) —
     // the quiz shows a provisional best match plus the shade gate then.
-    const aiOrdered = aiOrderCandidates(pool.candidates);
-
+    // Mode 'ai' skips the matrix entirely: the merchant chose the LLM as
+    // the single source of ranking.
     const attemptMatch = async (attemptCriteria: MultiCriteria) => {
-      const match = Object.keys(attemptCriteria).length > 0
+      const match = mode !== "ai" && Object.keys(attemptCriteria).length > 0
         ? await matchRecommendationRules(verifiedShop.id, attemptCriteria)
         : null;
       // orderByMatrix logs criteria on misses; flatten arrays for readability.
@@ -160,6 +176,55 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     };
 
     let outcome = await attemptMatch(criteria);
+
+    // LLM ranking (migrations 050/051) only where it can actually surface:
+    // ai/hybrid mode, no matrix hit, and answers to rank against. Running
+    // AFTER the matrix keeps matrix-covered requests as fast as before and
+    // keeps the admin promise that hybrid uses AI only where no rule
+    // matches. Degrades to shuffle + mismatch guard + priority on any
+    // failure (including its own rate limiter), so results never blank.
+    if (mode !== "matrix" && !outcome.matrixApplied && Object.keys(criteria).length > 0) {
+      // Tighter caps than the endpoint limiter: this path spends Gemini
+      // tokens on an unauthenticated route. Per-IP for ordinary abuse, and
+      // per-SHOP as the backstop an X-Forwarded-For rotation can't evade.
+      // Beyond either we degrade, not 429 — a shopper still gets
+      // guarded-shuffle results.
+      const llmLimit = checkRateLimit(`quiz-recommend:llm:${clientIP}:minute`, 6, 60_000);
+      const shopLlmLimit = checkRateLimit(`quiz-recommend:llm-shop:${verifiedShop.id}:minute`, 60, 60_000);
+      const flow = await getFlow();
+      const ranked = llmLimit.allowed && shopLlmLimit.allowed
+        ? await llmOrderCandidates({
+            candidates: pool.candidates,
+            criteria,
+            flow,
+            config: chatConfig,
+            desiredCount,
+            shopDomain: verifiedDomain,
+            logTag: "quiz-recommend",
+          })
+        : null;
+      if (ranked) {
+        aiOrdered = ranked.ordered;
+        llmReasons = ranked.reasons;
+      } else {
+        aiOrdered = guardAndPrioritize(aiOrdered, criteria, flow, chatConfig, "quiz-recommend");
+      }
+      outcome = { ...outcome, ordered: aiOrdered };
+
+      // Shade gate for the non-matrix path: the matrix's partial mechanism
+      // can't fire when no rule matched (or mode is 'ai'), but a
+      // shade-driven shop still must not serve definitive variant picks
+      // before the shade is known. Mirror the matrix semantics: an
+      // unanswered shade axis -> partial, which makes the widget show
+      // product-level cards and the shade gate, then re-run with the shade
+      // answered. ONLY the first photo axis counts: the widget's shade
+      // gate resolves exactly photoAxisDetails[0], so gating on later axes
+      // would loop the gate forever with no way to clear it.
+      const gateAxis = flow.photoAxisDetails[0];
+      if (gateAxis && !(gateAxis.key in criteria)) {
+        outcome = { ...outcome, partial: true };
+      }
+    }
 
     // Stock-aware filtering (migration 047, opt-in per shop): drop matrix
     // targets that aren't purchasable right now. When that empties a shade's
@@ -216,6 +281,38 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           );
         }
       }
+    } else if (
+      chatConfig.quiz_availability_filter &&
+      !outcome.matrixApplied &&
+      mode !== "matrix" &&
+      // Partial results collapse to product level with the variant
+      // explicitly arbitrary — probing that arbitrary variant's stock
+      // would drop purchasable products over a shade nobody picked yet.
+      // The definitive re-run after the shade gate gets the filter.
+      !outcome.partial
+    ) {
+      // LLM-ranked (non-matrix) results get the same stock hygiene: drop
+      // unavailable picks from the top window, backfill from the ranked
+      // tail. Fail open on probe errors, and never filter down to zero.
+      // 4x the desired count (one batched Admin call either way) so the
+      // served picks come from probed candidates even when most of the
+      // window is out of stock — backfilling from an unprobed tail would
+      // quietly defeat the filter.
+      const window = Math.min(outcome.ordered.length, desiredCount * 4);
+      const segment = outcome.ordered.slice(0, window);
+      const gids = segment.map((c) => c.variant?.shopify_variant_id || c.product.shopify_id);
+      const avail = await fetchAvailability(verifiedDomain, gids, "quiz-recommend");
+      if (avail !== null) {
+        const inStock = segment.filter(
+          (c) => avail.get(c.variant?.shopify_variant_id || c.product.shopify_id) !== false
+        );
+        if (inStock.length > 0 && inStock.length < segment.length) {
+          console.log(
+            `[quiz-recommend] availability filter dropped ${segment.length - inStock.length}/${segment.length} LLM picks for ${verifiedDomain}`
+          );
+          outcome = { ...outcome, ordered: inStock.concat(outcome.ordered.slice(window)) };
+        }
+      }
     }
 
     const { ordered, matrixApplied, matrixCount } = outcome;
@@ -234,7 +331,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // products the matrix never matched.
     const reasons: string[] = [];
     if (matrixApplied) {
-      const flow = await getRecommendationFlow(verifiedShop.id);
+      const flow = await getFlow();
       for (const q of flow.questions) {
         const answered = criteria[q.axisKey];
         if (!answered) continue;
@@ -298,6 +395,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       const variant = partial ? null : candidate.variant;
       const productName = product.product_name;
       const variantTitle = variant?.variant_title || null;
+      const llmReason = llmReasons?.get(candidate);
       const effectiveRank = (typeof candidate.matrixRank === "number" && candidate.matrixRank > 0)
         ? candidate.matrixRank
         : idx + 1;
@@ -312,7 +410,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         tagline: variant?.tagline ?? null,
         rank: effectiveRank,
         quantity: Math.max(1, candidate.quantity ?? 1),
-        reasons,
+        // Matrix picks keep the merchant-authored answer reasons; LLM picks
+        // get the ranker's per-candidate reason. Same wire shape either way.
+        reasons: matrixApplied ? reasons : llmReason ? [llmReason] : [],
       };
     });
 

@@ -10,8 +10,10 @@ import {
   getConfiguredProducts,
   getVariantsForProducts,
   matchRecommendationRules,
+  getRecommendationFlow,
 } from "./supabase.server";
 import type { ChatAssistantConfig } from "./supabase.server";
+import { llmOrderCandidates, guardAndPrioritize, shuffle, diversify } from "./llm-recommender.server";
 
 const SHOPIFY_ADMIN_TIMEOUT_MS = 6_000;
 const HANDLE_CACHE_TTL_MS = 10 * 60_000;
@@ -41,6 +43,9 @@ export type EngineVariant = {
   // Optional italic copy line shown beneath the variant title on product
   // cards. Migration 032 added the column.
   tagline?: string | null;
+  // Hex swatch (migration 018) — feeds the CIELAB color pre-filter and the
+  // LLM ranker's color hints. Null = no color data, always passes filters.
+  display_color?: string | null;
 };
 
 // matrixRank is the merchant's authored rank when this candidate came from a
@@ -136,23 +141,7 @@ export async function buildCandidatePool(
  * doesn't apply, and the backfill pool when a curated pick fails.
  */
 export function aiOrderCandidates(candidates: Candidate[]): Candidate[] {
-  const shuffled = [...candidates];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  const seenProducts = new Set<string>();
-  const uniquePassFirst: Candidate[] = [];
-  const uniquePassRest: Candidate[] = [];
-  for (const c of shuffled) {
-    if (seenProducts.has(c.product.id)) {
-      uniquePassRest.push(c);
-    } else {
-      seenProducts.add(c.product.id);
-      uniquePassFirst.push(c);
-    }
-  }
-  return uniquePassFirst.concat(uniquePassRest);
+  return diversify(shuffle(candidates));
 }
 
 export type MatrixHit = {
@@ -250,14 +239,60 @@ export async function orderCandidates(
   shopId: string,
   criteria: Record<string, string>,
   pool: CandidatePool,
-  opts: { logTag: string; shopDomain: string },
-): Promise<{ ordered: Candidate[]; matrixApplied: boolean; matrixCount: number }> {
-  const aiOrdered = aiOrderCandidates(pool.candidates);
-  const match = Object.keys(criteria).length > 0
+  opts: { logTag: string; shopDomain: string; config?: ChatAssistantConfig },
+): Promise<{
+  ordered: Candidate[];
+  matrixApplied: boolean;
+  matrixCount: number;
+  // Per-candidate shopper-facing reasons from the LLM ranker; null when the
+  // fallback ordering came from the shuffle (mode 'matrix' or LLM failure).
+  llmReasons: Map<Candidate, string> | null;
+}> {
+  const mode = opts.config?.recommendation_mode ?? "matrix";
+
+  // Matrix lookup FIRST — it's a fast DB query, and in hybrid mode a
+  // definitive hit means the LLM call is skipped entirely. That keeps the
+  // admin promise ("hybrid uses AI only where no rule matches") and keeps
+  // matrix-covered requests as fast as they were before the LLM existed.
+  // Mode 'ai' ignores the matrix — the merchant chose the LLM as the
+  // single source of ranking.
+  const match = mode !== "ai" && Object.keys(criteria).length > 0
     ? await matchRecommendationRules(shopId, criteria)
     : null;
   const hits = match && !match.partial ? match.hits : null;
-  return orderByMatrix(hits, pool, aiOrdered, { ...opts, criteria });
+
+  let aiOrdered = aiOrderCandidates(pool.candidates);
+  let llmReasons: Map<Candidate, string> | null = null;
+
+  // LLM ranking only where it can actually surface: ai/hybrid mode, no
+  // definitive matrix hit, and answers to rank against. Degrades to
+  // shuffle + guard + priority on any failure, so this path can only ever
+  // improve on the old behavior.
+  if (
+    mode !== "matrix" &&
+    opts.config &&
+    (!hits || hits.length === 0) &&
+    Object.keys(criteria).length > 0
+  ) {
+    const flow = await getRecommendationFlow(shopId);
+    const ranked = await llmOrderCandidates({
+      candidates: pool.candidates,
+      criteria,
+      flow,
+      config: opts.config,
+      desiredCount: Math.max(1, Math.min(5, Number(opts.config.num_recommendations) || 3)),
+      shopDomain: opts.shopDomain,
+      logTag: opts.logTag,
+    });
+    if (ranked) {
+      aiOrdered = ranked.ordered;
+      llmReasons = ranked.reasons;
+    } else {
+      aiOrdered = guardAndPrioritize(aiOrdered, criteria, flow, opts.config, opts.logTag);
+    }
+  }
+
+  return { ...orderByMatrix(hits, pool, aiOrdered, { ...opts, criteria }), llmReasons };
 }
 
 // ---------------------------------------------------------------------

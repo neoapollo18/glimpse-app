@@ -159,13 +159,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     // Matrix path when a rule matches the criteria (curated picks first in
-    // rank order, AI-ordered candidates appended as backfill); AI ordering
-    // (shuffle + diversity pass) otherwise.
-    const { ordered, matrixApplied, matrixCount } = await orderCandidates(
+    // rank order, AI-ordered candidates appended as backfill). Otherwise:
+    // LLM listwise ranking in ai/hybrid modes (migration 050), or the
+    // legacy shuffle + diversity pass in matrix mode / on LLM failure.
+    const { ordered, matrixApplied, matrixCount, llmReasons } = await orderCandidates(
       verifiedShop.id,
       criteria,
       pool,
-      { logTag: "chat-recommend", shopDomain: verifiedDomain },
+      { logTag: "chat-recommend", shopDomain: verifiedDomain, config: chatConfig },
     );
 
     const transformCandidate = async (candidate: Candidate) => {
@@ -200,6 +201,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         // builds ignore it; current gleame-chat.js uses it for cart adds so
         // a "2 sets" rule carts the same on chat and quiz.
         quantity: Math.max(1, candidate.quantity ?? 1),
+        // Shopper-facing reasons from the LLM ranker (migration 050).
+        // Additive field; empty on matrix picks and in matrix mode. Same
+        // shape as the quiz's matches[].reasons so a future widget renderer
+        // works for both surfaces.
+        reasons: llmReasons?.get(candidate) ? [llmReasons.get(candidate)!] : [],
       };
     };
 

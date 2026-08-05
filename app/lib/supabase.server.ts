@@ -2431,6 +2431,90 @@ export interface ChatAssistantConfig {
   // availability filter leaves zero matrix matches:
   // { hair_shade: { jet_black: ['soft_black', 'darkest_brown'] } }.
   quiz_shade_fallbacks: Record<string, Record<string, string[]>> | null;
+  // ---- LLM recommendation engine (migration 050) ----
+  // 'matrix' = merchant rule matrix only (legacy default). 'ai' = LLM
+  // listwise ranking over the candidate pool. 'hybrid' = matrix rules win
+  // when they match; the LLM replaces the random-shuffle fallback.
+  recommendation_mode: 'matrix' | 'ai' | 'hybrid';
+  // Soft boost, never a hard pin: these products get a bounded rank lift
+  // plus a prompt hint in ai/hybrid modes.
+  priority_product_ids: string[];
+  // Merchant positioning notes fed verbatim to the ranking prompt.
+  ai_guidance: string;
+  // Tuning knobs for the LLM engine (migration 051). Always fully
+  // populated after mapping — absent/malformed keys get defaults. The
+  // migration-050 color_filter_enabled boolean was folded into
+  // recommendation_tuning.colorFilter by migration 051's backfill; the
+  // column is dead and unread.
+  recommendation_tuning: RecommendationTuning;
+}
+
+// ---- Recommendation tuning (migration 051) ----
+// Every knob has a default so an empty jsonb blob means "shipped behavior".
+export type ColorFilterStrength = 'off' | 'loose' | 'normal' | 'strict';
+
+export interface RecommendationTuning {
+  // Pre-rank ΔE00 gate vs the shopper's picked swatch: off, or
+  // loose (45) / normal (30) / strict (18).
+  colorFilter: ColorFilterStrength;
+  // Always-on egregious-mismatch filter (ΔE00 > 60) on AI-ordered picks —
+  // catches "picked purple, got white" even with the color filter off.
+  mismatchGuard: boolean;
+  // 'boost' = bounded rank lift; 'pin' = suitable priority picks go first.
+  priorityStyle: 'boost' | 'pin';
+  // How many positions a boost lifts (1-10). Ignored for 'pin'.
+  priorityBoostSlots: number;
+  // Which Gemini tier ranks: 'lite' (fastest), 'flash' (default), or
+  // 'pro' (accuracy; cannot disable thinking, so slowest).
+  rankerModel: 'lite' | 'flash' | 'pro';
+  // Unique products before duplicate variants in the ranked tail.
+  productDiversity: boolean;
+  // Attach the ranker's per-pick shopper-facing reasons to result cards.
+  llmReasons: boolean;
+  // Prompt-size cap on candidates sent to the LLM (50-400).
+  maxLlmCandidates: number;
+}
+
+export const RECOMMENDATION_TUNING_DEFAULTS: RecommendationTuning = {
+  colorFilter: 'off',
+  mismatchGuard: true,
+  priorityStyle: 'boost',
+  priorityBoostSlots: 3,
+  rankerModel: 'flash',
+  productDiversity: true,
+  llmReasons: true,
+  maxLlmCandidates: 200,
+};
+
+const clampInt = (v: unknown, min: number, max: number, fallback: number): number => {
+  const n = typeof v === 'number' ? Math.round(v) : NaN;
+  return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback;
+};
+
+// Enum-or-fallback validation used by the tuning mapper and the admin
+// action, so allowed values live in exactly one place per knob.
+export const oneOf = <T extends string>(v: unknown, allowed: readonly T[], fallback: T): T =>
+  typeof v === 'string' && (allowed as readonly string[]).includes(v) ? (v as T) : fallback;
+
+/**
+ * Defensive mapper for the recommendation_tuning jsonb. Single source of
+ * truth for shape + defaults; malformed values degrade key-by-key. Also
+ * used by the admin save action so write-side validation can't drift from
+ * read-side validation.
+ */
+export function mapRecommendationTuning(raw: unknown): RecommendationTuning {
+  const d = RECOMMENDATION_TUNING_DEFAULTS;
+  const t = (raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
+  return {
+    colorFilter: oneOf(t.colorFilter, ['off', 'loose', 'normal', 'strict'] as const, d.colorFilter),
+    mismatchGuard: typeof t.mismatchGuard === 'boolean' ? t.mismatchGuard : d.mismatchGuard,
+    priorityStyle: oneOf(t.priorityStyle, ['boost', 'pin'] as const, d.priorityStyle),
+    priorityBoostSlots: clampInt(t.priorityBoostSlots, 1, 10, d.priorityBoostSlots),
+    rankerModel: oneOf(t.rankerModel, ['lite', 'flash', 'pro'] as const, d.rankerModel),
+    productDiversity: typeof t.productDiversity === 'boolean' ? t.productDiversity : d.productDiversity,
+    llmReasons: typeof t.llmReasons === 'boolean' ? t.llmReasons : d.llmReasons,
+    maxLlmCandidates: clampInt(t.maxLlmCandidates, 50, 400, d.maxLlmCandidates),
+  };
 }
 
 const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
@@ -2522,6 +2606,10 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   quiz_intro_layout: null,
   quiz_animation_style: null,
   quiz_availability_filter: false,
+  recommendation_mode: 'matrix',
+  priority_product_ids: [],
+  ai_guidance: '',
+  recommendation_tuning: { ...RECOMMENDATION_TUNING_DEFAULTS },
   quiz_shade_fallbacks: null,
 };
 
@@ -2664,6 +2752,16 @@ function mapChatAssistantRow(data: any): ChatAssistantConfig {
       CHAT_ASSISTANT_DEFAULTS.quiz_animation_style,
     quiz_availability_filter: data.quiz_availability_filter ?? CHAT_ASSISTANT_DEFAULTS.quiz_availability_filter,
     quiz_shade_fallbacks: mapShadeFallbacks(data.quiz_shade_fallbacks),
+    // A stray mode value degrades to the legacy matrix engine rather than
+    // accidentally turning LLM calls on for a shop.
+    recommendation_mode: (['matrix', 'ai', 'hybrid'] as const).includes(data.recommendation_mode)
+      ? (data.recommendation_mode as ChatAssistantConfig['recommendation_mode'])
+      : CHAT_ASSISTANT_DEFAULTS.recommendation_mode,
+    priority_product_ids: Array.isArray(data.priority_product_ids)
+      ? data.priority_product_ids.filter((v: unknown): v is string => typeof v === 'string')
+      : CHAT_ASSISTANT_DEFAULTS.priority_product_ids,
+    ai_guidance: typeof data.ai_guidance === 'string' ? data.ai_guidance : CHAT_ASSISTANT_DEFAULTS.ai_guidance,
+    recommendation_tuning: mapRecommendationTuning(data.recommendation_tuning),
   };
 }
 

@@ -10,8 +10,8 @@
 // Failure-tolerant by design: any error returns {} and chat-recommend
 // degrades to the AI-pick fallback, same as before this existed.
 
-import { GoogleGenAI } from '@google/genai';
 import { compressImage } from './ai.server';
+import { geminiClient, extractGeminiText, stripJsonFences } from './gemini.server';
 
 export interface PhotoAxisSpec {
   key: string;
@@ -26,28 +26,6 @@ const PHOTO_AXIS_MODEL = 'gemini-2.5-flash';
 const PHOTO_AXIS_TIMEOUT_MS = 12_000;
 // Classification doesn't need detail — small input keeps the call fast.
 const PHOTO_AXIS_MAX_PX = 768;
-
-let _client: GoogleGenAI | null = null;
-function client(): GoogleGenAI {
-  if (_client) return _client;
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) throw new Error('GEMINI_API_KEY not configured');
-  _client = new GoogleGenAI({ apiKey: key });
-  return _client;
-}
-
-function extractText(response: unknown): string {
-  const r = response as {
-    text?: string;
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-  };
-  if (typeof r?.text === 'string' && r.text) return r.text;
-  const parts = r?.candidates?.[0]?.content?.parts;
-  if (Array.isArray(parts)) {
-    return parts.map((p) => (typeof p.text === 'string' ? p.text : '')).join('');
-  }
-  return '';
-}
 
 /**
  * Classify each photo axis into one of its defined values by looking at the
@@ -99,7 +77,7 @@ export async function classifyPhotoAxes(
       'If the photo is ambiguous, pick the closest match — never refuse. ' +
       'Attributes:\n' + axisDescriptions;
 
-    const responsePromise = client().models.generateContent({
+    const responsePromise = geminiClient().models.generateContent({
       model: PHOTO_AXIS_MODEL,
       contents: [
         {
@@ -115,6 +93,10 @@ export async function classifyPhotoAxes(
         responseMimeType: 'application/json',
         responseSchema: responseSchema as unknown as Record<string, unknown>,
         temperature: 0,
+        // 2.5-flash thinks by default even on structured output (~7-11s vs
+        // ~1-2.5s without); closed-set classification gains nothing from
+        // reasoning tokens and this call gates every transform.
+        thinkingConfig: { thinkingBudget: 0 },
       },
     });
 
@@ -125,13 +107,8 @@ export async function classifyPhotoAxes(
       ),
     );
 
-    const raw = extractText(await Promise.race([responsePromise, timeoutPromise]));
-    const cleaned = raw
-      .trim()
-      .replace(/^```(?:json)?\s*/i, '')
-      .replace(/```\s*$/i, '')
-      .trim();
-    const parsed = JSON.parse(cleaned) as Record<string, unknown>;
+    const raw = extractGeminiText(await Promise.race([responsePromise, timeoutPromise]));
+    const parsed = JSON.parse(stripJsonFences(raw)) as Record<string, unknown>;
 
     // Schema enforcement is best-effort — re-validate against the allowed
     // sets so a stray value can't poison the strict-equality rule lookup.
