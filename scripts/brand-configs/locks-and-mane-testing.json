@@ -1,5 +1,5 @@
 {
-  "$comment": "Locks & Mane flow adapted for the glimpsetesting.myshopify.com dev store (demo/QA). Differences from locks-and-mane.json: real testing shop domain; extensions-only (no category axis, no accessory branch — accessories per style intent are still pending from Christa, and the demoed flow starts at the goal question); product names match the catalog created by backfill-lm-testing-catalog.cjs; availabilityFilter off (dev store inventory isn't managed). Question order mirrors the demoed flow: goal, style intent, current length, thickness, layers, then the quiz's built-in photo gate for shade.",
+  "$comment": "Locks & Mane flow adapted for the glimpsetesting.myshopify.com dev store (demo/QA). Differences from locks-and-mane.json: real testing shop domain; extensions-only (no category axis, no accessory branch — accessories per style intent are still pending from Christa, and the demoed flow starts at the goal question); product names match the catalog created by backfill-lm-testing-catalog.cjs; availabilityFilter off (dev store inventory isn't managed). Question order mirrors the demoed flow: goal, style intent, current length, thickness, blunt cut, then the quiz's built-in photo gate for shade.",
 
   "shopDomain": "glimpsetesting.myshopify.com",
 
@@ -51,8 +51,8 @@
       ]
     },
     {
-      "key": "layers",
-      "label": "Layers",
+      "key": "blunt_cut",
+      "label": "Blunt cut",
       "source": "user_question",
       "values": [
         { "value": "yes", "label": "Yes" },
@@ -80,29 +80,48 @@
 
   "questions": [
     {
+      "$comment": "helperText / option labels / sublabels / imageUrls below were merged from the live admin-styled flow on 2026-07-31 so a recompile reproduces them (the destructive-save guard checks this). 'Thick' sublabel was a live typo ('thinner') — fixed to 'thicker' here.",
       "axisKey": "goal",
-      "prompt": "What are you hoping to change about your hair?"
+      "prompt": "What are you hoping to change about your hair?",
+      "helperText": "We'll tailor your match to the look you want"
     },
     {
       "axisKey": "style_intent",
-      "prompt": "What's the look for?"
+      "prompt": "What's the look for?",
+      "helperText": "Let's nail the style for your occasion",
+      "options": [
+        { "label": "Everyday Wear", "value": "everyday", "displayMeta": { "sublabel": "🙌" } },
+        { "label": "A Special Event", "value": "special_event", "displayMeta": { "sublabel": "💃" } },
+        { "label": "Vacation", "value": "vacation", "displayMeta": { "sublabel": "🏝️" } },
+        { "label": "Photoshoot / Content", "value": "photoshoot", "displayMeta": { "sublabel": "📸" } },
+        { "label": "Surprise Me", "value": "choose_for_me", "displayMeta": { "sublabel": "🤔" } }
+      ]
     },
     {
       "axisKey": "current_length",
-      "prompt": "Where does your hair fall right now?"
+      "prompt": "Where does your hair fall right now?",
+      "helperText": "Go by where your ends land - your starting length tells us which lengths will blend seamlessly",
+      "options": [
+        { "label": "Above my shoulders", "value": "above_shoulders", "imageUrl": "https://cdn.shopify.com/s/files/1/0693/4219/9959/files/Above_Shoulders.png?v=1785166768" },
+        { "label": "At my shoulders", "value": "at_shoulders", "imageUrl": "https://cdn.shopify.com/s/files/1/0693/4219/9959/files/At_Shoulders.png?v=1785166816" },
+        { "label": "Past my shoulders", "value": "past_shoulders", "imageUrl": "https://cdn.shopify.com/s/files/1/0693/4219/9959/files/Past_Shoulders.png?v=1785166737" },
+        { "label": "Down to my mid-back", "value": "mid_back", "imageUrl": "https://cdn.shopify.com/s/files/1/0693/4219/9959/files/Mid_Back.png?v=1785166847" }
+      ]
     },
     {
       "axisKey": "thickness",
-      "prompt": "How thick is your hair?"
+      "prompt": "How thick is your hair?",
+      "helperText": "Finer and thicker hair carry extensions differently - this helps us decide how many sets you need.",
+      "options": [
+        { "label": "Thin", "value": "thin", "displayMeta": { "sublabel": "On the thinner side" } },
+        { "label": "Medium", "value": "medium" },
+        { "label": "Thick", "value": "thick", "displayMeta": { "sublabel": "On the thicker side" } }
+      ]
     },
     {
-      "axisKey": "layers",
-      "prompt": "Do you have layers?",
-      "options": [
-        { "label": "Yes", "value": "yes" },
-        { "label": "No", "value": "no" },
-        { "label": "I’m not sure", "value": "no" }
-      ]
+      "axisKey": "blunt_cut",
+      "prompt": "Do you have blunt-cut hair?",
+      "optionStyle": "boxed"
     }
   ],
 
@@ -148,31 +167,29 @@
   },
 
   "setsTable": {
-    "$comment": "Rule Set 2 — first matching row wins; compiled quantity is max(this table, matrix cell sets).",
+    "$comment": "Rule Set 2 — 2026-07-31 spec: TWO sets only for above-shoulders, thick, or blunt-cut hair (rows OR'd, default 1). Mirrors locks-and-mane.json.",
     "rows": [
-      { "layers": "yes", "sets": 1 },
-      { "layers": "no", "thickness": "thin", "sets": 1 },
-      { "layers": "no", "thickness": "medium", "lengths": ["above_shoulders"], "sets": 1 },
-      { "layers": "no", "thickness": "medium", "lengths": ["at_shoulders", "past_shoulders", "mid_back"], "sets": 2 },
-      { "layers": "no", "thickness": "thick", "sets": 2 }
+      { "lengths": ["above_shoulders"], "sets": 2 },
+      { "thickness": "thick", "sets": 2 },
+      { "blunt_cut": "yes", "sets": 2 }
     ]
   },
 
   "matrix": {
-    "$comment": "Rule Set 3 — same 12 cells as the production config (Christa's table).",
+    "$comment": "Rule Set 3 — same 12 cells as the production config (2026-07-31 lengths table); set counts live in setsTable only.",
     "cells": [
-      { "current_length": "above_shoulders", "goal": "length", "clipIn": "clip_16", "sets": 2 },
-      { "current_length": "above_shoulders", "goal": "volume", "clipIn": "clip_16", "sets": 2 },
-      { "current_length": "above_shoulders", "goal": "both",   "clipIn": "clip_16", "sets": 2 },
-      { "current_length": "at_shoulders",    "goal": "length", "clipIn": "clip_16", "sets": 1, "pony": "pony_18" },
-      { "current_length": "at_shoulders",    "goal": "volume", "clipIn": "clip_12", "sets": 1 },
-      { "current_length": "at_shoulders",    "goal": "both",   "clipIn": "clip_16", "sets": 2, "pony": "pony_18" },
-      { "current_length": "past_shoulders",  "goal": "length", "clipIn": "clip_18", "sets": 1, "pony": "pony_18" },
-      { "current_length": "past_shoulders",  "goal": "volume", "clipIn": "clip_16", "sets": 1, "pony": "pony_18" },
-      { "current_length": "past_shoulders",  "goal": "both",   "clipIn": "clip_18", "sets": 2, "pony": "pony_18" },
-      { "current_length": "mid_back",        "goal": "length", "clipIn": "clip_20", "sets": 1, "pony": "pony_18" },
-      { "current_length": "mid_back",        "goal": "volume", "clipIn": "clip_18", "sets": 1, "pony": "pony_18" },
-      { "current_length": "mid_back",        "goal": "both",   "clipIn": "clip_20", "sets": 2, "pony": "pony_18" }
+      { "current_length": "above_shoulders", "goal": "length", "clipIn": "clip_16" },
+      { "current_length": "above_shoulders", "goal": "volume", "clipIn": "clip_12" },
+      { "current_length": "above_shoulders", "goal": "both",   "clipIn": "clip_16" },
+      { "current_length": "at_shoulders",    "goal": "length", "clipIn": "clip_16", "pony": "pony_18" },
+      { "current_length": "at_shoulders",    "goal": "volume", "clipIn": "clip_12" },
+      { "current_length": "at_shoulders",    "goal": "both",   "clipIn": "clip_16", "pony": "pony_18" },
+      { "current_length": "past_shoulders",  "goal": "length", "clipIn": "clip_18", "pony": "pony_18" },
+      { "current_length": "past_shoulders",  "goal": "volume", "clipIn": "clip_16", "pony": "pony_18" },
+      { "current_length": "past_shoulders",  "goal": "both",   "clipIn": "clip_18", "pony": "pony_18" },
+      { "current_length": "mid_back",        "goal": "length", "clipIn": "clip_20", "pony": "pony_18" },
+      { "current_length": "mid_back",        "goal": "volume", "clipIn": "clip_18", "pony": "pony_18" },
+      { "current_length": "mid_back",        "goal": "both",   "clipIn": "clip_20", "pony": "pony_18" }
     ]
   }
 }

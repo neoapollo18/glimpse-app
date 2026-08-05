@@ -1,5 +1,5 @@
 {
-  "$comment": "Locks & Mane brand config for compile-brand-flow.cjs. Everything brand-specific lives HERE; the compiler and the runtime engine are generic. Encodes the 2026-07 spec: Rule Set 1 (accessory branch by style intent), Rule Set 2 (sets count from layers/thickness/length), Rule Set 3 (length matrix), Rule Set 4 (shade maps). Remaining TODOs: real shop domain, exact Gleame product names once the catalog is imported, Jenn's real 10 shades + pony shade map + fallback adjacencies. Product/variant names must match the Gleame-configured names exactly.",
+  "$comment": "Locks & Mane brand config for compile-brand-flow.cjs. Everything brand-specific lives HERE; the compiler and the runtime engine are generic. Encodes the 2026-07 spec: Rule Set 1 (accessory branch by style intent), Rule Set 2 (2-sets conditions: above-shoulders / thick / blunt-cut), Rule Set 3 (length matrix), Rule Set 4 (shade maps). Remaining TODOs: real shop domain, exact Gleame product names once the catalog is imported, Jenn's real 10 shades + pony shade map + fallback adjacencies. Product/variant names must match the Gleame-configured names exactly.",
 
   "shopDomain": "TODO-locksandmane.myshopify.com",
 
@@ -60,8 +60,8 @@
       ]
     },
     {
-      "key": "layers",
-      "label": "Layers",
+      "key": "blunt_cut",
+      "label": "Blunt cut",
       "source": "user_question",
       "values": [
         { "value": "yes", "label": "Yes" },
@@ -113,14 +113,10 @@
       "showIf": { "axis_key": "category", "axis_value": "extensions" }
     },
     {
-      "axisKey": "layers",
-      "prompt": "Do you have layers?",
+      "axisKey": "blunt_cut",
+      "prompt": "Do you have blunt-cut hair?",
       "showIf": { "axis_key": "category", "axis_value": "extensions" },
-      "options": [
-        { "label": "Yes", "value": "yes" },
-        { "label": "No", "value": "no" },
-        { "label": "I’m not sure", "value": "no" }
-      ]
+      "optionStyle": "boxed"
     }
   ],
 
@@ -167,31 +163,29 @@
   },
 
   "setsTable": {
-    "$comment": "Rule Set 2 — how many sets, first matching row wins. 'lengths' restricts a row to specific current_length values (omitted = any). The compiled quantity is max(this table, the matrix cell's own sets) — so goal=both keeps 2 sets even for layered/thin hair. OPEN QUESTION flagged to Christa/Jenn: should Rule Set 2 be able to LOWER a both-goal cell to 1 set instead?",
+    "$comment": "Rule Set 2 — 2026-07-31 spec: recommend TWO sets only when the shopper has short hair (above shoulders), super thick hair, or blunt-cut hair; everyone else gets 1. Rows are effectively OR'd (first match wins, every row yields 2, default 1). Replaces the old layers/thickness table and RESOLVES the 07-16 open question: goal=both no longer forces 2 sets — quantity comes solely from these three conditions.",
     "rows": [
-      { "layers": "yes", "sets": 1 },
-      { "layers": "no", "thickness": "thin", "sets": 1 },
-      { "layers": "no", "thickness": "medium", "lengths": ["above_shoulders"], "sets": 1 },
-      { "layers": "no", "thickness": "medium", "lengths": ["at_shoulders", "past_shoulders", "mid_back"], "sets": 2 },
-      { "layers": "no", "thickness": "thick", "sets": 2 }
+      { "lengths": ["above_shoulders"], "sets": 2 },
+      { "thickness": "thick", "sets": 2 },
+      { "blunt_cut": "yes", "sets": 2 }
     ]
   },
 
   "matrix": {
-    "$comment": "Rule Set 3 — current_length × goal → hero clip-in (+sets) and optional complementary ponytail. 'pony' omitted = single-recommendation cell (above-shoulders row and at-shoulders+volume have no ponytail in Christa's table). Above-shoulders row: the source table shows one entry spanning all goals — encoded as 16″ × 2 sets for every goal; FLAGGED for confirmation.",
+    "$comment": "Rule Set 3 — 2026-07-31 lengths table: current_length × goal → hero clip-in and optional complementary ponytail. Set counts are NOT encoded per cell anymore; quantity comes entirely from setsTable. 'pony' omitted = single-recommendation cell (the whole above-shoulders row and at-shoulders+volume have no ponytail in the table).",
     "cells": [
-      { "current_length": "above_shoulders", "goal": "length", "clipIn": "clip_16", "sets": 2 },
-      { "current_length": "above_shoulders", "goal": "volume", "clipIn": "clip_16", "sets": 2 },
-      { "current_length": "above_shoulders", "goal": "both",   "clipIn": "clip_16", "sets": 2 },
-      { "current_length": "at_shoulders",    "goal": "length", "clipIn": "clip_16", "sets": 1, "pony": "pony_18" },
-      { "current_length": "at_shoulders",    "goal": "volume", "clipIn": "clip_12", "sets": 1 },
-      { "current_length": "at_shoulders",    "goal": "both",   "clipIn": "clip_16", "sets": 2, "pony": "pony_18" },
-      { "current_length": "past_shoulders",  "goal": "length", "clipIn": "clip_18", "sets": 1, "pony": "pony_18" },
-      { "current_length": "past_shoulders",  "goal": "volume", "clipIn": "clip_16", "sets": 1, "pony": "pony_18" },
-      { "current_length": "past_shoulders",  "goal": "both",   "clipIn": "clip_18", "sets": 2, "pony": "pony_18" },
-      { "current_length": "mid_back",        "goal": "length", "clipIn": "clip_20", "sets": 1, "pony": "pony_18" },
-      { "current_length": "mid_back",        "goal": "volume", "clipIn": "clip_18", "sets": 1, "pony": "pony_18" },
-      { "current_length": "mid_back",        "goal": "both",   "clipIn": "clip_20", "sets": 2, "pony": "pony_18" }
+      { "current_length": "above_shoulders", "goal": "length", "clipIn": "clip_16" },
+      { "current_length": "above_shoulders", "goal": "volume", "clipIn": "clip_12" },
+      { "current_length": "above_shoulders", "goal": "both",   "clipIn": "clip_16" },
+      { "current_length": "at_shoulders",    "goal": "length", "clipIn": "clip_16", "pony": "pony_18" },
+      { "current_length": "at_shoulders",    "goal": "volume", "clipIn": "clip_12" },
+      { "current_length": "at_shoulders",    "goal": "both",   "clipIn": "clip_16", "pony": "pony_18" },
+      { "current_length": "past_shoulders",  "goal": "length", "clipIn": "clip_18", "pony": "pony_18" },
+      { "current_length": "past_shoulders",  "goal": "volume", "clipIn": "clip_16", "pony": "pony_18" },
+      { "current_length": "past_shoulders",  "goal": "both",   "clipIn": "clip_18", "pony": "pony_18" },
+      { "current_length": "mid_back",        "goal": "length", "clipIn": "clip_20", "pony": "pony_18" },
+      { "current_length": "mid_back",        "goal": "volume", "clipIn": "clip_18", "pony": "pony_18" },
+      { "current_length": "mid_back",        "goal": "both",   "clipIn": "clip_20", "pony": "pony_18" }
     ]
   },
 

@@ -9,14 +9,14 @@
 //     may list explicit options ({label, value}) — two labels can map to one
 //     value ("I'm not sure" → no); otherwise options mirror the axis values.
 //   - each extensions matrix cell (current_length × goal) expands per photo
-//     shade AND per sets-table combo (layers × thickness): clip-in rule
+//     shade AND per sets-table combo (e.g. thickness × blunt_cut): clip-in rule
 //     (rank 1, quantity = max(cell sets, sets-table row)) + optional
 //     ponytail rule (rank 2, shade remapped through shadeVariantMap.ponytail
 //     — Jenn's lookup). Cells without a pony yield a SINGLE recommendation.
 //     There is INTENTIONALLY no shade-less backstop: before the selfie the
 //     match is partial, which is what triggers the quiz's shade gate.
 //   - setsTable rows (Rule Set 2) are evaluated first-match-wins per
-//     (layers, thickness, cell length); the combo axes are derived from the
+//     (combo axes, cell length); the combo axes are derived from the
 //     keys the rows actually use, so other brands can table on other axes.
 //   - accessories.byStyleIntent become {category, style_intent} rules that
 //     resolve without any extension question answered — the early exit.
@@ -114,7 +114,7 @@ const setsFromTable = (cell, combo) => {
   }
   return 1;
 };
-// Every (layers × thickness × …) combination the table can distinguish.
+// Every combination of combo-axis values the table can distinguish.
 let combos = [{}];
 for (const key of comboAxisKeys) {
   const values = [...axisByKey.get(key).valueSet];
@@ -208,9 +208,9 @@ for (const s of shades) {
     };
     for (const shade of shades) {
       const shadeCriteria = { ...cellCriteria, [shadeAxis.key]: shade };
-      // Hero clip-in — AI shade used directly. One rule per sets-table combo
-      // (layers × thickness): quantity = max(cell sets, Rule Set 2 row), so
-      // goal=both keeps its 2 sets and thick/no-layers hair upgrades to 2.
+      // Hero clip-in — AI shade used directly. One rule per sets-table combo:
+      // quantity = max(cell sets, Rule Set 2 row). L&M cells no longer carry
+      // their own sets, so quantity comes straight from the table.
       for (const combo of combos) {
         rules.push(target(cell.clipIn, clipShadeMap[shade], {
           criteria: { ...shadeCriteria, ...combo },
@@ -252,10 +252,15 @@ for (const s of shades) {
   }));
   const questionsPayload = (brand.questions || []).map((q, qi) => {
     const ax = axisByKey.get(q.axisKey);
-    // Explicit options let two labels map to one value ("I'm not sure" → no);
-    // without them the options mirror the axis values 1:1.
+    // Explicit options let two labels map to one value ("I'm not sure" → no)
+    // and can carry admin-editor styling (imageUrl, displayMeta) so a
+    // recompile reproduces it; without them the options mirror the axis
+    // values 1:1.
     const optionList = (q.options && q.options.length > 0)
-      ? q.options.map((o) => ({ label: o.label, value: o.value, reasonText: o.reasonText }))
+      ? q.options.map((o) => ({
+          label: o.label, value: o.value, reasonText: o.reasonText,
+          imageUrl: o.imageUrl, displayMeta: o.displayMeta,
+        }))
       : ax.values.map((v) => ({ label: v.label, value: v.value, reasonText: v.reasonText }));
     return {
       axisKey: q.axisKey,
@@ -273,10 +278,10 @@ for (const s of shades) {
         axisValueValue: o.value,
         botResponse: null,
         reasonText: o.reasonText || null,
-        imageUrl: null,
+        imageUrl: o.imageUrl || null,
         showIf: null,
         selectAll: false,
-        displayMeta: null,
+        displayMeta: o.displayMeta || null,
         position: i,
       })),
     };
@@ -355,11 +360,29 @@ for (const s of shades) {
         const oRes = await sb.from('recommendation_question_options')
           .select('question_id, label, image_url, display_meta, bot_response')
           .in('question_id', liveQs.map((q) => q.id));
-        // The compiler never emits these option fields — if set, they are
-        // admin-editor work by definition.
+        // imageUrl/displayMeta CAN be reproduced by the config (explicit
+        // question options) — doom only what the config does not re-emit for
+        // the same question axis + option label. bot_response is still never
+        // emitted, so any live value is admin-editor work by definition.
+        //
+        // display_meta comparison must be key-order-insensitive: Postgres
+        // jsonb normalizes key order, so a faithfully-reproduced object can
+        // come back with keys reordered — a naive JSON.stringify diff would
+        // false-doom it and push the operator toward --force, the exact
+        // destructive habit this guard exists to prevent.
+        const stableStringify = (v) => {
+          if (v === null || typeof v !== 'object') return JSON.stringify(v);
+          if (Array.isArray(v)) return '[' + v.map(stableStringify).join(',') + ']';
+          return '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + stableStringify(v[k])).join(',') + '}';
+        };
+        const axisKeyByQId = new Map(liveQs.map((q) => [q.id, keyByAxisId.get(q.axis_id)]));
         for (const o of oRes.data || []) {
-          if (o.image_url) doomed.push(`option "${o.label}": image_url`);
-          if (o.display_meta) doomed.push(`option "${o.label}": display_meta`);
+          const cfgQ = cfgQByAxis.get(axisKeyByQId.get(o.question_id));
+          const cfgOpt = (cfgQ && cfgQ.options || []).find((c) => c.label === o.label);
+          if (o.image_url && o.image_url !== (cfgOpt && cfgOpt.imageUrl)) doomed.push(`option "${o.label}": image_url`);
+          // {} carries no admin work — treat it like absent, or clearing a
+          // style panel in the admin editor would false-doom every option.
+          if (o.display_meta && Object.keys(o.display_meta).length > 0 && stableStringify(o.display_meta) !== stableStringify((cfgOpt && cfgOpt.displayMeta) || null)) doomed.push(`option "${o.label}": display_meta`);
           if (o.bot_response) doomed.push(`option "${o.label}": bot_response`);
         }
       }
