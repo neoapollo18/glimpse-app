@@ -704,6 +704,66 @@ const NUM_RANKS = 3;
     [],
   );
 
+  // -----------------------------------------------------------------
+  // Saved-rules browser (rendered when the cartesian grid is hidden).
+  // Index-based mutators: the browser edits arbitrary saved rules, which
+  // may legitimately share a criteria key + rank (unlike grid cells).
+  // -----------------------------------------------------------------
+  const [ruleSearch, setRuleSearch] = useState("");
+  const [ruleShowCount, setRuleShowCount] = useState(50);
+  // Add-rule draft: axisKey -> value; '' = "Any" (axis not part of the rule).
+  const [draftCriteria, setDraftCriteria] = useState<Record<string, string>>({});
+  const [draftTarget, setDraftTarget] = useState("");
+  const [draftRank, setDraftRank] = useState("1");
+  const [draftQty, setDraftQty] = useState("1");
+
+  const axisByKey = useMemo(() => new Map(axes.map((a) => [a.key, a])), [axes]);
+  const targetLabelByValue = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const v of variants as Array<{ label: string; value: string }>) m.set(v.value, v.label);
+    return m;
+  }, [variants]);
+
+  // Search matches human-readable text: axis labels, picked value labels,
+  // and the target product/shade label.
+  const visibleRules = useMemo(() => {
+    const withIdx = rules.map((rule, idx) => ({ rule, idx }));
+    const q = ruleSearch.trim().toLowerCase();
+    if (!q) return withIdx;
+    return withIdx.filter(({ rule }) => {
+      const parts: string[] = [targetLabelByValue.get(rule.target) || rule.target];
+      for (const [k, v] of Object.entries(rule.criteria)) {
+        const axis = axisByKey.get(k);
+        parts.push(axis?.label || k, axis?.values.find((av) => av.value === v)?.label || v);
+      }
+      return parts.join(" ").toLowerCase().includes(q);
+    });
+  }, [rules, ruleSearch, targetLabelByValue, axisByKey]);
+
+  const updateRuleAt = useCallback((idx: number, patch: Partial<EditorRule>) => {
+    setRules((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  }, []);
+
+  const removeRuleAt = useCallback((idx: number) => {
+    setRules((prev) => prev.filter((_, i) => i !== idx));
+  }, []);
+
+  const addDraftRule = useCallback(() => {
+    const criteria: Record<string, string> = {};
+    for (const [k, v] of Object.entries(draftCriteria)) {
+      if (v) criteria[k] = v;
+    }
+    if (!draftTarget || Object.keys(criteria).length === 0) return;
+    const rank = Math.max(1, parseInt(draftRank, 10) || 1);
+    setRules((prev) => [
+      ...prev,
+      { criteria, target: draftTarget, rank, quantity: draftQty.trim() || "1" },
+    ]);
+    // Keep the criteria selections so adding rank 2 for the same answers is
+    // one click; clear only the target.
+    setDraftTarget("");
+  }, [draftCriteria, draftTarget, draftRank, draftQty]);
+
   const getRuleTarget = useCallback(
     (criteria: Record<string, string>, rank: number): string => {
       const k = criteriaKey(criteria);
@@ -1682,14 +1742,183 @@ const NUM_RANKS = 3;
                 rather than freezing the tab. Existing rules are preserved
                 on save either way. */}
             {combinations.length > GRID_RENDER_CAP && (
-              <Banner tone="info">
-                This flow has {combinations.length.toLocaleString()} possible
-                answer combinations — too many to edit cell-by-cell, so the
-                grid is hidden. Recommendations still work: rules covering
-                part of the answers (for example a single question's value)
-                match automatically, with the most specific rule winning.
-                Any previously saved rules are preserved when you save.
-              </Banner>
+              <BlockStack gap="300">
+                <Banner tone="info">
+                  This flow has {combinations.length.toLocaleString()} possible
+                  answer combinations — too many to edit cell-by-cell, so the
+                  grid is hidden and your saved rules are listed below instead.
+                  Rules covering part of the answers (for example a single
+                  question's value) match automatically, with the most
+                  specific rule winning.
+                </Banner>
+
+                {/* ---- Saved rules browser ---- */}
+                <Text as="h3" variant="headingSm">
+                  Saved rules ({rules.length.toLocaleString()})
+                </Text>
+                {rules.length === 0 ? (
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    No rules saved yet. Add one below, or compile a brand config.
+                  </Text>
+                ) : (
+                  <TextField
+                    label="Search rules"
+                    labelHidden
+                    placeholder="Search by answer or product…"
+                    value={ruleSearch}
+                    onChange={(v) => {
+                      setRuleSearch(v);
+                      setRuleShowCount(50);
+                    }}
+                    autoComplete="off"
+                    clearButton
+                    onClearButtonClick={() => {
+                      setRuleSearch("");
+                      setRuleShowCount(50);
+                    }}
+                  />
+                )}
+                {rules.length > 0 && visibleRules.length === 0 && (
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    No rules match "{ruleSearch}".
+                  </Text>
+                )}
+                <BlockStack gap="200">
+                  {visibleRules.slice(0, ruleShowCount).map(({ rule, idx }) => (
+                    <Box
+                      key={`${idx}-${criteriaKey(rule.criteria)}-${rule.rank}`}
+                      padding="300"
+                      background="bg-surface-secondary"
+                      borderRadius="200"
+                    >
+                      <BlockStack gap="200">
+                        <InlineStack gap="200" wrap blockAlign="center">
+                          <Badge tone={rule.rank === 1 ? "success" : undefined}>
+                            {`Rank ${rule.rank}`}
+                          </Badge>
+                          {Object.entries(rule.criteria).map(([k, v]) => {
+                            const axis = axisByKey.get(k);
+                            const valueLabel =
+                              axis?.values.find((av) => av.value === v)?.label || v;
+                            return (
+                              <Tag key={k}>{`${axis?.label || k}: ${valueLabel}`}</Tag>
+                            );
+                          })}
+                        </InlineStack>
+                        <InlineStack gap="300" blockAlign="end" wrap={false}>
+                          <div style={{ flex: 1 }}>
+                            <Select
+                              label="Recommends"
+                              options={variantOptions}
+                              value={rule.target}
+                              onChange={(v) => updateRuleAt(idx, { target: v })}
+                            />
+                          </div>
+                          <div style={{ width: 64 }}>
+                            <TextField
+                              label="Qty"
+                              type="number"
+                              min={1}
+                              value={rule.quantity}
+                              onChange={(v) => updateRuleAt(idx, { quantity: v })}
+                              autoComplete="off"
+                            />
+                          </div>
+                          <Button
+                            tone="critical"
+                            variant="tertiary"
+                            onClick={() => removeRuleAt(idx)}
+                          >
+                            Remove
+                          </Button>
+                        </InlineStack>
+                      </BlockStack>
+                    </Box>
+                  ))}
+                </BlockStack>
+                {visibleRules.length > ruleShowCount && (
+                  <InlineStack align="center">
+                    <Button onClick={() => setRuleShowCount((c) => c + 100)}>
+                      Show more ({(visibleRules.length - ruleShowCount).toLocaleString()} remaining)
+                    </Button>
+                  </InlineStack>
+                )}
+
+                <Divider />
+
+                {/* ---- Add-rule builder ---- */}
+                <Text as="h3" variant="headingSm">
+                  Add a rule
+                </Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Pick the answers this rule covers — leave an axis on "Any" to
+                  ignore it — then the product it recommends. More specific
+                  rules beat broader ones for the same shopper.
+                </Text>
+                <InlineStack gap="200" wrap>
+                  {axes
+                    .filter((a) => a.key && a.values.length > 0)
+                    .map((a) => (
+                      <div key={a.key} style={{ minWidth: 180 }}>
+                        <Select
+                          label={a.label || a.key}
+                          options={[
+                            { label: "Any", value: "" },
+                            ...a.values.map((v) => ({
+                              label: v.label || v.value,
+                              value: v.value,
+                            })),
+                          ]}
+                          value={draftCriteria[a.key] || ""}
+                          onChange={(v) =>
+                            setDraftCriteria((prev) => ({ ...prev, [a.key]: v }))
+                          }
+                        />
+                      </div>
+                    ))}
+                </InlineStack>
+                <InlineStack gap="300" blockAlign="end" wrap={false}>
+                  <div style={{ flex: 1 }}>
+                    <Select
+                      label="Recommends"
+                      options={variantOptions}
+                      value={draftTarget}
+                      onChange={setDraftTarget}
+                    />
+                  </div>
+                  <div style={{ width: 80 }}>
+                    <TextField
+                      label="Rank"
+                      type="number"
+                      min={1}
+                      value={draftRank}
+                      onChange={setDraftRank}
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div style={{ width: 64 }}>
+                    <TextField
+                      label="Qty"
+                      type="number"
+                      min={1}
+                      value={draftQty}
+                      onChange={setDraftQty}
+                      autoComplete="off"
+                    />
+                  </div>
+                  <Button
+                    variant="primary"
+                    onClick={addDraftRule}
+                    disabled={!draftTarget || !Object.values(draftCriteria).some(Boolean)}
+                  >
+                    Add rule
+                  </Button>
+                </InlineStack>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Changes here are held with the rest of the editor and written
+                  when you press "Save recommendation logic" below.
+                </Text>
+              </BlockStack>
             )}
             {combinations.length > 0 && combinations.length <= GRID_RENDER_CAP && variants.length > 0 && (
               <Box
