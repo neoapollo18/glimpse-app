@@ -1,7 +1,7 @@
 {
-  "$comment": "Locks & Mane brand config for compile-brand-flow.cjs. Everything brand-specific lives HERE; the compiler and the runtime engine are generic. Encodes the 2026-07 spec: Rule Set 1 (accessory branch by style intent), Rule Set 2 (2-sets conditions: above-shoulders / thick / blunt-cut), Rule Set 3 (length matrix), Rule Set 4 (shade maps). Remaining TODOs: real shop domain, exact Gleame product names once the catalog is imported, Jenn's real 10 shades + pony shade map + fallback adjacencies. Product/variant names must match the Gleame-configured names exactly.",
+  "$comment": "Locks & Mane brand config for compile-brand-flow.cjs. Everything brand-specific lives HERE; the compiler and the runtime engine are generic. Encodes the 2026-07 spec: Rule Set 1 (accessory branch by style intent), Rule Set 2 (2-sets conditions: above-shoulders / thick / blunt-cut), Rule Set 3 (length matrix), Rule Set 4 (shade maps). Product/variant names match the LIVE locks-mane.myshopify.com catalog verbatim (2026-08-07, mirrored into Gleame by backfill-lm-live-catalog.cjs). Remaining TODOs: Jenn's pony shade lookup + fallback adjacencies (placeholders are identity/neighbors).",
 
-  "shopDomain": "TODO-locksandmane.myshopify.com",
+  "shopDomain": "locks-mane.myshopify.com",
 
   "availabilityFilter": true,
 
@@ -121,28 +121,28 @@
   ],
 
   "products": {
-    "$comment": "Gleame product names (must match products.product_name exactly). TODO: confirm once the L&M catalog is configured. pony_14 kept because Example Response 2 references a 14″ ponytail even though the matrix only uses 18″.",
-    "clip_12": "12\" Clip-In",
-    "clip_16": "16\" Clip-In",
-    "clip_18": "18\" Clip-In",
-    "clip_20": "20\" Clip-In",
-    "pony_14": "14\" Ponytail",
-    "pony_18": "18\" Ponytail"
+    "$comment": "Gleame product names (must match products.product_name exactly) — live locks-mane.myshopify.com titles. pony_14 kept because Example Response 2 references a 14″ ponytail even though the matrix only uses 18″.",
+    "clip_12": "12\" Clip-In Extensions",
+    "clip_16": "16\" Clip-In Extensions",
+    "clip_18": "18\" Clip-In Extensions",
+    "clip_20": "20\" Clip-In Extensions",
+    "pony_14": "14\" Clip-In Ponytail",
+    "pony_18": "18\" Clip-In Ponytail"
   },
 
   "shadeVariantMap": {
-    "$comment": "hair_shade axis value → variant_title per product family (Rule Set 4). clip_in is identity (clip-ins use the AI shade directly); ponytail is Jenn's lookup map — TODO Jenn: real mapping, placeholders are identity for now.",
+    "$comment": "hair_shade axis value → variant_title per product family (Rule Set 4). Live variant titles carry dye codes ('Vanilla #613'), so both maps use the coded titles. clip_in uses the AI shade directly; ponytail is Jenn's lookup map — TODO Jenn: real mapping, placeholder is same-shade for now. Shades a product doesn't stock (e.g. only 5 shades on the 12\" clip-in) fall back to product-level targets at compile time.",
     "clip_in": {
-      "vanilla": "Vanilla", "toastedmarshmallow": "Toasted Marshmallow", "cinnamonbun": "Cinnamon Bun",
-      "butterpecan": "Butter Pecan", "butterscotch": "Butterscotch", "peanutbuttercup": "Peanut Butter Cup",
-      "gingerbread": "Gingerbread", "milkchocolate": "Milk Chocolate", "darkchocolate": "Dark Chocolate",
-      "espresso": "Espresso"
+      "vanilla": "Vanilla #613", "toastedmarshmallow": "Toasted Marshmallow #613/16", "cinnamonbun": "Cinnamon Bun #613/27",
+      "butterpecan": "Butter Pecan #6/24", "butterscotch": "Butterscotch #6/27", "peanutbuttercup": "Peanut Butter Cup #4/27",
+      "gingerbread": "Gingerbread #4/30", "milkchocolate": "Milk Chocolate #4", "darkchocolate": "Dark Chocolate #2",
+      "espresso": "Espresso #1B"
     },
     "ponytail": {
-      "vanilla": "Vanilla", "toastedmarshmallow": "Toasted Marshmallow", "cinnamonbun": "Cinnamon Bun",
-      "butterpecan": "Butter Pecan", "butterscotch": "Butterscotch", "peanutbuttercup": "Peanut Butter Cup",
-      "gingerbread": "Gingerbread", "milkchocolate": "Milk Chocolate", "darkchocolate": "Dark Chocolate",
-      "espresso": "Espresso"
+      "vanilla": "Vanilla #613", "toastedmarshmallow": "Toasted Marshmallow #613/16", "cinnamonbun": "Cinnamon Bun #613/27",
+      "butterpecan": "Butter Pecan #6/24", "butterscotch": "Butterscotch #6/27", "peanutbuttercup": "Peanut Butter Cup #4/27",
+      "gingerbread": "Gingerbread #4/30", "milkchocolate": "Milk Chocolate #4", "darkchocolate": "Dark Chocolate #2",
+      "espresso": "Espresso #1B"
     }
   },
 
@@ -190,30 +190,30 @@
   },
 
   "accessories": {
-    "$comment": "Rule Set 1 — top 3 accessories per style intent; category=accessories exits here (extension questions are showIf-hidden). Names derived from the locksandmane.com handles provided 2026-07-15, ASSUMING the 15-URL list reads column-by-column (3 per intent) — confirm with Jenn. 'handle' is reference only; the compiler resolves by name.",
+    "$comment": "Rule Set 1 — top 3 accessories per style intent; category=accessories exits here (extension questions are showIf-hidden). Names are the LIVE locks-mane.myshopify.com product titles (2026-08-07): 'Fleurette' spelling, punctuated titles, and the blue braided headband is a variant of the base 'Soft Touch Braided Headband' product. Column-by-column reading of the 2026-07-15 15-URL list — confirm with Jenn. 'handle' is reference only; the compiler resolves by name.",
     "byStyleIntent": {
       "everyday": [
         { "name": "Denim Headband", "handle": "denim-headband" },
-        { "name": "Flourette Gem Stone Headband", "handle": "flourette-gem-stone-headband" },
+        { "name": "Fleurette Gem Stone Headband", "handle": "flourette-gem-stone-headband" },
         { "name": "Embroidered Floral Headband", "handle": "embroidered-floral-headband" }
       ],
       "special_event": [
         { "name": "Lavish Gemstone Headband", "handle": "lavish-gemstone-headband" },
         { "name": "3 Hearts Barrette Set", "handle": "3-hearts-barrette-set" },
-        { "name": "Mini Gem Skinny Headband Gold", "handle": "mini-gem-skinny-headband-gold" }
+        { "name": "Mini Gem Skinny Headband - Gold", "handle": "mini-gem-skinny-headband-gold" }
       ],
       "vacation": [
         { "name": "Diamond Veil Headband", "handle": "diamond-veil-headband" },
         { "name": "Cozumel Headband", "handle": "cozumel-headband" },
-        { "name": "Midsummer Nights Dream Headband", "handle": "midsummer-nights-dream-headband" }
+        { "name": "Midsummer Night's Dream Headband", "handle": "midsummer-nights-dream-headband" }
       ],
       "photoshoot": [
-        { "name": "Vintage Gem Headband Mint Green", "handle": "vintage-gem-headband-mint-green" },
+        { "name": "Vintage Gem Headband - Mint Green", "handle": "vintage-gem-headband-mint-green" },
         { "name": "So 90s Barrette Set", "handle": "so-90s-barrette-set" },
         { "name": "Pearl Laurel Headband", "handle": "pearl-laurel-headband" }
       ],
       "choose_for_me": [
-        { "name": "Soft Touch Braided Headband In Blue", "handle": "soft-touch-braided-headband-in-blue" },
+        { "name": "Soft Touch Braided Headband", "handle": "soft-touch-braided-headband-in-blue" },
         { "name": "Blue Gemstone Barrette Set", "handle": "blue-gemstone-barrette-set" },
         { "name": "Tawny Diamond Headband", "handle": "tawny-diamond-headband" }
       ]

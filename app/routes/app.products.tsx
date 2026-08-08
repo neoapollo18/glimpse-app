@@ -440,7 +440,7 @@ interface ConfiguredProduct {
   id: string;
   shopify_id: string;
   product_name: string;
-  transformation_prompt: string;
+  transformation_prompt: string | null;
   created_at: string;
   reference_image_url: string | null;
   // Funnel system fields
@@ -677,7 +677,7 @@ export default function Products() {
     setSelectedProduct(shopifyProduct || null);
     setSelectedConfiguredProduct(configuredProduct);
     setIsEditMode(true);
-    setTransformationPrompt(configuredProduct.transformation_prompt);
+    setTransformationPrompt(configuredProduct.transformation_prompt || "");
     setShowVariants(false); // Reset variant view
     setConfiguredVariants([]); // Will load when user expands variants
     
@@ -860,7 +860,7 @@ export default function Products() {
     try {
       const formData = new FormData();
       formData.append('image', uploadedFile);
-      formData.append('transformationPrompt', selectedTestProduct.transformation_prompt);
+      formData.append('transformationPrompt', selectedTestProduct.transformation_prompt || "");
 
       const response = await fetch('/api/transform-image', {
         method: 'POST',
@@ -1011,9 +1011,9 @@ export default function Products() {
         <InlineStack gap="200" blockAlign="center" wrap={false}>
           <Badge>Legacy</Badge>
           <Text as="span" variant="bodySm">
-            {product.transformation_prompt.length > 60
-              ? `${product.transformation_prompt.substring(0, 60)}...` 
-              : product.transformation_prompt}
+            {(product.transformation_prompt || "").length > 60
+              ? `${(product.transformation_prompt || "").substring(0, 60)}...`
+              : product.transformation_prompt || "No try-on prompt"}
           </Text>
         </InlineStack>
       </div>
@@ -1449,9 +1449,9 @@ export default function Products() {
                                     {existingConfig && (
                                       <Text as="p" variant="bodySm">
                                         <Text as="span" fontWeight="semibold">Prompt: </Text>
-                                        {existingConfig.transformation_prompt.length > 80 
-                                          ? existingConfig.transformation_prompt.substring(0, 80) + '...'
-                                          : existingConfig.transformation_prompt}
+                                        {(existingConfig.transformation_prompt || "").length > 80
+                                          ? (existingConfig.transformation_prompt || "").substring(0, 80) + '...'
+                                          : existingConfig.transformation_prompt || "No prompt"}
                                       </Text>
                                     )}
                                     
