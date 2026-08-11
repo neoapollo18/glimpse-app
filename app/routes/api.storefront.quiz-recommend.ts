@@ -365,18 +365,53 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const matrixSegment = matrixApplied ? ordered.slice(0, matrixCount) : ordered;
     const picks: Candidate[] = [];
     const seenProducts = new Set<string>();
-    const productsWithVariantPick = new Set(
-      matrixSegment.filter((c) => c.variant).map((c) => c.product.id)
-    );
-    for (const c of matrixSegment) {
-      if (picks.length >= targetCount) break;
-      if (partial) {
-        if (seenProducts.has(c.product.id)) continue;
-        seenProducts.add(c.product.id);
-      } else if (!c.variant && productsWithVariantPick.has(c.product.id)) {
-        continue; // product-level duplicate of a variant-level pick
+    if (partial && matrixApplied) {
+      // Partial cards collapse to product level, but one rank slot can span
+      // MULTIPLE products since shade routing (variantFallbackProducts):
+      // shades the 12" doesn't stock compile to 16" variants, so a cell's
+      // rank-1 rules target two lengths pre-shade. Showing both reads as
+      // "you need both". Keep ONE product per rank slot — the one backing
+      // the most rules in the slot (= the most likely outcome once the
+      // shade resolves), name-ascending on ties for determinism.
+      const byRank = new Map<number, Candidate[]>();
+      for (const c of matrixSegment) {
+        const rank = typeof c.matrixRank === "number" && c.matrixRank > 0 ? c.matrixRank : 0;
+        const group = byRank.get(rank);
+        if (group) group.push(c);
+        else byRank.set(rank, [c]);
       }
-      picks.push(c);
+      for (const rank of [...byRank.keys()].sort((a, b) => a - b)) {
+        if (picks.length >= targetCount) break;
+        const group = byRank.get(rank)!;
+        const ruleCount = new Map<string, number>();
+        for (const c of group) {
+          ruleCount.set(c.product.id, (ruleCount.get(c.product.id) ?? 0) + 1);
+        }
+        const winner = group
+          .filter((c) => !seenProducts.has(c.product.id))
+          .sort(
+            (a, b) =>
+              ruleCount.get(b.product.id)! - ruleCount.get(a.product.id)! ||
+              a.product.product_name.localeCompare(b.product.product_name)
+          )[0];
+        if (!winner) continue;
+        seenProducts.add(winner.product.id);
+        picks.push(winner);
+      }
+    } else {
+      const productsWithVariantPick = new Set(
+        matrixSegment.filter((c) => c.variant).map((c) => c.product.id)
+      );
+      for (const c of matrixSegment) {
+        if (picks.length >= targetCount) break;
+        if (partial) {
+          if (seenProducts.has(c.product.id)) continue;
+          seenProducts.add(c.product.id);
+        } else if (!c.variant && productsWithVariantPick.has(c.product.id)) {
+          continue; // product-level duplicate of a variant-level pick
+        }
+        picks.push(c);
+      }
     }
 
     const realHandles = await fetchProductHandles(
