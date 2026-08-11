@@ -134,6 +134,13 @@
     "pony_18": "18\" Clip-In Ponytail"
   },
 
+  "variantFallbackProducts": {
+    "$comment": "Mirrors locks-and-mane.json (2026-08-10): a shade the 12\" clip-in doesn't stock compiles to the 16\" clip-in's variant. Inert if the testing catalog stocks all shades on the 12\", but keeps the write path exercised.",
+    "clip_12": "clip_16"
+  },
+
+  "multiSetPrompt": "The shopper is wearing {count} full sets of these clip-in extensions at once, not one. Render noticeably fuller, denser hair than a single set would give: significantly more volume and thickness from roots to ends, while keeping the same length, shade, seamless blend, natural hairline, and part. Do not change the face, skin, lighting, or background.",
+
   "shadeVariantMap": {
     "$comment": "clip_in is identity (AI shade used directly). ponytail is identity until Jenn's real lookup map lands.",
     "clip_in": {

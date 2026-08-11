@@ -527,7 +527,10 @@
   }
 
   function matchKey(match) {
-    return String(match.productId || '') + '|' + String(match.variantId || '');
+    // Quantity is part of the key: a 2-set try-on renders differently from a
+    // single set of the same variant (server appends the multi-set prompt).
+    return String(match.productId || '') + '|' + String(match.variantId || '') +
+      '|' + String(Math.max(1, match.quantity || 1));
   }
 
   function requestTryon(match) {
@@ -543,6 +546,8 @@
     fd.append('shopDomain', shopDomain);
     fd.append('productId', match.productId);
     if (match.variantId) fd.append('variantId', match.variantId);
+    // Per-rule sets count — the server swaps in the multi-set prompt for 2+.
+    fd.append('quantity', String(Math.max(1, match.quantity || 1)));
 
     var p = fetch(SHOPIFY_APP_URL + '/api/storefront/quiz-tryon', {
       method: 'POST',

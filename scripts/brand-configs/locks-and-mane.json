@@ -1,20 +1,11 @@
 {
-  "$comment": "Locks & Mane brand config for compile-brand-flow.cjs. Everything brand-specific lives HERE; the compiler and the runtime engine are generic. Encodes the 2026-07 spec: Rule Set 1 (accessory branch by style intent), Rule Set 2 (2-sets conditions: above-shoulders / thick / blunt-cut), Rule Set 3 (length matrix), Rule Set 4 (shade maps). Product/variant names match the LIVE locks-mane.myshopify.com catalog verbatim (2026-08-07, mirrored into Gleame by backfill-lm-live-catalog.cjs). Remaining TODOs: Jenn's pony shade lookup + fallback adjacencies (placeholders are identity/neighbors).",
+  "$comment": "Locks & Mane brand config for compile-brand-flow.cjs. Everything brand-specific lives HERE; the compiler and the runtime engine are generic. Encodes the 2026-07 spec: Rule Set 2 (2-sets conditions: above-shoulders / thick / blunt-cut), Rule Set 3 (length matrix), Rule Set 4 (shade maps), plus the 2026-08-10 closeout: 12\"→16\" shade routing (variantFallbackProducts) and the two-set try-on prompt (multiSetPrompt, migration 052). 2026-08-10 REBASELINE: mirrors the LIVE admin-edited flow, which is extensions-only — the category question and Rule Set 1 accessory branch were removed in the admin editor after the 08-07 compile (parked under parkedAccessoryBranch below), and every question carries admin styling (helper texts, boxed/visual styles, relabeled options, emoji sublabels, length images) merged here verbatim so a recompile reproduces it and the destructive-save guard passes without --force. Product/variant names match the LIVE locks-mane.myshopify.com catalog verbatim (2026-08-07, mirrored into Gleame by backfill-lm-live-catalog.cjs). Remaining TODOs: Jenn's pony shade lookup + fallback adjacencies (placeholders are identity/neighbors).",
 
   "shopDomain": "locks-mane.myshopify.com",
 
   "availabilityFilter": true,
 
   "axes": [
-    {
-      "key": "category",
-      "label": "Shopping for",
-      "source": "user_question",
-      "values": [
-        { "value": "extensions", "label": "Extensions" },
-        { "value": "accessories", "label": "Accessories" }
-      ]
-    },
     {
       "key": "goal",
       "label": "Hair goal",
@@ -29,7 +20,7 @@
       "key": "style_intent",
       "label": "The look",
       "source": "user_question",
-      "$comment": "Drives accessory picks (Rule Set 1). Filler for extensions — no extension rule keys on it.",
+      "$comment": "Filler for extensions — no extension rule keys on it. Kept for the parked accessory branch's future rules.",
       "values": [
         { "value": "everyday", "label": "Everyday wear" },
         { "value": "special_event", "label": "A special event" },
@@ -90,33 +81,51 @@
 
   "questions": [
     {
-      "axisKey": "category",
-      "prompt": "What are you looking for today?"
-    },
-    {
       "axisKey": "goal",
       "prompt": "What are you hoping to change about your hair?",
-      "showIf": { "axis_key": "category", "axis_value": "extensions" }
+      "helperText": "We'll tailor your match to the look you want"
     },
     {
       "axisKey": "style_intent",
-      "prompt": "What's the look for?"
+      "prompt": "What's the look for?",
+      "helperText": "Help us match your transformation to the occasion.",
+      "optionStyle": "boxed",
+      "options": [
+        { "label": "Everyday Wear", "value": "everyday", "displayMeta": { "sublabel": "🙌" } },
+        { "label": "A Special Event", "value": "special_event", "displayMeta": { "sublabel": "🥂" } },
+        { "label": "Vacation", "value": "vacation", "displayMeta": { "sublabel": "🏝️" } },
+        { "label": "Photoshoot / Content", "value": "photoshoot", "displayMeta": { "sublabel": "📸" } },
+        { "label": "Surprise Me", "value": "choose_for_me", "displayMeta": { "sublabel": "🎉" } }
+      ]
     },
     {
       "axisKey": "current_length",
       "prompt": "Where does your hair fall right now?",
-      "showIf": { "axis_key": "category", "axis_value": "extensions" }
+      "helperText": "Go by where your ends land when hair is down.",
+      "optionStyle": "visual",
+      "$comment": "The live 'Above My Shoulders' option also had a stray screenshot URL pasted into reason_text (2026-07-27 filename) — looked like a mispaste, intentionally NOT reproduced.",
+      "options": [
+        { "label": "Above My Shoulders", "value": "above_shoulders", "imageUrl": "https://cdn.shopify.com/s/files/1/1376/9241/files/Above_Shoulders.png?v=1786293261" },
+        { "label": "At My Shoulders", "value": "at_shoulders", "imageUrl": "https://cdn.shopify.com/s/files/1/1376/9241/files/At_Shoulders.png?v=1786293202" },
+        { "label": "Past My Shoulders", "value": "past_shoulders", "imageUrl": "https://cdn.shopify.com/s/files/1/1376/9241/files/Past-Shoulders.png?v=1786293194" },
+        { "label": "Down to my mid-back", "value": "mid_back", "imageUrl": "https://cdn.shopify.com/s/files/1/1376/9241/files/Mid-Back.png?v=1786293180" }
+      ]
     },
     {
       "axisKey": "thickness",
       "prompt": "How thick is your hair?",
-      "showIf": { "axis_key": "category", "axis_value": "extensions" }
+      "helperText": "This tells us how many sets you need for a seamless blend.",
+      "optionStyle": "boxed"
     },
     {
       "axisKey": "blunt_cut",
       "prompt": "Do you have blunt-cut hair?",
-      "showIf": { "axis_key": "category", "axis_value": "extensions" },
-      "optionStyle": "boxed"
+      "helperText": "Most hair is layered — only choose blunt if your ends are cut in one sharp, straight line.",
+      "optionStyle": "boxed",
+      "options": [
+        { "label": "Yes", "value": "yes", "displayMeta": { "sublabel": "My ends are cut in one straight line" } },
+        { "label": "No", "value": "no", "displayMeta": { "sublabel": "My ends have layers or aren't perfectly straight" } }
+      ]
     }
   ],
 
@@ -130,8 +139,15 @@
     "pony_18": "18\" Clip-In Ponytail"
   },
 
+  "variantFallbackProducts": {
+    "$comment": "Shade-not-offered routing (2026-08-10): the 12\" clip-in carries only part of the shade range, so a shade it doesn't stock compiles to the 16\" clip-in's variant in that shade instead of a shade-less 12\" product target.",
+    "clip_12": "clip_16"
+  },
+
+  "multiSetPrompt": "The shopper is wearing {count} full sets of these clip-in extensions at once, not one. Render noticeably fuller, denser hair than a single set would give: significantly more volume and thickness from roots to ends, while keeping the same length, shade, seamless blend, natural hairline, and part. Do not change the face, skin, lighting, or background.",
+
   "shadeVariantMap": {
-    "$comment": "hair_shade axis value → variant_title per product family (Rule Set 4). Live variant titles carry dye codes ('Vanilla #613'), so both maps use the coded titles. clip_in uses the AI shade directly; ponytail is Jenn's lookup map — TODO Jenn: real mapping, placeholder is same-shade for now. Shades a product doesn't stock (e.g. only 5 shades on the 12\" clip-in) fall back to product-level targets at compile time.",
+    "$comment": "hair_shade axis value → variant_title per product family (Rule Set 4). Live variant titles carry dye codes ('Vanilla #613'), so both maps use the coded titles. clip_in uses the AI shade directly; ponytail is Jenn's lookup map — TODO Jenn: real mapping, placeholder is same-shade for now. Shades a product doesn't stock route through variantFallbackProducts at compile time (12\" → 16\").",
     "clip_in": {
       "vanilla": "Vanilla #613", "toastedmarshmallow": "Toasted Marshmallow #613/16", "cinnamonbun": "Cinnamon Bun #613/27",
       "butterpecan": "Butter Pecan #6/24", "butterscotch": "Butterscotch #6/27", "peanutbuttercup": "Peanut Butter Cup #4/27",
@@ -189,34 +205,36 @@
     ]
   },
 
-  "accessories": {
-    "$comment": "Rule Set 1 — top 3 accessories per style intent; category=accessories exits here (extension questions are showIf-hidden). Names are the LIVE locks-mane.myshopify.com product titles (2026-08-07): 'Fleurette' spelling, punctuated titles, and the blue braided headband is a variant of the base 'Soft Touch Braided Headband' product. Column-by-column reading of the 2026-07-15 15-URL list — confirm with Jenn. 'handle' is reference only; the compiler resolves by name.",
-    "byStyleIntent": {
-      "everyday": [
-        { "name": "Denim Headband", "handle": "denim-headband" },
-        { "name": "Fleurette Gem Stone Headband", "handle": "flourette-gem-stone-headband" },
-        { "name": "Embroidered Floral Headband", "handle": "embroidered-floral-headband" }
-      ],
-      "special_event": [
-        { "name": "Lavish Gemstone Headband", "handle": "lavish-gemstone-headband" },
-        { "name": "3 Hearts Barrette Set", "handle": "3-hearts-barrette-set" },
-        { "name": "Mini Gem Skinny Headband - Gold", "handle": "mini-gem-skinny-headband-gold" }
-      ],
-      "vacation": [
-        { "name": "Diamond Veil Headband", "handle": "diamond-veil-headband" },
-        { "name": "Cozumel Headband", "handle": "cozumel-headband" },
-        { "name": "Midsummer Night's Dream Headband", "handle": "midsummer-nights-dream-headband" }
-      ],
-      "photoshoot": [
-        { "name": "Vintage Gem Headband - Mint Green", "handle": "vintage-gem-headband-mint-green" },
-        { "name": "So 90s Barrette Set", "handle": "so-90s-barrette-set" },
-        { "name": "Pearl Laurel Headband", "handle": "pearl-laurel-headband" }
-      ],
-      "choose_for_me": [
-        { "name": "Soft Touch Braided Headband", "handle": "soft-touch-braided-headband-in-blue" },
-        { "name": "Blue Gemstone Barrette Set", "handle": "blue-gemstone-barrette-set" },
-        { "name": "Tawny Diamond Headband", "handle": "tawny-diamond-headband" }
-      ]
+  "parkedAccessoryBranch": {
+    "$comment": "Rule Set 1 (accessory branch by style intent), PARKED 2026-08-10: the live admin-edited flow removed the category question and runs extensions-only, so none of this compiles (the compiler ignores this key). To relaunch accessories: rename 'accessories' back to the top level, restore the category axis {extensions, accessories} + the 'What are you looking for today?' question, and re-add showIf {category: extensions} to the goal/current_length/thickness/blunt_cut questions. Names are the LIVE locks-mane.myshopify.com product titles (2026-08-07). Column-by-column reading of the 2026-07-15 15-URL list — confirm with Jenn.",
+    "accessories": {
+      "byStyleIntent": {
+        "everyday": [
+          { "name": "Denim Headband", "handle": "denim-headband" },
+          { "name": "Fleurette Gem Stone Headband", "handle": "flourette-gem-stone-headband" },
+          { "name": "Embroidered Floral Headband", "handle": "embroidered-floral-headband" }
+        ],
+        "special_event": [
+          { "name": "Lavish Gemstone Headband", "handle": "lavish-gemstone-headband" },
+          { "name": "3 Hearts Barrette Set", "handle": "3-hearts-barrette-set" },
+          { "name": "Mini Gem Skinny Headband - Gold", "handle": "mini-gem-skinny-headband-gold" }
+        ],
+        "vacation": [
+          { "name": "Diamond Veil Headband", "handle": "diamond-veil-headband" },
+          { "name": "Cozumel Headband", "handle": "cozumel-headband" },
+          { "name": "Midsummer Night's Dream Headband", "handle": "midsummer-nights-dream-headband" }
+        ],
+        "photoshoot": [
+          { "name": "Vintage Gem Headband - Mint Green", "handle": "vintage-gem-headband-mint-green" },
+          { "name": "So 90s Barrette Set", "handle": "so-90s-barrette-set" },
+          { "name": "Pearl Laurel Headband", "handle": "pearl-laurel-headband" }
+        ],
+        "choose_for_me": [
+          { "name": "Soft Touch Braided Headband", "handle": "soft-touch-braided-headband-in-blue" },
+          { "name": "Blue Gemstone Barrette Set", "handle": "blue-gemstone-barrette-set" },
+          { "name": "Tawny Diamond Headband", "handle": "tawny-diamond-headband" }
+        ]
+      }
     }
   }
 }

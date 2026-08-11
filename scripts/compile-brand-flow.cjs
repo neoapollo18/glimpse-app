@@ -20,8 +20,12 @@
 //     keys the rows actually use, so other brands can table on other axes.
 //   - accessories.byStyleIntent become {category, style_intent} rules that
 //     resolve without any extension question answered — the early exit.
-//   - shadeFallbacks + availabilityFilter are written to
-//     chat_assistant_config (quiz_shade_fallbacks / quiz_availability_filter).
+//   - variantFallbackProducts routes a shade a product doesn't stock to
+//     another product's variant at compile time (clip_12 → clip_16), instead
+//     of the old shade-less product-level target.
+//   - shadeFallbacks + availabilityFilter + multiSetPrompt are written to
+//     chat_assistant_config (quiz_shade_fallbacks / quiz_availability_filter /
+//     quiz_multi_set_prompt, migration 052).
 //
 // USAGE:
 //   node scripts/compile-brand-flow.cjs [path/to/brand.json] [--dry-run]
@@ -36,7 +40,8 @@
 //
 // Idempotent: wipe-and-rewrite via the RPC, same as seed-demo-flows.cjs.
 // Fails loudly on a missing product name; a missing VARIANT (shade not
-// configured yet) only warns and falls back to a product-level target.
+// stocked) warns and routes through variantFallbackProducts, ending on a
+// product-level target only when no product in the chain stocks the shade.
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -142,6 +147,26 @@ for (const s of shades) {
   if (!ponyShadeMap[s]) fail(`shadeVariantMap.ponytail missing shade "${s}"`);
 }
 
+// Product-to-product variant fallback ("shade not offered on the 12″ →
+// recommend the 16″ in that shade"). Chains are allowed but must not cycle.
+const variantFallbacks = Object.fromEntries(
+  Object.entries(brand.variantFallbackProducts || {}).filter(([k]) => k !== '$comment')
+);
+for (const [from, to] of Object.entries(variantFallbacks)) {
+  if (!productKeys[from]) fail(`variantFallbackProducts references unknown product key "${from}"`);
+  if (!productKeys[to]) fail(`variantFallbackProducts references unknown product key "${to}"`);
+  const seen = new Set([from]);
+  for (let k = to; k !== undefined; k = variantFallbacks[k]) {
+    if (seen.has(k)) fail(`variantFallbackProducts cycle at "${k}"`);
+    seen.add(k);
+  }
+}
+
+if (brand.multiSetPrompt !== undefined &&
+    (typeof brand.multiSetPrompt !== 'string' || !brand.multiSetPrompt.trim())) {
+  fail('multiSetPrompt must be a non-empty string when present');
+}
+
 (async () => {
   // ---- Resolve shop, products, variants (skipped on --dry-run) ----
   let P = (key) => `product:${key}`; // dry-run placeholder resolver
@@ -185,16 +210,30 @@ for (const s of shades) {
   // ---- Compile rules ----
   const rules = [];
   const warnings = [];
-  // Target helper: prefer the shade's variant; fall back to the whole
-  // product (with a warning) when that shade isn't configured yet.
+  // Target helper: prefer the shade's variant. When the product doesn't
+  // stock that shade, walk variantFallbackProducts (e.g. clip_12 → clip_16:
+  // the 12″ carries only part of the range, so those shoppers get the 16″ in
+  // their shade). Only if no product in the chain stocks the shade do we
+  // fall back to a product-level target on the LAST product tried — the
+  // routing intent is "send them to the fallback", never a shade-less
+  // recommendation of the short product. Dry-run can't resolve variants, so
+  // it keeps the primary product-level placeholder.
   const target = (productKey, shadeTitle, ruleBase) => {
-    const productId = P(productKey);
-    const vid = dryRun ? null : variantId(productId, shadeTitle);
-    if (!vid) {
-      if (!dryRun) warnings.push(`no variant "${shadeTitle}" on ${productKeys[productKey]} — product-level fallback`);
-      return { ...ruleBase, variantId: null, productId };
+    if (dryRun) return { ...ruleBase, variantId: null, productId: P(productKey) };
+    let key = productKey;
+    for (;;) {
+      const vid = variantId(P(key), shadeTitle);
+      if (vid) {
+        if (key !== productKey) warnings.push(`no variant "${shadeTitle}" on ${productKeys[productKey]} — routed to ${productKeys[key]}`);
+        return { ...ruleBase, variantId: vid, productId: null };
+      }
+      const next = variantFallbacks[key];
+      if (next === undefined) {
+        warnings.push(`no variant "${shadeTitle}" on ${productKeys[productKey]}${key !== productKey ? ` or its fallback chain` : ''} — product-level fallback on ${productKeys[key]}`);
+        return { ...ruleBase, variantId: null, productId: P(key) };
+      }
+      key = next;
     }
-    return { ...ruleBase, variantId: vid, productId: null };
   };
 
   for (const cell of cells) {
@@ -410,6 +449,9 @@ for (const s of shades) {
     shop_domain: brand.shopDomain,
     quiz_availability_filter: !!brand.availabilityFilter,
     quiz_shade_fallbacks: Object.keys(fallbacks).length > 0 ? fallbacks : null,
+    // Migration 052: appended to the try-on prompt when quantity >= 2 (the
+    // per-product prompts describe a single set).
+    quiz_multi_set_prompt: brand.multiSetPrompt || null,
     updated_at: new Date().toISOString(),
   }, { onConflict: 'shop_domain' });
   if (cfgErr) throw new Error('chat_assistant_config upsert failed: ' + cfgErr.message);

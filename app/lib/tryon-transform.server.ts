@@ -29,6 +29,10 @@ export type TransformOutcome = {
  *
  * `widgetType` is recorded on the transformation analytics event
  * ("chat" for the assistant, "quiz" for the quiz page).
+ *
+ * `promptAddendum` is appended to the resolved prompt (multi-set
+ * recommendations, migration 052) — appended rather than substituted so
+ * variant-level shade prompts keep their shade description.
  */
 export async function transformCandidateImage(args: {
   product: EngineProduct;
@@ -38,12 +42,16 @@ export async function transformCandidateImage(args: {
   shopDomain: string;
   widgetType: string;
   logTag?: string;
+  promptAddendum?: string | null;
 }): Promise<TransformOutcome> {
-  const { product, variant, base64Image, mimeType, shopDomain, widgetType } = args;
+  const { product, variant, base64Image, mimeType, shopDomain, widgetType, promptAddendum } = args;
   const logTag = args.logTag ?? "tryon-transform";
   const source = variant || product;
   try {
-    const prompt = source.transformation_prompt || product.transformation_prompt;
+    const basePrompt = source.transformation_prompt || product.transformation_prompt;
+    const prompt = basePrompt && promptAddendum
+      ? `${basePrompt}\n\n${promptAddendum}`
+      : basePrompt;
     // Reference images: prefer variant's own refs, else product's
     const referenceUrls = parseReferenceImageUrls(source).length > 0
       ? parseReferenceImageUrls(source)

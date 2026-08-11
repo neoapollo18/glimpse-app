@@ -176,6 +176,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       const displayTitle = variantTitle
         ? `${productName} — ${variantTitle}`
         : productName;
+      // Multi-set rules (migration 052): stored prompts describe ONE set, so
+      // a quantity >= 2 pick gets the shop's addendum appended.
+      const quantity = Math.max(1, candidate.quantity ?? 1);
+      const promptAddendum =
+        quantity >= 2 && chatConfig.quiz_multi_set_prompt
+          ? chatConfig.quiz_multi_set_prompt.replace(/\{count\}/g, String(quantity))
+          : null;
       const outcome = await transformCandidateImage({
         product,
         variant,
@@ -184,6 +191,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         shopDomain: verifiedDomain,
         widgetType: "chat",
         logTag: "chat-recommend",
+        promptAddendum,
       });
       return {
         productId: product.shopify_id,
@@ -200,7 +208,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         // Per-rule quantity (migration 043). Additive field: older widget
         // builds ignore it; current gleame-chat.js uses it for cart adds so
         // a "2 sets" rule carts the same on chat and quiz.
-        quantity: Math.max(1, candidate.quantity ?? 1),
+        quantity,
         // Shopper-facing reasons from the LLM ranker (migration 050).
         // Additive field; empty on matrix picks and in matrix mode. Same
         // shape as the quiz's matches[].reasons so a future widget renderer

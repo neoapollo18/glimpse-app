@@ -2431,6 +2431,10 @@ export interface ChatAssistantConfig {
   // availability filter leaves zero matrix matches:
   // { hair_shade: { jet_black: ['soft_black', 'darkest_brown'] } }.
   quiz_shade_fallbacks: Record<string, Record<string, string[]>> | null;
+  // Appended to the try-on transformation prompt when the recommendation
+  // being tried on carries quantity >= 2 (migration 052) — the per-product
+  // prompts describe a single set. {count} is replaced with the quantity.
+  quiz_multi_set_prompt: string | null;
   // ---- LLM recommendation engine (migration 050) ----
   // 'matrix' = merchant rule matrix only (legacy default). 'ai' = LLM
   // listwise ranking over the candidate pool. 'hybrid' = matrix rules win
@@ -2611,6 +2615,7 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   ai_guidance: '',
   recommendation_tuning: { ...RECOMMENDATION_TUNING_DEFAULTS },
   quiz_shade_fallbacks: null,
+  quiz_multi_set_prompt: null,
 };
 
 // Defensive parse of the quiz_shade_fallbacks jsonb: keep only
@@ -2752,6 +2757,10 @@ function mapChatAssistantRow(data: any): ChatAssistantConfig {
       CHAT_ASSISTANT_DEFAULTS.quiz_animation_style,
     quiz_availability_filter: data.quiz_availability_filter ?? CHAT_ASSISTANT_DEFAULTS.quiz_availability_filter,
     quiz_shade_fallbacks: mapShadeFallbacks(data.quiz_shade_fallbacks),
+    quiz_multi_set_prompt:
+      typeof data.quiz_multi_set_prompt === 'string' && data.quiz_multi_set_prompt.trim()
+        ? data.quiz_multi_set_prompt
+        : CHAT_ASSISTANT_DEFAULTS.quiz_multi_set_prompt,
     // A stray mode value degrades to the legacy matrix engine rather than
     // accidentally turning LLM calls on for a shop.
     recommendation_mode: (['matrix', 'ai', 'hybrid'] as const).includes(data.recommendation_mode)
