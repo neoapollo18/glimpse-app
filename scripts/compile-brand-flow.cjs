@@ -381,9 +381,18 @@ if (brand.multiSetPrompt !== undefined &&
   // this config does not reproduce is lost. Refuse unless --force.
   if (!args.includes('--force')) {
     const cfgQByAxis = new Map(questionsPayload.map((q) => [q.axisKey, q]));
+    const doomed = [];
+    // The multi-set prompt is admin-editable (Recommendation Logic page since
+    // migration 052) and this compile overwrites it with brand.multiSetPrompt
+    // — doom any live value the config does not reproduce.
+    const liveCfg = await sb.from('chat_assistant_config')
+      .select('quiz_multi_set_prompt').eq('shop_domain', brand.shopDomain).maybeSingle();
+    const livePrompt = liveCfg.data && liveCfg.data.quiz_multi_set_prompt;
+    if (livePrompt && livePrompt !== (brand.multiSetPrompt || null)) {
+      doomed.push('chat_assistant_config.quiz_multi_set_prompt (admin-edited multi-set prompt differs from config multiSetPrompt)');
+    }
     const axRes = await sb.from('recommendation_axes').select('id, key').eq('shop_id', shopId);
     const keyByAxisId = new Map((axRes.data || []).map((a) => [a.id, a.key]));
-    const doomed = [];
     if (keyByAxisId.size > 0) {
       const qRes = await sb.from('recommendation_questions')
         .select('id, axis_id, prompt, option_style, helper_text, screen_group')

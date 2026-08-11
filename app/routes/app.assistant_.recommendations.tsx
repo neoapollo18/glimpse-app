@@ -25,6 +25,8 @@ import {
   getRecommendationAdminConfig,
   saveRecommendationConfig,
   getShopVariantsFlat,
+  getChatAssistantConfig,
+  saveChatAssistantConfig,
 } from "../lib/supabase.server";
 
 // ---------------------------------------------------------------------
@@ -36,15 +38,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const shop = await findShopByDomain(shopDomain);
   if (!shop) {
-    return json({ error: "Shop not found", config: null, variants: [] }, { status: 404 });
+    return json(
+      { error: "Shop not found", config: null, variants: [], multiSetPrompt: "" },
+      { status: 404 },
+    );
   }
 
-  const [config, variants] = await Promise.all([
+  const [config, variants, chatConfig] = await Promise.all([
     getRecommendationAdminConfig(shop.id),
     getShopVariantsFlat(shop.id),
+    getChatAssistantConfig(shopDomain),
   ]);
 
-  return json({ shopDomain, config, variants });
+  return json({
+    shopDomain,
+    config,
+    variants,
+    // Multi-set try-on prompt (migration 052) — lives on chat_assistant_config,
+    // edited here because this page is where rule quantities are set.
+    multiSetPrompt: chatConfig.quiz_multi_set_prompt ?? "",
+  });
 };
 
 // ---------------------------------------------------------------------
@@ -80,6 +93,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   const result = await saveRecommendationConfig(shop.id, payload);
   if (!result.ok) return json({ success: false, error: result.error });
+
+  // Multi-set try-on prompt rides along with the matrix save. Saved AFTER the
+  // matrix so a matrix failure aborts the whole save; empty stores NULL
+  // (= quantity never alters the try-on prompt).
+  const multiSetPromptRaw = formData.get("multiSetPrompt");
+  if (typeof multiSetPromptRaw === "string") {
+    try {
+      await saveChatAssistantConfig(shopDomain, {
+        quiz_multi_set_prompt: multiSetPromptRaw.trim() || null,
+      });
+    } catch (err) {
+      return json({
+        success: false,
+        error: `Matrix saved, but the multi-set prompt failed: ${err instanceof Error ? err.message : "unknown error"}`,
+      });
+    }
+  }
+
   return json({ success: true });
 };
 
@@ -256,7 +287,8 @@ function buildDisplayMeta(o: EditorQuestionOption): Record<string, string | numb
 // Component
 // ---------------------------------------------------------------------
 export default function AssistantRecommendations() {
-  const { config, variants } = useLoaderData<typeof loader>();
+  const { config, variants, multiSetPrompt: initialMultiSetPrompt } =
+    useLoaderData<typeof loader>();
   const fetcher = useFetcher<{ success?: boolean; error?: string }>();
   const isSaving = fetcher.state !== "idle";
 
@@ -328,6 +360,7 @@ export default function AssistantRecommendations() {
   const [axes, setAxes] = useState<EditorAxis[]>(initialAxes);
   const [questions, setQuestions] = useState<EditorQuestion[]>(initialQuestions);
   const [rules, setRules] = useState<EditorRule[]>(initialRules);
+  const [multiSetPrompt, setMultiSetPrompt] = useState(initialMultiSetPrompt ?? "");
   const [validationError, setValidationError] = useState<string | null>(null);
   // Armed when the merchant has been warned that saving will drop rules
   // authored under a different axis set (see the guard in handleSave). The
@@ -1091,8 +1124,9 @@ const NUM_RANKS = 3;
 
     const fd = new FormData();
     fd.append("payload", JSON.stringify(payload));
+    fd.append("multiSetPrompt", multiSetPrompt);
     fetcher.submit(fd, { method: "POST" });
-  }, [axes, questions, rules, fetcher, confirmedRuleDrop]);
+  }, [axes, questions, rules, multiSetPrompt, fetcher, confirmedRuleDrop]);
 
   // -----------------------------------------------------------------
   // Render
@@ -1987,6 +2021,37 @@ const NUM_RANKS = 3;
                 </BlockStack>
               </Box>
             )}
+          </BlockStack>
+        </Card>
+
+        {/* Multi-set try-on prompt (migration 052). Kept on this page because
+            rule quantities are set here — the two features work together. */}
+        <Card>
+          <BlockStack gap="300">
+            <Text as="h2" variant="headingMd">
+              Multi-set try-on prompt
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Your product and shade prompts describe wearing ONE set. When a
+              matched rule has Qty 2 or more, this text is added to the try-on
+              instruction so the preview renders the extra fullness. Write only
+              what changes with multiple sets (more volume and density) — the
+              shade and base styling come from the product's own prompt.
+              Use {"{count}"} for the number of sets. Leave empty to render
+              multi-set picks the same as a single set.
+            </Text>
+            <TextField
+              label="Prompt addendum"
+              labelHidden
+              value={multiSetPrompt}
+              onChange={setMultiSetPrompt}
+              multiline={4}
+              autoComplete="off"
+              placeholder="The shopper is wearing {count} full sets at once — render noticeably fuller, denser results than a single set…"
+            />
+            <Text as="p" variant="bodySm" tone="subdued">
+              Saved with "Save recommendation logic" below.
+            </Text>
           </BlockStack>
         </Card>
 
