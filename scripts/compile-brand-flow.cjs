@@ -25,7 +25,11 @@
 //     of the old shade-less product-level target.
 //   - shadeFallbacks + availabilityFilter + multiSetPrompt are written to
 //     chat_assistant_config (quiz_shade_fallbacks / quiz_availability_filter /
-//     quiz_multi_set_prompt, migration 052).
+//     quiz_multi_set_prompt). NOTE multiSetPrompt is the shop-wide FALLBACK
+//     used INSTEAD of the base prompt for quantity >= 2 try-ons (migration
+//     053 semantics — a complete standalone prompt, NOT an appended
+//     addendum); per-product multi_set_prompt columns take precedence and
+//     are managed by backfill scripts, not this compiler.
 //
 // USAGE:
 //   node scripts/compile-brand-flow.cjs [path/to/brand.json] [--dry-run]
@@ -458,8 +462,9 @@ if (brand.multiSetPrompt !== undefined &&
     shop_domain: brand.shopDomain,
     quiz_availability_filter: !!brand.availabilityFilter,
     quiz_shade_fallbacks: Object.keys(fallbacks).length > 0 ? fallbacks : null,
-    // Migration 052: appended to the try-on prompt when quantity >= 2 (the
-    // per-product prompts describe a single set).
+    // Shop-wide fallback prompt for quantity >= 2 try-ons — used INSTEAD of
+    // the base prompt when no per-product multi_set_prompt exists (migration
+    // 053). Must be a complete standalone prompt, never an addendum fragment.
     quiz_multi_set_prompt: brand.multiSetPrompt || null,
     updated_at: new Date().toISOString(),
   }, { onConflict: 'shop_domain' });

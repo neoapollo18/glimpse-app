@@ -176,13 +176,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       const displayTitle = variantTitle
         ? `${productName} — ${variantTitle}`
         : productName;
-      // Multi-set rules (migration 052): stored prompts describe ONE set, so
-      // a quantity >= 2 pick gets the shop's addendum appended.
       const quantity = Math.max(1, candidate.quantity ?? 1);
-      const promptAddendum =
-        quantity >= 2 && chatConfig.quiz_multi_set_prompt
-          ? chatConfig.quiz_multi_set_prompt.replace(/\{count\}/g, String(quantity))
-          : null;
       const outcome = await transformCandidateImage({
         product,
         variant,
@@ -191,7 +185,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         shopDomain: verifiedDomain,
         widgetType: "chat",
         logTag: "chat-recommend",
-        promptAddendum,
+        // Multi-set rules (migration 053): quantity >= 2 swaps in the
+        // variant/product multi-set prompt + refs; the shop-level prompt is
+        // the fallback when neither is configured.
+        quantity,
+        multiSetFallbackPrompt: chatConfig.quiz_multi_set_prompt,
       });
       return {
         productId: product.shopify_id,

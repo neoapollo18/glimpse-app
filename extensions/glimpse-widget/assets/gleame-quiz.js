@@ -1326,7 +1326,12 @@
     // layout would leave a dead right column and a lopsided page — the solo
     // variant centers the whole gate instead.
     var gateAxis = shadeAxis();
-    var hasRail = Boolean(gateAxis && gateAxis.values.length > 0);
+    // Merchant toggle (migration 054): manualEnabled=false hides the manual
+    // shade rail on this step — photo or skip only. Absent (older cached
+    // config) means enabled. The results shade gate is NOT gated by this;
+    // it stays the recovery path for no-photo shoppers.
+    var manualRailOn = !((config.shadeGate || {}).manualEnabled === false);
+    var hasRail = Boolean(gateAxis && gateAxis.values.length > 0 && manualRailOn);
     var screen = el('div', 'gq-step gq-step--gate' + (hasRail ? '' : ' gq-step--gate-solo'));
     screen.appendChild(buildStepHeader(0, true));
 

@@ -1124,9 +1124,14 @@ const NUM_RANKS = 3;
 
     const fd = new FormData();
     fd.append("payload", JSON.stringify(payload));
-    fd.append("multiSetPrompt", multiSetPrompt);
+    // Only ship the prompt when this session actually edited it — a stale
+    // open tab must not resurrect a value something else (e.g. a backfill
+    // script) changed underneath it. Absent field = action leaves it alone.
+    if (multiSetPrompt !== (initialMultiSetPrompt ?? "")) {
+      fd.append("multiSetPrompt", multiSetPrompt);
+    }
     fetcher.submit(fd, { method: "POST" });
-  }, [axes, questions, rules, multiSetPrompt, fetcher, confirmedRuleDrop]);
+  }, [axes, questions, rules, multiSetPrompt, initialMultiSetPrompt, fetcher, confirmedRuleDrop]);
 
   // -----------------------------------------------------------------
   // Render
@@ -2024,8 +2029,10 @@ const NUM_RANKS = 3;
           </BlockStack>
         </Card>
 
-        {/* Multi-set try-on prompt (migration 052). Kept on this page because
-            rule quantities are set here — the two features work together. */}
+        {/* Multi-set try-on prompt (migrations 052 + 053). Kept on this page
+            because rule quantities are set here — the two features work
+            together. This is the shop-wide FALLBACK; per-product/per-variant
+            multi_set_prompt columns take precedence when configured. */}
         <Card>
           <BlockStack gap="300">
             <Text as="h2" variant="headingMd">
@@ -2033,21 +2040,22 @@ const NUM_RANKS = 3;
             </Text>
             <Text as="p" variant="bodySm" tone="subdued">
               Your product and shade prompts describe wearing ONE set. When a
-              matched rule has Qty 2 or more, this text is added to the try-on
-              instruction so the preview renders the extra fullness. Write only
-              what changes with multiple sets (more volume and density) — the
-              shade and base styling come from the product's own prompt.
-              Use {"{count}"} for the number of sets. Leave empty to render
-              multi-set picks the same as a single set.
+              matched rule has Qty 2 or more, this prompt is used INSTEAD of
+              the product's own prompt so the preview renders the multi-set
+              look — write it as a complete try-on instruction, not an
+              add-on note. Products with their own multi-set prompt
+              configured ignore this and use theirs. Use {"{count}"} for the
+              number of sets. Leave empty to render multi-set picks the same
+              as a single set.
             </Text>
             <TextField
-              label="Prompt addendum"
+              label="Multi-set try-on prompt"
               labelHidden
               value={multiSetPrompt}
               onChange={setMultiSetPrompt}
               multiline={4}
               autoComplete="off"
-              placeholder="The shopper is wearing {count} full sets at once — render noticeably fuller, denser results than a single set…"
+              placeholder="Apply {count} full sets of this product at once — a complete instruction for the whole try-on…"
             />
             <Text as="p" variant="bodySm" tone="subdued">
               Saved with "Save recommendation logic" below.

@@ -13,6 +13,13 @@ function coerceReferenceUrlArray(raw: unknown): string[] {
 }
 
 /**
+ * Normalize a raw jsonb value holding a URL array (e.g. multi_set_reference_urls).
+ */
+export function coerceReferenceImageUrlList(raw: unknown): string[] {
+  return coerceReferenceUrlArray(raw).slice(0, MAX_REFERENCE_IMAGES);
+}
+
+/**
  * Normalize reference URLs from a DB row (JSON array and/or legacy single column).
  */
 export function parseReferenceImageUrls(
@@ -25,8 +32,8 @@ export function parseReferenceImageUrls(
     | undefined
 ): string[] {
   if (!row) return [];
-  const fromJson = coerceReferenceUrlArray(row.reference_image_urls);
-  if (fromJson.length > 0) return fromJson.slice(0, MAX_REFERENCE_IMAGES);
+  const fromJson = coerceReferenceImageUrlList(row.reference_image_urls);
+  if (fromJson.length > 0) return fromJson;
   if (row.reference_image_url) return [row.reference_image_url];
   return [];
 }

@@ -48,7 +48,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const variantId = (formData.get("variantId") as string) || null;
     // Recommended quantity for this card, echoed from quiz-recommend's match.
     // Client-supplied, but it only selects between the shop's own stored
-    // prompts (single-set vs multi-set addendum) — never free text.
+    // configs (single-set vs multi-set prompt + reference images, migration
+    // 053) — never free text.
     const rawQuantity = Number(formData.get("quantity"));
     const quantity = Number.isFinite(rawQuantity)
       ? Math.min(10, Math.max(1, Math.round(rawQuantity)))
@@ -121,13 +122,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const arrayBuffer = await imageFile.arrayBuffer();
     const base64Image = Buffer.from(arrayBuffer).toString("base64");
 
-    // Multi-set recommendations (migration 052): the stored prompts describe
-    // ONE set, so a "2 sets" card gets the shop's addendum appended.
-    const promptAddendum =
-      quantity >= 2 && chatConfig.quiz_multi_set_prompt
-        ? chatConfig.quiz_multi_set_prompt.replace(/\{count\}/g, String(quantity))
-        : null;
-
     const outcome = await transformCandidateImage({
       product: candidate.product,
       variant: candidate.variant,
@@ -136,7 +130,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       shopDomain: verifiedDomain,
       widgetType: "quiz",
       logTag: "quiz-tryon",
-      promptAddendum,
+      // Multi-set recommendations (migration 053): quantity >= 2 swaps in the
+      // variant/product multi-set prompt + refs; the shop-level prompt is the
+      // fallback when neither is configured.
+      quantity,
+      multiSetFallbackPrompt: chatConfig.quiz_multi_set_prompt,
     });
 
     return json(outcome, { headers: CORS_HEADERS });

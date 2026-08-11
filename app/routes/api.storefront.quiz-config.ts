@@ -121,6 +121,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         body: renderTokens(config.quiz_shade_body),
         ctaPhoto: config.quiz_shade_cta_photo,
         ctaManual: config.quiz_shade_cta_manual,
+        // Migration 054: false hides the photo step's manual shade rail.
+        // The results shade gate ignores this (it's the no-photo recovery
+        // path). Older cached configs omit it — widget treats absent as true.
+        manualEnabled: config.quiz_manual_shade_enabled,
       },
     },
     {

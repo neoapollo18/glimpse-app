@@ -2431,9 +2431,14 @@ export interface ChatAssistantConfig {
   // availability filter leaves zero matrix matches:
   // { hair_shade: { jet_black: ['soft_black', 'darkest_brown'] } }.
   quiz_shade_fallbacks: Record<string, Record<string, string[]>> | null;
-  // Appended to the try-on transformation prompt when the recommendation
-  // being tried on carries quantity >= 2 (migration 052) — the per-product
-  // prompts describe a single set. {count} is replaced with the quantity.
+  // When false, the quiz photo step hides its manual shade rail ("No photo
+  // handy?" / "I know my shade") — shoppers upload a photo or skip
+  // (migration 054). The results-page shade gate keeps its manual picker.
+  quiz_manual_shade_enabled: boolean;
+  // Shop-wide FALLBACK transformation prompt for quantity >= 2 try-ons
+  // (migration 052, repurposed by migration 053): used INSTEAD of the base
+  // prompt only when neither the variant nor the product defines its own
+  // multi_set_prompt. {count} is replaced with the quantity.
   quiz_multi_set_prompt: string | null;
   // ---- LLM recommendation engine (migration 050) ----
   // 'matrix' = merchant rule matrix only (legacy default). 'ai' = LLM
@@ -2615,6 +2620,7 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   ai_guidance: '',
   recommendation_tuning: { ...RECOMMENDATION_TUNING_DEFAULTS },
   quiz_shade_fallbacks: null,
+  quiz_manual_shade_enabled: true,
   quiz_multi_set_prompt: null,
 };
 
@@ -2757,6 +2763,8 @@ function mapChatAssistantRow(data: any): ChatAssistantConfig {
       CHAT_ASSISTANT_DEFAULTS.quiz_animation_style,
     quiz_availability_filter: data.quiz_availability_filter ?? CHAT_ASSISTANT_DEFAULTS.quiz_availability_filter,
     quiz_shade_fallbacks: mapShadeFallbacks(data.quiz_shade_fallbacks),
+    quiz_manual_shade_enabled:
+      data.quiz_manual_shade_enabled ?? CHAT_ASSISTANT_DEFAULTS.quiz_manual_shade_enabled,
     quiz_multi_set_prompt:
       typeof data.quiz_multi_set_prompt === 'string' && data.quiz_multi_set_prompt.trim()
         ? data.quiz_multi_set_prompt

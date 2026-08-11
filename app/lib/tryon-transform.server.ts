@@ -12,7 +12,7 @@ import {
   isOpenAIModel,
   type ReferenceImagePart,
 } from "./ai.server";
-import { parseReferenceImageUrls } from "./reference-images";
+import { parseReferenceImageUrls, coerceReferenceImageUrlList } from "./reference-images";
 import { safeFetch } from "./safe-fetch.server";
 import { trackTransformationEvent } from "./supabase.server";
 import type { EngineProduct, EngineVariant } from "./recommendation-engine.server";
@@ -30,9 +30,13 @@ export type TransformOutcome = {
  * `widgetType` is recorded on the transformation analytics event
  * ("chat" for the assistant, "quiz" for the quiz page).
  *
- * `promptAddendum` is appended to the resolved prompt (multi-set
- * recommendations, migration 052) — appended rather than substituted so
- * variant-level shade prompts keep their shade description.
+ * Multi-set recommendations (migration 053): when `quantity` >= 2, the
+ * multi-set prompt REPLACES the base prompt (the base prompts describe one
+ * set) — variant's multi_set_prompt, else product's, and the prompt + its
+ * multi-set reference images travel as a unit (a multi-set prompt with no
+ * multi-set refs falls back to single-set config). The shop-wide
+ * `multiSetFallbackPrompt` (chat_assistant_config.quiz_multi_set_prompt) is
+ * the ref-less last resort. Nothing configured = single-set behavior.
  */
 export async function transformCandidateImage(args: {
   product: EngineProduct;
@@ -42,20 +46,51 @@ export async function transformCandidateImage(args: {
   shopDomain: string;
   widgetType: string;
   logTag?: string;
-  promptAddendum?: string | null;
+  quantity?: number;
+  multiSetFallbackPrompt?: string | null;
 }): Promise<TransformOutcome> {
-  const { product, variant, base64Image, mimeType, shopDomain, widgetType, promptAddendum } = args;
+  const { product, variant, base64Image, mimeType, shopDomain, widgetType } = args;
   const logTag = args.logTag ?? "tryon-transform";
   const source = variant || product;
   try {
-    const basePrompt = source.transformation_prompt || product.transformation_prompt;
-    const prompt = basePrompt && promptAddendum
-      ? `${basePrompt}\n\n${promptAddendum}`
-      : basePrompt;
-    // Reference images: prefer variant's own refs, else product's
-    const referenceUrls = parseReferenceImageUrls(source).length > 0
-      ? parseReferenceImageUrls(source)
-      : parseReferenceImageUrls(product);
+    const quantity = Math.max(1, Math.round(args.quantity ?? 1));
+    const firstNonEmpty = (...lists: string[][]) => lists.find((l) => l.length > 0) ?? [];
+
+    // Product/variant multi-set prompts are written against their multi-set
+    // reference photos (the finished N-set look) — firing one with single-set
+    // refs would tell the model to read two-set density off a one-set photo.
+    // No multi-set refs = drop back to single-set config for that level. The
+    // shop-wide fallback prompt is generic text and needs no refs.
+    let multiSetPrompt = quantity >= 2
+      ? (variant?.multi_set_prompt || product.multi_set_prompt || null)
+      : null;
+    let multiSetRefs: string[] = [];
+    if (multiSetPrompt) {
+      multiSetRefs = firstNonEmpty(
+        coerceReferenceImageUrlList(variant?.multi_set_reference_urls),
+        coerceReferenceImageUrlList(product.multi_set_reference_urls),
+      );
+      if (multiSetRefs.length === 0) {
+        console.warn(
+          `[${logTag}] multi_set_prompt configured without multi_set_reference_urls for ` +
+          `${product.id}${variant ? `/${variant.id}` : ""} — falling back to the shop-wide ` +
+          `multi-set prompt if set, else single-set config`
+        );
+        multiSetPrompt = null;
+      }
+    }
+    if (!multiSetPrompt && quantity >= 2 && args.multiSetFallbackPrompt) {
+      multiSetPrompt = args.multiSetFallbackPrompt;
+    }
+
+    const prompt = multiSetPrompt
+      ? multiSetPrompt.replace(/\{count\}/g, String(quantity))
+      : (source.transformation_prompt || product.transformation_prompt);
+    const referenceUrls = multiSetRefs.length > 0
+      ? multiSetRefs
+      : variant
+        ? firstNonEmpty(parseReferenceImageUrls(variant), parseReferenceImageUrls(product))
+        : parseReferenceImageUrls(product);
 
     const referenceImages: ReferenceImagePart[] = [];
     for (const refUrl of referenceUrls) {

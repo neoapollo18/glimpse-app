@@ -12,6 +12,7 @@ import {
   Tag,
   Banner,
   Select,
+  Checkbox,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { useState, useCallback, useRef } from "react";
@@ -108,6 +109,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       quiz_shade_body: formData.get("quiz_shade_body") as string,
       quiz_shade_cta_photo: formData.get("quiz_shade_cta_photo") as string,
       quiz_shade_cta_manual: formData.get("quiz_shade_cta_manual") as string,
+      // Photo-step manual shade rail (migration 054). Only "false" disables —
+      // an absent field (stale tab predating the toggle) keeps it on.
+      quiz_manual_shade_enabled: formData.get("quiz_manual_shade_enabled") !== "false",
       // Style — NULL means inherit (accent → assistant accent, radius →
       // widget default, fonts → runtime theme detection)
       quiz_accent_color: orNull("quiz_accent_color"),
@@ -248,6 +252,11 @@ export default function AssistantQuiz() {
 
   // Trust items — same tag-list editing pattern as hero_trust_items.
   const [trustItems, setTrustItems] = useState<string[]>(config.quiz_trust_items);
+  // Photo-step manual shade rail toggle (migration 054) — boolean, so held
+  // outside the string-typed QuizFormState.
+  const [manualShadeEnabled, setManualShadeEnabled] = useState<boolean>(
+    config.quiz_manual_shade_enabled ?? true,
+  );
   const [newTrustItem, setNewTrustItem] = useState("");
 
   const addTrustItem = useCallback(() => {
@@ -303,8 +312,9 @@ export default function AssistantQuiz() {
       formData.append(key, value);
     }
     formData.append("quiz_trust_items", JSON.stringify(trustItems));
+    formData.append("quiz_manual_shade_enabled", String(manualShadeEnabled));
     fetcher.submit(formData, { method: "POST" });
-  }, [fetcher, form, trustItems]);
+  }, [fetcher, form, trustItems, manualShadeEnabled]);
 
   // Optional color token: blank = the widget's shipped default (shown in
   // the swatch so merchants see what "inherit" looks like).
@@ -560,6 +570,16 @@ export default function AssistantQuiz() {
               onChange={setField("quiz_privacy_note")}
               autoComplete="off"
               helpText="Small reassurance line under the photo button"
+            />
+            <Checkbox
+              label="Manual shade picker on this step"
+              checked={manualShadeEnabled}
+              onChange={setManualShadeEnabled}
+              helpText={
+                'When off, the "No photo handy?" shade rail is hidden here — shoppers ' +
+                "take a photo or skip. The results page's shade picker stays available " +
+                "either way, so no-photo shoppers can still finish."
+              }
             />
           </BlockStack>
         </Card>

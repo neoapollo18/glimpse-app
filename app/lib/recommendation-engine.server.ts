@@ -29,6 +29,10 @@ export type EngineProduct = {
   ai_model?: string | null;
   reference_image_url?: string | null;
   reference_image_urls?: string[];
+  // Standalone prompt + refs for quantity >= 2 recommendations
+  // (migration 053); null = fall through to the single-set config.
+  multi_set_prompt?: string | null;
+  multi_set_reference_urls?: unknown;
 };
 
 export type EngineVariant = {
@@ -40,6 +44,9 @@ export type EngineVariant = {
   ai_model?: string | null;
   reference_image_url?: string | null;
   reference_image_urls?: string[];
+  // Migration 053 — see EngineProduct.
+  multi_set_prompt?: string | null;
+  multi_set_reference_urls?: unknown;
   // Optional italic copy line shown beneath the variant title on product
   // cards. Migration 032 added the column.
   tagline?: string | null;
