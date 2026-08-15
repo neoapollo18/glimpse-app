@@ -1,0 +1,785 @@
+{
+ "shopDomain": "orlybeauty.myshopify.com",
+ "products": [
+  {
+   "gleameId": "8b4c74f4-e8e4-4dac-8a71-264e139e0537",
+   "name": "Star Spangled",
+   "colors": [
+    "Red"
+   ],
+   "types": [
+    "Glitter",
+    "Shimmer"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "gleameId": "2ced2054-7fec-4885-a9f1-f01449b8744d",
+   "name": "Anything Goes",
+   "colors": [
+    "Multi"
+   ],
+   "types": [
+    "Confetti",
+    "Glitter",
+    "Shimmer"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "gleameId": "0617a8b4-509d-4dd2-913f-a9dbfbb051fc",
+   "name": "Don't Be Suspicious",
+   "colors": [
+    "Brown",
+    "Neutral"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "gleameId": "9bdfc0a5-fbbc-49a4-a20e-7c5f3c62b10e",
+   "name": "Bubbly Bombshell",
+   "colors": [
+    "Purple"
+   ],
+   "types": [
+    "Glitter"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "gleameId": "a9b56ae6-3ec8-4095-af0d-829f931f8d53",
+   "name": "Turn It Up",
+   "colors": [
+    "Multi",
+    "Rainbow"
+   ],
+   "types": [
+    "Confetti",
+    "Topper"
+   ],
+   "formula": "Lacquer",
+   "topper": true,
+   "available": true,
+   "bestsellerRank": 4,
+   "retired": false
+  },
+  {
+   "gleameId": "7c3a4f23-4c07-42c3-88fa-30fefce7730d",
+   "name": "Crash the Party",
+   "colors": [
+    "Red"
+   ],
+   "types": [],
+   "formula": "Lacquer",
+   "retired": true
+  },
+  {
+   "gleameId": "e96cf28f-96ba-4429-9af9-54a101533c6a",
+   "name": "You Had Me At Hydrangea",
+   "colors": [
+    "Blue",
+    "Purple"
+   ],
+   "types": [],
+   "formula": "Lacquer",
+   "retired": true
+  },
+  {
+   "gleameId": "9bc2aa98-2da3-49fe-9654-1146cbbd8277",
+   "name": "Kaleidoscope Eyes",
+   "colors": [
+    "Purple"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": 5,
+   "retired": false
+  },
+  {
+   "gleameId": "d9f2f757-8b4b-43e6-83f6-43e7ee61e0d2",
+   "name": "Sagebrush",
+   "colors": [
+    "Green",
+    "Grey"
+   ],
+   "types": [
+    "Creme",
+    "Grey"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": 6,
+   "retired": false
+  },
+  {
+   "gleameId": "211d1902-0b9d-420a-a637-f266eb500015",
+   "name": "It's Not A Phase",
+   "colors": [
+    "Black",
+    "Purple"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Breathable",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": 18,
+   "retired": false
+  },
+  {
+   "gleameId": "44c1ce8d-cb4b-4244-a3c7-2d279857986f",
+   "name": "Peaches and Dreams",
+   "colors": [
+    "Peach"
+   ],
+   "types": [],
+   "formula": "Lacquer",
+   "retired": true
+  },
+  {
+   "gleameId": "460e8d24-1883-4d09-838d-1149c2d33399",
+   "name": "Morning Mantra",
+   "colors": [
+    "Blue"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Breathable",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": 7,
+   "retired": false
+  },
+  {
+   "gleameId": "8c3ec6a8-ddd0-408f-88dd-dde158f22994",
+   "name": "Kiss Me, I'm Kind",
+   "colors": [
+    "Pink"
+   ],
+   "types": [
+    "Creme",
+    "Sheer"
+   ],
+   "formula": "Breathable",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": 8,
+   "retired": false
+  },
+  {
+   "gleameId": "2f09b780-3a3f-4dc3-bcd3-8f6eb4119a75",
+   "name": "Citrus Got Real",
+   "colors": [
+    "Orange",
+    "Peach"
+   ],
+   "types": [
+    "Shimmer",
+    "Topper"
+   ],
+   "formula": "Breathable",
+   "topper": true,
+   "available": true,
+   "bestsellerRank": 9,
+   "retired": false
+  },
+  {
+   "gleameId": "8ec3095c-e447-46c7-8eb4-e8ca0e49e788",
+   "name": "Rage",
+   "colors": [
+    "Copper"
+   ],
+   "types": [],
+   "formula": "Lacquer",
+   "retired": true
+  },
+  {
+   "gleameId": "91437c77-6300-4924-b790-04c260d62d83",
+   "name": "Kick Glass",
+   "colors": [
+    "Iridescent"
+   ],
+   "types": [
+    "Flakie",
+    "Topper"
+   ],
+   "formula": "Lacquer",
+   "topper": true,
+   "available": true,
+   "bestsellerRank": 11,
+   "retired": false
+  },
+  {
+   "gleameId": "eaa1d4c2-580f-4592-86b3-a20125e2a155",
+   "name": "Don't Pop My Balloon",
+   "colors": [
+    "Pink"
+   ],
+   "types": [
+    "Shimmer"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": 12,
+   "retired": false
+  },
+  {
+   "gleameId": "7d46d9dc-ad18-4ac6-ae24-160690259467",
+   "name": "Earthfire",
+   "colors": [
+    "Orange"
+   ],
+   "types": [],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "gleameId": "56c7d5c1-09d3-4dd3-b7c9-f9246d3a3a5b",
+   "name": "Astral Flaire",
+   "colors": [
+    "Magenta",
+    "Pink"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Breathable",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": 23,
+   "retired": false
+  },
+  {
+   "gleameId": "2cd3a354-73bd-49e7-a7f3-0b1a318d1285",
+   "name": "Frond Of You",
+   "colors": [
+    "Green"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Breathable",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "gleameId": "9853e8f8-f31a-4398-ada9-27b29446a1ef",
+   "name": "Embrace Danger",
+   "colors": [
+    "Coral",
+    "Orange",
+    "Red"
+   ],
+   "types": [
+    "Shimmer"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "gleameId": "4782cfb9-43fa-4384-9a1d-34c24677fc49",
+   "name": "Retrograde",
+   "colors": [
+    "Blue",
+    "Green"
+   ],
+   "types": [
+    "Chrome",
+    "Shimmer"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": 3,
+   "retired": false
+  },
+  {
+   "gleameId": "5ecf1343-b45b-4b39-a729-9a90166df7cd",
+   "name": "Fairy Godmother",
+   "colors": [
+    "Rose Gold"
+   ],
+   "types": [
+    "Metallic",
+    "Shimmer"
+   ],
+   "formula": "Breathable",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": 15,
+   "retired": false
+  },
+  {
+   "gleameId": "55b4c509-90c3-4285-98e3-d810e4fdb0c2",
+   "name": "Heart Beet",
+   "colors": [
+    "Magenta",
+    "Pink"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Breathable",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": 10,
+   "retired": false
+  },
+  {
+   "gleameId": "50a7490f-6b31-416f-9b7d-89ab4ceed2bb",
+   "name": "De-Stressed Denim",
+   "colors": [
+    "Blue",
+    "Grey"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Breathable",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": 17,
+   "retired": false
+  },
+  {
+   "gleameId": "3b4c44b6-bef8-4306-8aca-3ce2427d10d7",
+   "name": "Beautifully Bizarre",
+   "colors": [
+    "Pink"
+   ],
+   "types": [
+    "Shimmer"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": 25,
+   "retired": false
+  },
+  {
+   "gleameId": "e4300660-91f9-415d-b499-8c68d1f75563",
+   "name": "Mind Over Matter",
+   "colors": [
+    "Black"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Breathable",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": 19,
+   "retired": false
+  },
+  {
+   "gleameId": "0084eeb4-c2fe-48c2-90a3-62f893429f20",
+   "name": "Crush",
+   "colors": [
+    "Multi",
+    "Pink"
+   ],
+   "types": [
+    "Confetti",
+    "Topper"
+   ],
+   "formula": "Lacquer",
+   "topper": true,
+   "available": true,
+   "bestsellerRank": 27,
+   "retired": false
+  },
+  {
+   "gleameId": "3506dcb7-c56a-49bb-a924-e5ad4371372b",
+   "name": "Love My Nails",
+   "colors": [
+    "Red"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Breathable",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": 20,
+   "retired": false
+  },
+  {
+   "gleameId": "530132a5-f652-462e-9d62-7032da0fdd48",
+   "name": "Crystal Healing",
+   "colors": [
+    "Holo",
+    "Lilac",
+    "Purple",
+    "White"
+   ],
+   "types": [
+    "Holo",
+    "Shimmer",
+    "Topper"
+   ],
+   "formula": "Breathable",
+   "topper": true,
+   "available": true,
+   "bestsellerRank": 26,
+   "retired": false
+  },
+  {
+   "gleameId": "b543adec-7f7b-4d91-ad68-94e4640d6018",
+   "name": "She’s A Wildflower",
+   "colors": [
+    "Pink"
+   ],
+   "types": [
+    "Shimmer"
+   ],
+   "formula": "Breathable",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": 2,
+   "retired": false
+  },
+  {
+   "gleameId": "ef7638d7-4f61-42eb-bc3b-8db3c04c0a3d",
+   "name": "A Vibe",
+   "colors": [
+    "Orange"
+   ],
+   "types": [
+    "Neon"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "gleameId": "102e5e17-e5c2-4296-bbbc-4b7e0ba8f2d9",
+   "name": "Back For S'more",
+   "colors": [
+    "Black"
+   ],
+   "types": [],
+   "formula": "Breathable",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "gleameId": "8ced5798-31e0-4233-8e35-73a063983499",
+   "name": "Liquid Vinyl",
+   "colors": [
+    "Black"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": 21,
+   "retired": false
+  },
+  {
+   "gleameId": "ab2c9dbb-3da5-44d0-a3cb-2c2f9f2d83f1",
+   "name": "Sweet Serenity",
+   "colors": [
+    "Pink",
+    "Red"
+   ],
+   "types": [
+    "Sheer"
+   ],
+   "formula": "Breathable",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": 28,
+   "retired": false
+  },
+  {
+   "gleameId": "e0ec11e2-fdb4-4c44-9b7a-aeae73673f76",
+   "name": "Haute Red",
+   "colors": [
+    "Red"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": 29,
+   "retired": false
+  },
+  {
+   "gleameId": "ec63e572-a98a-4a6b-95a0-9c6bd314976f",
+   "name": "Almond Milk",
+   "colors": [
+    "Beige",
+    "Neutral",
+    "Nude",
+    "White"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Breathable",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": 13,
+   "retired": false
+  },
+  {
+   "gleameId": "b7ec7815-27b3-4e48-a808-df97276d8e95",
+   "name": "Blue Tango",
+   "colors": [
+    "Blue"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "gleameId": "b94d208a-d8da-4834-b341-2c6e3ccf71a8",
+   "name": "White Tips",
+   "colors": [
+    "White"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": 22,
+   "retired": false
+  },
+  {
+   "gleameId": "5c0a76b6-3e97-4243-a3a0-b90851dc4fe4",
+   "name": "Coral Crush",
+   "colors": [
+    "Coral",
+    "Pink"
+   ],
+   "types": [
+    "Jelly",
+    "Topper"
+   ],
+   "formula": "Lacquer",
+   "topper": true,
+   "available": true,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "gleameId": "2ec6b2c2-c29e-4176-b4c4-05cde18f25e5",
+   "name": "Detox My Socks Off",
+   "colors": [
+    "Blue",
+    "Green",
+    "Teal",
+    "Turquoise"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Breathable",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": 14,
+   "retired": false
+  },
+  {
+   "gleameId": "a3b379bf-03cb-465c-9e04-f168c27a419f",
+   "name": "Kiss The Bride",
+   "colors": [
+    "Pink"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": 24,
+   "retired": false
+  },
+  {
+   "gleameId": "400c0132-656c-44de-81da-9490ed9d4f69",
+   "name": "Bare Rose",
+   "colors": [
+    "Pink"
+   ],
+   "types": [
+    "Sheer"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "gleameId": "94376206-4998-4600-8312-1c04d52a3552",
+   "name": "Happy And Healthy",
+   "colors": [
+    "Pink"
+   ],
+   "types": [],
+   "formula": "Breathable",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "gleameId": "7c2092e1-6661-4963-887c-22cd10c22206",
+   "name": "All Dahlia’d Up",
+   "colors": [
+    "Pink",
+    "Red"
+   ],
+   "types": [
+    "Shimmer"
+   ],
+   "formula": "Breathable",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": 1,
+   "retired": false
+  },
+  {
+   "gleameId": "a885cf7d-b6ec-49a1-afc6-8d91001eff32",
+   "name": "Lost Treasure",
+   "colors": [
+    "Blue"
+   ],
+   "types": [
+    "Shimmer"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "gleameId": "404522bd-1153-4af4-9ff7-e14abbdf3904",
+   "name": "Sheer Nude",
+   "colors": [
+    "Neutral"
+   ],
+   "types": [
+    "Sheer"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "gleameId": "7a6b62de-4431-43b2-8961-b39408a541e5",
+   "name": "Pointe Blanche",
+   "colors": [
+    "White"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "gleameId": "35cd4f30-08d8-468e-a567-fc6eedc754dc",
+   "name": "Des Fleurs",
+   "colors": [
+    "Pink"
+   ],
+   "types": [
+    "Shimmer"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "gleameId": "5175a108-516e-4ce8-9175-ee4efd9d5333",
+   "name": "Beverly Hills Plum",
+   "colors": [
+    "Pink"
+   ],
+   "types": [
+    "Sheer"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "gleameId": "1e9cd346-6f24-46e1-8e0d-9805f53d3a22",
+   "name": "Canyon Clay",
+   "colors": [
+    "Brown",
+    "Neutral",
+    "Nude"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "bestsellerRank": null,
+   "retired": false
+  }
+ ]
+}

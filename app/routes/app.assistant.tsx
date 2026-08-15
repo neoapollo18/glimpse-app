@@ -570,7 +570,7 @@ export default function AssistantConfig() {
                   label={`Number of recommendations: ${numRecommendations}`}
                   value={numRecommendations}
                   min={1}
-                  max={5}
+                  max={8}
                   step={1}
                   onChange={(val) => setNumRecommendations(val as number)}
                   output

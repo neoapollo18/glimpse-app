@@ -2919,6 +2919,8 @@ export interface RecommendationFlow {
     // Multi-select: shopper picks several options; the quiz shows Continue
     // instead of auto-advancing and criteria carries an array for the axis.
     multiSelect: boolean;
+    // Cap on multi-select picks (migration 055). Null = unlimited.
+    maxSelections: number | null;
     // Consecutive questions sharing a screenGroup render on ONE quiz screen.
     screenGroup: string | null;
     // Render condition for the WHOLE question (migration 047): only asked
@@ -3026,6 +3028,7 @@ export async function getRecommendationFlow(shopId: string): Promise<Recommendat
         position,
         helper_text,
         multi_select,
+        max_selections,
         screen_group,
         show_if,
         option_style,
@@ -3107,6 +3110,10 @@ export async function getRecommendationFlow(shopId: string): Promise<Recommendat
         prompt: q.prompt as string,
         helperText: (q.helper_text as string | null) ?? null,
         multiSelect: Boolean(q.multi_select),
+        // Guard the read: a 0/negative value (impossible via the RPC, but
+        // this is a public payload) would lock the question entirely.
+        maxSelections:
+          typeof q.max_selections === 'number' && q.max_selections > 0 ? q.max_selections : null,
         screenGroup: (q.screen_group as string | null) ?? null,
         showIf: qShowIf,
         optionStyle: optionStyleOrNull(q.option_style),
@@ -3370,6 +3377,8 @@ export interface AdminQuestion {
   helperText: string | null;
   // Shopper may pick several options; the quiz shows a Continue button.
   multiSelect: boolean;
+  // Cap on multi-select picks (migration 055). Null = unlimited.
+  maxSelections: number | null;
   // Optional group key — consecutive questions sharing it render on one
   // quiz screen with a single Continue.
   screenGroup: string | null;
@@ -3465,7 +3474,7 @@ export async function getRecommendationAdminConfig(
   const questionsRes = axisIds.length > 0
     ? await supabase
         .from('recommendation_questions')
-        .select('id, axis_id, prompt, helper_text, multi_select, screen_group, show_if, option_style, recommendation_question_options ( id, label, axis_value_id, bot_response, position, reason_text, image_url, show_if, select_all, display_meta )')
+        .select('id, axis_id, prompt, helper_text, multi_select, max_selections, screen_group, show_if, option_style, recommendation_question_options ( id, label, axis_value_id, bot_response, position, reason_text, image_url, show_if, select_all, display_meta )')
         .in('axis_id', axisIds)
     : { data: [], error: null };
 
@@ -3511,6 +3520,7 @@ export async function getRecommendationAdminConfig(
     prompt: q.prompt,
     helperText: (q.helper_text as string | null) ?? null,
     multiSelect: (q.multi_select as boolean | null) ?? false,
+    maxSelections: (q.max_selections as number | null) ?? null,
     screenGroup: (q.screen_group as string | null) ?? null,
     showIf: qShowIf,
     optionStyle: optionStyleOrNull(q.option_style),
@@ -3675,6 +3685,9 @@ export async function saveRecommendationConfig(
       helperText?: string | null;
       // Shopper may pick several options. Omitted → false in the RPC.
       multiSelect?: boolean;
+      // Cap on multi-select picks (migration 055). Omitted/null → NULL in
+      // the RPC = unlimited.
+      maxSelections?: number | null;
       // Optional screen-group key — consecutive questions sharing it render
       // on one quiz screen. '' → NULL in the RPC.
       screenGroup?: string | null;
@@ -3763,6 +3776,18 @@ export async function saveRecommendationConfig(
       return {
         ok: false,
         error: `Question "${question.prompt}" has an invalid option style "${question.optionStyle}"`,
+      };
+    }
+    // The RPC casts maxSelections with ::int — a non-integer would blow up
+    // the whole atomic save, and 0/negative trips the DB CHECK. Friendly
+    // message instead.
+    if (
+      question.maxSelections != null &&
+      !(Number.isInteger(question.maxSelections) && question.maxSelections > 0)
+    ) {
+      return {
+        ok: false,
+        error: `Question "${question.prompt}" has an invalid max selections — it must be a positive whole number (or left empty for unlimited)`,
       };
     }
     // Question-level showIf is stored verbatim as jsonb and read back by the

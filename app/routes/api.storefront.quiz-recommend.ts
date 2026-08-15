@@ -142,7 +142,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       );
     }
 
-    const desiredCount = Math.max(1, Math.min(5, Number(chatConfig.num_recommendations) || 3));
+    const desiredCount = Math.max(1, Math.min(8, Number(chatConfig.num_recommendations) || 3));
 
     // The flow is needed by both the LLM ranker (answer labels, swatch
     // colors) and the matrix reason bullets — fetch at most once.

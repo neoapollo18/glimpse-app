@@ -287,7 +287,7 @@ export async function orderCandidates(
       criteria,
       flow,
       config: opts.config,
-      desiredCount: Math.max(1, Math.min(5, Number(opts.config.num_recommendations) || 3)),
+      desiredCount: Math.max(1, Math.min(8, Number(opts.config.num_recommendations) || 3)),
       shopDomain: opts.shopDomain,
       logTag: opts.logTag,
     });

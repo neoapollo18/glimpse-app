@@ -122,10 +122,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       );
     }
 
-    // Clamp desired count to a safe range (matches admin UI slider 1..5)
+    // Clamp desired count to a safe range (matches admin UI slider 1..8)
     const desiredCount = Math.max(
       1,
-      Math.min(5, Number(chatConfig.num_recommendations) || 3)
+      Math.min(8, Number(chatConfig.num_recommendations) || 3)
     );
 
     // Convert image to base64 once — used by the photo-axis classifier

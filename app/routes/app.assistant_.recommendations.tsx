@@ -162,6 +162,9 @@ type EditorQuestion = {
   helperText: string;
   // Shopper may pick several options; the quiz shows a Continue button.
   multiSelect: boolean;
+  // Cap on multi-select picks (migration 055). '' = unlimited. Kept as a
+  // string for the text field; serialized to int-or-null on save.
+  maxSelections: string;
   // Optional group key — consecutive questions with the same group render
   // together on one quiz screen. '' = its own screen.
   screenGroup: string;
@@ -314,6 +317,7 @@ export default function AssistantRecommendations() {
         prompt: q.prompt,
         helperText: q.helperText || "",
         multiSelect: q.multiSelect || false,
+        maxSelections: q.maxSelections != null ? String(q.maxSelections) : "",
         screenGroup: q.screenGroup || "",
         showIfAxisKey: q.showIf?.axisKey || "",
         showIfAxisValue: q.showIf?.axisValue || "",
@@ -609,6 +613,7 @@ export default function AssistantRecommendations() {
         prompt: "",
         helperText: "",
         multiSelect: false,
+        maxSelections: "",
         screenGroup: "",
         showIfAxisKey: "",
         showIfAxisValue: "",
@@ -627,7 +632,7 @@ export default function AssistantRecommendations() {
       if (idx === -1) {
         return [
           ...prev,
-          { axisKey, prompt: "", helperText: "", multiSelect: false, screenGroup: "", showIfAxisKey: "", showIfAxisValue: "", optionStyle: "", options: [], ...patch },
+          { axisKey, prompt: "", helperText: "", multiSelect: false, maxSelections: "", screenGroup: "", showIfAxisKey: "", showIfAxisValue: "", optionStyle: "", options: [], ...patch },
         ];
       }
       return prev.map((q, i) => (i === idx ? { ...q, ...patch } : q));
@@ -656,7 +661,7 @@ export default function AssistantRecommendations() {
       if (idx === -1) {
         return [
           ...prev,
-          { axisKey, prompt: "", helperText: "", multiSelect: false, screenGroup: "", showIfAxisKey: "", showIfAxisValue: "", optionStyle: "", options: [newOpt] },
+          { axisKey, prompt: "", helperText: "", multiSelect: false, maxSelections: "", screenGroup: "", showIfAxisKey: "", showIfAxisValue: "", optionStyle: "", options: [newOpt] },
         ];
       }
       return prev.map((q, i) =>
@@ -1060,6 +1065,12 @@ const NUM_RANKS = 3;
           position: qi,
           helperText: q.helperText || null,
           multiSelect: q.multiSelect,
+          // Only meaningful on multi-select; blank/invalid = unlimited.
+          maxSelections: (() => {
+            if (!q.multiSelect) return null;
+            const n = parseInt(q.maxSelections, 10);
+            return Number.isInteger(n) && n > 0 ? n : null;
+          })(),
           screenGroup: q.screenGroup.trim() || null,
           // Same snake_case serialization as the option-level condition;
           // incomplete = always asked.
@@ -1343,6 +1354,7 @@ const NUM_RANKS = 3;
                   prompt: "",
                   helperText: "",
                   multiSelect: false,
+                  maxSelections: "",
                   screenGroup: "",
                   showIfAxisKey: "",
                   showIfAxisValue: "",
@@ -1398,6 +1410,20 @@ const NUM_RANKS = 3;
                             helpText="Shopper can pick several options; the quiz shows a Continue button instead of auto-advancing."
                           />
                         </div>
+                        {q.multiSelect && (
+                          <div style={{ flex: 1 }}>
+                            <TextField
+                              label="Max selections (optional)"
+                              type="number"
+                              min={1}
+                              value={q.maxSelections}
+                              onChange={(v) => updateQuestion(axis.key, { maxSelections: v })}
+                              autoComplete="off"
+                              placeholder="3"
+                              helpText="Most options the shopper can pick. Empty = unlimited."
+                            />
+                          </div>
+                        )}
                         <div style={{ flex: 1 }}>
                           <TextField
                             label="Screen group (optional)"

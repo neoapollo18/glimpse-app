@@ -1102,6 +1102,10 @@
         }
         var at = d.options.indexOf(opt);
         if (at === -1) {
+          // Per-question pick cap (migration 055). Deselecting is always
+          // allowed; extra picks are ignored so the shopper swaps by
+          // deselecting first, like every "pick up to N" UI.
+          if (q.maxSelections && d.options.length >= q.maxSelections) return;
           d.options.push(opt);
           btn.classList.add('is-selected');
         } else {
