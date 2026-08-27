@@ -1211,9 +1211,11 @@ export async function getConfiguredVariantsForStorefront(
   const productConfig = await getProductConfiguration(shopDomain, productId);
   if (!productConfig) return [];
 
+  // '*' so this keeps working whether or not migration 057 (status column)
+  // has run; deleted rows are filtered JS-side (NULL status = active).
   const { data: variants, error } = await supabase
     .from('product_variants')
-    .select('shopify_variant_id, variant_title, display_color')
+    .select('*')
     .eq('product_id', productConfig.id)
     .order('created_at', { ascending: true });
 
@@ -1222,7 +1224,7 @@ export async function getConfiguredVariantsForStorefront(
     return [];
   }
 
-  return variants.map(v => ({
+  return variants.filter(v => (v as any).status !== 'deleted').map(v => ({
     variantId: v.shopify_variant_id as string,
     variantTitle: v.variant_title as string,
     displayColor: (v.display_color as string | null) ?? null,
@@ -1342,7 +1344,21 @@ export async function deleteShopData(shopDomain: string): Promise<{
       console.log(`[Uninstall Cleanup] Deleted ${result.deleted.products} products`);
     }
 
-    // Step 6: Delete the shop
+    // Step 6: Delete chat_assistant_config (keyed on shop_domain). This table
+    // was created outside migrations and its cascade behavior is unverified,
+    // so delete it explicitly before removing the shops row.
+    const { error: chatConfigError } = await supabase
+      .from('chat_assistant_config')
+      .delete()
+      .eq('shop_domain', shopDomain);
+
+    if (chatConfigError) {
+      console.error('[Uninstall Cleanup] Error deleting chat assistant config:', chatConfigError);
+    } else {
+      console.log(`[Uninstall Cleanup] Deleted chat assistant config`);
+    }
+
+    // Step 7: Delete the shop
     const { error: deleteShopError } = await supabase
       .from('shops')
       .delete()
@@ -1350,6 +1366,13 @@ export async function deleteShopData(shopDomain: string): Promise<{
 
     if (deleteShopError) {
       console.error('[Uninstall Cleanup] Error deleting shop:', deleteShopError);
+      // A surviving shops row means the uninstall cleanup did NOT complete —
+      // report failure so the webhook can retry instead of claiming success.
+      return {
+        ...result,
+        success: false,
+        error: deleteShopError.message,
+      };
     } else {
       result.deleted.shop = true;
       console.log(`[Uninstall Cleanup] Deleted shop record`);
@@ -1733,6 +1756,33 @@ export async function updateProductPromptDirect(
  * This allows existing users to continue using the app on a free plan
  * while new users must select a paid plan.
  */
+/**
+ * Quiz-first nav gate: try-on admin pages (Products, AI Assistant) only show
+ * for shops that actually use try-on, i.e. have at least one product with a
+ * configured transformation prompt. FAILS OPEN (true) — a DB hiccup must
+ * never hide nav links from live merchants.
+ */
+export async function shopHasTryOnConfig(shopDomain: string): Promise<boolean> {
+  try {
+    const shop = await findShopByDomain(shopDomain);
+    if (!shop) return true;
+    const { count, error } = await supabase
+      .from('products')
+      .select('id', { count: 'exact', head: true })
+      .eq('shop_id', shop.id)
+      .not('transformation_prompt', 'is', null)
+      .neq('transformation_prompt', '');
+    if (error) {
+      console.error('shopHasTryOnConfig error (failing open):', error.message);
+      return true;
+    }
+    return (count ?? 0) > 0;
+  } catch (e) {
+    console.error('shopHasTryOnConfig exception (failing open):', e);
+    return true;
+  }
+}
+
 export async function isShopGrandfathered(shopDomain: string): Promise<boolean> {
   console.log('🔍 Checking if shop is grandfathered:', shopDomain);
   
@@ -2643,12 +2693,25 @@ function mapShadeFallbacks(raw: any): Record<string, Record<string, string[]>> |
   return Object.keys(out).length > 0 ? out : null;
 }
 
-export async function getChatAssistantConfig(shopDomain: string): Promise<ChatAssistantConfig> {
+export async function getChatAssistantConfig(
+  shopDomain: string,
+  opts?: { throwOnError?: boolean }
+): Promise<ChatAssistantConfig> {
   const { data, error } = await supabase
     .from('chat_assistant_config')
     .select('*')
     .eq('shop_domain', shopDomain)
     .single();
+
+  // A missing row (PGRST116: zero rows for .single()) is a legitimate
+  // "not configured yet" and always falls through to defaults. A QUERY
+  // error is not: for admin editors, rendering defaults over an error-shaped
+  // read means one Save wipes every authored quiz field, so those callers
+  // pass throwOnError to fail the loader instead. Storefront callers stay
+  // fail-soft on defaults.
+  if (error && error.code !== 'PGRST116' && opts?.throwOnError) {
+    throw new Error(`Failed to load assistant config for ${shopDomain}: ${error.message}`);
+  }
 
   if (error || !data) {
     return { ...CHAT_ASSISTANT_DEFAULTS };
@@ -3179,6 +3242,9 @@ export async function fetchAllRules(
       // rank ties (rank repeats across criteria combinations).
       .order('rank', { ascending: true })
       .order('created_at', { ascending: true })
+      // Stable pagination requires a UNIQUE tiebreak — bulk-compiled rules
+      // share created_at, so page boundaries could skip/duplicate rows.
+      .order('id', { ascending: true })
       .range(from, from + PAGE - 1);
     if (error) return { rows, error: error.message };
     rows.push(...(data ?? []));
@@ -3290,10 +3356,10 @@ export async function matchRecommendationRules(
  */
 export async function getPhotoAxes(
   shopId: string,
-): Promise<Array<{ key: string; label: string; values: Array<{ value: string; label: string }> }>> {
+): Promise<Array<{ key: string; label: string; values: Array<{ value: string; label: string; swatch?: string | null }> }>> {
   const { data, error } = await supabase
     .from('recommendation_axes')
-    .select('key, label, recommendation_axis_values ( value, label, position )')
+    .select('key, label, recommendation_axis_values ( value, label, position, swatch_color )')
     .eq('shop_id', shopId)
     .eq('source', 'photo')
     .order('position', { ascending: true });
@@ -3309,7 +3375,13 @@ export async function getPhotoAxes(
     values: ((a.recommendation_axis_values || []) as any[])
       .slice()
       .sort((x, y) => (x.position ?? 0) - (y.position ?? 0))
-      .map((v) => ({ value: v.value as string, label: v.label as string })),
+      .map((v) => ({
+        value: v.value as string,
+        label: v.label as string,
+        // Swatch hex feeds the vision classifier: "Vanilla" means nothing to
+        // a model without the actual color it names.
+        swatch: (v.swatch_color as string | null) ?? null,
+      })),
   }));
 }
 
@@ -3551,6 +3623,13 @@ export async function getRecommendationAdminConfig(
     };
   });
 
+  // Storefront question order = axis position, but the questions query has no
+  // .order — reads come back in arbitrary row order, and the editor's save
+  // persists position: index, so an unordered read would scramble saved order.
+  // Sort by the (already position-ordered) axes array instead.
+  const axisIndex = new Map(axes.map((a, i) => [a.id, i]));
+  questions.sort((a, b) => (axisIndex.get(a.axisId) ?? Infinity) - (axisIndex.get(b.axisId) ?? Infinity));
+
   const rules: AdminRule[] = (rulesRes.rows || []).map((r: any) => ({
     id: r.id,
     criteria: r.criteria as Record<string, string>,
@@ -3588,9 +3667,12 @@ export async function getShopVariantsFlat(
   displayColor: string | null;
 }>> {
   const [variantsRes, productsRes] = await Promise.all([
+    // select('*') rather than naming status explicitly: naming a column that
+    // doesn't exist yet errors the whole query and silently empties the
+    // picker. '*' keeps this working whether or not migration 057 has run.
     supabase
       .from('product_variants')
-      .select('id, product_id, variant_title, display_color, products!inner ( id, shop_id, product_name )')
+      .select('*, products!inner ( id, shop_id, product_name )')
       .eq('products.shop_id', shopId)
       .order('created_at', { ascending: true }),
     // NOTE: do NOT .order('created_at') here — the products table may not have
@@ -3599,15 +3681,29 @@ export async function getShopVariantsFlat(
     // Final ordering is done in JS below by product_name.
     supabase
       .from('products')
-      .select('id, product_name')
+      .select('*')
       .eq('shop_id', shopId),
   ]);
 
   if (variantsRes.error) console.error('getShopVariantsFlat variants error', variantsRes.error);
   if (productsRes.error) console.error('getShopVariantsFlat products error', productsRes.error);
 
+  // Migration 057: soft-deleted catalog rows aren't valid rule targets.
+  // status NULL (all pre-057 rows) means active — JS filter, never .neq().
+  const liveProducts = (productsRes.data || []).filter(
+    (p: any) => p.status == null || p.status === 'active',
+  );
+  // Variants must ALSO check their parent product's status: an archived
+  // product keeps 'active' variant rows, but buildCandidatePool drops the
+  // whole product — a shade offered here would pass publish validation yet
+  // never fire at runtime.
+  const liveProductIds = new Set(liveProducts.map((p: any) => p.id as string));
+  const liveVariants = (variantsRes.data || []).filter(
+    (v: any) => v.status !== 'deleted' && liveProductIds.has(v.product_id as string),
+  );
+
   const productsWithVariants = new Set<string>();
-  const variantEntries = (variantsRes.data || []).map((v: any) => {
+  const variantEntries = liveVariants.map((v: any) => {
     productsWithVariants.add(v.product_id as string);
     const productName = (v.products?.product_name as string) || '';
     const variantTitle = (v.variant_title as string) || '';
@@ -3626,7 +3722,7 @@ export async function getShopVariantsFlat(
   // Every configured product is selectable as a whole-product target — not
   // just variant-less ones. Products that also have configured shades show
   // both: the whole product AND each shade (the editor groups them together).
-  const productEntries = (productsRes.data || []).map((p: any) => {
+  const productEntries = liveProducts.map((p: any) => {
     const productName = (p.product_name as string) || '';
     const hasVariants = productsWithVariants.has(p.id as string);
     return {

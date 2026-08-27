@@ -346,8 +346,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (isMultiVariant) {
       console.log(`Multi-variant transform: ${variantIds.length} variants`);
 
+      // Cap the fan-out: each entry is a PAID generation but the whole
+      // request counted as ONE rate-limit hit, so an unbounded array was a
+      // cost amplifier. 12 covers every legitimate widget flow.
+      const cappedVariantIds = variantIds.slice(0, 12);
+
       const results = await Promise.all(
-        variantIds.map(async (vid) => {
+        cappedVariantIds.map(async (vid) => {
           try {
             const { prompt, referenceImages } = await buildVariantConfig(vid);
             const result = await runTransform(prompt, referenceImages);

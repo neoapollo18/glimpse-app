@@ -78,6 +78,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         { status: 429, headers: { ...CORS_HEADERS, "Retry-After": ipLimit.retryAfterSeconds.toString() } }
       );
     }
+    // Per-shop backstop: the per-IP key is spoofable via X-Forwarded-For
+    // rotation, and each call here is a paid Gemini vision request.
+    const shopLimit = checkRateLimit(`quiz-shade:shop:${verifiedDomain}:hour`, 600, 60 * 60 * 1000);
+    if (!shopLimit.allowed) {
+      return json(
+        { error: "Too many requests. Please wait a moment." },
+        { status: 429, headers: { ...CORS_HEADERS, "Retry-After": shopLimit.retryAfterSeconds.toString() } }
+      );
+    }
 
     const chatConfig = await getChatAssistantConfig(verifiedDomain);
     if (!chatConfig.enabled) {

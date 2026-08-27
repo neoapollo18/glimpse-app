@@ -26,6 +26,13 @@
   var root = document.getElementById('gleame-quiz-root');
   if (!root) return;
 
+  // ---- Admin preview mode ----
+  // When the admin Quiz Builder embeds this file with an injected
+  // window.GLEAME_QUIZ_PREVIEW = { config, flow, sampleRecommend }, the quiz
+  // renders that DRAFT config and stubs every network side effect (analytics,
+  // cart, try-on, persistence). Absent the global, nothing changes.
+  var PREVIEW = window.GLEAME_QUIZ_PREVIEW || null;
+
   var shopDomain = root.getAttribute('data-shop-domain') || '';
   if (!shopDomain) {
     if (window.Shopify && window.Shopify.shop) shopDomain = window.Shopify.shop;
@@ -36,7 +43,6 @@
   var config = null;   // quiz-config payload
   var flow = null;     // recommendation-config payload
   var stageEl = null;
-  var quizStarted = false;
 
   // Screens: array of arrays of question indexes. Consecutive questions
   // sharing a non-empty screenGroup render together on one screen (e.g.
@@ -55,6 +61,7 @@
     matches: null,          // quiz-recommend matches (no images — safe to persist)
     matrixApplied: false,
     partial: false,
+    quizStarted: false,     // quiz_start fired; persisted so a mid-quiz refresh doesn't re-fire it
   };
 
   // Memory only — the "never stored" promise.
@@ -117,6 +124,9 @@
 
   var productJsonCache = {};
   function fetchProductJson(handle) {
+    if (PREVIEW) {
+      return Promise.resolve((PREVIEW.productJson && PREVIEW.productJson[handle]) || null);
+    }
     if (!handle) return Promise.resolve(null);
     if (productJsonCache[handle]) return productJsonCache[handle];
     var p = fetch('/products/' + encodeURIComponent(handle) + '.js', {
@@ -170,6 +180,7 @@
   }
 
   function addToBag(variantId, quantity) {
+    if (PREVIEW) return Promise.resolve({ preview: true });
     var formData = new FormData();
     formData.append('id', String(variantId));
     formData.append('quantity', String(quantity || 1));
@@ -255,6 +266,7 @@
   }
   cartToken = acceptToken(root.getAttribute('data-cart-token'));
   function refreshCartToken() {
+    if (PREVIEW) return Promise.resolve(null);
     return fetch('/cart.js', { credentials: 'same-origin' })
       .then(function(r) { return r.ok ? r.json() : null; })
       .then(function(cart) {
@@ -266,6 +278,7 @@
   }
 
   function trackEvent(eventType) {
+    if (PREVIEW) return; // draft previews never pollute analytics
     try {
       var payload = {
         shopDomain: shopDomain,
@@ -286,12 +299,14 @@
   // ---- Persistence (no images, ever) ----
 
   function saveState() {
+    if (PREVIEW) return; // previews are ephemeral
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ v: 1, s: state }));
     } catch (e) { /* quota / private mode — quiz still works, just won't survive nav */ }
   }
 
   function loadState() {
+    if (PREVIEW) return null;
     try {
       var raw = sessionStorage.getItem(STORAGE_KEY);
       if (!raw) return null;
@@ -503,6 +518,11 @@
   // ---- API calls ----
 
   function quizRecommend() {
+    if (PREVIEW) {
+      return Promise.resolve(
+        PREVIEW.sampleRecommend || { matches: [], matrixApplied: false, partial: false }
+      );
+    }
     return fetch(SHOPIFY_APP_URL + '/api/storefront/quiz-recommend', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -514,6 +534,7 @@
   }
 
   function quizShade(file) {
+    if (PREVIEW) return Promise.resolve({ values: {}, labels: {} });
     var fd = new FormData();
     fd.append('image', file);
     fd.append('shopDomain', shopDomain);
@@ -534,11 +555,14 @@
   }
 
   function requestTryon(match) {
+    if (PREVIEW) return Promise.resolve(null);
     var key = matchKey(match);
     if (!photoFile) return Promise.resolve(null);
     if (tryonCache[key]) return Promise.resolve(tryonCache[key]);
     if (tryonPending[key]) return tryonPending[key];
-    if (tryonCount >= TRYON_SESSION_CAP) return Promise.resolve(null);
+    // Distinct marker (not null): consumers show "limit reached" instead of
+    // silently reverting the See-on-me button as if nothing happened.
+    if (tryonCount >= TRYON_SESSION_CAP) return Promise.resolve({ capReached: true });
     tryonCount++;
 
     var fd = new FormData();
@@ -734,11 +758,17 @@
     }
 
     if (landing.altAudienceLabel && landing.altAudienceUrl) {
-      var alt = el('p', 'gq-alt-audience');
-      var altLink = el('a', 'gq-alt-audience-link', escapeHtml(landing.altAudienceLabel) + ' →');
-      altLink.href = landing.altAudienceUrl;
-      alt.appendChild(altLink);
-      copy.appendChild(alt);
+      // javascript: (and other scheme) URLs from admin input must never
+      // reach href. Only http(s) and site-relative paths render; anything
+      // else drops the link entirely.
+      var altUrl = String(landing.altAudienceUrl).trim();
+      if (/^(https?:\/\/|\/)/i.test(altUrl)) {
+        var alt = el('p', 'gq-alt-audience');
+        var altLink = el('a', 'gq-alt-audience-link', escapeHtml(landing.altAudienceLabel) + ' →');
+        altLink.href = altUrl;
+        alt.appendChild(altLink);
+        copy.appendChild(alt);
+      }
     }
     main.appendChild(copy);
 
@@ -1183,7 +1213,7 @@
   // Fired synchronously at commit — NOT inside the tap-acknowledge delay,
   // where a fast tab-close would drop the funnel's first-step beacons.
   function fireAnswerEvents() {
-    if (!quizStarted) { quizStarted = true; trackEvent('quiz_start'); }
+    if (!state.quizStarted) { state.quizStarted = true; trackEvent('quiz_start'); }
     trackEvent('quiz_question_answered');
   }
 
@@ -1209,6 +1239,7 @@
   // otherwise the flow continues at the first broken screen, and finishing
   // THAT screen returns to results (editReturn persists until then).
   function finishCommit(screenIdx) {
+    committing = false; // acknowledge window over; taps commit again
     fireAnswerEvents();
     if (editReturn) {
       var broken = pruneDownstreamAnswers();
@@ -1245,7 +1276,14 @@
   // Tap-to-advance path for plain single-select screens (and the intro's
   // inline first question). Small selected-state beat before advancing —
   // the tap should feel acknowledged, not teleporting.
+  // Double-tap guard: a second tap inside the acknowledge delay re-ran the
+  // whole commit (duplicate history entries + double analytics). The pending
+  // timer is never cancelled anywhere, so finishCommit ALWAYS runs and
+  // clears the flag; no navigation path (popstate included) can leave it
+  // stuck true.
+  var committing = false;
   function commitSingle(screenIdx, qi, opt) {
+    if (committing) return;
     // Edits from results keep downstream answers (pruned in finishCommit);
     // normal flow truncates so a changed answer restarts what follows.
     if (!editReturn) truncateToScreen(screenIdx);
@@ -1253,6 +1291,7 @@
     var answer = draftToAnswer(qi);
     if (!answer) return;
     recordAnswer(qi, answer);
+    committing = true;
     setTimeout(function() { finishCommit(screenIdx); }, 220);
   }
 
@@ -1366,7 +1405,10 @@
     fileInput.style.display = 'none';
     fileInput.onchange = function(e) {
       var f = e.target.files && e.target.files[0];
-      if (f && validPhoto(f)) onPhotoChosen(f, screen);
+      if (f) onPhotoChosen(f, screen); // rejection feedback lives inside
+      // Reset so picking the SAME file again re-fires change (it doesn't
+      // otherwise, which made a rejected photo look permanently broken).
+      e.target.value = '';
     };
     drop.appendChild(fileInput);
     drop.onclick = function() {
@@ -1382,7 +1424,7 @@
       e.preventDefault();
       drop.classList.remove('is-dragover');
       var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-      if (f && validPhoto(f)) onPhotoChosen(f, screen);
+      if (f) onPhotoChosen(f, screen); // rejection feedback lives inside
     };
     cols.appendChild(drop);
 
@@ -1426,6 +1468,10 @@
     fileInput.onchange = function(e) {
       var f = e.target.files && e.target.files[0];
       if (f) handler(f);
+      e.target.value = ''; // same-file re-pick must re-fire change
+      // One-shot input: remove after use (these used to accumulate in the
+      // DOM holding File references for the life of the page).
+      if (fileInput.parentNode) fileInput.parentNode.removeChild(fileInput);
     };
     document.body.appendChild(fileInput);
 
@@ -1440,15 +1486,48 @@
     }
   }
 
+  // Why the photo can't be used, or null when it can. The server accepts
+  // 8MB — the old silent 5MB client cap rejected ordinary 12MP phone photos
+  // with NO feedback, which read as "uploading a photo does nothing".
+  function photoRejectReason(file) {
+    if (!file) return 'No file selected.';
+    if (file.type && file.type.indexOf('image/') !== 0) {
+      return 'That file isn’t a photo — please choose an image.';
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      return 'That photo is too large (over 8MB). Try a smaller photo or a screenshot of it.';
+    }
+    return null;
+  }
+
   function validPhoto(file) {
-    if (!file) return false;
-    if (file.type && file.type.indexOf('image/') !== 0) return false;
-    if (file.size > 5 * 1024 * 1024) return false;
-    return true;
+    return photoRejectReason(file) === null;
+  }
+
+  // Transient notice for photo problems. Inline on the given screen when
+  // there is one; a fixed toast otherwise (results shade path).
+  function showPhotoNotice(screenEl, msg) {
+    var host = screenEl || root;
+    var existing = host.querySelector('.gq-photo-notice');
+    if (existing) existing.parentNode.removeChild(existing);
+    var n = el('p', 'gq-photo-notice', escapeHtml(msg));
+    n.setAttribute('role', 'alert');
+    n.style.cssText = screenEl
+      ? 'margin:10px 0 0;font-size:13px;line-height:1.4;color:#b54708;'
+      : 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:9999;background:#1a1a1a;color:#fff;' +
+        'padding:10px 16px;border-radius:10px;font-size:13px;max-width:90vw;text-align:center;';
+    host.appendChild(n);
+    setTimeout(function() {
+      if (n.parentNode) n.parentNode.removeChild(n);
+    }, 6000);
   }
 
   function onPhotoChosen(file, screenEl, onDone) {
-    if (!validPhoto(file)) return;
+    var reason = photoRejectReason(file);
+    if (reason) {
+      showPhotoNotice(screenEl, reason);
+      return;
+    }
     photoFile = file;
     state.hasPhoto = true;
     tryonCache = {};
@@ -1469,10 +1548,12 @@
 
     showWorking(screenEl, needsShade ? 'Reading your shade…' : 'Matching you up…');
 
+    var detected = false;
     var classify = needsShade
       ? quizShade(file).then(function(res) {
           var v = res && res.values && res.values[axis.key];
           if (v) {
+            detected = true;
             state.criteria[axis.key] = v;
             state.detectedShade = {
               axisKey: axis.key,
@@ -1481,15 +1562,25 @@
               source: 'photo',
             };
             trackEvent('quiz_shade_detected');
+          } else {
+            // Failure and "couldn't classify" used to be silent and
+            // indistinguishable — the shopper retried photos in a loop with
+            // zero feedback. Say it, and point at the manual rail.
+            trackEvent('quiz_shade_detect_failed');
+            showPhotoNotice(
+              screenEl,
+              'We couldn’t read your shade from that photo — natural light helps. ' +
+                'You can also pick the closest shade manually.'
+            );
           }
         })
       : Promise.resolve();
 
     classify.then(function() {
       // shadeChanged tells results-side callers whether criteria moved —
-      // when it didn't (no photo axis, or same detection), a re-recommend
-      // would return byte-identical matches.
-      var shadeChanged = Boolean(needsShade);
+      // a rerun after a FAILED classification would just re-render the
+      // identical partial results (the old infinite-retry loop).
+      var shadeChanged = Boolean(needsShade) && detected;
       if (onDone) return onDone(shadeChanged);
       return goToResults(screenEl);
     });
@@ -1511,6 +1602,14 @@
     if (screenEl) showWorking(screenEl, 'Finding your match…');
     return quizRecommend()
       .then(function(data) {
+        // A resolved response without a usable matches payload (or an empty
+        // set the server flagged as an error) is a failure, not a results
+        // screen: throw into the catch below so it renders the same retry
+        // UI as a network error instead of an empty results page.
+        if (!data || !Array.isArray(data.matches) ||
+            (data.matches.length === 0 && data.error)) {
+          throw new Error('quiz-recommend empty');
+        }
         state.matches = (data && data.matches) || [];
         state.matrixApplied = Boolean(data && data.matrixApplied);
         state.partial = Boolean(data && data.partial);
@@ -1796,8 +1895,11 @@
       // on the detached copy.
       var connected = media.isConnected !== undefined ? media.isConnected : document.contains(media);
       if (!connected) { if (onDone) onDone(false, false); return; }
-      if (!result || result.rateLimited) {
-        if (onDone) onDone(false, Boolean(result && result.rateLimited));
+      if (!result || result.rateLimited || result.capReached) {
+        if (onDone) {
+          onDone(false, Boolean(result && result.rateLimited),
+            Boolean(result && result.capReached));
+        }
         return;
       }
       img.classList.add('gq-media-img--pending');
@@ -1906,14 +2008,24 @@
       var addBtn = el('button', 'gq-add-btn gq-add-btn--card', escapeHtml(buildAddLabel(results.addButtonTemplate, m.quantity || 1, null)));
       addBtn.type = 'button';
       body.appendChild(addBtn);
-      wirePricedAddButton(addBtn, m, results);
+      if (m.productHandle) {
+        wirePricedAddButton(addBtn, m, results);
+      } else {
+        // No handle means no product JSON, no price, no cart variant to arm.
+        addBtn.disabled = true;
+        addBtn.textContent = 'Unavailable';
+      }
     }
 
-    var view = el('a', 'gq-view-link', escapeHtml(results.viewProductLabel || 'View full product') + ' \u2192');
-    view.href = '/products/' + encodeURIComponent(m.productHandle) +
-      (m.variantNumericId ? '?variant=' + encodeURIComponent(m.variantNumericId) : '');
-    view.onclick = function() { trackEvent('quiz_view_product'); saveState(); };
-    body.appendChild(view);
+    // No handle means nowhere to link; skip the View link rather than render a
+    // dead '/products/undefined' href.
+    if (m.productHandle) {
+      var view = el('a', 'gq-view-link', escapeHtml(results.viewProductLabel || 'View full product') + ' \u2192');
+      view.href = '/products/' + encodeURIComponent(m.productHandle) +
+        (m.variantNumericId ? '?variant=' + encodeURIComponent(m.variantNumericId) : '');
+      view.onclick = function() { trackEvent('quiz_view_product'); saveState(); };
+      body.appendChild(view);
+    }
     card.appendChild(body);
 
     fetchProductJson(m.productHandle).then(function(pj) {
@@ -1941,9 +2053,14 @@
             e.stopPropagation();
             seeBtn.disabled = true;
             seeBtn.textContent = 'Working\u2026';
-            applyTryonToMedia(media, img, m, false, function(ok, limited) {
+            applyTryonToMedia(media, img, m, false, function(ok, limited, capped) {
               if (ok) { if (seeBtn.parentNode) seeBtn.parentNode.removeChild(seeBtn); }
-              else if (limited) {
+              else if (capped) {
+                // Session try-on cap hit: a persistent disabled label, not
+                // a silent revert that reads as a broken button.
+                seeBtn.disabled = true;
+                seeBtn.textContent = 'Try-on limit reached';
+              } else if (limited) {
                 // Rate-limited: soft copy for a beat, then invite a retry.
                 seeBtn.textContent = 'One moment\u2026';
                 setTimeout(function() {
@@ -2038,7 +2155,11 @@
       '<span class="gq-shade-photo-sub">' + escapeHtml((config.gate && config.gate.privacyNote) || 'Processed instantly \u00b7 never stored') + '</span>');
     photoBtn.type = 'button';
     photoBtn.onclick = function() {
-      openPhotoCapture(null, function() { rerunWithShade(); });
+      openPhotoCapture(null, function(shadeChanged) {
+        // Rerunning after a failed classification re-renders the identical
+        // partial screen — only rerun when the shade actually moved.
+        if (shadeChanged) rerunWithShade();
+      });
     };
     wrap.appendChild(photoBtn);
 
@@ -2080,13 +2201,13 @@
       screen: 'intro', screenIndex: 0, criteria: {}, answers: [],
       hasPhoto: false, detectedShade: null, matches: null,
       matrixApplied: false, partial: false,
+      quizStarted: false, // the restarted run gets its own quiz_start event
     };
     draft = {}; // ghost selections must not leak into intro option visibility
     editReturn = false;
     photoFile = null;
     tryonCache = {};
     tryonCount = 0;
-    quizStarted = false; // the restarted run gets its own quiz_start event
     clearState();
     replaceStep();
     render('back');
@@ -2094,32 +2215,142 @@
 
   // ---- Boot ----
 
+  // Preview navigation: jump the quiz to a named step ('intro', 'q1'..'qN',
+  // 'gate', 'results'). Only wired up in preview mode. qN refers to the Nth
+  // QUESTION — mapped to the screen hosting it, since screenGroup can put
+  // several questions on one screen.
+  function previewGoto(step) {
+    if (!PREVIEW || !stageEl) return;
+    if (step === 'intro') {
+      state.screen = 'intro';
+      state.screenIndex = 0;
+    } else if (step === 'gate') {
+      state.screen = 'gate';
+    } else if (step === 'results') {
+      var sample = PREVIEW.sampleRecommend || { matches: [], matrixApplied: false, partial: false };
+      state.matches = sample.matches || [];
+      state.matrixApplied = !!sample.matrixApplied;
+      state.partial = !!sample.partial;
+      state.screen = 'results';
+    } else {
+      var n = parseInt(String(step).replace(/^q/, ''), 10);
+      if (!isFinite(n)) return;
+      var questionIndex = n - 1;
+      var screenIndex = 0;
+      for (var si = 0; si < screens.length; si++) {
+        if (screens[si].indexOf(questionIndex) !== -1) { screenIndex = si; break; }
+      }
+      state.screen = 'question';
+      state.screenIndex = Math.max(0, Math.min(screens.length - 1, screenIndex));
+    }
+    replaceStep();
+    render('forward');
+  }
+
+  // Preview with nothing to render (no questions yet): show a friendly
+  // placeholder instead of a blank frame, and keep the update listener able
+  // to boot the real quiz once questions exist.
+  function renderPreviewPlaceholder() {
+    root.classList.add('gq-active');
+    root.innerHTML =
+      '<div style="display:flex;align-items:center;justify-content:center;min-height:60vh;' +
+      'padding:24px;text-align:center;font-family:sans-serif;color:#6d7175;font-size:14px;line-height:1.5;">' +
+      'Nothing to preview yet — add questions to your draft and this phone will come to life.</div>';
+  }
+
+  function previewUsable() {
+    return config && flow && flow.configured && Array.isArray(flow.questions) && flow.questions.length > 0;
+  }
+
+  function activateQuiz() {
+    buildScreens();
+    detectThemeTypography();
+    applyStyleConfig();
+    root.innerHTML = '';
+    root.classList.add('gq-active');
+    stageEl = el('div', 'gq-stage');
+    root.appendChild(stageEl);
+  }
+
+  function initPreviewListener() {
+    window.addEventListener('message', function(ev) {
+      var d = ev.data || {};
+      if (d.type === 'gleame-preview-goto') {
+        previewGoto(d.step);
+      } else if (d.type === 'gleame-preview-update') {
+        if (d.config) config = d.config;
+        if (d.flow) flow = d.flow;
+        if (d.sampleRecommend) PREVIEW.sampleRecommend = d.sampleRecommend;
+        if (d.productJson) PREVIEW.productJson = d.productJson;
+        if (!previewUsable()) {
+          stageEl = null;
+          renderPreviewPlaceholder();
+          return;
+        }
+        if (!stageEl) {
+          // The initial boot bailed (draft had no questions then) — the
+          // stage doesn't exist, so run the full activation now.
+          activateQuiz();
+          state.screen = 'intro';
+          state.screenIndex = 0;
+        }
+        buildScreens();
+        applyStyleConfig();
+        var clamped = clampStep({ screen: state.screen, screenIndex: state.screenIndex || 0 });
+        state.screen = clamped.screen;
+        state.screenIndex = clamped.screenIndex || 0;
+        replaceStep();
+        render('forward');
+      }
+    });
+  }
+
   function init() {
     Promise.all([
-      fetch(SHOPIFY_APP_URL + '/api/storefront/quiz-config?shopDomain=' + encodeURIComponent(shopDomain))
-        .then(function(res) { return res.json(); })
-        .catch(function() { return null; }),
-      fetch(SHOPIFY_APP_URL + '/api/storefront/recommendation-config?shopDomain=' + encodeURIComponent(shopDomain))
-        .then(function(res) { return res.ok ? res.json() : null; })
-        .catch(function() { return null; }),
+      PREVIEW
+        ? Promise.resolve(PREVIEW.config)
+        : fetch(SHOPIFY_APP_URL + '/api/storefront/quiz-config?shopDomain=' + encodeURIComponent(shopDomain))
+            .then(function(res) { return res.json(); })
+            .catch(function() { return null; }),
+      PREVIEW
+        ? Promise.resolve(PREVIEW.flow)
+        : fetch(SHOPIFY_APP_URL + '/api/storefront/recommendation-config?shopDomain=' + encodeURIComponent(shopDomain))
+            .then(function(res) { return res.ok ? res.json() : null; })
+            .catch(function() { return null; }),
     ]).then(function(results) {
       config = results[0];
       flow = results[1];
-      if (!config || !config.enabled) return;          // quiz mode off — section stays empty
-      if (!flow || !flow.configured || !Array.isArray(flow.questions) || flow.questions.length === 0) return;
+      if (PREVIEW) initPreviewListener();
+      if (!config || !config.enabled) {               // quiz mode off — section stays empty
+        if (PREVIEW) renderPreviewPlaceholder();      // previews explain themselves instead
+        return;
+      }
+      if (!flow || !flow.configured || !Array.isArray(flow.questions) || flow.questions.length === 0) {
+        if (PREVIEW) renderPreviewPlaceholder();
+        return;
+      }
 
-      buildScreens();
-      detectThemeTypography();
-      applyStyleConfig();
-
-      root.innerHTML = '';
-      root.classList.add('gq-active');
-      stageEl = el('div', 'gq-stage');
-      root.appendChild(stageEl);
+      activateQuiz();
 
       // Restore an in-flight session (per-tab). Photos don't survive a
       // refresh by design; results re-render in product-image mode.
       var saved = loadState();
+      // Answers are stored positionally (parallel to flow.questions): if
+      // the merchant reordered, replaced, or removed questions since this
+      // session was saved, answer i may no longer belong to question i and
+      // would feed garbage criteria into quiz-recommend. Any axis mismatch
+      // invalidates the WHOLE restore; the shopper starts fresh.
+      if (saved && saved.screen) {
+        var savedAnswers = Array.isArray(saved.answers) ? saved.answers : [];
+        for (var ai = 0; ai < savedAnswers.length; ai++) {
+          if (!savedAnswers[ai]) continue;
+          if (!flow.questions[ai] || savedAnswers[ai].axisKey !== flow.questions[ai].axisKey) {
+            clearState();
+            saved = null;
+            break;
+          }
+        }
+      }
       if (saved && saved.screen) {
         state = saved;
         state.hasPhoto = false; // File is gone — never persisted

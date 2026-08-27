@@ -180,6 +180,25 @@ export default function Settings() {
                   </InlineStack>
                 </BlockStack>
               </Card>
+
+              {/* Try-on entry point. The nav hides Products/AI Assistant for
+                  shops with no configured try-on prompts (quiz-first pivot),
+                  which would otherwise make try-on impossible to bootstrap. */}
+              <Card>
+                <BlockStack gap="300">
+                  <Text as="h2" variant="headingMd">
+                    AI try-on
+                  </Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Let shoppers see products on their own photo. Configure a
+                    transformation prompt on your first product to enable the
+                    try-on pages in the navigation.
+                  </Text>
+                  <InlineStack>
+                    <Button url="/app/products">Set up product try-on</Button>
+                  </InlineStack>
+                </BlockStack>
+              </Card>
             </BlockStack>
           </Layout.Section>
 

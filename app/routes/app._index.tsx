@@ -18,7 +18,6 @@ import {
   InlineGrid,
 } from "@shopify/polaris";
 import {
-  CheckCircleIcon,
   ProductIcon,
   ViewIcon,
   PlusCircleIcon,
@@ -35,6 +34,7 @@ import {
   completeOnboarding as completeOnboardingDb,
 } from "../lib/supabase.server";
 import { sendOnboardingCompleteEmail } from "../lib/email.server";
+import { useCatalogSync } from "../lib/use-catalog-sync";
 
 // ============================================================
 // Types
@@ -94,7 +94,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("Error fetching shop owner name:", error);
   }
 
-  const [configuredProducts, analytics, onboarding] = await Promise.all([
+  const [allProducts, analytics, onboarding] = await Promise.all([
     getConfiguredProducts(shopDomain),
     getAnalytics(shopDomain, 365),
     getOnboardingState(shopDomain),
@@ -102,6 +102,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   console.log(`[Onboarding Loader] shop=${shopDomain}, step=${onboarding.step}, completed=${onboarding.completed}`);
 
+  // "Configured" means TRY-ON configured (has a transformation prompt).
+  // Catalog sync inserts prompt-less rows into the same table mid-onboarding;
+  // counting those flipped the wizard-skip heuristic below and dumped
+  // merchants onto the dashboard in the middle of the Connect Catalog step.
+  const configuredProducts = allProducts.filter(
+    (p: any) => typeof p.transformation_prompt === "string" && p.transformation_prompt.length > 0,
+  );
   const configuredProductsCount = configuredProducts.length;
   const activeProducts = analytics?.productBreakdown?.length || 0;
   const productStats = (analytics?.productBreakdown || []) as ProductStat[];
@@ -450,145 +457,27 @@ function Step3Attribution({
   );
 }
 
-function Step4ChoosePath({
-  onContinueSelfServe,
-  onBookCall,
-  onBack,
-}: {
-  onContinueSelfServe: () => void;
-  onBookCall: () => void;
-  onBack: () => void;
-}) {
-  return (
-    <BlockStack gap="600">
-      <BlockStack gap="200" inlineAlign="center">
-        <Text as="h2" variant="headingLg" alignment="center">
-          How would you like to get set up?
-        </Text>
-        <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
-          Go at your own pace, or let our team configure Gleame with you
-        </Text>
-      </BlockStack>
-
-      <InlineGrid columns={{ xs: 1, sm: 2 }} gap="400">
-        {/* Self-serve card */}
-        <div
-          style={{
-            border: "1px solid #E1E3E5",
-            borderRadius: "12px",
-            padding: "24px",
-            background: "#FFFFFF",
-            display: "flex",
-            flexDirection: "column",
-            gap: "16px",
-          }}
-        >
-          <BlockStack gap="300">
-            <Text as="span" variant="headingXl">
-              🛠️
-            </Text>
-            <Text as="h3" variant="headingMd">
-              I'll set it up myself
-            </Text>
-            <BlockStack gap="150">
-              <Text as="p" variant="bodySm" tone="subdued">
-                • Walk through each step at your own pace
-              </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                • Typical setup takes about 10 minutes
-              </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                • Full control over every prompt and widget setting
-              </Text>
-            </BlockStack>
-          </BlockStack>
-          <div style={{ marginTop: "auto" }}>
-            <Button onClick={onContinueSelfServe} fullWidth>
-              Continue setup
-            </Button>
-          </div>
-        </div>
-
-        {/* Book-a-call card (recommended) */}
-        <div
-          style={{
-            border: "2px solid #2C6ECB",
-            borderRadius: "12px",
-            padding: "24px",
-            background: "#F2F7FE",
-            display: "flex",
-            flexDirection: "column",
-            gap: "16px",
-            position: "relative",
-          }}
-        >
-          <div
-            style={{
-              position: "absolute",
-              top: "-10px",
-              right: "16px",
-            }}
-          >
-            <Badge tone="info">Recommended</Badge>
-          </div>
-          <BlockStack gap="300">
-            <Text as="span" variant="headingXl">
-              🎯
-            </Text>
-            <Text as="h3" variant="headingMd">
-              Get set up with our team
-            </Text>
-            <BlockStack gap="150">
-              <Text as="p" variant="bodySm" tone="subdued">
-                • 15-min guided walkthrough on Zoom
-              </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                • We configure your products and widget with you
-              </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                • Free, low commitment
-              </Text>
-            </BlockStack>
-          </BlockStack>
-          <div style={{ marginTop: "auto" }}>
-            <Button variant="primary" onClick={onBookCall} fullWidth>
-              Book a call
-            </Button>
-          </div>
-        </div>
-      </InlineGrid>
-
-      <InlineStack align="space-between">
-        <Button onClick={onBack}>Back</Button>
-        <Text as="span" variant="bodySm" tone="subdued">
-          You can reach out anytime at gleame.ai/contact
-        </Text>
-      </InlineStack>
-    </BlockStack>
-  );
-}
-
-function Step5ProductSetup({
-  hasConfiguredProducts,
+function Step4ConnectCatalog({
   onNext,
   onBack,
-  onSkip,
-  onNavigateToProducts,
+  onBookCall,
 }: {
-  hasConfiguredProducts: boolean;
   onNext: () => void;
   onBack: () => void;
-  onSkip: () => void;
-  onNavigateToProducts: () => void;
+  onBookCall: () => void;
 }) {
+  // Shared chunked-sync driver (same code path as the Quiz Builder card).
+  const { start, progress, syncDone, syncError, syncedCount } = useCatalogSync();
+
   return (
     <BlockStack gap="600">
       <BlockStack gap="200" inlineAlign="center">
         <Text as="h2" variant="headingLg" alignment="center">
-          Set up your first product
+          Connect your catalog
         </Text>
         <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
-          Train your AI model to show before/afters exactly how you want
+          Gleame syncs your Shopify products so the quiz can recommend them.
+          Nothing changes in your store.
         </Text>
       </BlockStack>
 
@@ -602,50 +491,45 @@ function Step5ProductSetup({
         }}
       >
         <BlockStack gap="400" inlineAlign="center">
-          {hasConfiguredProducts ? (
+          {syncDone ? (
             <>
-              <div
-                style={{
-                  width: "48px",
-                  height: "48px",
-                  borderRadius: "50%",
-                  background: "#AEE9D1",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  margin: "0 auto",
-                }}
-              >
-                <Icon source={CheckCircleIcon} tone="success" />
-              </div>
+              <Text as="span" variant="headingXl">
+                ✅
+              </Text>
               <Text as="p" variant="headingMd">
-                Product configured!
+                Catalog synced ({syncedCount} products)
               </Text>
               <Text as="p" variant="bodySm" tone="subdued">
-                You can add more products anytime from the Products page.
+                We'll keep it up to date automatically from now on.
               </Text>
             </>
+          ) : progress ? (
+            <div style={{ width: "100%", maxWidth: 360 }}>
+              <BlockStack gap="200">
+                <ProgressBar
+                  progress={progress.total ? Math.min(100, Math.round((progress.done / progress.total) * 100)) : 10}
+                  size="small"
+                  tone="primary"
+                />
+                <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+                  Synced {progress.done}
+                  {progress.total ? ` of ${progress.total}` : ""} products…
+                </Text>
+              </BlockStack>
+            </div>
           ) : (
             <>
-              <div
-                style={{
-                  width: "48px",
-                  height: "48px",
-                  borderRadius: "50%",
-                  background: "#F4F6F8",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  margin: "0 auto",
-                }}
-              >
-                <Icon source={ProductIcon} />
-              </div>
-              <Text as="p" variant="bodyMd" tone="subdued">
-                Select a product to configure AI transformations
+              <Text as="span" variant="headingXl">
+                🛍️
               </Text>
-              <Button onClick={onNavigateToProducts}>
-                Select Product
+              {syncError && (
+                <Text as="p" variant="bodySm" tone="critical">
+                  Sync hit a problem: {syncError}. You can retry, or continue and
+                  sync later from the Quiz Builder.
+                </Text>
+              )}
+              <Button variant="primary" onClick={() => start()}>
+                {syncError ? "Retry sync" : "Sync my catalog"}
               </Button>
             </>
           )}
@@ -654,17 +538,68 @@ function Step5ProductSetup({
 
       <InlineStack align="space-between">
         <Button onClick={onBack}>Back</Button>
-        <InlineStack gap="200">
-          {!hasConfiguredProducts && (
-            <Button onClick={onSkip}>Skip</Button>
-          )}
-          <Button
-            variant="primary"
-            onClick={onNext}
-          >
-            Continue
+        <InlineStack gap="200" blockAlign="center">
+          <Button variant="plain" onClick={onBookCall}>
+            Prefer we set it up? Book a call
+          </Button>
+          <Button variant="primary" onClick={onNext} disabled={progress !== null}>
+            {syncDone ? "Continue" : "Skip for now"}
           </Button>
         </InlineStack>
+      </InlineStack>
+    </BlockStack>
+  );
+}
+
+function Step5BuildQuiz({
+  onNext,
+  onBack,
+  onNavigateToBuilder,
+}: {
+  onNext: () => void;
+  onBack: () => void;
+  onNavigateToBuilder: () => void;
+}) {
+  return (
+    <BlockStack gap="600">
+      <BlockStack gap="200" inlineAlign="center">
+        <Text as="h2" variant="headingLg" alignment="center">
+          Build your quiz
+        </Text>
+        <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
+          Create your Find My Fit quiz in the Quiz Builder. You'll work on a
+          draft — nothing goes live until you publish.
+        </Text>
+      </BlockStack>
+
+      <div
+        style={{
+          border: "1px solid #E1E3E5",
+          borderRadius: "12px",
+          padding: "32px",
+          background: "#FFFFFF",
+          textAlign: "center",
+        }}
+      >
+        <BlockStack gap="400" inlineAlign="center">
+          <Text as="span" variant="headingXl">
+            🧩
+          </Text>
+          <Text as="p" variant="bodyMd" tone="subdued">
+            Pick your questions, map answers to products, and style it to match
+            your brand — then come back here to finish up.
+          </Text>
+          <Button variant="primary" onClick={onNavigateToBuilder}>
+            Open Quiz Builder
+          </Button>
+        </BlockStack>
+      </div>
+
+      <InlineStack align="space-between">
+        <Button onClick={onBack}>Back</Button>
+        <Button variant="primary" onClick={onNext}>
+          Continue
+        </Button>
       </InlineStack>
     </BlockStack>
   );
@@ -715,6 +650,7 @@ function Step6GoLive({
           }}
         >
           <iframe
+            title="Gleame quiz setup walkthrough"
             src={LOOM_EMBED_URL}
             allow="fullscreen"
             style={{
@@ -831,14 +767,12 @@ function OnboardingWizard({
   initialStep,
   initialGoals,
   initialAttribution,
-  hasConfiguredProducts,
   onComplete,
   navigate,
 }: {
   initialStep: number;
   initialGoals: string[];
   initialAttribution: string[];
-  hasConfiguredProducts: boolean;
   onComplete: () => void;
   navigate: ReturnType<typeof useNavigate>;
 }) {
@@ -1030,22 +964,20 @@ function OnboardingWizard({
           )}
 
           {currentStep === 4 && (
-            <Step4ChoosePath
-              onContinueSelfServe={() => goToStep(5)}
+            <Step4ConnectCatalog
+              onNext={() => goToStep(5)}
               onBookCall={handleBookCall}
               onBack={() => goToStep(3)}
             />
           )}
 
           {currentStep === 5 && (
-            <Step5ProductSetup
-              hasConfiguredProducts={hasConfiguredProducts}
+            <Step5BuildQuiz
               onNext={() => goToStep(6)}
               onBack={() => goToStep(4)}
-              onSkip={() => goToStep(6)}
-              onNavigateToProducts={() => {
+              onNavigateToBuilder={() => {
                 persistToServer({ intent: "updateStep", step: "5" });
-                setPendingNav("/app/products");
+                setPendingNav("/app/quiz-builder");
               }}
             />
           )}
@@ -1333,7 +1265,6 @@ export default function Dashboard() {
         initialStep={onboarding.step}
         initialGoals={onboarding.goals}
         initialAttribution={onboarding.attribution}
-        hasConfiguredProducts={configuredProductsCount > 0}
         onComplete={() => setOnboardingCompleted(true)}
         navigate={navigate}
       />

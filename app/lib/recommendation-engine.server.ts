@@ -12,7 +12,7 @@ import {
   matchRecommendationRules,
   getRecommendationFlow,
 } from "./supabase.server";
-import type { ChatAssistantConfig } from "./supabase.server";
+import type { ChatAssistantConfig, MultiCriteria } from "./supabase.server";
 import { llmOrderCandidates, guardAndPrioritize, shuffle, diversify } from "./llm-recommender.server";
 
 const SHOPIFY_ADMIN_TIMEOUT_MS = 6_000;
@@ -110,7 +110,11 @@ export async function buildCandidatePool(
   shopDomain: string,
   chatConfig: Pick<ChatAssistantConfig, "product_scope" | "selected_product_ids">,
 ): Promise<CandidatePoolResult> {
-  let products = (await getConfiguredProducts(shopDomain)) as EngineProduct[];
+  let products = (await getConfiguredProducts(shopDomain)) as (EngineProduct & { status?: string | null })[];
+  // Migration 057 catalog sync: soft-deleted/archived/draft products drop out
+  // of the pool. JS-side filter, NOT .neq() — PostgREST neq excludes NULL
+  // rows, and every pre-057 row has status NULL (which must mean "active").
+  products = products.filter((p) => p.status == null || p.status === "active");
   if (chatConfig.product_scope === "selected") {
     const selectedIds = chatConfig.selected_product_ids || [];
     if (selectedIds.length === 0) return { pool: null, emptyReason: "no_selected" };
@@ -118,7 +122,10 @@ export async function buildCandidatePool(
   }
   if (products.length === 0) return { pool: null, emptyReason: "no_products" };
 
-  const variants = (await getVariantsForProducts(products.map((p) => p.id))) as EngineVariant[];
+  let variants = (await getVariantsForProducts(products.map((p) => p.id))) as (EngineVariant & { status?: string | null })[];
+  // Same NULL-is-active rule as products above (variants only ever get
+  // 'active' | 'deleted' from sync).
+  variants = variants.filter((v) => v.status !== "deleted");
   const variantsByProduct = new Map<string, EngineVariant[]>();
   for (const v of variants) {
     const arr = variantsByProduct.get(v.product_id);
@@ -170,7 +177,7 @@ export function orderByMatrix(
   hits: MatrixHit[] | null,
   pool: CandidatePool,
   aiOrdered: Candidate[],
-  opts: { logTag: string; shopDomain: string; criteria: Record<string, string> },
+  opts: { logTag: string; shopDomain: string; criteria: MultiCriteria },
 ): { ordered: Candidate[]; matrixApplied: boolean; matrixCount: number } {
   const candidateKey = (c: Candidate) => `${c.product.id}|${c.variant ? c.variant.id : ""}`;
 
@@ -244,7 +251,9 @@ export function orderByMatrix(
  */
 export async function orderCandidates(
   shopId: string,
-  criteria: Record<string, string>,
+  // MultiCriteria: chat mirrors the quiz's validation now, so multi-select
+  // arrays can arrive here too; the matcher handles both shapes.
+  criteria: MultiCriteria,
   pool: CandidatePool,
   opts: { logTag: string; shopDomain: string; config?: ChatAssistantConfig },
 ): Promise<{
@@ -418,7 +427,14 @@ export async function fetchAvailability(
         store.set(gid, true);
       }
     }
-    availabilityCache.set(shopDomain, { avail: store, fetchedAt: Date.now() });
+    // When merging into a still-fresh cache, KEEP its original fetchedAt —
+    // resetting it on every merge would let steady traffic renew the whole
+    // map forever, making stale stock data immortal. The TTL must date from
+    // when the OLDEST entries were fetched, so the map expires as a unit.
+    availabilityCache.set(shopDomain, {
+      avail: store,
+      fetchedAt: fresh ? cached!.fetchedAt : Date.now(),
+    });
     return result;
   } catch (err) {
     if (err instanceof Error && err.name === "AbortError") {

@@ -29,7 +29,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopDomain = session.shop;
 
-  const config = await getChatAssistantConfig(shopDomain);
+  // throwOnError: an error-shaped read would render the editor full of
+  // defaults, and one Save would then wipe every authored quiz field.
+  // Failing the loader is strictly safer than a plausible-looking form.
+  const config = await getChatAssistantConfig(shopDomain, { throwOnError: true });
 
   return json({ shopDomain, config });
 };
@@ -70,65 +73,92 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       const v = orNull(name);
       return v !== null && (values as readonly string[]).includes(v) ? (v as T) : null;
     };
-    // Clamped to the DB CHECK range (migration 049) for the same reason.
-    const cardRadius = intOrNull("quiz_card_radius");
-
-    const config = {
-      // Landing
-      quiz_eyebrow: formData.get("quiz_eyebrow") as string,
-      quiz_headline: formData.get("quiz_headline") as string,
-      quiz_subtext: formData.get("quiz_subtext") as string,
-      quiz_trust_items: JSON.parse((formData.get("quiz_trust_items") as string) || "[]"),
-      quiz_before_image_url: orNull("quiz_before_image_url"),
-      quiz_after_image_url: orNull("quiz_after_image_url"),
-      quiz_visual_caption: formData.get("quiz_visual_caption") as string,
-      quiz_alt_audience_label: formData.get("quiz_alt_audience_label") as string,
-      quiz_alt_audience_url: formData.get("quiz_alt_audience_url") as string,
-      // Try-on gate
-      quiz_gate_headline: formData.get("quiz_gate_headline") as string,
-      quiz_gate_helper: formData.get("quiz_gate_helper") as string,
-      quiz_gate_photo_label: formData.get("quiz_gate_photo_label") as string,
-      quiz_gate_skip_label: formData.get("quiz_gate_skip_label") as string,
-      quiz_privacy_note: formData.get("quiz_privacy_note") as string,
-      // Results (subtext / show-matches / upsell are non-nullable with code
-      // defaults, so they save as plain strings like the other copy fields)
-      quiz_results_headline_photo: formData.get("quiz_results_headline_photo") as string,
-      quiz_results_headline_nophoto: formData.get("quiz_results_headline_nophoto") as string,
-      quiz_results_subtext: formData.get("quiz_results_subtext") as string,
-      quiz_show_matches_label: formData.get("quiz_show_matches_label") as string,
-      quiz_upsell_title: formData.get("quiz_upsell_title") as string,
-      quiz_upsell_body: formData.get("quiz_upsell_body") as string,
-      quiz_upsell_cta: formData.get("quiz_upsell_cta") as string,
-      quiz_best_match_pill: formData.get("quiz_best_match_pill") as string,
-      quiz_also_matched_label: formData.get("quiz_also_matched_label") as string,
-      quiz_add_button_template: formData.get("quiz_add_button_template") as string,
-      quiz_view_product_label: formData.get("quiz_view_product_label") as string,
-      quiz_retake_label: formData.get("quiz_retake_label") as string,
-      // Shade gate
-      quiz_shade_headline: formData.get("quiz_shade_headline") as string,
-      quiz_shade_body: formData.get("quiz_shade_body") as string,
-      quiz_shade_cta_photo: formData.get("quiz_shade_cta_photo") as string,
-      quiz_shade_cta_manual: formData.get("quiz_shade_cta_manual") as string,
-      // Photo-step manual shade rail (migration 054). Only "false" disables —
-      // an absent field (stale tab predating the toggle) keeps it on.
-      quiz_manual_shade_enabled: formData.get("quiz_manual_shade_enabled") !== "false",
-      // Style — NULL means inherit (accent → assistant accent, radius →
-      // widget default, fonts → runtime theme detection)
-      quiz_accent_color: orNull("quiz_accent_color"),
-      quiz_button_radius: intOrNull("quiz_button_radius"),
-      quiz_heading_font_override: orNull("quiz_heading_font_override"),
-      quiz_body_font_override: orNull("quiz_body_font_override"),
-      // Design tokens (migration 049) — NULL means the widget's shipped
-      // design, so an untouched section saves as all-NULL.
-      quiz_ink_color: orNull("quiz_ink_color"),
-      quiz_card_bg_color: orNull("quiz_card_bg_color"),
-      quiz_line_color: orNull("quiz_line_color"),
-      quiz_cta_color: orNull("quiz_cta_color"),
-      quiz_card_radius: cardRadius === null ? null : Math.min(60, Math.max(0, cardRadius)),
-      quiz_progress_style: oneOf("quiz_progress_style", ["pips", "bar", "counter", "none"]),
-      quiz_intro_layout: oneOf("quiz_intro_layout", ["split", "centered"]),
-      quiz_animation_style: oneOf("quiz_animation_style", ["full", "minimal", "off"]),
+    // Presence-guarded writes: a field ABSENT from the POST means
+    // "unchanged", never NULL/"". A stale tab across a deploy that added
+    // fields was silently nulling authored copy on every Save. Fields the
+    // form DID send keep their ''-means-clear semantics.
+    const config: Record<string, unknown> = {};
+    const putString = (name: string) => {
+      if (formData.has(name)) config[name] = formData.get(name) as string;
     };
+    const putOrNull = (name: string) => {
+      if (formData.has(name)) config[name] = orNull(name);
+    };
+    const putIntOrNull = (name: string) => {
+      if (formData.has(name)) config[name] = intOrNull(name);
+    };
+    const putOneOf = (name: string, values: readonly string[]) => {
+      if (formData.has(name)) config[name] = oneOf(name, values);
+    };
+
+    // Landing
+    putString("quiz_eyebrow");
+    putString("quiz_headline");
+    putString("quiz_subtext");
+    // Malformed JSON (crafted POST, truncated submit) must fail the save
+    // loudly instead of throwing out of the action or storing garbage.
+    if (formData.has("quiz_trust_items")) {
+      try {
+        const parsedTrust = JSON.parse((formData.get("quiz_trust_items") as string) || "[]");
+        if (!Array.isArray(parsedTrust)) throw new Error("not an array");
+        config.quiz_trust_items = parsedTrust.map((item) => String(item));
+      } catch {
+        return json({ error: "Invalid trust items. Please reload and try again." }, { status: 400 });
+      }
+    }
+    putOrNull("quiz_before_image_url");
+    putOrNull("quiz_after_image_url");
+    putString("quiz_visual_caption");
+    putString("quiz_alt_audience_label");
+    putString("quiz_alt_audience_url");
+    // Try-on gate
+    putString("quiz_gate_headline");
+    putString("quiz_gate_helper");
+    putString("quiz_gate_photo_label");
+    putString("quiz_gate_skip_label");
+    putString("quiz_privacy_note");
+    // Results (subtext / show-matches / upsell are non-nullable with code
+    // defaults, so they save as plain strings like the other copy fields)
+    putString("quiz_results_headline_photo");
+    putString("quiz_results_headline_nophoto");
+    putString("quiz_results_subtext");
+    putString("quiz_show_matches_label");
+    putString("quiz_upsell_title");
+    putString("quiz_upsell_body");
+    putString("quiz_upsell_cta");
+    putString("quiz_best_match_pill");
+    putString("quiz_also_matched_label");
+    putString("quiz_add_button_template");
+    putString("quiz_view_product_label");
+    putString("quiz_retake_label");
+    // Shade gate
+    putString("quiz_shade_headline");
+    putString("quiz_shade_body");
+    putString("quiz_shade_cta_photo");
+    putString("quiz_shade_cta_manual");
+    // Photo-step manual shade rail (migration 054). Only "false" disables —
+    // an absent field (stale tab predating the toggle) keeps it on.
+    config.quiz_manual_shade_enabled = formData.get("quiz_manual_shade_enabled") !== "false";
+    // Style — NULL means inherit (accent → assistant accent, radius →
+    // widget default, fonts → runtime theme detection)
+    putOrNull("quiz_accent_color");
+    putIntOrNull("quiz_button_radius");
+    putOrNull("quiz_heading_font_override");
+    putOrNull("quiz_body_font_override");
+    // Design tokens (migration 049) — NULL means the widget's shipped
+    // design, so an untouched section saves as all-NULL.
+    putOrNull("quiz_ink_color");
+    putOrNull("quiz_card_bg_color");
+    putOrNull("quiz_line_color");
+    putOrNull("quiz_cta_color");
+    if (formData.has("quiz_card_radius")) {
+      // Clamped to the DB CHECK range (migration 049) for the same reason.
+      const cardRadius = intOrNull("quiz_card_radius");
+      config.quiz_card_radius = cardRadius === null ? null : Math.min(60, Math.max(0, cardRadius));
+    }
+    putOneOf("quiz_progress_style", ["pips", "bar", "counter", "none"]);
+    putOneOf("quiz_intro_layout", ["split", "centered"]);
+    putOneOf("quiz_animation_style", ["full", "minimal", "off"]);
 
     try {
       await saveChatAssistantConfig(shopDomain, config);

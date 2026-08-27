@@ -27,6 +27,13 @@ api_version = "2025-07"
   topics = [ "orders/create" ]
   uri = "/webhooks/orders"
 
+  # products/* keeps the Supabase catalog mirror fresh for shops with
+  # catalog_sync_enabled (quiz-first overhaul). Handler no-ops for all other
+  # shops. See app/routes/webhooks.products.tsx.
+  [[webhooks.subscriptions]]
+  topics = [ "products/create", "products/update", "products/delete" ]
+  uri = "/webhooks/products"
+
   [[webhooks.subscriptions]]
   compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
   uri = "https://glimpse-app-charles.onrender.com/webhooks"

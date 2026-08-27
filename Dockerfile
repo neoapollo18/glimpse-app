@@ -1,4 +1,6 @@
-FROM node:18-alpine
+# Node 20+: required by @anthropic-ai/sdk (AI quiz creator); matches the
+# "^18.20 || ^20.10 || >=21" engines range in package.json.
+FROM node:20-alpine
 RUN apk add --no-cache openssl
 
 EXPOSE 3000

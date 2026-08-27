@@ -194,6 +194,26 @@ export const RATE_LIMITS = {
     limit: 1500,
     windowMs: 60 * 60 * 1000,
   },
+  // AI quiz creator (Claude, admin-authenticated). Generation is the
+  // expensive call (~$0.50); copilot messages are cheap (~$0.10) thanks to
+  // prompt caching. Keys are per shop, not per IP — these endpoints sit
+  // behind authenticate.admin.
+  QUIZ_GENERATE_PER_SHOP_HOUR: {
+    limit: 4,
+    windowMs: 60 * 60 * 1000,
+  },
+  QUIZ_GENERATE_PER_SHOP_DAY: {
+    limit: 10,
+    windowMs: 24 * 60 * 60 * 1000,
+  },
+  QUIZ_COPILOT_PER_SHOP_MINUTE: {
+    limit: 10,
+    windowMs: 60 * 1000,
+  },
+  QUIZ_COPILOT_PER_SHOP_DAY: {
+    limit: 200,
+    windowMs: 24 * 60 * 60 * 1000,
+  },
 } as const;
 
 // ============================================
@@ -213,6 +233,11 @@ export function startCleanupInterval(): void {
       console.log(`[RateLimiter] Cleaned up ${cleaned} expired entries. Store size: ${store.size}`);
     }
   }, 5 * 60 * 1000); // Every 5 minutes
+
+  // Housekeeping only — never keep the event loop alive for it, so the
+  // process can exit cleanly on shutdown. Optional chaining: Node returns a
+  // Timeout with unref(), but browser-typed environments return a number.
+  cleanupInterval.unref?.();
 }
 
 export function stopCleanupInterval(): void {

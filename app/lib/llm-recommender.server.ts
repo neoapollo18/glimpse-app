@@ -263,9 +263,13 @@ function describeAnswers(criteria: MultiCriteria, flow: RecommendationFlow): str
   // unmatched values verbatim would hand anyone a prompt-injection slot
   // (a snake_case identifier is still an instruction after tokenization).
   for (const q of flow.questions) {
-    const values = answered(q.axisKey);
-    if (!values) continue;
-    if (values.includes(ANY_VALUE)) {
+    const rawValues = answered(q.axisKey);
+    if (!rawValues) continue;
+    // Multi-select can pair ANY_VALUE with concrete picks ("surprise me" +
+    // "red"). The concrete picks are real signal — only read the answer as
+    // "open to anything" when ANY_VALUE was the ONLY selection.
+    const values = rawValues.filter((v) => v !== ANY_VALUE);
+    if (values.length === 0 && rawValues.includes(ANY_VALUE)) {
       lines.push(`${q.prompt} → open to anything`);
       continue;
     }
@@ -276,8 +280,12 @@ function describeAnswers(criteria: MultiCriteria, flow: RecommendationFlow): str
     if (labels) lines.push(`${q.prompt} → ${labels}`);
   }
   for (const axis of flow.photoAxisDetails) {
-    const values = answered(axis.key);
-    if (!values || values.includes(ANY_VALUE)) continue;
+    const rawValues = answered(axis.key);
+    if (!rawValues) continue;
+    // Same ANY_VALUE-alongside-concrete rule as questions: drop the
+    // wildcard, keep the concrete shades; skip only if nothing remains.
+    const values = rawValues.filter((v) => v !== ANY_VALUE);
+    if (values.length === 0) continue;
     const labels = values
       .map((v) => axis.values.find((av) => av.value === v)?.label)
       .filter((l): l is string => Boolean(l))
@@ -426,15 +434,19 @@ export async function llmOrderCandidates(params: {
           : {}),
       },
     });
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`LLM ranking timed out after ${timeoutMs}ms`)), timeoutMs),
-    );
+    // Capture the race timer's handle so it can be cleared on the success
+    // path too — otherwise every request leaks a pending 12-20s timer.
+    let raceTimer: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      raceTimer = setTimeout(() => reject(new Error(`LLM ranking timed out after ${timeoutMs}ms`)), timeoutMs);
+    });
 
     let raw: string;
     try {
       raw = extractGeminiText(await Promise.race([responsePromise, timeoutPromise]));
     } finally {
       clearTimeout(timer);
+      clearTimeout(raceTimer);
     }
     const parsed = JSON.parse(stripJsonFences(raw)) as { picks?: Array<{ id?: unknown; reason?: unknown }> };
     if (!Array.isArray(parsed.picks)) return null;

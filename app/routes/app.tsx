@@ -11,7 +11,7 @@ import jwt from "jsonwebtoken";
 
 import { authenticate } from "../shopify.server";
 import { identifyAndGetCustomer } from "../lib/mantle.server";
-import { isShopGrandfathered, markShopAsGrandfathered } from "../lib/supabase.server";
+import { isShopGrandfathered, markShopAsGrandfathered, shopHasTryOnConfig } from "../lib/supabase.server";
 import { isSkinAnalysisEnabledForShop } from "../lib/skin-analysis.server";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
@@ -88,12 +88,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Feature flag — skin analysis nav link is hidden by default. Default
   // FALSE for every shop; flipped manually from /admin (founders).
   // Kept in a try/catch so a DB hiccup never blocks app render.
-  let isSkinAnalysisEnabled = false;
-  try {
-    isSkinAnalysisEnabled = await isSkinAnalysisEnabledForShop(shopDomain);
-  } catch (err) {
-    console.error("[app loader] skin-analysis flag check failed:", err);
-  }
+  // Nav-flag checks are independent — run them in parallel; this loader runs
+  // on EVERY admin navigation, so serial awaits here tax every page load.
+  // Quiz-first pivot: try-on admin pages stay visible for any shop that has
+  // try-on prompts configured (all pre-pivot merchants); new quiz-only
+  // merchants don't see them. Routes remain reachable by URL either way.
+  // shopHasTryOnConfig fails open (true) on any error.
+  const [isSkinAnalysisEnabled, isTryOnEnabled] = await Promise.all([
+    isSkinAnalysisEnabledForShop(shopDomain).catch((err) => {
+      console.error("[app loader] skin-analysis flag check failed:", err);
+      return false;
+    }),
+    shopHasTryOnConfig(shopDomain),
+  ]);
 
   return json({
     apiKey: process.env.SHOPIFY_API_KEY || "",
@@ -103,11 +110,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     needsBilling,
     isOnBillingPage,
     isSkinAnalysisEnabled,
+    isTryOnEnabled,
   });
 };
 
 export default function App() {
-  const { apiKey, shop, intercomAppId, intercomUserJwt, needsBilling, isSkinAnalysisEnabled } = useLoaderData<typeof loader>();
+  const { apiKey, shop, intercomAppId, intercomUserJwt, needsBilling, isSkinAnalysisEnabled, isTryOnEnabled } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const location = useLocation();
   const [isRedirecting, setIsRedirecting] = useState(false);
@@ -164,8 +172,9 @@ export default function App() {
             Dashboard
           </Link>
           <Link to="/app/quiz">Quiz</Link>
-          <Link to="/app/products">Products</Link>
-          <Link to="/app/assistant">AI Assistant</Link>
+          <Link to="/app/quiz-builder">Quiz Builder</Link>
+          {isTryOnEnabled && <Link to="/app/products">Products</Link>}
+          {isTryOnEnabled && <Link to="/app/assistant">AI Assistant</Link>}
           {isSkinAnalysisEnabled && <Link to="/app/skin-analysis">Skin Analysis</Link>}
           <Link to="/app/analytics">Analytics</Link>
           <Link to="/app/billing">Billing</Link>

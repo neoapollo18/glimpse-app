@@ -101,12 +101,18 @@ async function convertHeicToJpeg(inputBuffer: Buffer): Promise<Buffer> {
 
 // Check if buffer is HEIC format (check magic bytes)
 function isHeicBuffer(buffer: Buffer): boolean {
-  // HEIC files have 'ftyp' at offset 4 and 'heic' or 'mif1' shortly after
+  // HEIC files have 'ftyp' at offset 4 with a brand code shortly after.
+  // Brand list matters: iPhone HDR/10-bit photos use 'heix', bursts/
+  // sequences use 'hevc'/'hevx'/'msf1', Live Photo stills 'heim'/'heis'.
+  // Missing a brand meant raw HEIC bytes reached the AI APIs mislabeled as
+  // JPEG (permanent INVALID_ARGUMENT, shopper saw "could not be processed").
   if (buffer.length < 12) return false;
   const ftypOffset = buffer.indexOf('ftyp');
   if (ftypOffset === -1) return false;
-  const brandArea = buffer.slice(ftypOffset, ftypOffset + 12).toString();
-  return brandArea.includes('heic') || brandArea.includes('mif1') || brandArea.includes('heif');
+  const brandArea = buffer.slice(ftypOffset, ftypOffset + 16).toString();
+  return ['heic', 'heix', 'heim', 'heis', 'hevc', 'hevx', 'mif1', 'msf1', 'heif'].some((b) =>
+    brandArea.includes(b),
+  );
 }
 
 // Compress image for faster processing and lower costs
@@ -157,7 +163,23 @@ export async function compressImage(base64Image: string, mimeType: string, maxPx
     };
   } catch (error) {
     console.error('Image compression failed:', error);
-    // If compression fails, return original image
+    // HEIC that failed to convert must NOT fall through: the AI APIs can't
+    // read raw HEIC, so shipping the original bytes (often mislabeled as
+    // JPEG downstream) guarantees a slow, retried, still-failing request.
+    // Throw a recognizable error so routes return a clear "try a different
+    // photo" instead.
+    try {
+      if (isHeicBuffer(Buffer.from(base64Image, 'base64'))) {
+        throw new Error('UNSUPPORTED_IMAGE: HEIC photo could not be converted — ask for a JPEG/PNG or a different photo');
+      }
+    } catch (heicCheckError) {
+      if (heicCheckError instanceof Error && heicCheckError.message.startsWith('UNSUPPORTED_IMAGE')) {
+        throw heicCheckError;
+      }
+      // magic-byte check itself failed — fall through to the legacy path
+    }
+    // Non-HEIC failure (odd but sharp-processable formats): return the
+    // original image — the models handle standard formats at full size.
     return {
       compressedBase64: base64Image,
       compressedMimeType: mimeType,

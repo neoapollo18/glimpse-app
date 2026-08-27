@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { extractGeminiText } from './gemini.server';
 import { getCategories } from './supabase.server';
 
 const client = new GoogleGenAI({
@@ -183,7 +184,14 @@ If you cannot confidently classify the product (confidence < 0.5), respond with:
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         config: {
           temperature: 0.1, // Low temperature for consistent classification
-          maxOutputTokens: 200,
+          // Gemini 3 thinks by default and thinking counts against
+          // maxOutputTokens — at 200 with no thinkingConfig the reply could
+          // be truncated to nothing. 'low' keeps latency in check; 500
+          // leaves room for the JSON after thinking. Cast: @google/genai
+          // 1.15 typings predate thinkingLevel (same pattern as
+          // photo-axis-classifier.server.ts).
+          maxOutputTokens: 500,
+          thinkingConfig: { thinkingLevel: 'low' } as unknown as { thinkingBudget?: number },
         },
       });
       console.log('✅ Gemini API call successful');
@@ -192,23 +200,18 @@ If you cannot confidently classify the product (confidence < 0.5), respond with:
       return null;
     }
 
-    // 5. Parse response
-    if (!response || !response.candidates || response.candidates.length === 0) {
-      console.error('❌ No response/candidates from Gemini');
+    // 5. Parse response. extractGeminiText joins multi-part responses —
+    // gemini-3 can split the reply across parts, so parts[0].text alone
+    // could miss or truncate it.
+    const candidate = response?.candidates?.[0];
+    console.log('📦 Candidate finish reason:', candidate?.finishReason);
+
+    const responseText = extractGeminiText(response).trim();
+    if (!responseText) {
+      console.error('❌ Empty response from Gemini');
       console.error('   Response object:', JSON.stringify(response, null, 2));
       return null;
     }
-
-    const candidate = response.candidates[0];
-    console.log('📦 Candidate finish reason:', candidate?.finishReason);
-    
-    if (!candidate?.content?.parts?.[0]?.text) {
-      console.error('❌ Invalid response structure from Gemini');
-      console.error('   Candidate:', JSON.stringify(candidate, null, 2));
-      return null;
-    }
-
-    const responseText = candidate.content.parts[0].text.trim();
     console.log('📝 Gemini raw response:', responseText);
 
     // 6. Parse JSON response
@@ -224,8 +227,10 @@ If you cannot confidently classify the product (confidence < 0.5), respond with:
       const result = JSON.parse(cleanJson);
       console.log('🤖 Gemini parsed result:', result);
 
-      // Validate the response - only check categoryName now (not categoryId)
-      if (!result.categoryName || result.confidence < 0.5) {
+      // Validate the response - only check categoryName now (not categoryId).
+      // typeof check: a missing/non-numeric confidence made `< 0.5` false
+      // (NaN comparisons), letting garbage through as a valid classification.
+      if (!result.categoryName || typeof result.confidence !== 'number' || result.confidence < 0.5) {
         console.log('⚠️ No category name or low confidence:', { 
           categoryName: result.categoryName, 
           confidence: result.confidence 

@@ -5,6 +5,7 @@ import {
   shopHasValidAccess,
   getChatAssistantConfig,
   getPhotoAxes,
+  type MultiCriteria,
 } from "../lib/supabase.server";
 import {
   buildCandidatePool,
@@ -22,6 +23,13 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, X-Requested-With",
+};
+
+// CORS preflight — Remix routes OPTIONS to the LOADER, not the action (same
+// pattern as quiz-recommend/track-event). Without a loader, preflights got a
+// 405 with no CORS headers and the browser blocked the real request.
+export const loader = async () => {
+  return new Response(null, { status: 204, headers: CORS_HEADERS });
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -45,20 +53,37 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // widget sends this for shops with a recommendation matrix configured.
     // We parse defensively — malformed criteria just falls through to the
     // legacy AI-pick path instead of erroring the whole request.
-    let criteria: Record<string, string> = {};
+    // Same defensive validation as quiz-recommend: keys must be length-capped
+    // lower snake_case identifiers; values a matching string OR an array of
+    // them (deduped, capped). Anything else is dropped — a malformed payload
+    // becomes empty criteria, which silently falls through to the legacy
+    // AI-pick path. Null prototype + explicit blocklist: "__proto__"/
+    // "constructor"/"prototype" pass the identifier regex, and on a plain
+    // object `criteria["__proto__"] = ...` is a setter call, not a key write
+    // — this is a public endpoint.
+    const criteria: MultiCriteria = Object.create(null);
     try {
       const raw = formData.get("criteria");
       if (typeof raw === "string" && raw.length > 0) {
         const parsed = JSON.parse(raw);
         if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-          // Both keys and values must match the same identifier shape used
-          // in the schema's CHECK constraints (lower snake_case). Anything
-          // else is dropped — a malformed payload becomes empty criteria,
-          // which silently falls through to the legacy AI-pick path.
-          const ID_RE = /^[a-z_][a-z0-9_]*$/;
-          for (const [k, v] of Object.entries(parsed)) {
-            if (typeof v === "string" && ID_RE.test(k) && ID_RE.test(v)) {
+          // Length-capped: identifiers here can reach an LLM prompt, and
+          // unbounded keys would bloat the rules matcher.
+          const ID_RE = /^[a-z_][a-z0-9_]{0,63}$/;
+          const VALUE_RE = /^[a-z_][a-z0-9_]{0,127}$/;
+          const PROTO_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+          const MAX_VALUES_PER_AXIS = 16;
+          const MAX_AXES = 32;
+          for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+            if (Object.keys(criteria).length >= MAX_AXES) break;
+            if (!ID_RE.test(k) || PROTO_KEYS.has(k)) continue;
+            if (typeof v === "string" && VALUE_RE.test(v)) {
               criteria[k] = v;
+            } else if (Array.isArray(v)) {
+              const values = [...new Set(v.filter(
+                (s): s is string => typeof s === "string" && VALUE_RE.test(s)
+              ))].slice(0, MAX_VALUES_PER_AXIS);
+              if (values.length > 0) criteria[k] = values;
             }
           }
         }

@@ -15,6 +15,10 @@
   var stream = null;
   var currentCallback = null;
   var currentFallback = null;
+  // Document-level Escape handler for the open modal, removed in
+  // closeModal so every close path (X, backdrop, upload, use-photo)
+  // unbinds it instead of leaking one listener per open.
+  var escHandler = null;
   // Merchant-configurable framing instruction, set per open() call. Falls back
   // to the face-framing default when the caller doesn't pass one.
   var frameHint = DEFAULT_FRAME_HINT;
@@ -52,6 +56,10 @@
     overlay = null;
     currentCallback = null;
     currentFallback = null;
+    if (escHandler) {
+      document.removeEventListener('keydown', escHandler);
+      escHandler = null;
+    }
   }
 
   function createModal() {
@@ -135,6 +143,14 @@
     var video = viewfinder ? viewfinder.querySelector('video') : null;
     if (!video) return;
 
+    // Stream not delivering frames yet: drawing now would capture a blank
+    // 0x0 canvas. Nudge via the existing hint instead.
+    if (!video.videoWidth) {
+      var hint = document.getElementById('gleameCameraHint');
+      if (hint) hint.textContent = 'Camera is still starting... try again in a moment';
+      return;
+    }
+
     // Shutter flash
     var flash = document.createElement('div');
     flash.className = 'gleame-camera-flash';
@@ -173,9 +189,12 @@
   function usePhoto() {
     if (!capturedDataUrl || !currentCallback) return;
 
-    // Convert data URL to File
+    // Convert data URL to File. Guard the parse: a malformed capture must
+    // not throw out of the click handler.
     var arr = capturedDataUrl.split(',');
-    var mime = arr[0].match(/:(.*?);/)[1];
+    var m = arr[0].match(/:(.*?);/);
+    if (!m) return;
+    var mime = m[1];
     var bstr = atob(arr[1]);
     var n = bstr.length;
     var u8 = new Uint8Array(n);
@@ -275,12 +294,9 @@
         if (fallback) fallback();
       });
 
-      // Escape key to close
-      var escHandler = function(e) {
-        if (e.key === 'Escape') {
-          closeModal();
-          document.removeEventListener('keydown', escHandler);
-        }
+      // Escape key to close (removed in closeModal)
+      escHandler = function(e) {
+        if (e.key === 'Escape') closeModal();
       };
       document.addEventListener('keydown', escHandler);
 

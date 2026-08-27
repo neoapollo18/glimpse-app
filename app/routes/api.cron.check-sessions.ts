@@ -7,6 +7,7 @@
  * Security: Protected by CRON_SECRET environment variable
  */
 
+import { timingSafeEqual } from "node:crypto";
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import prisma from "../db.server";
@@ -85,8 +86,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Verify cron secret for security
   const url = new URL(request.url);
   const secret = url.searchParams.get('secret');
-  
-  if (secret !== process.env.CRON_SECRET) {
+
+  // Constant-time comparison — a plain !== leaks how many leading bytes
+  // matched via timing. timingSafeEqual requires equal-length buffers, so a
+  // length mismatch (which !== leaks anyway) is an immediate 401.
+  const expected = process.env.CRON_SECRET;
+  const secretBuf = Buffer.from(secret ?? '');
+  const expectedBuf = Buffer.from(expected ?? '');
+  const valid =
+    Boolean(secret && expected) &&
+    secretBuf.length === expectedBuf.length &&
+    timingSafeEqual(secretBuf, expectedBuf);
+  if (!valid) {
     console.error('Cron job called with invalid secret');
     return json({ error: 'Unauthorized' }, { status: 401 });
   }

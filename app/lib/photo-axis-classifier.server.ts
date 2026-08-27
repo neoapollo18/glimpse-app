@@ -16,16 +16,20 @@ import { geminiClient, extractGeminiText, stripJsonFences } from './gemini.serve
 export interface PhotoAxisSpec {
   key: string;
   label: string;
-  values: Array<{ value: string; label: string }>;
+  values: Array<{ value: string; label: string; swatch?: string | null }>;
 }
 
 // Text-capable vision model — NOT the image-generation models used for
-// try-ons. Flash over pro: this is a small closed-set classification and
-// it sits on the consultation's critical path ahead of every transform.
-const PHOTO_AXIS_MODEL = 'gemini-2.5-flash';
-const PHOTO_AXIS_TIMEOUT_MS = 12_000;
-// Classification doesn't need detail — small input keeps the call fast.
-const PHOTO_AXIS_MAX_PX = 768;
+// try-ons. Fine-grained shade discrimination (jet_black vs soft_black vs
+// darkest_brown) was beyond 2.5-flash-with-thinking-off; gemini-3.7-flash
+// (Aug 2026, strongest Flash, "vision as active investigation") is the
+// current best fit that still sits acceptably on the critical path.
+// Env-overridable for fast rollback without a deploy.
+const PHOTO_AXIS_MODEL = process.env.GEMINI_PHOTO_AXIS_MODEL || 'gemini-3.7-flash';
+const PHOTO_AXIS_TIMEOUT_MS = 15_000;
+// Enough detail to separate adjacent hair/skin shades; still small enough
+// to keep the call fast.
+const PHOTO_AXIS_MAX_PX = 1024;
 
 /**
  * Classify each photo axis into one of its defined values by looking at the
@@ -66,7 +70,12 @@ export async function classifyPhotoAxes(
 
     const axisDescriptions = usable
       .map((axis) => {
-        const opts = axis.values.map((v) => `"${v.value}" (${v.label})`).join(', ');
+        // Include each value's swatch hex when available: names like
+        // "Vanilla" or "Mocha" are meaningless without the color they
+        // denote, and the hexes let the model compare against actual pixels.
+        const opts = axis.values
+          .map((v) => `"${v.value}" (${v.label}${v.swatch ? `, approx color ${v.swatch}` : ''})`)
+          .join(', ');
         return `- ${axis.key} (${axis.label}): one of ${opts}`;
       })
       .join('\n');
@@ -74,6 +83,8 @@ export async function classifyPhotoAxes(
     const systemPrompt =
       'You classify a customer selfie for beauty product matching. ' +
       'Look at the person in the photo and pick exactly one value per attribute. ' +
+      'Compare what you see against each option\'s approximate color when given. ' +
+      'Account for lighting: indoor/warm lighting shifts apparent shade — judge the underlying color. ' +
       'If the photo is ambiguous, pick the closest match — never refuse. ' +
       'Attributes:\n' + axisDescriptions;
 
@@ -93,10 +104,13 @@ export async function classifyPhotoAxes(
         responseMimeType: 'application/json',
         responseSchema: responseSchema as unknown as Record<string, unknown>,
         temperature: 0,
-        // 2.5-flash thinks by default even on structured output (~7-11s vs
-        // ~1-2.5s without); closed-set classification gains nothing from
-        // reasoning tokens and this call gates every transform.
-        thinkingConfig: { thinkingBudget: 0 },
+        // Gemini 3 models use thinkingLevel (thinkingBudget is the 2.5-era
+        // knob). 'low' keeps latency in check while letting the model
+        // actually look — full thinking-off was part of why 2.5-flash
+        // misjudged adjacent shades. Cast: @google/genai 1.15 typings
+        // predate the field; the API accepts it, and if a proxy strips it
+        // the model just uses its default (dynamic) thinking.
+        thinkingConfig: { thinkingLevel: 'low' } as unknown as { thinkingBudget?: number },
       },
     });
 

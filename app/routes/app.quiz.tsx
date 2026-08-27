@@ -106,7 +106,11 @@ export default function QuizHub() {
     counts !== null && counts.questions > 0 && counts.rules > 0;
 
   const storeHandle = shopDomain.replace(".myshopify.com", "");
-  const themeEditorUrl = `https://admin.shopify.com/store/${storeHandle}/themes/current/editor`;
+  // Deep link that opens the theme editor with the Gleame Quiz app block
+  // pre-added (addAppBlockId = <theme extension uid>/<block filename>).
+  // The uid comes from extensions/glimpse-widget/shopify.extension.toml.
+  const THEME_EXT_UUID = "1013fc3f-b18d-aa39-07f6-10dfd57397a6749693b0";
+  const themeEditorUrl = `https://admin.shopify.com/store/${storeHandle}/themes/current/editor?template=index&addAppBlockId=${THEME_EXT_UUID}/gleame-quiz&target=newAppsSection`;
 
   const saveMode = () => {
     const fd = new FormData();
@@ -198,9 +202,12 @@ export default function QuizHub() {
               Questions ask shoppers about their preferences; rules map their
               answers to the products you want recommended.
             </Text>
-            <InlineStack>
+            <InlineStack gap="300">
+              <Button variant="primary" url="/app/quiz-builder">
+                Open Quiz Builder
+              </Button>
               <Button url="/app/assistant/recommendations">
-                {logicReady ? "Edit logic" : "Set up questions & rules"}
+                {logicReady ? "Edit logic (live)" : "Set up questions & rules"}
               </Button>
             </InlineStack>
           </BlockStack>
