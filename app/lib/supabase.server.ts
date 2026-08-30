@@ -3981,3 +3981,88 @@ export async function deleteReferenceImage(imageUrl: string) {
     console.error('Error deleting reference image:', error);
   }
 }
+
+// ============================================================
+// Per-question merchant guidance (migration 059)
+// ============================================================
+
+/**
+ * Head-only product count for a shop. Used by self-serve pages to pre-flight
+ * "can the AI build from a catalog" before the merchant invests effort;
+ * returns null (unknown) on error so a counting hiccup never blocks a page.
+ */
+export async function countShopProducts(shopId: string): Promise<number | null> {
+  const { count, error } = await supabase
+    .from('products')
+    .select('id', { count: 'exact', head: true })
+    .eq('shop_id', shopId);
+  if (error) {
+    console.error('countShopProducts error', error);
+    return null;
+  }
+  return count ?? 0;
+}
+
+/**
+ * All merchant guidance notes for a shop, keyed by axis key (plus the
+ * '__general' row when present). Keyed by axis_key TEXT rather than axis_id
+ * on purpose — rows survive the wipe-and-rewrite save_recommendation_config
+ * RPC and attach back to the recreated axis by key.
+ */
+export async function getQuestionGuidance(
+  shopId: string,
+): Promise<Record<string, string>> {
+  const { data, error } = await supabase
+    .from('quiz_question_guidance')
+    .select('axis_key, merchant_notes')
+    .eq('shop_id', shopId);
+  // THROW rather than returning {} — an empty map feeds the logic page a
+  // blank slate, and a save from there would upsert '' over real notes.
+  if (error) {
+    throw new Error(`Failed to load question guidance: ${error.message}`);
+  }
+  const out: Record<string, string> = {};
+  for (const row of data || []) {
+    out[row.axis_key as string] = (row.merchant_notes as string) ?? '';
+  }
+  return out;
+}
+
+export async function upsertQuestionGuidance(
+  shopId: string,
+  axisKey: string,
+  notes: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await supabase
+    .from('quiz_question_guidance')
+    .upsert(
+      {
+        shop_id: shopId,
+        axis_key: axisKey,
+        merchant_notes: notes,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'shop_id,axis_key' },
+    );
+  if (error) {
+    console.error(`upsertQuestionGuidance error for shop ${shopId}/${axisKey}:`, error);
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}
+
+export async function deleteQuestionGuidance(
+  shopId: string,
+  axisKey: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await supabase
+    .from('quiz_question_guidance')
+    .delete()
+    .eq('shop_id', shopId)
+    .eq('axis_key', axisKey);
+  if (error) {
+    console.error(`deleteQuestionGuidance error for shop ${shopId}/${axisKey}:`, error);
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}

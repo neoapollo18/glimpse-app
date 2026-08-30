@@ -19,6 +19,7 @@ import {
   findShopByDomain,
   getChatAssistantConfig,
   getRecommendationCounts,
+  getQuestionGuidance,
   saveChatAssistantConfig,
 } from "../lib/supabase.server";
 
@@ -43,11 +44,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const counts = shop
     ? await getRecommendationCounts(shop.id).catch(() => null)
     : null;
+  // "Almost there" nudge: notes written on the logic page but nothing
+  // generated/activated yet. Best-effort; never blocks the hub.
+  const hasNotes = shop
+    ? await getQuestionGuidance(shop.id)
+        .then((n) => Object.values(n).some((v) => v.trim() !== ""))
+        .catch(() => false)
+    : false;
 
   return json({
     shopDomain,
     assistantMode: config.assistant_mode,
     assistantEnabled: config.enabled,
+    recommendationMode: config.recommendation_mode ?? "matrix",
+    hasGuidance: Boolean(String(config.ai_guidance ?? "").trim()),
+    hasNotes,
     counts,
   });
 };
@@ -91,7 +102,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function QuizHub() {
-  const { shopDomain, assistantMode, assistantEnabled, counts } =
+  const { shopDomain, assistantMode, assistantEnabled, recommendationMode, hasGuidance, hasNotes, counts } =
     useLoaderData<typeof loader>();
   const fetcher = useFetcher<{ success?: boolean; error?: string }>();
 
@@ -102,8 +113,13 @@ export default function QuizHub() {
   const [mode, setMode] = useState<string>(assistantMode);
   const quizLive =
     assistantEnabled && (assistantMode === "quiz" || assistantMode === "both");
+  // "Configured" = questions exist AND something maps answers to products:
+  // matrix rules, or AI guidance in an ai/hybrid shop. The old rules-only
+  // check read every ai-mode shop as unconfigured.
   const logicReady =
-    counts !== null && counts.questions > 0 && counts.rules > 0;
+    counts !== null &&
+    counts.questions > 0 &&
+    (counts.rules > 0 || (recommendationMode !== "matrix" && hasGuidance));
 
   const storeHandle = shopDomain.replace(".myshopify.com", "");
   // Deep link that opens the theme editor with the Gleame Quiz app block
@@ -126,11 +142,16 @@ export default function QuizHub() {
         {fetcher.data?.error && (
           <Banner tone="critical">Save failed: {fetcher.data.error}</Banner>
         )}
+        {fetcher.data?.success && (
+          <Banner tone="success">
+            Saved. Your quiz is {quizLive ? "on" : "off"}.
+          </Banner>
+        )}
         {!quizLive && (
           <Banner tone="warning" title="Your quiz is not live yet">
-            Work through the steps below. The quiz shows on your storefront
-            once the surface is on, the logic has questions and rules, and the
-            section is added to a page in your theme.
+            Work through the steps below: turn the quiz on, set up questions
+            and recommendation logic, then add the Gleame Quiz section to a
+            page in your theme.
           </Banner>
         )}
 
@@ -139,20 +160,26 @@ export default function QuizHub() {
           <BlockStack gap="400">
             <InlineStack align="space-between" blockAlign="center">
               <Text as="h2" variant="headingMd">
-                1. Storefront surface
+                1. Turn on the quiz
               </Text>
               <Badge tone={quizLive ? "success" : "attention"}>
                 {quizLive ? "Quiz on" : "Quiz off"}
               </Badge>
             </InlineStack>
             <Text as="p" variant="bodySm" tone="subdued">
-              Choose which Gleame surface runs on your storefront. "Quiz page"
-              or "Both" activates the Find My Fit quiz section.
+              Choose where Gleame appears on your storefront. "Quiz page" or
+              "Both" turns on the quiz section.
             </Text>
+            {counts !== null && counts.questions === 0 && (
+              <Text as="p" variant="bodySm" tone="caution">
+                Your quiz has no questions yet, so shoppers would see an empty
+                page. Build it in step 2 first.
+              </Text>
+            )}
             <InlineStack gap="300" blockAlign="end">
               <div style={{ minWidth: 260 }}>
                 <Select
-                  label="Surface"
+                  label="Where Gleame appears"
                   options={[
                     { label: "Chat bubble only", value: "chat" },
                     { label: "Quiz page only", value: "quiz" },
@@ -185,40 +212,75 @@ export default function QuizHub() {
                 tone={logicReady ? "success" : "attention"}
               >
                 {counts === null
-                  ? "Status unavailable"
+                  ? "Status unavailable (reload to retry)"
                   : logicReady
                     ? "Configured"
-                    : "Needs setup"}
+                    : hasNotes && counts.questions > 0
+                      ? "Almost there"
+                      : "Needs setup"}
               </Badge>
             </InlineStack>
             <Text as="p" variant="bodySm" tone="subdued">
               {counts !== null && (
                 <>
-                  {counts.axes} criteria {counts.axes === 1 ? "axis" : "axes"} ·{" "}
-                  {counts.questions} {counts.questions === 1 ? "question" : "questions"} ·{" "}
-                  {counts.rules} recommendation {counts.rules === 1 ? "rule" : "rules"}.{" "}
+                  {counts.questions} {counts.questions === 1 ? "question" : "questions"}
+                  {counts.rules > 0 && (
+                    <> · {counts.rules} recommendation {counts.rules === 1 ? "rule" : "rules"}</>
+                  )}
+                  {recommendationMode !== "matrix" && hasGuidance && <> · AI logic active</>}
+                  .{" "}
                 </>
               )}
-              Questions ask shoppers about their preferences; rules map their
-              answers to the products you want recommended.
+              {!logicReady && hasNotes && counts !== null && counts.questions > 0
+                ? "You've described your answers. Generate and activate your logic on the Recommendation logic page to finish."
+                : "Write your questions, then describe what each answer should mean for recommendations. Gleame turns that into the matching logic."}
             </Text>
-            <InlineStack gap="300">
-              <Button variant="primary" url="/app/quiz-builder">
-                Open Quiz Builder
-              </Button>
-              <Button url="/app/assistant/recommendations">
-                {logicReady ? "Edit logic (live)" : "Set up questions & rules"}
-              </Button>
-            </InlineStack>
+            {counts !== null && counts.questions === 0 ? (
+              <>
+                <InlineStack gap="300">
+                  <Button variant="primary" url="/app/quiz-builder">
+                    Open Quiz Builder
+                  </Button>
+                  <Button variant="plain" url="/app/quiz/questions">
+                    Or write questions by hand
+                  </Button>
+                </InlineStack>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Fastest start: the Quiz Builder drafts your whole quiz from
+                  your catalog, and you review before it goes live.
+                </Text>
+              </>
+            ) : (
+              <>
+                <InlineStack gap="300">
+                  <Button variant="primary" url="/app/quiz/questions">
+                    Edit questions
+                  </Button>
+                  <Button url="/app/quiz/logic">Recommendation logic</Button>
+                </InlineStack>
+                <InlineStack gap="200" blockAlign="center">
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Want a full redesign? The Quiz Builder drafts a new quiz
+                    from your catalog.
+                  </Text>
+                  <Button variant="plain" url="/app/quiz-builder">
+                    Open Quiz Builder
+                  </Button>
+                </InlineStack>
+              </>
+            )}
           </BlockStack>
         </Card>
 
         {/* Step 3: copy + design */}
         <Card>
           <BlockStack gap="400">
-            <Text as="h2" variant="headingMd">
-              3. Copy &amp; design
-            </Text>
+            <InlineStack align="space-between" blockAlign="center">
+              <Text as="h2" variant="headingMd">
+                3. Copy &amp; design
+              </Text>
+              <Badge>Optional</Badge>
+            </InlineStack>
             <Text as="p" variant="bodySm" tone="subdued">
               Landing headline, trust items, results copy, colors, fonts,
               progress style, and layout. Everything ships with polished
@@ -233,12 +295,15 @@ export default function QuizHub() {
         {/* Step 4: theme section */}
         <Card>
           <BlockStack gap="400">
-            <Text as="h2" variant="headingMd">
-              4. Add the section to your theme
-            </Text>
+            <InlineStack align="space-between" blockAlign="center">
+              <Text as="h2" variant="headingMd">
+                4. Add the section to your theme
+              </Text>
+              <Badge tone="attention">Manual step</Badge>
+            </InlineStack>
             <Text as="p" variant="bodySm" tone="subdued">
               In the theme editor, open the page where the quiz should live
-              (a dedicated "Find My Fit" page works best), click "Add
+              (a dedicated quiz page works best), click "Add
               section", and pick "Gleame Quiz" under Apps.
             </Text>
             <InlineStack>

@@ -15,7 +15,7 @@ import {
   Checkbox,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { authenticate } from "../shopify.server";
 import {
   getChatAssistantConfig,
@@ -274,9 +274,18 @@ export default function AssistantQuiz() {
     quiz_animation_style: config.quiz_animation_style || "",
   });
 
+  // Dirty tracking gates both Save buttons so "did I save?" is never a
+  // guess on a page this tall.
+  const [dirty, setDirty] = useState(false);
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data?.success) setDirty(false);
+  }, [fetcher.state, fetcher.data]);
+
   const setField = useCallback(
-    (key: keyof QuizFormState) => (value: string) =>
-      setForm((prev) => ({ ...prev, [key]: value })),
+    (key: keyof QuizFormState) => (value: string) => {
+      setForm((prev) => ({ ...prev, [key]: value }));
+      setDirty(true);
+    },
     [],
   );
 
@@ -294,12 +303,14 @@ export default function AssistantQuiz() {
     if (trimmed && !trustItems.includes(trimmed) && trustItems.length < 4) {
       setTrustItems([...trustItems, trimmed]);
       setNewTrustItem("");
+      setDirty(true);
     }
   }, [newTrustItem, trustItems]);
 
   const removeTrustItem = useCallback(
     (item: string) => {
       setTrustItems(trustItems.filter((t) => t !== item));
+      setDirty(true);
     },
     [trustItems],
   );
@@ -307,6 +318,7 @@ export default function AssistantQuiz() {
   // Before/after image uploads — reuses the generic authenticated image
   // upload endpoint (same as the assistant avatar / hero sample images).
   const [uploadingImage, setUploadingImage] = useState<"before" | "after" | null>(null);
+  const [uploadError, setUploadError] = useState<"before" | "after" | null>(null);
   const uploadTargetRef = useRef<"before" | "after">("before");
   const imageInputRef = useRef<HTMLInputElement>(null);
 
@@ -314,6 +326,7 @@ export default function AssistantQuiz() {
     async (file: File) => {
       const target = uploadTargetRef.current;
       setUploadingImage(target);
+      setUploadError(null);
       try {
         const fd = new FormData();
         fd.append("image", file);
@@ -325,9 +338,13 @@ export default function AssistantQuiz() {
             [target === "before" ? "quiz_before_image_url" : "quiz_after_image_url"]:
               data.avatarUrl,
           }));
+          setDirty(true);
+        } else {
+          setUploadError(target);
         }
       } catch (e) {
         console.error("Quiz image upload failed", e);
+        setUploadError(target);
       } finally {
         setUploadingImage(null);
       }
@@ -428,12 +445,22 @@ export default function AssistantQuiz() {
           </Button>
         )}
       </InlineStack>
+      {uploadError === target && (
+        <Text as="p" variant="bodySm" tone="critical">
+          Image upload failed. Try a smaller JPG or PNG.
+        </Text>
+      )}
     </BlockStack>
   );
 
   return (
-    <Page backAction={{ content: "Assistant", url: "/app/assistant" }} title="Quiz Page">
-      <TitleBar title="Quiz Page" />
+    <Page
+      backAction={{ content: "Quiz", url: "/app/quiz" }}
+      title="Quiz copy & design"
+      primaryAction={{ content: "Save", onAction: handleSave, loading: isSaving, disabled: !dirty }}
+      secondaryActions={[{ content: "Preview in Quiz Builder", url: "/app/quiz-builder" }]}
+    >
+      <TitleBar title="Quiz copy & design" />
       <BlockStack gap="500">
         {fetcher.data?.success && (
           <Banner tone="success">Quiz page settings saved.</Banner>
@@ -445,8 +472,8 @@ export default function AssistantQuiz() {
         <Banner tone="info">
           The quiz appears on your storefront once you add the "Gleame Quiz" section to a
           page in the theme editor and set the assistant surface to "Quiz page" or "Both".
-          Question content comes from your recommendation logic — this page controls the
-          copy and styling around it.
+          Question content comes from your quiz questions. This page controls the
+          copy and styling around them.
         </Banner>
 
         {/* Landing */}
@@ -520,7 +547,7 @@ export default function AssistantQuiz() {
             {renderImageField("Before Image", "quiz_before_image_url", "before")}
             {renderImageField("After Image", "quiz_after_image_url", "after")}
             <TextField
-              label="Visual Caption"
+              label="Visual caption"
               value={form.quiz_visual_caption}
               onChange={setField("quiz_visual_caption")}
               autoComplete="off"
@@ -529,7 +556,7 @@ export default function AssistantQuiz() {
             <InlineStack gap="400" wrap={false}>
               <div style={{ flex: 1 }}>
                 <TextField
-                  label="Alternate Audience Label"
+                  label="Alternate audience label"
                   value={form.quiz_alt_audience_label}
                   onChange={setField("quiz_alt_audience_label")}
                   autoComplete="off"
@@ -539,7 +566,7 @@ export default function AssistantQuiz() {
               </div>
               <div style={{ flex: 1 }}>
                 <TextField
-                  label="Alternate Audience URL"
+                  label="Alternate audience URL"
                   value={form.quiz_alt_audience_url}
                   onChange={setField("quiz_alt_audience_url")}
                   autoComplete="off"
@@ -556,10 +583,10 @@ export default function AssistantQuiz() {
           <BlockStack gap="400">
             <BlockStack gap="100">
               <Text as="h2" variant="headingMd">
-                Try-On Gate
+                Photo step
               </Text>
               <Text as="p" variant="bodySm" tone="subdued">
-                The optional photo step after the questions — shoppers can add a
+                The optional photo step after the questions. Shoppers can add a
                 photo to see their match on themselves, or skip.
               </Text>
             </BlockStack>
@@ -570,7 +597,7 @@ export default function AssistantQuiz() {
               autoComplete="off"
             />
             <TextField
-              label="Helper Text"
+              label="Helper text"
               value={form.quiz_gate_helper}
               onChange={setField("quiz_gate_helper")}
               autoComplete="off"
@@ -579,7 +606,7 @@ export default function AssistantQuiz() {
             <InlineStack gap="400" wrap={false}>
               <div style={{ flex: 1 }}>
                 <TextField
-                  label="Photo Button Label"
+                  label="Photo button label"
                   value={form.quiz_gate_photo_label}
                   onChange={setField("quiz_gate_photo_label")}
                   autoComplete="off"
@@ -587,7 +614,7 @@ export default function AssistantQuiz() {
               </div>
               <div style={{ flex: 1 }}>
                 <TextField
-                  label="Skip Button Label"
+                  label="Skip button label"
                   value={form.quiz_gate_skip_label}
                   onChange={setField("quiz_gate_skip_label")}
                   autoComplete="off"
@@ -595,7 +622,7 @@ export default function AssistantQuiz() {
               </div>
             </InlineStack>
             <TextField
-              label="Privacy Note"
+              label="Privacy note"
               value={form.quiz_privacy_note}
               onChange={setField("quiz_privacy_note")}
               autoComplete="off"
@@ -604,9 +631,12 @@ export default function AssistantQuiz() {
             <Checkbox
               label="Manual shade picker on this step"
               checked={manualShadeEnabled}
-              onChange={setManualShadeEnabled}
+              onChange={(v) => {
+                setManualShadeEnabled(v);
+                setDirty(true);
+              }}
               helpText={
-                'When off, the "No photo handy?" shade rail is hidden here — shoppers ' +
+                'When off, the "No photo handy?" shade rail is hidden here; shoppers ' +
                 "take a photo or skip. The results page's shade picker stays available " +
                 "either way, so no-photo shoppers can still finish."
               }
@@ -657,7 +687,7 @@ export default function AssistantQuiz() {
               </div>
               <div style={{ flex: 1 }}>
                 <TextField
-                  label="Show Matches Label"
+                  label="Show matches label"
                   value={form.quiz_show_matches_label}
                   onChange={setField("quiz_show_matches_label")}
                   autoComplete="off"
@@ -668,7 +698,7 @@ export default function AssistantQuiz() {
             <InlineStack gap="400" wrap={false}>
               <div style={{ flex: 1 }}>
                 <TextField
-                  label="Best Match Pill"
+                  label="Best match pill"
                   value={form.quiz_best_match_pill}
                   onChange={setField("quiz_best_match_pill")}
                   autoComplete="off"
@@ -678,7 +708,7 @@ export default function AssistantQuiz() {
               </div>
               <div style={{ flex: 1 }}>
                 <TextField
-                  label="Also Matched Label"
+                  label="Also matched label"
                   value={form.quiz_also_matched_label}
                   onChange={setField("quiz_also_matched_label")}
                   autoComplete="off"
@@ -696,7 +726,7 @@ export default function AssistantQuiz() {
             <InlineStack gap="400" wrap={false}>
               <div style={{ flex: 1 }}>
                 <TextField
-                  label="View Product Label"
+                  label="View product label"
                   value={form.quiz_view_product_label}
                   onChange={setField("quiz_view_product_label")}
                   autoComplete="off"
@@ -715,7 +745,7 @@ export default function AssistantQuiz() {
           <BlockStack gap="400">
             <BlockStack gap="100">
               <Text as="h2" variant="headingMd">
-                Try-On Upsell
+                Try-on upsell
               </Text>
               <Text as="p" variant="bodySm" tone="subdued">
                 Banner on the results screen inviting shoppers who skipped the
@@ -736,7 +766,7 @@ export default function AssistantQuiz() {
               multiline={2}
             />
             <TextField
-              label="CTA"
+              label="Button label"
               value={form.quiz_upsell_cta}
               onChange={setField("quiz_upsell_cta")}
               autoComplete="off"
@@ -750,7 +780,7 @@ export default function AssistantQuiz() {
           <BlockStack gap="400">
             <BlockStack gap="100">
               <Text as="h2" variant="headingMd">
-                Shade Gate
+                Shade picker step
               </Text>
               <Text as="p" variant="bodySm" tone="subdued">
                 The step where shoppers choose between AI shade matching and
@@ -773,7 +803,7 @@ export default function AssistantQuiz() {
             <InlineStack gap="400" wrap={false}>
               <div style={{ flex: 1 }}>
                 <TextField
-                  label="Photo CTA"
+                  label="Photo button label"
                   value={form.quiz_shade_cta_photo}
                   onChange={setField("quiz_shade_cta_photo")}
                   autoComplete="off"
@@ -782,7 +812,7 @@ export default function AssistantQuiz() {
               </div>
               <div style={{ flex: 1 }}>
                 <TextField
-                  label="Manual CTA"
+                  label="Manual picker button label"
                   value={form.quiz_shade_cta_manual}
                   onChange={setField("quiz_shade_cta_manual")}
                   autoComplete="off"
@@ -817,7 +847,7 @@ export default function AssistantQuiz() {
               </div>
               <div style={{ flex: 1 }}>
                 <TextField
-                  label="Button Radius"
+                  label="Button radius"
                   value={form.quiz_button_radius}
                   onChange={setField("quiz_button_radius")}
                   autoComplete="off"
@@ -831,7 +861,7 @@ export default function AssistantQuiz() {
             <InlineStack gap="400" wrap={false}>
               <div style={{ flex: 1 }}>
                 <TextField
-                  label="Heading Font Override"
+                  label="Heading font override"
                   value={form.quiz_heading_font_override}
                   onChange={setField("quiz_heading_font_override")}
                   autoComplete="off"
@@ -841,7 +871,7 @@ export default function AssistantQuiz() {
               </div>
               <div style={{ flex: 1 }}>
                 <TextField
-                  label="Body Font Override"
+                  label="Body font override"
                   value={form.quiz_body_font_override}
                   onChange={setField("quiz_body_font_override")}
                   autoComplete="off"
@@ -858,7 +888,7 @@ export default function AssistantQuiz() {
           <BlockStack gap="400">
             <BlockStack gap="100">
               <Text as="h2" variant="headingMd">
-                Design
+                Advanced design
               </Text>
               <Text as="p" variant="bodySm" tone="subdued">
                 Deeper visual controls. Every field left at its default keeps
@@ -904,7 +934,7 @@ export default function AssistantQuiz() {
             <InlineStack gap="400" wrap={false}>
               <div style={{ flex: 1 }}>
                 <TextField
-                  label="Card Radius"
+                  label="Card radius"
                   value={form.quiz_card_radius}
                   onChange={setField("quiz_card_radius")}
                   autoComplete="off"
@@ -918,9 +948,9 @@ export default function AssistantQuiz() {
               </div>
               <div style={{ flex: 1 }}>
                 <Select
-                  label="Progress Indicator"
+                  label="Progress indicator"
                   options={[
-                    { label: "Default (nail pips)", value: "" },
+                    { label: "Default (dots)", value: "" },
                     { label: "Progress bar", value: "bar" },
                     { label: "Step counter only", value: "counter" },
                     { label: "None", value: "none" },
@@ -934,7 +964,7 @@ export default function AssistantQuiz() {
             <InlineStack gap="400" wrap={false}>
               <div style={{ flex: 1 }}>
                 <Select
-                  label="Landing Layout"
+                  label="Landing layout"
                   options={[
                     { label: "Default (split two-column)", value: "" },
                     { label: "Centered", value: "centered" },
@@ -963,8 +993,8 @@ export default function AssistantQuiz() {
 
         {/* Save */}
         <InlineStack align="end">
-          <Button variant="primary" onClick={handleSave} loading={isSaving}>
-            Save Quiz Settings
+          <Button variant="primary" onClick={handleSave} loading={isSaving} disabled={!dirty}>
+            Save
           </Button>
         </InlineStack>
       </BlockStack>

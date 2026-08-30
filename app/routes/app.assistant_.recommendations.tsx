@@ -28,6 +28,7 @@ import {
   getChatAssistantConfig,
   saveChatAssistantConfig,
 } from "../lib/supabase.server";
+import { withShopSaveLock } from "../lib/shop-save-lock.server";
 
 // ---------------------------------------------------------------------
 // Loader: pull current matrix config + flat variant list (for cell pickers)
@@ -91,7 +92,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ success: false, error: "Malformed payload" }, { status: 400 });
   }
 
-  const result = await saveRecommendationConfig(shop.id, payload);
+  // Serialized with the questions-page patch saves and draft publishes —
+  // this editor's client-built payload is a full rewrite, and racing another
+  // writer would silently erase one side's changes.
+  const result = await withShopSaveLock(shop.id, () =>
+    saveRecommendationConfig(shop.id, payload),
+  );
   if (!result.ok) return json({ success: false, error: result.error });
 
   // Multi-set try-on prompt rides along with the matrix save. Saved AFTER the
@@ -1150,12 +1156,12 @@ const NUM_RANKS = 3;
   return (
     <Page
       backAction={{ content: "Assistant", url: "/app/assistant" }}
-      title="Recommendation Logic"
+      title="Advanced rules editor"
     >
-      <TitleBar title="Recommendation Logic" />
+      <TitleBar title="Advanced rules editor" />
       <BlockStack gap="500">
         {fetcher.data?.success && (
-          <Banner tone="success">Recommendation logic saved.</Banner>
+          <Banner tone="success">Advanced rules saved.</Banner>
         )}
         {fetcher.data?.error && (
           <Banner tone="critical">Save failed: {fetcher.data.error}</Banner>
@@ -1783,7 +1789,7 @@ const NUM_RANKS = 3;
         {/* Matrix */}
         <Card>
           <BlockStack gap="400">
-            <Text as="h2" variant="headingMd">Recommendation Matrix</Text>
+            <Text as="h2" variant="headingMd">Rules matrix</Text>
             <Text as="p" variant="bodySm" tone="subdued">
               Each row is one combination of axis values. Assign up to {NUM_RANKS}{" "}
               products or shades per cell in rank order — rank 1 gets the Top Match
@@ -1981,7 +1987,7 @@ const NUM_RANKS = 3;
                 </InlineStack>
                 <Text as="p" variant="bodySm" tone="subdued">
                   Changes here are held with the rest of the editor and written
-                  when you press "Save recommendation logic" below.
+                  when you press "Save advanced rules" below.
                 </Text>
               </BlockStack>
             )}
@@ -2084,7 +2090,7 @@ const NUM_RANKS = 3;
               placeholder="Apply {count} full sets of this product at once — a complete instruction for the whole try-on…"
             />
             <Text as="p" variant="bodySm" tone="subdued">
-              Saved with "Save recommendation logic" below.
+              Saved with "Save advanced rules" below.
             </Text>
           </BlockStack>
         </Card>
@@ -2093,7 +2099,7 @@ const NUM_RANKS = 3;
         <InlineStack align="end" gap="300">
           <Button url="/app/assistant">Cancel</Button>
           <Button variant="primary" onClick={handleSave} loading={isSaving}>
-            Save recommendation logic
+            Save advanced rules
           </Button>
         </InlineStack>
       </BlockStack>

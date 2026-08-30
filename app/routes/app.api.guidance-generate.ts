@@ -1,16 +1,21 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
-import { findShopByDomain } from "../lib/supabase.server";
+import { findShopByDomain, upsertQuestionGuidance } from "../lib/supabase.server";
 import { checkRateLimit, RATE_LIMITS } from "../lib/rate-limiter.server";
 import { isClaudeConfigured } from "../lib/claude.server";
-import { generateQuizConfig, type BrandBrief } from "../lib/quiz-generator.server";
+import { generateGuidance } from "../lib/guidance-generator.server";
 
-// AI quiz generation endpoint (admin-authenticated, NOT storefront).
-// Streams SSE progress events; the client uses fetch + a stream reader
+// Recommendation-logic guidance compiler endpoint (admin-authenticated, NOT
+// storefront). Streams SSE progress; the client uses fetch + a stream reader
 // (EventSource can't POST with App Bridge session tokens).
 //
-// Events: {type:"progress", phase} | {type:"result", summary, warnings}
+// Generation saves NOTHING — the result event carries the compiled guidance
+// back to the logic page for merchant review; applying it is a separate
+// explicit action there.
+//
+// Events: {type:"progress", phase}
+//       | {type:"result", guidanceText, perQuestionSummary, warnings}
 //       | {type:"error", error} | {type:"heartbeat"}
 
 export const loader = async (_args: LoaderFunctionArgs) => {
@@ -33,38 +38,62 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const shopDomain = session.shop;
 
   if (!isClaudeConfigured()) {
-    return json({ ok: false, error: "AI quiz creation is not configured (missing ANTHROPIC_API_KEY)." }, { status: 503 });
+    return json(
+      { ok: false, error: "AI generation isn't set up for this installation. Contact Gleame support." },
+      { status: 503 },
+    );
   }
 
-  const hourly = checkRateLimit(`quiz-generate:shop:${shopDomain}:hour`, RATE_LIMITS.QUIZ_GENERATE_PER_SHOP_HOUR.limit, RATE_LIMITS.QUIZ_GENERATE_PER_SHOP_HOUR.windowMs);
-  const daily = checkRateLimit(`quiz-generate:shop:${shopDomain}:day`, RATE_LIMITS.QUIZ_GENERATE_PER_SHOP_DAY.limit, RATE_LIMITS.QUIZ_GENERATE_PER_SHOP_DAY.windowMs);
+  const hourly = checkRateLimit(
+    `guidance-generate:shop:${shopDomain}:hour`,
+    RATE_LIMITS.GUIDANCE_GENERATE_PER_SHOP_HOUR.limit,
+    RATE_LIMITS.GUIDANCE_GENERATE_PER_SHOP_HOUR.windowMs,
+  );
+  const daily = checkRateLimit(
+    `guidance-generate:shop:${shopDomain}:day`,
+    RATE_LIMITS.GUIDANCE_GENERATE_PER_SHOP_DAY.limit,
+    RATE_LIMITS.GUIDANCE_GENERATE_PER_SHOP_DAY.windowMs,
+  );
   if (!hourly.allowed || !daily.allowed) {
     const retryAfterSeconds = Math.max(hourly.retryAfterSeconds, daily.retryAfterSeconds);
     const wait =
       retryAfterSeconds > 7200
         ? `${Math.ceil(retryAfterSeconds / 3600)} hours`
         : `${Math.ceil(retryAfterSeconds / 60)} minutes`;
-    return json({ ok: false, error: `Generation limit reached. Try again in ${wait}.`, retryAfterSeconds }, { status: 429 });
+    return json(
+      {
+        ok: false,
+        error: `Generation limit reached. Try again in ${wait}. Use Save notes to keep your edits meanwhile.`,
+        retryAfterSeconds,
+      },
+      { status: 429 },
+    );
   }
 
   const shop = await findShopByDomain(shopDomain);
   if (!shop) return json({ ok: false, error: "Shop not found" }, { status: 404 });
 
+  // Generate implicitly saves the notes it was asked to compile — otherwise
+  // a merchant could edit a box, hit Generate, and get output built from
+  // stale DB notes. Presence-guarded: only keys submitted by the form are
+  // touched.
   const formData = await request.formData();
-  const brief: BrandBrief = {
-    category: String(formData.get("category") ?? "").slice(0, 200) || "beauty products",
-    brandVoice: String(formData.get("brandVoice") ?? "").slice(0, 400) || "warm and confident",
-    quizLength: formData.get("quizLength") === "short" ? "short" : "standard",
-    modePreference: (["matrix", "ai", "hybrid"] as const).find((m) => m === formData.get("modePreference")) ?? "auto",
-    extraNotes: String(formData.get("extraNotes") ?? "").slice(0, 2000) || undefined,
-  };
+  const NOTE_KEY_RE = /^[a-z_][a-z0-9_]*$/;
+  for (const [field, value] of formData.entries()) {
+    if (!field.startsWith("notes:") || typeof value !== "string") continue;
+    const axisKey = field.slice("notes:".length);
+    if (!NOTE_KEY_RE.test(axisKey)) continue;
+    const saved = await upsertQuestionGuidance(shop.id, axisKey, value.slice(0, 4000));
+    if (!saved.ok) {
+      return json({ ok: false, error: `Couldn't save your notes: ${saved.error}` }, { status: 500 });
+    }
+  }
 
   const stream = new ReadableStream({
     async start(controller) {
-      // Enqueue throws once the client disconnects. Generation must SURVIVE
-      // that (the Opus call is paid for and the draft save comes after the
-      // last progress event) — swallow send failures instead of letting them
-      // propagate into generateQuizConfig.
+      // Enqueue throws once the client disconnects. The Opus call is paid
+      // for either way — swallow send failures instead of letting them
+      // propagate into generateGuidance.
       let closed = false;
       const send = (data: unknown) => {
         if (closed) return;
@@ -78,19 +107,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       const heartbeat = setInterval(() => send({ type: "heartbeat" }), 10_000);
 
       try {
-        const result = await generateQuizConfig({
+        const result = await generateGuidance({
           shopId: shop.id,
           shopDomain,
-          brief,
           onProgress: (phase) => send({ type: "progress", phase }),
         });
         if (result.ok) {
-          send({ type: "result", summary: result.summary, warnings: result.warnings });
+          send({
+            type: "result",
+            guidanceText: result.guidanceText,
+            perQuestionSummary: result.perQuestionSummary,
+            warnings: result.warnings,
+          });
         } else {
           send({ type: "error", error: result.error, warnings: result.warnings });
         }
       } catch (err) {
-        console.error("[quiz-generate] failed:", err);
+        console.error("[guidance-generate] failed:", err);
         send({ type: "error", error: err instanceof Error ? err.message : "Generation failed" });
       } finally {
         clearInterval(heartbeat);

@@ -214,6 +214,17 @@ export const RATE_LIMITS = {
     limit: 200,
     windowMs: 24 * 60 * 60 * 1000,
   },
+  // Recommendation-logic guidance compiler (Claude, admin-authenticated).
+  // Roughly quiz-generation cost per call; merchants iterate a few times
+  // while tuning their notes, so slightly looser than QUIZ_GENERATE.
+  GUIDANCE_GENERATE_PER_SHOP_HOUR: {
+    limit: 6,
+    windowMs: 60 * 60 * 1000,
+  },
+  GUIDANCE_GENERATE_PER_SHOP_DAY: {
+    limit: 20,
+    windowMs: 24 * 60 * 60 * 1000,
+  },
 } as const;
 
 // ============================================

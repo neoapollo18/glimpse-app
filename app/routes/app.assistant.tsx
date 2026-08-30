@@ -118,7 +118,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         ["matrix", "ai", "hybrid"] as const,
         "matrix",
       );
-      config.ai_guidance = (formData.get("ai_guidance") as string) ?? "";
+      // Presence-guarded: a form that didn't render the guidance textarea
+      // (or a stale tab) must never blank a generated rulebook on save.
+      if (formData.get("ai_guidance") !== null) {
+        config.ai_guidance = formData.get("ai_guidance") as string;
+      }
       try {
         const parsed = JSON.parse(formData.get("priority_product_ids") as string || "[]");
         config.priority_product_ids = Array.isArray(parsed)
@@ -542,15 +546,20 @@ export default function AssistantConfig() {
                       Recommendation Logic
                     </Text>
                     <Text as="p" variant="bodySm" tone="subdued">
-                      The question flow and the answer-to-product matrix. This powers
+                      The question flow and how answers map to products. This powers
                       the quiz's questions and matches (and the chat bubble's, when it
                       runs). When unconfigured, the chat falls back to the single
                       preference question under Chat Conversation.
                     </Text>
                   </BlockStack>
-                  <Button url="/app/assistant/recommendations" variant="primary">
-                    Edit recommendation logic
-                  </Button>
+                  <BlockStack gap="200" inlineAlign="end">
+                    <Button url="/app/quiz/logic" variant="primary">
+                      Edit recommendation logic
+                    </Button>
+                    <Button url="/app/assistant/recommendations" variant="plain">
+                      Advanced rules editor
+                    </Button>
+                  </BlockStack>
                 </InlineStack>
               </BlockStack>
             </Card>
@@ -604,34 +613,34 @@ export default function AssistantConfig() {
                 )}
                 <Divider />
                 <Select
-                  label="Ranking engine"
+                  label="Ranking mode"
                   options={[
-                    { label: "Rule matrix only (classic)", value: "matrix" },
-                    { label: "Hybrid — your rules first, AI ranks the rest", value: "hybrid" },
-                    { label: "AI ranking only", value: "ai" },
+                    { label: "Rules only (classic)", value: "matrix" },
+                    { label: "Rules + AI: your rules first, AI ranks the rest", value: "hybrid" },
+                    { label: "AI only", value: "ai" },
                   ]}
                   value={recommendationMode}
                   onChange={(v) => setRecommendationMode(v as "matrix" | "ai" | "hybrid")}
-                  helpText="AI ranking scores every eligible product against the shopper's answers — no rule authoring needed. Hybrid keeps your matrix rules in charge and uses AI only where no rule matches (instead of a random pick)."
+                  helpText="AI scores every eligible product against the shopper's answers, no rule authoring needed. Rules + AI keeps your advanced rules in charge and uses AI only where no rule matches (instead of a random pick)."
                 />
                 {recommendationMode !== "matrix" && (
                   <BlockStack gap="400">
                     <TextField
-                      label="AI guidance"
+                      label="Recommendation logic (advanced text)"
                       value={aiGuidance}
                       onChange={setAiGuidance}
                       multiline={3}
                       autoComplete="off"
-                      placeholder={'e.g. "Our hero product is the Silk Set — suggest it to first-timers. Push bundles over singles."'}
-                      helpText="Optional notes the AI follows when ranking (positioning, what to push, what to avoid)."
+                      placeholder={'e.g. "Our hero product is the Silk Set. Suggest it to first-timers. Push bundles over singles."'}
+                      helpText="Notes the AI follows when ranking. The Recommendation logic page can generate this for you from per-question answers; edits here are kept until you regenerate there."
                     />
                     <Select
                       label="Color matching filter"
                       options={[
-                        { label: "Off — rank everything", value: "off" },
-                        { label: "Loose — drop clearly different colors", value: "loose" },
-                        { label: "Normal — keep the same color neighborhood", value: "normal" },
-                        { label: "Strict — same color family only", value: "strict" },
+                        { label: "Off: rank everything", value: "off" },
+                        { label: "Loose: drop clearly different colors", value: "loose" },
+                        { label: "Normal: keep the same color neighborhood", value: "normal" },
+                        { label: "Strict: same color family only", value: "strict" },
                       ]}
                       value={tuning.colorFilter}
                       onChange={(v) => setTuningField({ colorFilter: v as RecommendationTuning["colorFilter"] })}
@@ -646,12 +655,12 @@ export default function AssistantConfig() {
                     <Select
                       label="Priority style"
                       options={[
-                        { label: "Boost — nudge priority products up a few spots", value: "boost" },
-                        { label: "Pin — suitable priority products always go first", value: "pin" },
+                        { label: "Boost: nudge priority products up a few spots", value: "boost" },
+                        { label: "Pin: suitable priority products always go first", value: "pin" },
                       ]}
                       value={tuning.priorityStyle}
                       onChange={(v) => setTuningField({ priorityStyle: v as RecommendationTuning["priorityStyle"] })}
-                      helpText="Pin still requires the AI to judge the product suitable for the shopper — it can't force a bad match to the top."
+                      helpText="Pin still requires the AI to judge the product suitable for the shopper; it can't force a bad match to the top."
                     />
                     {tuning.priorityStyle === "boost" && (
                       <RangeSlider
@@ -667,9 +676,9 @@ export default function AssistantConfig() {
                     <Select
                       label="AI model"
                       options={[
-                        { label: "Fastest — lightest model, snappiest results", value: "lite" },
-                        { label: "Fast (recommended) — ranks in about a second", value: "flash" },
-                        { label: "Precise — slower, better with nuanced guidance", value: "pro" },
+                        { label: "Fastest: lightest model, snappiest results", value: "lite" },
+                        { label: "Fast (recommended): ranks in about a second", value: "flash" },
+                        { label: "Precise: slower, better with nuanced guidance", value: "pro" },
                       ]}
                       value={tuning.rankerModel}
                       onChange={(v) => setTuningField({ rankerModel: v as RecommendationTuning["rankerModel"] })}
@@ -928,7 +937,7 @@ export default function AssistantConfig() {
                       onChange={setOpeningMessage}
                       autoComplete="off"
                       multiline={2}
-                      helpText="Sent by the assistant right after the CTA opens the chat, immediately followed by the first question — no reply needed. Use {assistant_name} for the configured name. Leave blank to jump straight to the question."
+                      helpText="Sent by the assistant right after the CTA opens the chat, immediately followed by the first question; no reply needed. Use {assistant_name} for the configured name. Leave blank to jump straight to the question."
                     />
                     <TextField
                       label="Footer Line"
@@ -969,7 +978,7 @@ export default function AssistantConfig() {
                               }}
                             />
                           }
-                          helpText="Eyebrow label — also tints the panel when no Background Color is set"
+                          helpText="Eyebrow label; also tints the panel when no background color is set"
                         />
                       </div>
                       <div style={{ flex: 1 }}>
@@ -1021,7 +1030,7 @@ export default function AssistantConfig() {
                               }}
                             />
                           }
-                          helpText="Headline color — pick one that stays readable on your background"
+                          helpText="Headline color; pick one that stays readable on your background"
                         />
                       </div>
                     </InlineStack>

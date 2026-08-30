@@ -24,6 +24,7 @@ import {
   type ChatAssistantConfig,
 } from "./supabase.server";
 import { normalizeFlowOrder } from "./quiz-config-schema.server";
+import { withShopSaveLock } from "./shop-save-lock.server";
 
 export type SaveRecommendationConfigInput = Parameters<typeof saveRecommendationConfig>[1];
 
@@ -77,6 +78,21 @@ async function domainForShop(shopId: string): Promise<string> {
     .single();
   if (error || !data) throw new Error(`quiz-draft: unknown shop id ${shopId}: ${error?.message ?? ""}`);
   return data.shop_domain as string;
+}
+
+/** Cheap draft-existence check (no config jsonb fetch) for pages that only
+ * need to warn "an unpublished draft exists". */
+export async function hasQuizDraft(shopId: string): Promise<boolean> {
+  const { count, error } = await supabase
+    .from("quiz_config_versions")
+    .select("id", { count: "exact", head: true })
+    .eq("shop_id", shopId)
+    .eq("status", "draft");
+  if (error) {
+    console.error("hasQuizDraft error", error);
+    return false;
+  }
+  return (count ?? 0) > 0;
 }
 
 export async function getQuizDraft(shopId: string): Promise<QuizDraft | null> {
@@ -280,6 +296,13 @@ async function checkRuleTargets(shopId: string, flow: SaveRecommendationConfigIn
 }
 
 export async function publishQuizDraft(shopId: string): Promise<{ ok: boolean; error?: string }> {
+  // Same lock the questions-page patch saves take: publish is a
+  // snapshot-then-rewrite, and racing a live editor save would let one
+  // silently erase the other.
+  return withShopSaveLock(shopId, () => publishQuizDraftLocked(shopId));
+}
+
+async function publishQuizDraftLocked(shopId: string): Promise<{ ok: boolean; error?: string }> {
   const shopDomain = await domainForShop(shopId);
   const draft = await getQuizDraft(shopId);
   if (!draft) return { ok: false, error: "No draft to publish" };

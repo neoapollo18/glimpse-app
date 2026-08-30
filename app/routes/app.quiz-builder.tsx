@@ -195,13 +195,17 @@ export default function QuizBuilder() {
   const [genWarnings, setGenWarnings] = useState<string[]>([]);
   const [genSummary, setGenSummary] = useState<{ axes: number; questions: number; rules: number; mode: string } | null>(null);
 
+  const generateRunningRef = useRef(false);
   const runGenerate = async () => {
+    if (generateRunningRef.current) return;
+    generateRunningRef.current = true;
     setGenPhase("Starting…");
     setGenError(null);
     setGenWarnings([]);
     setGenSummary(null);
     const fd = new FormData();
     for (const [k, v] of Object.entries(brief)) fd.append(k, v);
+    let gotTerminal = false;
     try {
       // App Bridge patches global fetch with the session token in embedded
       // apps; EventSource can't POST, so we read the SSE body manually.
@@ -213,21 +217,30 @@ export default function QuizBuilder() {
       await readSseStream<GenerateEvent>(res, (event) => {
         if (event.type === "progress") setGenPhase(event.phase);
         else if (event.type === "result") {
+          gotTerminal = true;
           setGenSummary(event.summary);
           setGenWarnings(event.warnings ?? []);
           revalidator.revalidate();
           reloadPreview();
         } else if (event.type === "error") {
+          gotTerminal = true;
           setGenError(event.error);
           setGenWarnings(event.warnings ?? []);
         }
       });
+      if (!gotTerminal) {
+        // Stream cut cleanly (deploy, proxy) without a result or error
+        // frame — without this the button just stops spinning in silence.
+        setGenError("Generation was interrupted. Check the draft status above, or try again.");
+        revalidator.revalidate();
+      }
     } catch (err) {
       setGenError(err instanceof Error ? err.message : "Generation failed");
     } finally {
       // A severed stream (deploy, proxy cut) must not leave the button
       // spinning forever.
       setGenPhase(null);
+      generateRunningRef.current = false;
     }
   };
 
@@ -296,7 +309,7 @@ export default function QuizBuilder() {
         } else if (event.type === "done") {
           copilotSessionId.current = event.sessionId;
         } else if (event.type === "error") {
-          appendAssistantText(`\n⚠️ ${event.error}`);
+          appendAssistantText(`\nSomething went wrong: ${event.error}`);
         }
       });
       if (sawChange) {
@@ -304,7 +317,7 @@ export default function QuizBuilder() {
         revalidator.revalidate();
       }
     } catch (err) {
-      appendAssistantText(`\n⚠️ ${err instanceof Error ? err.message : "Something went wrong"}`);
+      appendAssistantText(`\nSomething went wrong: ${err instanceof Error ? err.message : "please try again"}`);
     } finally {
       setChatBusy(false);
     }
@@ -336,7 +349,7 @@ export default function QuizBuilder() {
       reloadPreview();
       revalidator.revalidate();
     } else {
-      setChatItems((items) => [...items, { kind: "assistant", text: `⚠️ Undo failed: ${body?.error ?? "unknown error"}` }]);
+      setChatItems((items) => [...items, { kind: "assistant", text: `Undo failed: ${body?.error ?? "unknown error"}` }]);
     }
   };
 
@@ -388,9 +401,14 @@ export default function QuizBuilder() {
       <BlockStack gap="500">
         {lastError && <Banner tone="critical">{lastError}</Banner>}
         {published && (
-          <Banner tone="success" title="Draft published">
-            Your quiz is live with the draft configuration. The previous live
-            config was archived and can be restored from version history.
+          <Banner
+            tone="success"
+            title="Draft published"
+            action={{ content: "Finish setup", url: "/app/quiz" }}
+          >
+            Your quiz now runs the draft configuration. The previous version
+            is archived in version history. If you haven't yet, add the
+            Gleame Quiz section to your theme so shoppers can see it.
           </Banner>
         )}
 
@@ -400,13 +418,14 @@ export default function QuizBuilder() {
             <InlineStack align="space-between" blockAlign="center">
               <Text as="h2" variant="headingMd">Draft</Text>
               <Badge tone={hasDraft ? "attention" : "info"}>
-                {hasDraft ? "Draft in progress — not live" : "No draft"}
+                {hasDraft ? "Draft in progress" : "No draft"}
               </Badge>
             </InlineStack>
             {hasDraft && draft ? (
               <Text as="p" variant="bodySm" tone="subdued">
-                {draft.axes} axes · {draft.questions} questions · {draft.rules} rules.
-                Changes here never touch your live quiz until you publish.
+                {draft.questions} {draft.questions === 1 ? "question" : "questions"} · {draft.rules}{" "}
+                {draft.rules === 1 ? "rule" : "rules"}. Changes here never
+                touch your live quiz until you publish.
               </Text>
             ) : (
               <Text as="p" variant="bodySm" tone="subdued">
@@ -417,7 +436,7 @@ export default function QuizBuilder() {
             <InlineStack gap="300">
               {!hasDraft && (
                 <Button variant="primary" onClick={() => submit("init-draft")} loading={busy}>
-                  Create draft from live config
+                  Start a draft
                 </Button>
               )}
               {hasDraft && (
@@ -436,7 +455,7 @@ export default function QuizBuilder() {
               <Card>
                 <BlockStack gap="300">
                   <InlineStack align="space-between" blockAlign="center">
-                    <Text as="h2" variant="headingMd">Build with Gleame</Text>
+                    <Text as="h2" variant="headingMd">Refine with Gleame</Text>
                     {chatItems.length > 0 && (
                       <Button size="micro" variant="plain" onClick={resetChat} disabled={chatBusy}>
                         Reset conversation
@@ -444,8 +463,8 @@ export default function QuizBuilder() {
                     )}
                   </InlineStack>
                   <Text as="p" variant="bodySm" tone="subdued">
-                    Describe a change — it appears in the preview. Every change
-                    has an Undo.
+                    Describe a change and it appears in the preview. Every
+                    change has an Undo.
                   </Text>
                   <div
                     style={{
@@ -460,8 +479,8 @@ export default function QuizBuilder() {
                   >
                     {chatItems.length === 0 && (
                       <Text as="p" variant="bodySm" tone="subdued">
-                        Try: "Make the first question feel more editorial — less
-                        like a survey."
+                        Try: "Make the first question feel more editorial,
+                        less like a survey."
                       </Text>
                     )}
                     {chatItems.map((item, i) => {
@@ -530,7 +549,7 @@ export default function QuizBuilder() {
                   <InlineStack gap="200" blockAlign="end">
                     <div style={{ flex: 1 }}>
                       <TextField
-                        label=""
+                        label="Message Gleame"
                         labelHidden
                         placeholder="Tell Gleame what to change…"
                         value={chatInput}
@@ -551,7 +570,7 @@ export default function QuizBuilder() {
               <BlockStack gap="400">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="h2" variant="headingMd">Preview</Text>
-                  <Badge tone="attention">Draft — not live</Badge>
+                  <Badge tone="attention">Draft preview</Badge>
                 </InlineStack>
                 <InlineStack gap="200" wrap>
                   {previewSteps.map((step) => (
@@ -595,20 +614,21 @@ export default function QuizBuilder() {
         <Card>
           <BlockStack gap="400">
             <InlineStack align="space-between" blockAlign="center">
-              <Text as="h2" variant="headingMd">Build with Gleame ✨</Text>
+              <Text as="h2" variant="headingMd">Generate a quiz with AI</Text>
               <Badge tone="info">AI</Badge>
             </InlineStack>
             {!aiConfigured ? (
               <Banner tone="warning">
-                AI quiz creation needs an Anthropic API key (ANTHROPIC_API_KEY).
+                AI quiz creation isn't set up for this installation. Contact
+                Gleame support.
               </Banner>
             ) : (
               <>
                 <Text as="p" variant="bodySm" tone="subdued">
                   Tell Gleame about your brand and it drafts the whole quiz from
-                  your synced catalog: questions, answer options, matching
+                  your synced catalog: questions, answer options, recommendation
                   logic, and copy in your voice. It only ever writes to your
-                  draft — you review and publish.
+                  draft. You review and publish. Takes about a minute.
                 </Text>
                 <InlineStack gap="300" wrap>
                   <div style={{ minWidth: 220, flex: 1 }}>
@@ -645,12 +665,13 @@ export default function QuizBuilder() {
                       label="Matching style"
                       options={[
                         { label: "Let Gleame decide", value: "auto" },
-                        { label: "Exact rules (matrix)", value: "matrix" },
+                        { label: "Exact rules", value: "matrix" },
                         { label: "AI ranking", value: "ai" },
-                        { label: "Hybrid", value: "hybrid" },
+                        { label: "Rules + AI", value: "hybrid" },
                       ]}
                       value={brief.modePreference}
                       onChange={(v) => setBrief((b) => ({ ...b, modePreference: v }))}
+                      helpText="How answers map to products. Let Gleame decide is right for most stores."
                     />
                   </div>
                 </InlineStack>
@@ -672,7 +693,8 @@ export default function QuizBuilder() {
                 {genSummary && (
                   <Banner tone="success" title="Draft quiz generated">
                     {genSummary.questions} questions · {genSummary.rules} rules ·{" "}
-                    {genSummary.mode} matching. Review it below, then publish.
+                    {({ matrix: "Rules only", ai: "AI", hybrid: "Rules + AI" } as Record<string, string>)[genSummary.mode] ?? genSummary.mode}{" "}
+                    matching. Review it in the preview, then publish.
                   </Banner>
                 )}
                 {genWarnings.length > 0 && (
@@ -695,9 +717,14 @@ export default function QuizBuilder() {
                   </Button>
                 </InlineStack>
                 {!catalog.syncEnabled && (
+                  <Banner tone="info">
+                    Gleame builds your quiz from your real products. Sync your
+                    catalog in the Catalog card below to get started.
+                  </Banner>
+                )}
+                {catalog.syncEnabled && !brief.category && (
                   <Text as="p" variant="bodySm" tone="subdued">
-                    Sync your catalog below first — the AI builds from your real
-                    products.
+                    Tell Gleame what you sell to enable generation.
                   </Text>
                 )}
               </>
@@ -746,13 +773,17 @@ export default function QuizBuilder() {
         <Card>
           <BlockStack gap="400">
             <Text as="h2" variant="headingMd">Advanced editing</Text>
-            <Banner tone="info">
-              These editors change your LIVE quiz immediately (they don't go
-              through the draft). Use them for fine-grained control.
+            <Banner tone="warning">
+              Changes made in these editors update your live quiz immediately,
+              without going through a draft.
             </Banner>
             <InlineStack gap="300">
-              <Button url="/app/assistant/recommendations">Questions &amp; rules (live)</Button>
-              <Button url="/app/assistant/quiz">Copy &amp; design (live)</Button>
+              <Button url="/app/quiz/questions">Questions</Button>
+              <Button url="/app/quiz/logic">Recommendation logic</Button>
+              <Button url="/app/assistant/quiz">Copy &amp; design</Button>
+              <Button variant="plain" url="/app/assistant/recommendations">
+                Advanced rules editor
+              </Button>
             </InlineStack>
           </BlockStack>
         </Card>
@@ -761,6 +792,10 @@ export default function QuizBuilder() {
         <Card>
           <BlockStack gap="400">
             <Text as="h2" variant="headingMd">Version history</Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Restoring a version replaces your current draft (never your live
+              quiz directly).
+            </Text>
             {versions.length === 0 ? (
               <Text as="p" variant="bodySm" tone="subdued">
                 No versions yet. Every publish archives the previous live
@@ -774,10 +809,10 @@ export default function QuizBuilder() {
                       <Badge
                         tone={v.status === "draft" ? "attention" : v.status === "published" ? "success" : "info"}
                       >
-                        {v.status}
+                        {v.status === "draft" ? "Draft" : v.status === "published" ? "Published" : "Archived"}
                       </Badge>
                       <Text as="span" variant="bodySm">
-                        {v.label || (v.createdBy === "ai" ? "AI draft" : v.createdBy === "system" ? "Snapshot" : "Manual")}
+                        {v.label || (v.createdBy === "ai" ? "Generated by Gleame" : v.createdBy === "system" ? "Auto-archived at publish" : "Saved manually")}
                         {" · "}
                         {new Date(v.createdAt).toLocaleString()}
                       </Text>
@@ -819,6 +854,11 @@ export default function QuizBuilder() {
               This replaces your live quiz configuration for {shopDomain} with
               the current draft. The existing live config is archived first,
               so you can restore it from version history at any time.
+            </Text>
+            <Text as="p" tone="subdued">
+              Heads up: any changes made in the live editors (Questions,
+              Recommendation logic, Copy &amp; design) since this draft was
+              created are replaced too.
             </Text>
           </BlockStack>
         </Modal.Section>
