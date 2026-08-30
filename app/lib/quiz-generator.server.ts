@@ -12,7 +12,6 @@
 //   system[2] serialized catalog + cache_control (stable per catalog sync)
 //   ...everything volatile (brief, conversation) comes after the breakpoint.
 
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import type Anthropic from "@anthropic-ai/sdk";
 import {
   claudeClient,
@@ -125,7 +124,9 @@ const SCHEMA_DOC_BLOCK = `QUIZ CONFIG FIELD GUIDE:
 - rules: matrix mappings. criteria = array of {axisKey, axisValue} pairs (ALL must match); exactly one of productId/variantId; rank (author priority, lower wins); quantity (how many units this recommendation means, e.g. 2 sets).
 - recommendationMode + aiGuidance: see rules above.
 - copy: storefront copy fields (quiz_eyebrow, quiz_headline, quiz_subtext, quiz_trust_items[], quiz_gate_headline, quiz_gate_helper, quiz_results_headline_photo, quiz_results_headline_nophoto, quiz_results_subtext, quiz_best_match_pill, quiz_also_matched_label, quiz_retake_label).
-- designTokens: quiz_accent_color/quiz_ink_color/quiz_card_bg_color/quiz_line_color/quiz_cta_color (hex), quiz_button_radius/quiz_card_radius (px numbers), quiz_progress_style (pips|bar|counter|none), quiz_intro_layout (split|centered), quiz_animation_style (full|minimal|off).`;
+- designTokens: quiz_accent_color/quiz_ink_color/quiz_card_bg_color/quiz_line_color/quiz_cta_color (hex), quiz_button_radius/quiz_card_radius (px numbers), quiz_progress_style (pips|bar|counter|none), quiz_intro_layout (split|centered), quiz_animation_style (full|minimal|off).
+
+OUTPUT FORMAT: when asked for a full quiz config, respond with ONLY the JSON object: no markdown fences, no commentary before or after. Omit fields you don't use (or set them to null).`;
 
 /**
  * Build the shared system blocks. cache_control sits on the LAST block so
@@ -168,19 +169,35 @@ export interface GenerateResult {
   usage: ClaudeUsage[];
 }
 
+/** Tolerate a ```json fence around the object; everything else must parse. */
+function stripJsonFences(raw: string): string {
+  const trimmed = raw.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
+  return fenced ? fenced[1] : trimmed;
+}
+
+type GeneratorCall =
+  | { config: GeneratedQuizConfig; parseErrors: null; rawText: string; usage: ClaudeUsage }
+  | { config: null; parseErrors: string[]; rawText: string; usage: ClaudeUsage };
+
 async function callGenerator(
   system: Anthropic.TextBlockParam[],
   messages: Anthropic.MessageParam[],
   shopDomain: string,
   label: string,
-): Promise<{ config: GeneratedQuizConfig; usage: ClaudeUsage }> {
+): Promise<GeneratorCall> {
   const client = claudeClient();
+  // NOT structured outputs: this schema blows both API grammar caps (24
+  // optional / 16 union parameters), which 400s at request validation. The
+  // model returns plain JSON text; the fence-strip + zod parse below and the
+  // caller's repair round-trip take the place of the grammar. Parse failures
+  // are RETURNED (with the raw text) rather than thrown so the caller can
+  // send them back for repair exactly like validator failures.
   const response = await callClaudeWithRetry(async () => {
     const stream = client.messages.stream({
       model: CLAUDE_MODEL_MAIN,
       max_tokens: 32000,
       thinking: { type: "adaptive" },
-      output_config: { format: zodOutputFormat(GeneratedQuizConfigSchema) },
       system,
       messages,
     });
@@ -188,6 +205,7 @@ async function callGenerator(
   }, label);
 
   logClaudeUsage(shopDomain, label, response.usage as ClaudeUsage);
+  const usage = response.usage as ClaudeUsage;
 
   const text = response.content
     .filter((b): b is Anthropic.TextBlock => b.type === "text")
@@ -195,11 +213,24 @@ async function callGenerator(
     .join("");
   if (!text) throw new Error(`empty model response (stop_reason=${response.stop_reason})`);
 
-  const parsed = GeneratedQuizConfigSchema.safeParse(JSON.parse(text));
-  if (!parsed.success) {
-    throw new Error(`model output failed schema parse: ${parsed.error.issues.slice(0, 3).map((i) => i.message).join("; ")}`);
+  let parsedJson: unknown;
+  try {
+    parsedJson = JSON.parse(stripJsonFences(text));
+  } catch {
+    return { config: null, parseErrors: ["response was not valid JSON"], rawText: text, usage };
   }
-  return { config: parsed.data, usage: response.usage as ClaudeUsage };
+  const parsed = GeneratedQuizConfigSchema.safeParse(parsedJson);
+  if (!parsed.success) {
+    return {
+      config: null,
+      parseErrors: parsed.error.issues
+        .slice(0, 10)
+        .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`),
+      rawText: text,
+      usage,
+    };
+  }
+  return { config: parsed.data, parseErrors: null, rawText: text, usage };
 }
 
 export async function generateQuizConfig(args: {
@@ -227,18 +258,44 @@ export async function generateQuizConfig(args: {
   const messages: Anthropic.MessageParam[] = [{ role: "user", content: briefToPrompt(brief) }];
 
   onProgress?.("Drafting your quiz…");
+  // Exactly ONE repair round-trip total, spent on whichever failure comes
+  // first: a schema-parse miss (free-form JSON) or a validation miss.
   let config: GeneratedQuizConfig;
+  let repairUsed = false;
   try {
-    const first = await callGenerator(system, messages, shopDomain, "quiz-generate");
-    usage.push(first.usage);
-    config = first.config;
+    let call = await callGenerator(system, messages, shopDomain, "quiz-generate");
+    usage.push(call.usage);
+    if (call.parseErrors) {
+      onProgress?.("Fixing a few issues…");
+      repairUsed = true;
+      messages.push(
+        { role: "assistant", content: call.rawText },
+        {
+          role: "user",
+          content:
+            `Your response did not match the documented config JSON. Fix ONLY these issues and return the full corrected JSON object:\n- ` +
+            call.parseErrors.join("\n- "),
+        },
+      );
+      call = await callGenerator(system, messages, shopDomain, "quiz-generate-repair");
+      usage.push(call.usage);
+      if (call.parseErrors) {
+        return {
+          ok: false,
+          error: `Generation failed: model output stayed malformed (${call.parseErrors[0]})`,
+          warnings: [],
+          usage,
+        };
+      }
+    }
+    config = call.config!;
   } catch (e) {
     return { ok: false, error: `Generation failed: ${(e as Error).message}`, warnings: [], usage };
   }
 
   let result = validateGeneratedConfig(config, catalog);
 
-  if (!result.ok) {
+  if (!result.ok && !repairUsed) {
     // One repair round-trip: send the validator errors back.
     onProgress?.("Fixing a few issues…");
     messages.push(
@@ -253,18 +310,26 @@ export async function generateQuizConfig(args: {
     try {
       const repaired = await callGenerator(system, messages, shopDomain, "quiz-generate-repair");
       usage.push(repaired.usage);
-      result = validateGeneratedConfig(repaired.config, catalog);
+      if (repaired.parseErrors) {
+        return {
+          ok: false,
+          error: `Repair attempt failed: ${repaired.parseErrors[0]}`,
+          warnings: result.warnings,
+          usage,
+        };
+      }
+      result = validateGeneratedConfig(repaired.config!, catalog);
     } catch (e) {
       return { ok: false, error: `Repair attempt failed: ${(e as Error).message}`, warnings: result.warnings, usage };
     }
-    if (!result.ok) {
-      return {
-        ok: false,
-        error: `Generated config is invalid even after repair: ${result.errors.slice(0, 5).join("; ")}`,
-        warnings: result.warnings,
-        usage,
-      };
-    }
+  }
+  if (!result.ok) {
+    return {
+      ok: false,
+      error: `Generated config is invalid even after repair: ${result.errors.slice(0, 5).join("; ")}`,
+      warnings: result.warnings,
+      usage,
+    };
   }
 
   const warnings = [...result.warnings];

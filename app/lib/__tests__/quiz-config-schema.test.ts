@@ -98,6 +98,45 @@ describe("GeneratedQuizConfigSchema", () => {
   it("parses a valid config", () => {
     expect(GeneratedQuizConfigSchema.safeParse(validConfig()).success).toBe(true);
   });
+
+  it("accepts explicit nulls for every flexible field (plain-JSON output contract)", () => {
+    // The generator parses free-form JSON (not structured outputs — the
+    // schema exceeds the API's grammar caps), so the model may emit null
+    // instead of omitting a key. Both must parse identically.
+    const config = validConfig();
+    const nulled = {
+      ...config,
+      axes: config.axes.map((a) => ({
+        ...a,
+        values: a.values.map((v) => ({ ...v, swatchColor: null })),
+      })),
+      questions: config.questions.map((q) => ({
+        ...q,
+        helperText: null,
+        multiSelect: null,
+        maxSelections: null,
+        screenGroup: null,
+        optionStyle: null,
+        options: q.options.map((o) => ({
+          ...o,
+          reasonText: null,
+          showIf: null,
+          selectAll: null,
+          displayMeta: { sublabel: null, tag: null, meterLabel: null, meterPct: null, swatch: null, swatch2: null },
+        })),
+      })),
+      rules: config.rules.map((r) => ({ ...r, quantity: null })),
+      aiGuidance: null,
+      copy: null,
+      designTokens: null,
+    };
+    expect(GeneratedQuizConfigSchema.safeParse(nulled).success).toBe(true);
+
+    // And the normalizer must scrub all-null displayMeta down to nothing.
+    const result = validateGeneratedConfig(nulled, catalog);
+    expect(result.ok).toBe(true);
+    expect(result.draft!.flow.questions[0].options[0].displayMeta).toBeNull();
+  });
 });
 
 describe("validateGeneratedConfig", () => {

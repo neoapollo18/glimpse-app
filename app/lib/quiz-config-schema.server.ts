@@ -1,18 +1,19 @@
 // Schema + validation layer for AI-generated quiz configs (Phase 5).
 //
 // PURE MODULE: no Supabase/env imports, so vitest can exercise it directly.
-// The generator asks Claude for GeneratedQuizConfig (via structured outputs),
-// then validateGeneratedConfig() enforces the referential rules a JSON schema
+// The generator asks Claude for GeneratedQuizConfig as plain JSON text (NOT
+// structured outputs: this schema exceeds the API's grammar-compilation caps
+// of 24 optional / 16 union parameters, which 400'd every generation), then
+// validateGeneratedConfig() enforces the referential rules a JSON schema
 // cannot express and converts the result into the QuizDraft shape
 // ({flow, settings}) consumed by quiz-draft.server.ts.
 //
-// Structured-outputs constraint worth knowing: open-ended records
-// (additionalProperties != false) aren't supported, so rule criteria are
-// generated as {axisKey, axisValue} PAIR ARRAYS and converted to the
-// engine's Record<string, string> here.
+// Because the output isn't grammar-constrained, every flexible field is
+// .nullish(): the model may omit a key OR send an explicit null and both
+// parse. Rule criteria stay {axisKey, axisValue} PAIR ARRAYS (a stable shape
+// for the model to emit) and are converted to Record<string, string> here.
 
-// zod/v4: the Anthropic SDK's zodOutputFormat helper requires the zod v4 API
-// (shipped inside the zod 3.25+ package under this subpath).
+// zod/v4 API (shipped inside the zod 3.25+ package under this subpath).
 import { z } from "zod/v4";
 
 // ---------------------------------------------------------------------
@@ -52,20 +53,18 @@ const ShowIfSchema = z
     axis_key: z.string(),
     axis_value: z.string(),
   })
-  .nullable()
-  .optional();
+  .nullish();
 
 const DisplayMetaSchema = z
   .object({
-    sublabel: z.string().optional(),
-    tag: z.string().optional(),
-    meterLabel: z.string().optional(),
-    meterPct: z.number().optional(),
-    swatch: z.string().optional(),
-    swatch2: z.string().optional(),
+    sublabel: z.string().nullish(),
+    tag: z.string().nullish(),
+    meterLabel: z.string().nullish(),
+    meterPct: z.number().nullish(),
+    swatch: z.string().nullish(),
+    swatch2: z.string().nullish(),
   })
-  .nullable()
-  .optional();
+  .nullish();
 
 const GeneratedAxisSchema = z.object({
   key: z.string(),
@@ -75,7 +74,7 @@ const GeneratedAxisSchema = z.object({
     z.object({
       value: z.string(),
       label: z.string(),
-      swatchColor: z.string().nullable().optional(),
+      swatchColor: z.string().nullish(),
     }),
   ),
 });
@@ -83,21 +82,21 @@ const GeneratedAxisSchema = z.object({
 const GeneratedOptionSchema = z.object({
   label: z.string(),
   axisValueValue: z.string(),
-  reasonText: z.string().nullable().optional(),
+  reasonText: z.string().nullish(),
   showIf: ShowIfSchema,
-  selectAll: z.boolean().optional(),
+  selectAll: z.boolean().nullish(),
   displayMeta: DisplayMetaSchema,
 });
 
 const GeneratedQuestionSchema = z.object({
   axisKey: z.string(),
   prompt: z.string(),
-  helperText: z.string().nullable().optional(),
-  multiSelect: z.boolean().optional(),
-  maxSelections: z.number().nullable().optional(),
-  screenGroup: z.string().nullable().optional(),
+  helperText: z.string().nullish(),
+  multiSelect: z.boolean().nullish(),
+  maxSelections: z.number().nullish(),
+  screenGroup: z.string().nullish(),
   showIf: ShowIfSchema,
-  optionStyle: z.enum(QUESTION_OPTION_STYLES).nullable().optional(),
+  optionStyle: z.enum(QUESTION_OPTION_STYLES).nullish(),
   options: z.array(GeneratedOptionSchema),
 });
 
@@ -105,41 +104,41 @@ const GeneratedRuleSchema = z.object({
   // Pair array (structured outputs can't do records); converted to
   // Record<string,string> during normalization.
   criteria: z.array(z.object({ axisKey: z.string(), axisValue: z.string() })),
-  productId: z.string().nullable().optional(),
-  variantId: z.string().nullable().optional(),
+  productId: z.string().nullish(),
+  variantId: z.string().nullish(),
   rank: z.number(),
-  quantity: z.number().optional(),
+  quantity: z.number().nullish(),
 });
 
 const CopyFieldsSchema = z.object({
-  quiz_eyebrow: z.string().optional(),
-  quiz_headline: z.string().optional(),
-  quiz_subtext: z.string().optional(),
-  quiz_trust_items: z.array(z.string()).optional(),
-  quiz_gate_headline: z.string().optional(),
-  quiz_gate_helper: z.string().optional(),
-  quiz_results_headline_photo: z.string().optional(),
-  quiz_results_headline_nophoto: z.string().optional(),
-  quiz_results_subtext: z.string().optional(),
-  quiz_best_match_pill: z.string().optional(),
-  quiz_also_matched_label: z.string().optional(),
-  quiz_retake_label: z.string().optional(),
+  quiz_eyebrow: z.string().nullish(),
+  quiz_headline: z.string().nullish(),
+  quiz_subtext: z.string().nullish(),
+  quiz_trust_items: z.array(z.string()).nullish(),
+  quiz_gate_headline: z.string().nullish(),
+  quiz_gate_helper: z.string().nullish(),
+  quiz_results_headline_photo: z.string().nullish(),
+  quiz_results_headline_nophoto: z.string().nullish(),
+  quiz_results_subtext: z.string().nullish(),
+  quiz_best_match_pill: z.string().nullish(),
+  quiz_also_matched_label: z.string().nullish(),
+  quiz_retake_label: z.string().nullish(),
 });
-const GeneratedCopySchema = CopyFieldsSchema.optional();
+const GeneratedCopySchema = CopyFieldsSchema.nullish();
 
 const DesignTokenFieldsSchema = z.object({
-  quiz_accent_color: z.string().optional(),
-  quiz_ink_color: z.string().optional(),
-  quiz_card_bg_color: z.string().optional(),
-  quiz_line_color: z.string().optional(),
-  quiz_cta_color: z.string().optional(),
-  quiz_button_radius: z.number().optional(),
-  quiz_card_radius: z.number().optional(),
-  quiz_progress_style: z.enum(["pips", "bar", "counter", "none"]).optional(),
-  quiz_intro_layout: z.enum(["split", "centered"]).optional(),
-  quiz_animation_style: z.enum(["full", "minimal", "off"]).optional(),
+  quiz_accent_color: z.string().nullish(),
+  quiz_ink_color: z.string().nullish(),
+  quiz_card_bg_color: z.string().nullish(),
+  quiz_line_color: z.string().nullish(),
+  quiz_cta_color: z.string().nullish(),
+  quiz_button_radius: z.number().nullish(),
+  quiz_card_radius: z.number().nullish(),
+  quiz_progress_style: z.enum(["pips", "bar", "counter", "none"]).nullish(),
+  quiz_intro_layout: z.enum(["split", "centered"]).nullish(),
+  quiz_animation_style: z.enum(["full", "minimal", "off"]).nullish(),
 });
-const GeneratedDesignTokensSchema = DesignTokenFieldsSchema.optional();
+const GeneratedDesignTokensSchema = DesignTokenFieldsSchema.nullish();
 
 // Canonical key lists for the other whitelists (copilot COPY_KEYS/DESIGN_KEYS)
 // to be tested against — the anti-drift contract lives in the unit tests.
@@ -150,11 +149,15 @@ export const GENERATED_DESIGN_KEYS = Object.keys(DesignTokenFieldsSchema.shape);
 const RADIUS_KEYS = new Set(["quiz_button_radius", "quiz_card_radius"]);
 
 export const GeneratedQuizConfigSchema = z.object({
-  axes: z.array(GeneratedAxisSchema),
-  questions: z.array(GeneratedQuestionSchema),
-  rules: z.array(GeneratedRuleSchema),
+  // Top-level arrays tolerate omission/null and normalize to [] — an
+  // ai-mode config legitimately has no rules, and a MISSING array should
+  // fail in the validator (friendly message + repair round-trip), not at
+  // JSON parse where the repair loop can't see it.
+  axes: z.array(GeneratedAxisSchema).nullish().transform((v) => v ?? []),
+  questions: z.array(GeneratedQuestionSchema).nullish().transform((v) => v ?? []),
+  rules: z.array(GeneratedRuleSchema).nullish().transform((v) => v ?? []),
   recommendationMode: z.enum(["matrix", "ai", "hybrid"]),
-  aiGuidance: z.string().nullable().optional(),
+  aiGuidance: z.string().nullish(),
   copy: GeneratedCopySchema,
   designTokens: GeneratedDesignTokensSchema,
 });
@@ -453,6 +456,26 @@ export function validateGeneratedConfig(
 
   if (errors.length > 0) return { ok: false, errors, warnings, draft: null };
 
+  // .nullish() fields mean displayMeta can arrive with explicit nulls; scrub
+  // them so the DB stores only meaningful keys, and an all-null meta
+  // collapses to no meta at all.
+  type DraftDisplayMeta = NonNullable<
+    NormalizedDraft["flow"]["questions"][number]["options"][number]["displayMeta"]
+  >;
+  const scrubDisplayMeta = (
+    meta: GeneratedQuizConfig["questions"][number]["options"][number]["displayMeta"],
+  ): DraftDisplayMeta | null => {
+    if (!meta) return null;
+    const out: DraftDisplayMeta = {};
+    if (meta.sublabel) out.sublabel = meta.sublabel;
+    if (meta.tag) out.tag = meta.tag;
+    if (meta.meterLabel) out.meterLabel = meta.meterLabel;
+    if (meta.meterPct != null) out.meterPct = meta.meterPct;
+    if (meta.swatch) out.swatch = meta.swatch;
+    if (meta.swatch2) out.swatch2 = meta.swatch2;
+    return Object.keys(out).length > 0 ? out : null;
+  };
+
   const draft: NormalizedDraft = {
     flow: {
       axes: config.axes.map((a, i) => ({
@@ -484,7 +507,7 @@ export function validateGeneratedConfig(
           imageUrl: null,
           showIf: opt.showIf ?? null,
           selectAll: opt.selectAll ?? false,
-          displayMeta: opt.displayMeta ?? null,
+          displayMeta: scrubDisplayMeta(opt.displayMeta),
           position: j,
         })),
       })),
