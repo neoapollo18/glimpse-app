@@ -21,10 +21,14 @@ import type { StudioLoaderData, StudioActionData } from "../../routes/studio";
 // (which creates the draft itself).
 
 type GenerateEvent =
-  | { type: "progress"; phase: string }
+  | { type: "progress"; phase: string; streamed?: number }
   | { type: "result"; summary: { questions: number; rules: number; mode: string }; warnings: string[] }
   | { type: "error"; error: string; warnings?: string[] }
   | { type: "heartbeat" };
+
+// Rough size of a full generated quiz config (model output chars) — used
+// only to map streaming progress onto the bar's drafting band.
+const EXPECTED_DRAFT_CHARS = 9000;
 
 const MODE_LABELS: Record<string, string> = {
   matrix: "Rules only",
@@ -37,7 +41,9 @@ export function OnboardingWizard({
   onDone,
 }: {
   data: StudioLoaderData;
-  onDone: (firstSlide: string) => void;
+  /** notice: generation warnings worth showing after landing in Build
+   * (e.g. "your brief said nail polish but the catalog is hair"). */
+  onDone: (firstSlide: string, notice?: string) => void;
 }) {
   const revalidator = useRevalidator();
   const blankFetcher = useFetcher<StudioActionData>();
@@ -96,12 +102,17 @@ export function OnboardingWizard({
     phaseRef.current = phase;
     setGenPhase(phase);
   };
+  // Streamed model-output chars for the current call — drives REAL motion
+  // through the drafting band instead of parking the bar at a phase cap.
+  const streamedRef = useRef(0);
   const capForPhase = (phase: string | null) => {
     if (watchingRef.current) return 97;
     if (!phase) return 0;
     if (phase.startsWith("Starting")) return 8;
     if (phase.startsWith("Reading")) return 16;
-    if (phase.startsWith("Drafting")) return 80;
+    if (phase.startsWith("Drafting")) {
+      return 20 + Math.min(66, (streamedRef.current / EXPECTED_DRAFT_CHARS) * 66);
+    }
     if (phase.startsWith("Fixing")) return 92;
     if (phase.startsWith("Saving")) return 97;
     return 60;
@@ -150,6 +161,7 @@ export function OnboardingWizard({
     setWatching(false);
     watchingRef.current = false;
     genStartRef.current = Date.now();
+    streamedRef.current = 0;
     lastEventAtRef.current = Date.now();
     const fd = new FormData();
     fd.append("category", category);
@@ -169,12 +181,14 @@ export function OnboardingWizard({
       streamStarted = true;
       await readSseStream<GenerateEvent>(res, (event) => {
         lastEventAtRef.current = Date.now();
-        if (event.type === "progress") setPhase(event.phase);
-        else if (event.type === "result") {
+        if (event.type === "progress") {
+          if (typeof event.streamed === "number") streamedRef.current = event.streamed;
+          setPhase(event.phase);
+        } else if (event.type === "result") {
           gotTerminal = true;
           setBarPct(100);
           revalidator.revalidate();
-          onDone("intro");
+          onDone("intro", (event.warnings ?? []).slice(0, 2).join(" ") || undefined);
         } else if (event.type === "error") {
           gotTerminal = true;
           setGenError(event.error);
@@ -283,6 +297,11 @@ export function OnboardingWizard({
             value={category}
             onChange={setCategory}
             autoComplete="off"
+            helpText={
+              generationAvailable && data.catalog.productCount
+                ? `Your quiz is built from your synced catalog (${data.catalog.productCount} products) — it only ever recommends products you actually sell.`
+                : undefined
+            }
           />
           <TextField
             label="Brand voice"

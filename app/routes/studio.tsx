@@ -4,6 +4,7 @@ import { useFetcher, useLoaderData, useRevalidator, useRouteError, useSearchPara
 import { boundary } from "@shopify/shopify-app-remix/server";
 import { AppProvider } from "@shopify/shopify-app-remix/react";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
+import { Banner } from "@shopify/polaris";
 import { useCallback, useEffect, useRef, useState } from "react";
 import jwt from "jsonwebtoken";
 
@@ -544,6 +545,9 @@ export default function Studio() {
 
   const [flowMapOpen, setFlowMapOpen] = useState(false);
   const [chatBusy, setChatBusy] = useState(false);
+  // Post-generation warnings worth reading (e.g. brief/catalog mismatch);
+  // shown once above the canvas, dismissible.
+  const [genNotice, setGenNotice] = useState<string | null>(null);
   // Bumped whenever a chat change/undo lands so the Edit tab's local form
   // state remounts with the fresh draft (manual edits are chat-gated, so
   // no in-progress typing is ever lost by the remount).
@@ -835,7 +839,15 @@ export default function Studio() {
           )
         }
         canvas={
-          step === "logic" ? (
+          <>
+          {genNotice && step === "build" && (
+            <div style={{ padding: "12px 16px 0" }}>
+              <Banner tone="warning" title="Heads up from the quiz generator" onDismiss={() => setGenNotice(null)}>
+                {genNotice}
+              </Banner>
+            </div>
+          )}
+          {step === "logic" ? (
             <LogicStep data={data} chatBusy={chatBusy} />
           ) : step === "publish" ? (
             <PublishStep
@@ -860,7 +872,8 @@ export default function Studio() {
               nonce={previewNonce}
               onLoad={onPreviewLoad}
             />
-          )
+          )}
+          </>
         }
         panel={
           <EditPanel
@@ -913,7 +926,13 @@ export default function Studio() {
         }
         overlay={
           needsOnboarding ? (
-            <OnboardingWizard data={data} onDone={(firstSlide) => selectSlide(firstSlide)} />
+            <OnboardingWizard
+              data={data}
+              onDone={(firstSlide, notice) => {
+                selectSlide(firstSlide);
+                if (notice) setGenNotice(notice);
+              }}
+            />
           ) : null
         }
       />

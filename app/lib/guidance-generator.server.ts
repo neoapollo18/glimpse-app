@@ -178,7 +178,7 @@ export async function generateGuidance(args: {
    * questions can differ from live, and summaries/warnings must reference
    * what the merchant is actually looking at. */
   source?: "live" | "draft";
-  onProgress?: (phase: string) => void;
+  onProgress?: (phase: string, streamedChars?: number) => void;
 }): Promise<GenerateGuidanceResult> {
   const { shopId, shopDomain, source = "live", onProgress } = args;
   const usage: ClaudeUsage[] = [];
@@ -253,7 +253,8 @@ export async function generateGuidance(args: {
 
   onProgress?.("Writing your recommendation logic…");
   // Throttled live progress: the compile call runs for minutes and a
-  // static phase string reads as hung.
+  // static phase string reads as hung. Plain phase + char count; the
+  // client turns the count into an approximate percentage.
   let streamedChars = 0;
   let lastTokenEmit = 0;
   const tokenProgress = (deltaChars: number) => {
@@ -261,7 +262,7 @@ export async function generateGuidance(args: {
     const now = Date.now();
     if (now - lastTokenEmit > 1500) {
       lastTokenEmit = now;
-      onProgress?.(`Writing your recommendation logic… (~${Math.round(streamedChars / 6).toLocaleString()} words)`);
+      onProgress?.("Writing your recommendation logic…", streamedChars);
     }
   };
   let output: GuidanceOutput | null = null;

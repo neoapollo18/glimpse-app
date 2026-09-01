@@ -89,7 +89,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           shopDomain,
           brief,
           accentColor: String(formData.get("accentColor") ?? "") || null,
-          onProgress: (phase) => send({ type: "progress", phase }),
+          onProgress: (phase, streamed) => send({ type: "progress", phase, streamed }),
         });
         if (result.ok) {
           send({ type: "result", summary: result.summary, warnings: result.warnings });

@@ -120,7 +120,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           shopId: shop.id,
           shopDomain,
           source,
-          onProgress: (phase) => send({ type: "progress", phase }),
+          onProgress: (phase, streamed) => send({ type: "progress", phase, streamed }),
         });
         if (result.ok) {
           send({

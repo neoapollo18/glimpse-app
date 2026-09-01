@@ -144,8 +144,9 @@ export function buildSystemBlocks(catalogText: string): Anthropic.TextBlockParam
 function briefToPrompt(brief: BrandBrief): string {
   return [
     `Design a complete quiz for this store.`,
-    `Category: ${brief.category}`,
+    `Category (merchant-stated): ${brief.category}`,
     `Brand voice: ${brief.brandVoice}`,
+    `THE CATALOG IS GROUND TRUTH: build the quiz around what the catalog actually sells (the quiz can only recommend real products). If the catalog's products clearly do not match the merchant-stated category, still follow the catalog — and add a warning that tells the merchant plainly, e.g. "You told us you sell nail polish, but your synced catalog is mostly hair extensions, so the quiz was built for what's actually in your catalog."`,
     `Quiz length: ${brief.quizLength === "short" ? "short (3-4 questions)" : "standard (5-7 questions)"}`,
     `Recommendation mode preference: ${brief.modePreference === "auto" ? "you decide based on the catalog" : brief.modePreference}`,
     brief.priorityProductIds?.length
@@ -198,7 +199,10 @@ async function callGenerator(
   const response = await callClaudeWithRetry(async () => {
     const stream = client.messages.stream({
       model: CLAUDE_MODEL_MAIN,
-      max_tokens: 32000,
+      // A full config is a few thousand output tokens; 20k bounds
+      // worst-case adaptive-thinking time (32k let slow generations run
+      // multiple minutes longer for no quality gain).
+      max_tokens: 20000,
       thinking: { type: "adaptive" },
       system,
       messages,
@@ -242,7 +246,9 @@ export async function generateQuizConfig(args: {
   shopId: string;
   shopDomain: string;
   brief: BrandBrief;
-  onProgress?: (phase: string) => void;
+  /** streamedChars (cumulative model output) lets the client render REAL
+   * within-phase progress instead of a bar parked at the phase cap. */
+  onProgress?: (phase: string, streamedChars?: number) => void;
   /** Brand accent picked in the onboarding wizard, applied to the draft's
    * design settings server-side. The client-side follow-up apply was lost
    * whenever the SSE stream cut before the result event. */
@@ -251,7 +257,9 @@ export async function generateQuizConfig(args: {
   const { shopId, shopDomain, brief, onProgress, accentColor } = args;
   const usage: ClaudeUsage[] = [];
 
-  // Throttled token progress: "Drafting your quiz… (~N words)" every ~1.5s.
+  // Throttled token progress (~1.5s): plain phase text + machine-readable
+  // char count. No word counts in the label — "(~1,200 words)" read as
+  // gibberish to merchants.
   let streamedChars = 0;
   let lastTokenEmit = 0;
   const tokenProgress = (label: string) => (deltaChars: number) => {
@@ -259,7 +267,7 @@ export async function generateQuizConfig(args: {
     const now = Date.now();
     if (now - lastTokenEmit > 1500) {
       lastTokenEmit = now;
-      onProgress?.(`${label} (~${Math.round(streamedChars / 6).toLocaleString()} words)`);
+      onProgress?.(label, streamedChars);
     }
   };
 

@@ -39,7 +39,7 @@ const ROW_MAX_LEN = 300;
 const EXPAND_EVENT = "gleame-logic-open";
 
 type GenerateEvent =
-  | { type: "progress"; phase: string }
+  | { type: "progress"; phase: string; streamed?: number }
   | {
       type: "result";
       guidanceText: string;
@@ -419,8 +419,16 @@ export function LogicStep({ data, chatBusy }: { data: StudioLoaderData; chatBusy
         throw new Error(body?.error ?? `Request failed (${res.status})`);
       }
       await readSseStream<GenerateEvent>(res, (event) => {
-        if (event.type === "progress") setGenPhase(event.phase);
-        else if (event.type === "result") {
+        if (event.type === "progress") {
+          // streamed = model-output chars; ~14k is a typical full rulebook.
+          // Show an approximate capped percentage so a minutes-long compile
+          // visibly moves instead of sitting on a static phrase.
+          const pct =
+            typeof event.streamed === "number" && event.streamed > 0
+              ? Math.min(95, Math.round((event.streamed / 14000) * 100))
+              : null;
+          setGenPhase(pct != null ? `${event.phase} ${pct}%` : event.phase);
+        } else if (event.type === "result") {
           gotTerminal = true;
           setReview({
             guidanceText: event.guidanceText,
