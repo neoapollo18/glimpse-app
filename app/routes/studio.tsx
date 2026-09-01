@@ -530,6 +530,34 @@ export default function Studio() {
     [setSelectedSlide, gotoPreviewStep],
   );
 
+  // Two-way sync: clicking through the quiz INSIDE the preview advances the
+  // widget, which reports its step (gleame-preview-at) — follow it in the
+  // tree + editor so the settings always match what's on screen.
+  const selectedSlideRef = useRef(selectedSlide);
+  selectedSlideRef.current = selectedSlide;
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      const d = e.data as { type?: string; step?: string } | null;
+      if (!d || d.type !== "gleame-preview-at") return;
+      const step = String(d.step ?? "");
+      let slideId: string | null = null;
+      if (step === "intro") slideId = "intro";
+      else if (step === "gate") slideId = "photo";
+      else if (step === "results") slideId = "results";
+      else if (/^q\d+$/.test(step)) {
+        const q = questions[parseInt(step.slice(1), 10) - 1];
+        if (q) slideId = slideIdForQuestion(q.axisKey);
+      }
+      if (!slideId) return;
+      // Theme maps its goto to the intro step — don't let the echo steal
+      // the Theme selection.
+      if (selectedSlideRef.current === "theme" && slideId === "intro") return;
+      if (slideId !== selectedSlideRef.current) setSelectedSlide(slideId);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [questions, setSelectedSlide]);
+
   // Tree structural edits (add/reorder) go through the same apply-tool path
   // as the panel editors; the response carries fresh preview payloads.
   const treeFetcher = useFetcher<StudioActionData>();

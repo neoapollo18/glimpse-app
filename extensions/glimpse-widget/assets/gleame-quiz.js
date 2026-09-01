@@ -652,6 +652,22 @@
       default:         next = renderIntro(); break;
     }
     swapScreen(next, direction || 'forward', seq);
+    reportPreviewStep();
+  }
+
+  // Studio sync (preview only): tell the host which step is on screen so
+  // the editor panel can follow along when someone clicks through the quiz
+  // inside the preview. No-op on real storefronts.
+  function reportPreviewStep() {
+    if (!PREVIEW) return;
+    var step;
+    if (state.screen === 'question') {
+      var qi = (screens[state.screenIndex] || [0])[0];
+      step = 'q' + (qi + 1);
+    } else {
+      step = state.screen; // intro | gate | results
+    }
+    try { window.parent.postMessage({ type: 'gleame-preview-at', step: step }, '*'); } catch (e) { /* sandboxed */ }
   }
 
   function swapScreen(nextEl, direction, seq) {

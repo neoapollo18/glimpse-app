@@ -107,6 +107,9 @@ export function PreviewCanvas({
           </button>
         ))}
       </div>
+      <div style={{ fontSize: 11, color: "#8C9196", marginBottom: 10, flexShrink: 0 }}>
+        Previewing your draft. Publish to put changes on your storefront.
+      </div>
       <div
         ref={stageRef}
         style={{
