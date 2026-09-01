@@ -32,23 +32,6 @@ export function StudioTopBar({
   return (
     <>
       <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-        <span
-          style={{
-            width: 24,
-            height: 24,
-            borderRadius: 6,
-            background: "#1a1a1a",
-            color: "#fff",
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 12,
-            fontWeight: 700,
-          }}
-        >
-          G
-        </span>
-        <span style={{ fontWeight: 600, whiteSpace: "nowrap" }}>Quiz Studio</span>
         {publishing ? (
           <Badge tone="attention">Publishing…</Badge>
         ) : (

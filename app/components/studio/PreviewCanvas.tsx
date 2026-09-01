@@ -57,14 +57,12 @@ export function PreviewCanvas({
 
   const frame = FRAMES[device];
   const isMobile = device === "mobile";
-  const chrome = isMobile ? 20 : 32; // bezel border / browser bar allowance
+  // Mobile: fixed bezel scaled to fit. Desktop: the frame FILLS the canvas
+  // (a real desktop viewport), no scaling — the quiz renders responsively
+  // at the actual width.
   const scale =
-    stage.width > 0
-      ? Math.min(
-          1,
-          (stage.height - 8) / (frame.height + chrome),
-          (stage.width - 16) / (frame.width + chrome),
-        )
+    isMobile && stage.width > 0
+      ? Math.min(1, (stage.height - 8) / (frame.height + 20), (stage.width - 16) / (frame.width + 20))
       : 1;
 
   return (
@@ -123,7 +121,10 @@ export function PreviewCanvas({
       >
         <div
           style={{
-            width: frame.width,
+            width: isMobile ? frame.width : "100%",
+            height: isMobile ? undefined : "100%",
+            display: isMobile ? undefined : "flex",
+            flexDirection: isMobile ? undefined : "column",
             border: isMobile ? "10px solid #1a1a1a" : "1px solid #D6D9DC",
             borderRadius: isMobile ? 36 : 12,
             overflow: "hidden",
@@ -155,7 +156,14 @@ export function PreviewCanvas({
             ref={iframeRef}
             title="Quiz preview"
             src={`/quiz-preview.html?token=${encodeURIComponent(stableTokenRef.current)}&v=${nonce}`}
-            style={{ width: "100%", height: frame.height, border: 0, display: "block" }}
+            style={{
+              width: "100%",
+              height: isMobile ? frame.height : undefined,
+              flex: isMobile ? undefined : 1,
+              minHeight: 0,
+              border: 0,
+              display: "block",
+            }}
           />
         </div>
       </div>
