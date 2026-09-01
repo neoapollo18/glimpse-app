@@ -16,6 +16,10 @@ import { SESSION_TIERS, type SessionTier } from "./pricing-tiers";
 
 export const USAGE_CAP_USD = 399;
 
+// One place to bump. 2025-07 fell out of Shopify's 12-month support window
+// (requests silently fall forward to the oldest supported version).
+export const ADMIN_API_VERSION = "2026-07";
+
 export interface TierMatch {
   tier: SessionTier;
   fee: number; // USD for this cycle; 0 = post nothing
@@ -33,7 +37,7 @@ export function billingTermsText(): string {
   const paid = SESSION_TIERS.filter((t) => (t.price ?? 0) > 0)
     .map((t) => `$${t.price}/mo for ${t.visitors}`)
     .join("; ");
-  return `Charged monthly by store traffic: free under 2,500 sessions; ${paid}. Never more than $${USAGE_CAP_USD}/mo.`;
+  return `Charged monthly by store traffic (average monthly sessions over the last 90 days): free under 2,500 sessions; ${paid}. Never more than $${USAGE_CAP_USD}/mo.`;
 }
 
 // ---------------------------------------------------------------------
@@ -45,7 +49,7 @@ export type GraphqlFn = (query: string, variables?: Record<string, unknown>) => 
 
 export function directGraphql(shopDomain: string, accessToken: string): GraphqlFn {
   return async (query, variables) => {
-    const res = await fetch(`https://${shopDomain}/admin/api/2025-07/graphql.json`, {
+    const res = await fetch(`https://${shopDomain}/admin/api/${ADMIN_API_VERSION}/graphql.json`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -105,8 +109,8 @@ const ACTIVE_SUBSCRIPTIONS_QUERY = `
           plan {
             pricingDetails {
               __typename
-              ... on AppRecurringPricingDetails { price { amount currencyCode } interval }
-              ... on AppUsagePricingDetails { terms cappedAmount { amount } balanceUsed { amount } }
+              ... on AppRecurringPricing { price { amount currencyCode } interval }
+              ... on AppUsagePricing { terms cappedAmount { amount } balanceUsed { amount } }
             }
           }
         }
@@ -139,9 +143,9 @@ export async function getActiveSubscription(graphql: GraphqlFn): Promise<ActiveS
   for (const li of sub.lineItems ?? []) {
     const pd = li?.plan?.pricingDetails;
     if (!pd) continue;
-    if (pd.__typename === "AppRecurringPricingDetails") {
+    if (pd.__typename === "AppRecurringPricing") {
       out.recurringPriceUsd = Number(pd.price?.amount ?? 0);
-    } else if (pd.__typename === "AppUsagePricingDetails") {
+    } else if (pd.__typename === "AppUsagePricing") {
       out.usageLineItemId = li.id;
       out.usageCappedUsd = Number(pd.cappedAmount?.amount ?? 0);
       out.usageBalanceUsd = Number(pd.balanceUsed?.amount ?? 0);

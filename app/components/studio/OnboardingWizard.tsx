@@ -131,6 +131,8 @@ export function OnboardingWizard({
   }, [stepIndex]);
 
   const startWatching = () => {
+    // A retry must never race a stale watcher from the previous attempt.
+    if (watchTimerRef.current != null) window.clearInterval(watchTimerRef.current);
     watchingRef.current = true;
     setWatching(true);
     const startedAt = Date.now();
@@ -140,6 +142,8 @@ export function OnboardingWizard({
         watchTimerRef.current = null;
         watchingRef.current = false;
         setWatching(false);
+        setPhase(null);
+        setBarPct(0);
         setGenError("Generation didn't finish. Try again — your answers are still filled in.");
         return;
       }
@@ -200,9 +204,12 @@ export function OnboardingWizard({
         startWatching();
       }
     } catch (err) {
-      if (streamStarted) {
+      if (streamStarted && !gotTerminal) {
+        // Stream died mid-flight: the server keeps going — watch for the
+        // draft. A read error AFTER a terminal event is already handled;
+        // spinning up a watcher then could time out a healthy retry later.
         startWatching();
-      } else {
+      } else if (!gotTerminal) {
         setGenError(err instanceof Error ? err.message : "Generation failed");
       }
     } finally {

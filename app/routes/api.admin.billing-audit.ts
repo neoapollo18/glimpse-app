@@ -17,10 +17,14 @@ import { getShopBillingState } from "../lib/supabase.server";
  *   - "none"  = no active subscription    → normal new-subscribe flow
  */
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const url = new URL(request.url);
-  const secret = url.searchParams.get("secret");
-  const expected = process.env.CRON_SECRET;
-  const secretBuf = Buffer.from(secret ?? "");
+  // Header-borne secret (query strings land in proxy/access logs, and this
+  // endpoint dumps per-shop revenue data):
+  //   curl -H "Authorization: Bearer $ADMIN_AUDIT_SECRET" .../api/admin/billing-audit
+  // ADMIN_AUDIT_SECRET, falling back to CRON_SECRET when unset.
+  const auth = request.headers.get("Authorization") ?? "";
+  const secret = auth.startsWith("Bearer ") ? auth.slice("Bearer ".length) : "";
+  const expected = process.env.ADMIN_AUDIT_SECRET || process.env.CRON_SECRET;
+  const secretBuf = Buffer.from(secret);
   const expectedBuf = Buffer.from(expected ?? "");
   const valid =
     Boolean(secret && expected) &&

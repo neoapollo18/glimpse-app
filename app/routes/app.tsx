@@ -27,10 +27,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // quiz/studio/analytics lookups work from the first load.
   await ensureShopExists(shopDomain);
 
-  // Get current path to know if we're on billing or welcome page
-  const url = new URL(request.url);
-  const isOnBillingPage = url.pathname.includes('/app/billing') || url.pathname.includes('/app/welcome');
-
   // MANTLE SHUTDOWN (late Aug 2026): the subscription check lived on
   // Mantle's API and failed closed, which locked every non-grandfathered
   // merchant out the moment Mantle died. Enforcement is OFF until the
@@ -72,7 +68,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     intercomAppId: process.env.INTERCOM_APP_ID || "",
     intercomUserJwt,
     needsBilling,
-    isOnBillingPage,
     isSkinAnalysisEnabled,
     isTryOnEnabled,
   });
@@ -94,7 +89,7 @@ export default function App() {
       setIsRedirecting(true);
       // Small delay to ensure loading state shows
       const timer = setTimeout(() => {
-        navigate('/app/welcome', { replace: true });
+        navigate('/app/billing', { replace: true });
       }, 50);
       return () => clearTimeout(timer);
     } else {

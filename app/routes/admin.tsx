@@ -65,7 +65,7 @@ function diffMissingScopes(scopeStr: string | null | undefined): string[] {
 // Fetch monthly sessions directly from Shopify API.
 // Formula matches the cron job (api.cron.check-sessions.ts): 90-day sum / 3.
 // Any change here MUST be mirrored in the cron — the cron's value is what's
-// sent to Mantle flex billing on renewal, and the two must stay in sync.
+// used by Shopify-native flex billing for tier fees, so keep them fresh.
 async function fetchMonthlySessionsForShop(shop: string, accessToken: string): Promise<number | null> {
   try {
     const query = `
@@ -777,8 +777,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (actionType === "refresh-sessions") {
     // Per-shop manual refresh. Writes monthly_sessions/sessions_updated_at in
-    // Supabase exactly like the cron; does NOT call Mantle — flex billing
-    // remains driven exclusively by the cron's renewal-window logic.
+    // Supabase exactly like the cron; no billing side effects — tier fees
+    // remain driven exclusively by the billing cron.
     const targetShopDomain = formData.get("targetShopDomain") as string;
     if (!targetShopDomain || typeof targetShopDomain !== "string") {
       return json({ success: false, error: "Missing targetShopDomain" });

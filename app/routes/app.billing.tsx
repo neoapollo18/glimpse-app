@@ -25,7 +25,11 @@ import {
   type ActiveSubscription,
 } from "../lib/shopify-billing.server";
 import { invalidateBillingCache } from "../lib/billing-gate.server";
-import { getShopBillingState, updateShopBillingState } from "../lib/supabase.server";
+import {
+  getShopBillingState,
+  updateShopBillingState,
+  updateShopSubscriptionStatus,
+} from "../lib/supabase.server";
 
 // Shopify-native billing (Mantle replacement). One flex subscription:
 // $0 recurring + usage line capped at the top tier; the merchant approves
@@ -54,8 +58,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     });
   }
   // A just-approved subscription must unlock the app immediately, not
-  // after the gate cache's TTL.
-  if (subscription?.status === "ACTIVE") invalidateBillingCache(shopDomain);
+  // after the gate cache's TTL — and the storefront gate reads
+  // subscription_status, so reconcile it here too (the webhook is
+  // best-effort).
+  if (subscription?.status === "ACTIVE") {
+    invalidateBillingCache(shopDomain);
+    if (state && state.subscription_status !== "grandfathered" && state.subscription_status !== "active") {
+      await updateShopSubscriptionStatus(shopDomain, "active", null);
+    }
+  }
 
   const sessions = state?.monthly_sessions ?? 0;
   const match = tierForSessions(sessions);
@@ -80,8 +91,28 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   const state = await getShopBillingState(shopDomain);
-  // One trial per shop: anyone who ever held a subscription (incl. via
-  // Mantle) starts billing immediately on approval.
+  if (state?.subscription_status === "grandfathered") {
+    return json({ error: "This store is grandfathered — no subscription needed." }, { status: 400 });
+  }
+  // Refuse to stack a second flex subscription on an existing one: a
+  // transient read error on the page must not lead to a duplicate
+  // approval and a second tier fee. Replacing a FLAT (Mantle-era)
+  // subscription is allowed — approval cancels the old one (STANDARD).
+  try {
+    const existing = await getActiveSubscription(adminGraphql(admin));
+    if (existing?.status === "ACTIVE" && existing.usageLineItemId && (existing.recurringPriceUsd ?? 0) === 0) {
+      return json({ error: "You already have an active Gleame subscription." }, { status: 400 });
+    }
+  } catch {
+    return json(
+      { error: "Couldn't verify your current subscription with Shopify. Try again in a moment." },
+      { status: 502 },
+    );
+  }
+  // One trial per shop: anyone who ever held an APPROVED subscription
+  // (incl. via Mantle) starts billing immediately. The webhook only
+  // records ids for subscriptions that went ACTIVE, so a declined or
+  // abandoned first attempt does NOT forfeit the trial.
   const hadSubscription = Boolean(
     state?.shopify_subscription_id ||
       (state?.subscription_status && !["none", "pending"].includes(state.subscription_status)),
@@ -110,6 +141,10 @@ export default function BillingPage() {
 
   const sub = data.subscription;
   const subscribed = sub?.status === "ACTIVE";
+  // Mantle-era flat subscription: fixed recurring price, no usage line
+  // (or a paid recurring line). It keeps charging on its own; offer the
+  // switch to traffic-based pricing instead of showing a false usage card.
+  const flatSub = subscribed && (!sub?.usageLineItemId || (sub?.recurringPriceUsd ?? 0) > 0);
 
   return (
     <Page>
@@ -137,6 +172,41 @@ export default function BillingPage() {
                 Your store is grandfathered — every Gleame feature is included
                 at no charge, permanently. Nothing to do here.
               </Text>
+            </BlockStack>
+          </Card>
+        ) : flatSub ? (
+          <Card>
+            <BlockStack gap="300">
+              <InlineStack gap="200" blockAlign="center">
+                <Text as="h2" variant="headingMd">Your plan</Text>
+                <Badge tone="success">Active</Badge>
+                {sub?.test && <Badge tone="info">Test mode</Badge>}
+              </InlineStack>
+              <Text as="p" variant="bodyMd">
+                You're on a fixed plan at ${sub?.recurringPriceUsd ?? 0}/month
+                {sub?.name ? ` ("${sub.name}")` : ""}. It keeps working as is.
+              </Text>
+              <Text as="p" variant="bodyMd">
+                Our new traffic-based pricing adjusts your charge to your
+                store's actual sessions each month (free under 2,500, capped
+                at $399) — one approval, no plan changes ever again.
+              </Text>
+              <InlineStack gap="300" blockAlign="center">
+                <Button
+                  variant="primary"
+                  loading={submitting}
+                  onClick={() => {
+                    const fd = new FormData();
+                    fd.append("intent", "subscribe");
+                    submit(fd, { method: "POST" });
+                  }}
+                >
+                  Switch to traffic-based pricing
+                </Button>
+                <Text as="span" variant="bodySm" tone="subdued">
+                  Approving the new plan replaces this one automatically.
+                </Text>
+              </InlineStack>
             </BlockStack>
           </Card>
         ) : subscribed ? (

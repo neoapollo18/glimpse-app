@@ -2004,20 +2004,22 @@ export async function updateShopSubscriptionStatus(
   shopDomain: string,
   status: SubscriptionStatus,
   expiresAt?: Date | null
-): Promise<void> {
-  const { error } = await supabase
+): Promise<{ ok: boolean }> {
+  const { data, error } = await supabase
     .from('shops')
     .update({
       subscription_status: status,
       subscription_expires_at: expiresAt?.toISOString() || null,
     })
-    .eq('shop_domain', shopDomain);
-  
-  if (error) {
-    console.error('Error updating subscription status:', error);
-  } else {
-    console.log(`📝 Updated subscription status for ${shopDomain}: ${status}`);
+    .eq('shop_domain', shopDomain)
+    .select('id');
+
+  if (error || !data?.length) {
+    console.error('Error updating subscription status:', error?.message ?? '0 rows matched');
+    return { ok: false };
   }
+  console.log(`📝 Updated subscription status for ${shopDomain}: ${status}`);
+  return { ok: true };
 }
 
 /**
@@ -2054,13 +2056,19 @@ export async function shopHasValidAccess(shopDomain: string): Promise<boolean> {
     return true;
   }
 
-  // Active or trial subscriptions have access (kept fresh by the
+  const subscription_expires_at = row.subscription_expires_at as string | null;
+
+  // Active subscriptions have access (kept fresh by the
   // app_subscriptions/update webhook)
-  if (subscription_status === 'active' || subscription_status === 'trial') {
+  if (subscription_status === 'active') {
     return true;
   }
+  // Mantle-era 'trial' rows stopped syncing when Mantle died: honor them
+  // only while their recorded expiry is in the future, never indefinitely.
+  if (subscription_status === 'trial') {
+    return Boolean(subscription_expires_at && new Date(subscription_expires_at) > new Date());
+  }
 
-  const subscription_expires_at = row.subscription_expires_at as string | null;
   // Grace period - check if still within the grace window
   if (subscription_status === 'grace_period' && subscription_expires_at) {
     const expiresAt = new Date(subscription_expires_at);
@@ -2136,44 +2144,42 @@ export async function updateShopBillingState(
 }
 
 /**
- * Pending Plan Change Interface
+ * Atomically claim a billing cycle BEFORE posting its usage record: the
+ * update only matches while last_usage_cycle_key still holds the value we
+ * read, so two racing crons (or a re-run after a partial failure) cannot
+ * both claim the same cycle. Post-then-store was a double-charge window —
+ * Shopify documents no retention window for appUsageRecordCreate's
+ * idempotencyKey, so a days-later retry may not dedupe.
  */
-export interface PendingPlanChange {
-  currentPlan: string;
-  suggestedPlan: string;
-  suggestedPlanId: string | null;
-  suggestedPrice: number | null;
-  sessions: number;
-  isUpgrade: boolean;
-  detectedAt: string;
-}
-
-/**
- * Get pending plan change notification for a shop (set by cron job)
- */
-export async function getPendingPlanChange(shopDomain: string): Promise<PendingPlanChange | null> {
-  const { data, error } = await supabase
+export async function claimUsageCycle(
+  shopDomain: string,
+  prevKey: string | null,
+  nextKey: string,
+): Promise<{ claimed: boolean; error?: string }> {
+  let query = supabase
     .from('shops')
-    .select('pending_plan_change')
-    .eq('shop_domain', shopDomain)
-    .single();
-  
-  if (error || !data?.pending_plan_change) {
-    return null;
-  }
-  
-  return data.pending_plan_change as PendingPlanChange;
-}
-
-/**
- * Clear pending plan change notification (after user acknowledges or updates plan)
- */
-export async function clearPendingPlanChange(shopDomain: string): Promise<void> {
-  await supabase
-    .from('shops')
-    .update({ pending_plan_change: null })
+    .update({ last_usage_cycle_key: nextKey })
     .eq('shop_domain', shopDomain);
+  query = prevKey === null ? query.is('last_usage_cycle_key', null) : query.eq('last_usage_cycle_key', prevKey);
+  const { data, error } = await query.select('id');
+  if (error) return { claimed: false, error: error.message };
+  return { claimed: (data?.length ?? 0) > 0 };
 }
+
+/** Best-effort release after a failed post, so the next run can retry. */
+export async function releaseUsageCycle(
+  shopDomain: string,
+  claimedKey: string,
+  prevKey: string | null,
+): Promise<void> {
+  const { error } = await supabase
+    .from('shops')
+    .update({ last_usage_cycle_key: prevKey })
+    .eq('shop_domain', shopDomain)
+    .eq('last_usage_cycle_key', claimedKey);
+  if (error) console.error(`releaseUsageCycle failed for ${shopDomain}:`, error.message);
+}
+
 
 /**
  * Update monthly sessions count for a shop (called by cron job)
@@ -2499,26 +2505,35 @@ export async function getOnboardingState(shopDomain: string): Promise<Onboarding
  * the row on first admin load (without it, every quiz/studio/analytics
  * lookup logs "No shop found" and the studio 404s).
  */
+const knownShopDomains = new Set<string>();
+
 export async function ensureShopExists(shopDomain: string): Promise<void> {
+  // Existence is permanent — once seen, skip the round trip (this runs on
+  // every admin navigation via app.tsx).
+  if (knownShopDomains.has(shopDomain)) return;
   const { data } = await supabase
     .from('shops')
     .select('id')
     .eq('shop_domain', shopDomain)
     .single();
-
-  if (!data) {
-    const { error } = await supabase
-      .from('shops')
-      .insert([{
-        shop_domain: shopDomain,
-        shopify_id: shopDomain.replace('.myshopify.com', ''),
-        shop_name: shopDomain.replace('.myshopify.com', ''),
-      }]);
-
-    if (error && error.code !== '23505') { // ignore unique violation (race condition)
-      console.error(`Error creating shop row for ${shopDomain}:`, error);
-    }
+  if (data) {
+    knownShopDomains.add(shopDomain);
+    return;
   }
+
+  const { error } = await supabase
+    .from('shops')
+    .insert([{
+      shop_domain: shopDomain,
+      shopify_id: shopDomain.replace('.myshopify.com', ''),
+      shop_name: shopDomain.replace('.myshopify.com', ''),
+    }]);
+
+  if (error && error.code !== '23505') { // ignore unique violation (race condition)
+    console.error(`Error creating shop row for ${shopDomain}:`, error);
+    return; // don't cache a failed create
+  }
+  knownShopDomains.add(shopDomain);
 }
 
 /**

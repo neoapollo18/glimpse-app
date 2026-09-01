@@ -4,7 +4,6 @@ import {
   getShopBillingState,
   updateShopBillingState,
   updateShopSubscriptionStatus,
-  type SubscriptionStatus,
 } from "../lib/supabase.server";
 
 // Webhooks only accept POST - return 405 for GET requests
@@ -13,50 +12,68 @@ export const loader = async (_args: LoaderFunctionArgs) => {
 };
 
 /**
- * app_subscriptions/update — the source of truth for subscription state
- * (Shopify-native billing, Mantle replacement). Fires on approve, decline,
- * cancel, freeze, and cycle changes for Billing-API subscriptions,
- * including ones Mantle created for this app before it shut down.
+ * app_subscriptions/update — subscription lifecycle sync for the
+ * Shopify-native billing (Mantle replacement).
  *
- * Always returns 200 (repo convention) so Shopify doesn't retry-storm;
- * failures are logged.
+ * Rules (each earned by a confirmed review finding):
+ * - The subscription id is persisted ONLY on ACTIVE. Persisting it for
+ *   PENDING/DECLINED made a declined first attempt look like a consumed
+ *   trial, silently forfeiting the merchant's promised 14 days.
+ * - DECLINED/PENDING never change access state: a sub that never went
+ *   ACTIVE has nothing to downgrade.
+ * - Downgrades (cancelled etc.) apply only when the event is about the
+ *   subscription we consider current — a decline of a NEW attempt must
+ *   not cancel a shop that still has an older ACTIVE sub.
+ * - Grandfathered is permanent and never overwritten.
+ * - DB write failures return 500 so Shopify RETRIES; returning 200 on a
+ *   failed cancellation write left cancelled shops with storefront
+ *   access forever (the cron also reconciles as a backstop).
  */
 export const action = async ({ request }: ActionFunctionArgs) => {
+  let shop = "";
   try {
-    const { shop, payload } = await authenticate.webhook(request);
-    const sub = (payload as Record<string, any>)?.app_subscription;
+    const auth = await authenticate.webhook(request);
+    shop = auth.shop;
+    const sub = (auth.payload as Record<string, any>)?.app_subscription;
     if (!sub) return new Response("OK", { status: 200 });
 
     const status = String(sub.status ?? "").toUpperCase();
-    console.log(`[billing] ${shop}: subscription ${sub.admin_graphql_api_id} → ${status}`);
+    const subId = String(sub.admin_graphql_api_id ?? "");
+    console.log(`[billing] ${shop}: subscription ${subId} → ${status}`);
 
-    // Keep the legacy subscription_status column in sync — the storefront
-    // gate reads it (grandfathered stays untouched: only overwrite when
-    // the shop is on a real subscription lifecycle).
-    // FROZEN (store payment issues) maps to cancelled for access purposes;
-    // PENDING (awaiting approval) maps to none — no access change either way
-    // until the sub goes ACTIVE.
-    const statusMap: Record<string, SubscriptionStatus> = {
-      ACTIVE: "active",
-      CANCELLED: "cancelled",
-      DECLINED: "cancelled",
-      EXPIRED: "cancelled",
-      FROZEN: "cancelled",
-      PENDING: "none",
-    };
-
-    await updateShopBillingState(shop, {
-      shopify_subscription_id: String(sub.admin_graphql_api_id ?? "") || null,
-    });
-    const mapped = statusMap[status];
     const current = await getShopBillingState(shop);
-    // Grandfathered is a permanent app-side grant — no subscription
-    // lifecycle event may downgrade it.
-    if (mapped && current?.subscription_status !== "grandfathered") {
-      await updateShopSubscriptionStatus(shop, mapped, null);
+    if (!current) {
+      // Shop row missing/unreadable: retry later rather than dropping a
+      // lifecycle event on the floor.
+      return new Response("Retry", { status: 500 });
     }
+    const grandfathered = current.subscription_status === "grandfathered";
+
+    if (status === "ACTIVE") {
+      const wrote = await updateShopBillingState(shop, { shopify_subscription_id: subId || null });
+      let ok = wrote.ok;
+      if (!grandfathered) {
+        ok = (await updateShopSubscriptionStatus(shop, "active", null)).ok && ok;
+      }
+      return new Response(ok ? "OK" : "Retry", { status: ok ? 200 : 500 });
+    }
+
+    if (["CANCELLED", "EXPIRED", "FROZEN"].includes(status)) {
+      if (grandfathered) return new Response("OK", { status: 200 });
+      // Only downgrade for the subscription we consider current.
+      if (current.shopify_subscription_id && subId && current.shopify_subscription_id !== subId) {
+        return new Response("OK", { status: 200 });
+      }
+      const ok = (await updateShopSubscriptionStatus(shop, "cancelled", null)).ok;
+      return new Response(ok ? "OK" : "Retry", { status: ok ? 200 : 500 });
+    }
+
+    // PENDING / DECLINED / anything else: no state change.
+    return new Response("OK", { status: 200 });
   } catch (e) {
-    console.error("[billing] app_subscriptions/update webhook failed:", e);
+    console.error(`[billing] app_subscriptions/update webhook failed for ${shop}:`, e);
+    // Auth/parse failures must not retry-storm; genuine handler crashes
+    // above already returned 500 where retry helps.
+    return new Response("OK", { status: 200 });
   }
-  return new Response("OK", { status: 200 });
 };
