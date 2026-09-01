@@ -1093,6 +1093,24 @@ function OnboardingWizard({
 
 const THEME_EXT_UUID = "1013fc3f-b18d-aa39-07f6-10dfd57397a6749693b0";
 
+const GLEAME_HERO_CSS = `
+  .gleame-hero { position: relative; overflow: hidden; border-radius: 20px; background: linear-gradient(135deg, #17171B 0%, #1F1F26 55%, #2A2130 100%); padding: 44px 48px; box-shadow: 0 12px 40px rgba(23, 23, 27, 0.28); }
+  .gleame-hero-glow { position: absolute; width: 480px; height: 480px; border-radius: 50%; top: -260px; right: -120px; background: radial-gradient(circle, rgba(216, 180, 254, 0.28) 0%, rgba(216, 180, 254, 0) 65%); pointer-events: none; }
+  .gleame-hero-glow-2 { top: auto; right: auto; bottom: -300px; left: -140px; background: radial-gradient(circle, rgba(255, 190, 160, 0.16) 0%, rgba(255, 190, 160, 0) 65%); }
+  .gleame-hero-content { position: relative; max-width: 640px; }
+  .gleame-hero-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+  .gleame-hero-mark { width: 28px; height: 28px; border-radius: 8px; background: #fff; color: #17171B; font-weight: 800; font-size: 15px; display: inline-flex; align-items: center; justify-content: center; }
+  .gleame-hero-wordmark { color: rgba(255, 255, 255, 0.55); font-size: 11px; font-weight: 700; letter-spacing: 0.28em; }
+  .gleame-hero-title { margin: 0 0 10px; color: #fff; font-family: Georgia, 'Times New Roman', serif; font-weight: 500; font-size: 34px; line-height: 1.15; letter-spacing: -0.01em; }
+  .gleame-hero-sub { margin: 0 0 26px; color: rgba(255, 255, 255, 0.72); font-size: 15px; line-height: 1.55; max-width: 520px; }
+  .gleame-hero-actions { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+  .gleame-hero-cta { border: 0; cursor: pointer; background: #fff; color: #17171B; font-size: 14px; font-weight: 650; padding: 12px 22px; border-radius: 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35); transition: transform 140ms ease, box-shadow 140ms ease; }
+  .gleame-hero-cta:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); }
+  .gleame-hero-ghost { border: 0; cursor: pointer; background: transparent; color: rgba(255, 255, 255, 0.75); font-size: 13px; font-weight: 600; padding: 8px 4px; }
+  .gleame-hero-ghost:hover { color: #fff; }
+  @media (max-width: 640px) { .gleame-hero { padding: 32px 24px; } .gleame-hero-title { font-size: 27px; } }
+`;
+
 const HOME_MODE_LABELS: Record<string, string> = {
   matrix: "Rules only",
   ai: "AI",
@@ -1162,35 +1180,37 @@ function DashboardView({
     <Page>
       <TitleBar title="Gleame" />
       <BlockStack gap="500">
-        {/* Hero: one clear door. Status is a sentence, not badge soup. */}
-        <Card>
-          <Box padding="400">
-            <BlockStack gap="400">
-              <BlockStack gap="150">
-                <Text as="h1" variant="headingXl">
-                  Welcome back, {displayName}
-                </Text>
-                <Text as="p" variant="bodyLg" tone="subdued">
-                  {quiz.questions === 0
-                    ? "Let's build your quiz. Gleame drafts the whole thing from your catalog in about a minute."
-                    : quiz.quizLive
-                      ? quiz.hasDraft
-                        ? "Your quiz is live. You have unpublished edits waiting in the Studio."
-                        : "Your quiz is live and matching shoppers to products."
-                      : "Your quiz isn't live yet. Build it in the Studio, then turn it on below."}
-                </Text>
-              </BlockStack>
-              <InlineStack gap="300" blockAlign="center">
-                <Button variant="primary" size="large" onClick={openStudio}>
-                  {quiz.questions === 0 ? "Build my quiz" : "Open Quiz Studio"}
-                </Button>
-                <Button variant="plain" onClick={() => navigate("/app/analytics")}>
-                  View analytics
-                </Button>
-              </InlineStack>
-            </BlockStack>
-          </Box>
-        </Card>
+        {/* Branded hero: one clear door, Gleame's editorial identity. */}
+        <div className="gleame-hero">
+          <style dangerouslySetInnerHTML={{ __html: GLEAME_HERO_CSS }} />
+          <div className="gleame-hero-glow" aria-hidden />
+          <div className="gleame-hero-glow gleame-hero-glow-2" aria-hidden />
+          <div className="gleame-hero-content">
+            <div className="gleame-hero-brand">
+              <span className="gleame-hero-mark">G</span>
+              <span className="gleame-hero-wordmark">GLEAME</span>
+            </div>
+            <h1 className="gleame-hero-title">Welcome back, {displayName}</h1>
+            <p className="gleame-hero-sub">
+              {quiz.questions === 0
+                ? "Let's build your quiz. Gleame drafts the whole thing from your catalog in about a minute."
+                : quiz.quizLive
+                  ? quiz.hasDraft
+                    ? "Your quiz is live. You have unpublished edits waiting in the Studio."
+                    : "Your quiz is live and matching shoppers to products."
+                  : "Your quiz isn't live yet. Build it in the Studio, then turn it on below."}
+            </p>
+            <div className="gleame-hero-actions">
+              <button className="gleame-hero-cta" onClick={openStudio}>
+                {quiz.questions === 0 ? "Build my quiz" : "Open Quiz Studio"}
+                <span aria-hidden> →</span>
+              </button>
+              <button className="gleame-hero-ghost" onClick={() => navigate("/app/analytics")}>
+                View analytics
+              </button>
+            </div>
+          </div>
+        </div>
 
         {fetcher.data?.error && <Banner tone="critical">{fetcher.data.error}</Banner>}
 
