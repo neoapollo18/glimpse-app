@@ -31,7 +31,7 @@ export function StudioTopBar({
 
   return (
     <>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+      <div className="studio-topbar-left">
         {publishing ? (
           <Badge tone="attention">Publishing…</Badge>
         ) : (
@@ -102,7 +102,9 @@ export function StudioTopBar({
         )}
       </div>
 
-      <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
+      {/* Centered in the CANVAS column (same grid as the body), so the
+          stepper, device toggle, and preview share one visual axis. */}
+      <div className="studio-topbar-center">
         <div
           style={{
             display: "flex",
@@ -125,7 +127,7 @@ export function StudioTopBar({
         </div>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div className="studio-topbar-right">
         <Button variant="plain" url="/app/assistant/quiz">
           Design &amp; text
         </Button>

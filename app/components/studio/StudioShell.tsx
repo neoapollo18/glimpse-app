@@ -7,7 +7,10 @@ import type { ReactNode } from "react";
 
 const SHELL_CSS = `
   .studio-root { display: grid; grid-template-columns: 264px minmax(0, 1fr) 380px; grid-template-rows: 56px minmax(0, 1fr); height: 100dvh; overflow: hidden; background: #fff; font-size: 13px; }
-  .studio-topbar { grid-column: 1 / -1; display: flex; align-items: center; gap: 16px; padding: 0 16px; border-bottom: 1px solid #E1E3E5; background: #fff; z-index: 20; }
+  .studio-topbar { grid-column: 1 / -1; display: grid; grid-template-columns: 264px minmax(0, 1fr) 380px; align-items: center; border-bottom: 1px solid #E1E3E5; background: #fff; z-index: 20; }
+  .studio-topbar-left { display: flex; align-items: center; gap: 10px; padding: 0 16px; min-width: 0; }
+  .studio-topbar-center { display: flex; justify-content: center; min-width: 0; }
+  .studio-topbar-right { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 0 16px; }
   .studio-rail { overflow-y: auto; border-right: 1px solid #E1E3E5; display: flex; flex-direction: column; min-height: 0; }
   .studio-canvas { background: #F6F6F7; min-width: 0; min-height: 0; position: relative; display: flex; flex-direction: column; }
   .studio-panel { border-left: 1px solid #E1E3E5; display: flex; flex-direction: column; min-height: 0; background: #fff; }
@@ -24,8 +27,8 @@ const SHELL_CSS = `
   .studio-panel-tabs { display: flex; border-bottom: 1px solid #E1E3E5; }
   .studio-panel-tab { flex: 1; border: 0; background: transparent; padding: 10px 0; font-size: 13px; font-weight: 600; color: #6D7175; cursor: pointer; border-bottom: 2px solid transparent; }
   .studio-panel-tab[data-active="true"] { color: #202223; border-bottom-color: #1a1a1a; }
-  @media (max-width: 1280px) { .studio-root { grid-template-columns: 264px minmax(0, 1fr) 340px; } }
-  @media (max-width: 1024px) { .studio-root { grid-template-columns: 48px minmax(0, 1fr) 340px; } .studio-rail .studio-rail-wide { display: none; } }
+  @media (max-width: 1280px) { .studio-root, .studio-topbar { grid-template-columns: 264px minmax(0, 1fr) 340px; } }
+  @media (max-width: 1024px) { .studio-root, .studio-topbar { grid-template-columns: 48px minmax(0, 1fr) 340px; } .studio-rail .studio-rail-wide { display: none; } .studio-topbar-left { padding: 0 8px; } }
 `;
 
 export function StudioShell({
