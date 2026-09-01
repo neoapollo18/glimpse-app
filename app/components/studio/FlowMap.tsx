@@ -118,32 +118,57 @@ export function FlowMap({
     }
 
     const branchEdges: Array<{ from: MapNode; to: MapNode; label: string }> = [];
+    const branchSources = new Map<string, Set<string>>(); // nodeId -> answer values that branch
     screens.forEach((s, si) => {
       const q = flow.questions[s.indices[0]];
       if (!q.showIf) return;
       const sourceScreen = screenOfAxis.get(q.showIf.axis_key);
       if (sourceScreen == null || sourceScreen >= si) return;
+      const from = screenNode(sourceScreen);
       branchEdges.push({
-        from: screenNode(sourceScreen),
+        from,
         to: screenNode(si),
-        label: answerLabel(flow, q.showIf.axis_key, q.showIf.axis_value).slice(0, 16),
+        label: answerLabel(flow, q.showIf.axis_key, q.showIf.axis_value).slice(0, 22),
       });
+      const set = branchSources.get(from.id) ?? new Set<string>();
+      set.add(`${q.showIf.axis_key}:${q.showIf.axis_value}`);
+      branchSources.set(from.id, set);
     });
 
     const width = PAD * 2 + (Math.max(...nodes.map((n) => n.col)) + 1) * (NODE_W + COL_GAP);
     const height = PAD + Math.max(NODE_H + ROW_GAP, ...colY.map((y) => y ?? 0));
-    return { nodes, plainEdges, branchEdges, problems, width, height, flow };
+    return { nodes, plainEdges, branchEdges, branchSources, problems, width, height, flow };
   }, [flow]);
 
   if (!layout || !flow) return null;
 
   const bezier = (a: MapNode, b: MapNode) => {
+    if (a.col === b.col) {
+      // Same column: a short vertical spine between stacked cards reads as
+      // "then", where the old side-exit bezier looped invisibly.
+      const x = a.x + a.w / 2;
+      return `M ${x} ${a.y + a.h} L ${x} ${b.y}`;
+    }
     const x1 = a.x + a.w;
     const y1 = a.y + a.h / 2;
     const x2 = b.x;
     const y2 = b.y + b.h / 2;
     const mx = (x1 + x2) / 2;
     return `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`;
+  };
+  // Point at parameter t along the cross-column cubic, for label placement
+  // near the TARGET end instead of the midpoint (which sat on the source
+  // card and clipped the text).
+  const bezierPoint = (a: MapNode, b: MapNode, t: number) => {
+    const x1 = a.x + a.w;
+    const y1 = a.y + a.h / 2;
+    const x2 = b.x;
+    const y2 = b.y + b.h / 2;
+    const mx = (x1 + x2) / 2;
+    const u = 1 - t;
+    const x = u * u * u * x1 + 3 * u * u * t * mx + 3 * u * t * t * mx + t * t * t * x2;
+    const y = u * u * u * y1 + 3 * u * u * t * y1 + 3 * u * t * t * y2 + t * t * t * y2;
+    return { x, y };
   };
 
   return (
@@ -168,13 +193,13 @@ export function FlowMap({
             <path key={`p${i}`} d={bezier(a, b)} stroke="#C9CCCF" strokeWidth={1.5} fill="none" />
           ))}
           {layout.branchEdges.map((e, i) => {
-            const midX = (e.from.x + e.from.w + e.to.x) / 2;
-            const midY = (e.from.y + e.from.h / 2 + e.to.y + e.to.h / 2) / 2;
+            const at = bezierPoint(e.from, e.to, 0.72);
+            const pillW = Math.min(150, e.label.length * 5.6 + 18);
             return (
               <g key={`b${i}`}>
                 <path d={bezier(e.from, e.to)} stroke="#1a1a1a" strokeWidth={2} fill="none" markerEnd="url(#fm-arrow)" />
-                <rect x={midX - 34} y={midY - 10} width={68} height={18} rx={9} fill="#fff" stroke="#E1E3E5" />
-                <text x={midX} y={midY + 3} textAnchor="middle" fontSize={10} fill="#202223">
+                <rect x={at.x - pillW / 2} y={at.y - 24} width={pillW} height={19} rx={9.5} fill="#1a1a1a" />
+                <text x={at.x} y={at.y - 11} textAnchor="middle" fontSize={10} fontWeight={600} fill="#fff">
                   {e.label}
                 </text>
               </g>
@@ -243,20 +268,28 @@ export function FlowMap({
                     </span>
                   ))}
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                    {flow.questions[node.questionIndices[0]].options.slice(0, 6).map((o, i) => (
-                      <span
-                        key={i}
-                        style={{
-                          background: "#F1F1F1",
-                          borderRadius: 999,
-                          padding: "1px 8px",
-                          fontSize: 11,
-                          color: "#202223",
-                        }}
-                      >
-                        {o.label || `Answer ${i + 1}`}
-                      </span>
-                    ))}
+                    {flow.questions[node.questionIndices[0]].options.slice(0, 6).map((o, i) => {
+                      const q = flow.questions[node.questionIndices[0]];
+                      const branches = layout.branchSources
+                        .get(node.id)
+                        ?.has(`${q.axisKey}:${o.axisValueValue}`);
+                      return (
+                        <span
+                          key={i}
+                          style={{
+                            background: branches ? "#1a1a1a" : "#F1F1F1",
+                            borderRadius: 999,
+                            padding: "1px 8px",
+                            fontSize: 11,
+                            fontWeight: branches ? 600 : 400,
+                            color: branches ? "#fff" : "#202223",
+                          }}
+                        >
+                          {o.label || `Answer ${i + 1}`}
+                          {branches ? " →" : ""}
+                        </span>
+                      );
+                    })}
                     {flow.questions[node.questionIndices[0]].options.length > 6 && (
                       <span style={{ fontSize: 11, color: "#6D7175" }}>
                         +{flow.questions[node.questionIndices[0]].options.length - 6} more
