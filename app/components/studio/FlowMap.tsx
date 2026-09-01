@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import { Button } from "@shopify/polaris";
+import { Button, Icon } from "@shopify/polaris";
+import { HomeIcon, CameraIcon, FlagIcon, MergeIcon } from "@shopify/polaris-icons";
 import type { StudioFlow } from "./types";
 import { answerLabel } from "./types";
 import { buildScreens, slideIdForQuestion } from "./SlideTree";
@@ -243,16 +244,26 @@ export function FlowMap({
                 />
               )}
               {node.kind !== "screen" ? (
-                <span style={{ fontWeight: 600 }}>
-                  {node.kind === "intro" ? "⌂ Intro" : node.kind === "photo" ? "◉ Photo" : "⚑ Results"}
+                <span style={{ fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ width: 14, height: 14, display: "inline-flex" }}>
+                    <Icon
+                      source={node.kind === "intro" ? HomeIcon : node.kind === "photo" ? CameraIcon : FlagIcon}
+                      tone="subdued"
+                    />
+                  </span>
+                  {node.kind === "intro" ? "Intro" : node.kind === "photo" ? "Photo" : "Results"}
                 </span>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  <span style={{ fontSize: 11, fontWeight: 600, color: "#6D7175" }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: "#6D7175", display: "inline-flex", alignItems: "center", gap: 4 }}>
                     {node.questionIndices.length > 1
                       ? `Q${node.questionIndices[0] + 1}-Q${node.questionIndices[node.questionIndices.length - 1] + 1}`
                       : `Q${node.questionIndices[0] + 1}`}
-                    {flow.questions[node.questionIndices[0]].showIf ? "  ⑂" : ""}
+                    {flow.questions[node.questionIndices[0]].showIf ? (
+                      <span style={{ width: 12, height: 12, display: "inline-flex" }}>
+                        <Icon source={MergeIcon} tone="subdued" />
+                      </span>
+                    ) : null}
                   </span>
                   {node.questionIndices.map((qi) => (
                     <span
