@@ -1094,21 +1094,20 @@ function OnboardingWizard({
 const THEME_EXT_UUID = "1013fc3f-b18d-aa39-07f6-10dfd57397a6749693b0";
 
 const GLEAME_HERO_CSS = `
-  .gleame-hero { position: relative; overflow: hidden; border-radius: 20px; background: linear-gradient(135deg, #17171B 0%, #1F1F26 55%, #2A2130 100%); padding: 44px 48px; box-shadow: 0 12px 40px rgba(23, 23, 27, 0.28); }
-  .gleame-hero-glow { position: absolute; width: 480px; height: 480px; border-radius: 50%; top: -260px; right: -120px; background: radial-gradient(circle, rgba(216, 180, 254, 0.28) 0%, rgba(216, 180, 254, 0) 65%); pointer-events: none; }
-  .gleame-hero-glow-2 { top: auto; right: auto; bottom: -300px; left: -140px; background: radial-gradient(circle, rgba(255, 190, 160, 0.16) 0%, rgba(255, 190, 160, 0) 65%); }
+  .gleame-hero { position: relative; overflow: hidden; border-radius: 20px; background: linear-gradient(135deg, #FFFFFF 0%, #F7F3FF 55%, #FFF1EA 100%); border: 1px solid #ECE8F4; padding: 40px 48px; box-shadow: 0 6px 24px rgba(23, 23, 27, 0.06); }
+  .gleame-hero-glow { position: absolute; width: 420px; height: 420px; border-radius: 50%; top: -240px; right: -100px; background: radial-gradient(circle, rgba(196, 164, 255, 0.18) 0%, rgba(196, 164, 255, 0) 65%); pointer-events: none; }
+  .gleame-hero-glow-2 { top: auto; right: auto; bottom: -280px; left: -120px; background: radial-gradient(circle, rgba(255, 178, 145, 0.14) 0%, rgba(255, 178, 145, 0) 65%); }
   .gleame-hero-content { position: relative; max-width: 640px; }
-  .gleame-hero-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
-  .gleame-hero-mark { width: 28px; height: 28px; border-radius: 8px; background: #fff; color: #17171B; font-weight: 800; font-size: 15px; display: inline-flex; align-items: center; justify-content: center; }
-  .gleame-hero-wordmark { color: rgba(255, 255, 255, 0.55); font-size: 11px; font-weight: 700; letter-spacing: 0.28em; }
-  .gleame-hero-title { margin: 0 0 10px; color: #fff; font-family: Georgia, 'Times New Roman', serif; font-weight: 500; font-size: 34px; line-height: 1.15; letter-spacing: -0.01em; }
-  .gleame-hero-sub { margin: 0 0 26px; color: rgba(255, 255, 255, 0.72); font-size: 15px; line-height: 1.55; max-width: 520px; }
+  .gleame-hero-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+  .gleame-hero-logo { width: 36px; height: 36px; display: block; }
+  .gleame-hero-title { margin: 0 0 8px; color: #1A1A1E; font-weight: 700; font-size: 28px; line-height: 1.2; letter-spacing: -0.01em; }
+  .gleame-hero-sub { margin: 0 0 24px; color: #5C5F66; font-size: 15px; line-height: 1.55; max-width: 520px; }
   .gleame-hero-actions { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
-  .gleame-hero-cta { border: 0; cursor: pointer; background: #fff; color: #17171B; font-size: 14px; font-weight: 650; padding: 12px 22px; border-radius: 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35); transition: transform 140ms ease, box-shadow 140ms ease; }
-  .gleame-hero-cta:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); }
-  .gleame-hero-ghost { border: 0; cursor: pointer; background: transparent; color: rgba(255, 255, 255, 0.75); font-size: 13px; font-weight: 600; padding: 8px 4px; }
-  .gleame-hero-ghost:hover { color: #fff; }
-  @media (max-width: 640px) { .gleame-hero { padding: 32px 24px; } .gleame-hero-title { font-size: 27px; } }
+  .gleame-hero-cta { border: 0; cursor: pointer; background: #1A1A1E; color: #fff; font-size: 14px; font-weight: 600; padding: 12px 22px; border-radius: 12px; box-shadow: 0 3px 12px rgba(26, 26, 30, 0.22); transition: transform 140ms ease, box-shadow 140ms ease; }
+  .gleame-hero-cta:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(26, 26, 30, 0.28); }
+  .gleame-hero-ghost { border: 0; cursor: pointer; background: transparent; color: #5C5F66; font-size: 13px; font-weight: 600; padding: 8px 4px; }
+  .gleame-hero-ghost:hover { color: #1A1A1E; }
+  @media (max-width: 640px) { .gleame-hero { padding: 28px 24px; } .gleame-hero-title { font-size: 23px; } }
 `;
 
 const HOME_MODE_LABELS: Record<string, string> = {
@@ -1187,8 +1186,7 @@ function DashboardView({
           <div className="gleame-hero-glow gleame-hero-glow-2" aria-hidden />
           <div className="gleame-hero-content">
             <div className="gleame-hero-brand">
-              <span className="gleame-hero-mark">G</span>
-              <span className="gleame-hero-wordmark">GLEAME</span>
+              <img className="gleame-hero-logo" src="/placeholders/gleametransparent.svg" alt="Gleame" />
             </div>
             <h1 className="gleame-hero-title">Welcome back, {displayName}</h1>
             <p className="gleame-hero-sub">
