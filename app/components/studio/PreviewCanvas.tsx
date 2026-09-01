@@ -125,7 +125,8 @@ export function PreviewCanvas({
         <div
           style={{
             width: isMobile ? frame.width : "100%",
-            height: isMobile ? undefined : "100%",
+            height: isMobile ? undefined : "calc(100% - 8px)",
+            boxSizing: "border-box",
             display: isMobile ? undefined : "flex",
             flexDirection: isMobile ? undefined : "column",
             border: isMobile ? "10px solid #1a1a1a" : "1px solid #D6D9DC",
