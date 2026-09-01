@@ -29,7 +29,7 @@ const SHELL_CSS = `
   .studio-panel-tab { flex: 1; border: 0; background: transparent; padding: 10px 0; font-size: 13px; font-weight: 600; color: #6D7175; cursor: pointer; border-bottom: 2px solid transparent; }
   .studio-panel-tab[data-active="true"] { color: #202223; border-bottom-color: #1a1a1a; }
   @media (max-width: 1280px) { .studio-root, .studio-topbar { grid-template-columns: 264px minmax(0, 1fr) 340px; } }
-  @media (max-width: 1024px) { .studio-root, .studio-topbar { grid-template-columns: 48px minmax(0, 1fr) 340px; } .studio-rail .studio-rail-wide { display: none; } .studio-topbar-left { padding: 0 8px; } }
+  @media (max-width: 1024px) { .studio-root, .studio-topbar { grid-template-columns: 48px minmax(0, 1fr) 340px; } .studio-rail .studio-rail-wide { display: none; } .studio-topbar-left { padding: 0 8px; overflow: hidden; } .studio-topbar-left > :not(:first-child) { display: none; } }
 `;
 
 export function StudioShell({

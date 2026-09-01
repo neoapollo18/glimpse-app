@@ -27,7 +27,8 @@ import {
   type CatalogProduct,
   type GeneratedQuizConfig,
 } from "./quiz-config-schema.server";
-import { saveQuizDraft, type QuizDraft } from "./quiz-draft.server";
+import { getQuizDraft, saveQuizDraft, type QuizDraft } from "./quiz-draft.server";
+import { withShopSaveLock } from "./shop-save-lock.server";
 import { supabase, getVariantsForProducts, getChatAssistantConfig } from "./supabase.server";
 
 export interface BrandBrief {
@@ -350,7 +351,20 @@ export async function generateQuizConfig(args: {
     (draft.settings as Record<string, unknown>).enabled = true;
     (draft.settings as Record<string, unknown>).assistant_mode = "quiz";
   }
-  const saved = await saveQuizDraft(shopId, draft, "ai");
+  // Locked save with an overwrite guard: generation runs for a minute or
+  // more, and the unconditional save could stomp a draft the merchant
+  // created or meaningfully edited in that window (or in another tab).
+  const saved = await withShopSaveLock(shopId, async () => {
+    const existing = await getQuizDraft(shopId);
+    const hasRealContent = existing?.flow.questions.some((q) => q.prompt.trim() !== "") ?? false;
+    if (hasRealContent) {
+      return {
+        ok: false as const,
+        error: "A quiz draft with content already exists — edit it in the studio, or discard it before generating a new one.",
+      };
+    }
+    return saveQuizDraft(shopId, draft, "ai");
+  });
   if (!saved.ok) return { ok: false, error: `Draft save failed: ${saved.error}`, warnings, usage };
 
   return {

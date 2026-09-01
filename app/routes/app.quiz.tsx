@@ -8,4 +8,8 @@ export const loader = ({ request }: LoaderFunctionArgs) => {
   const qs = url.searchParams.toString();
   return redirect(qs ? `/app?${qs}` : "/app");
 };
-export const action = () => redirect("/app");
+export const action = ({ request }: LoaderFunctionArgs) => {
+  const url = new URL(request.url);
+  const qs = url.searchParams.toString();
+  return redirect(qs ? `/app?${qs}` : "/app");
+};

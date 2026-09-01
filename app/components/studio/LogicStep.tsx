@@ -71,6 +71,18 @@ function useLogicModel(data: StudioLoaderData) {
 }
 
 // ---- Per-answer row serialization ------------------------------------------
+//
+// The serialized blob is for PERSISTENCE only. The text fields bind to local
+// row state and never round-trip through parse/compose while typing — the
+// early version did, and trimming ate trailing spaces and newlines under the
+// cursor.
+
+/** Unique trimmed labels, in order. Duplicate labels share one row (they
+ * name the same answer text) — duplicated record keys doubled the note on
+ * every keystroke. */
+function uniqueLabels(labels: string[]): string[] {
+  return [...new Set(labels.map((l) => l.trim()).filter((l) => l !== ""))];
+}
 
 /** Split a note blob into per-answer texts (lines starting "Label:") plus the
  * free-text remainder. Longest labels match first so a label that prefixes
@@ -82,9 +94,11 @@ function parseNote(note: string, labels: string[]) {
   for (const raw of note.split("\n")) {
     const line = raw.trim();
     if (!line) continue;
-    const hit = byLength.find((l) => line.toLowerCase().startsWith(l.trim().toLowerCase() + ":"));
+    const hit = byLength.find((l) => line.toLowerCase().startsWith(l.toLowerCase() + ":"));
     if (hit) {
-      const text = line.slice(line.indexOf(":") + 1).trim();
+      // Slice at the LABEL length, not the first colon — labels may
+      // themselves contain a colon.
+      const text = line.slice(hit.length + 1).trim();
       answers[hit] = answers[hit] ? `${answers[hit]} ${text}` : text;
     } else {
       extra.push(line);
@@ -96,9 +110,11 @@ function parseNote(note: string, labels: string[]) {
 function composeNote(labels: string[], answers: Record<string, string>, extra: string) {
   const lines = labels
     .filter((l) => (answers[l] ?? "").trim() !== "")
-    .map((l) => `${l.trim()}: ${answers[l].trim()}`);
+    .map((l) => `${l}: ${answers[l].trim()}`);
   if (extra.trim()) lines.push(extra.trim());
-  return lines.join("\n").slice(0, NOTE_MAX_LEN);
+  // No client-side slice: the server clips at NOTE_MAX_LEN, and the UI
+  // warns instead of silently dropping whole rows mid-blob.
+  return lines.join("\n");
 }
 
 // ---- Rail ------------------------------------------------------------------
@@ -191,7 +207,6 @@ export function LogicStep({ data, chatBusy }: { data: StudioLoaderData; chatBusy
   const { questions, photoAxes } = useLogicModel(data);
   const notesFetcher = useFetcher<StudioActionData>();
   const activateFetcher = useFetcher<StudioActionData>();
-  const draftFetcher = useFetcher<StudioActionData>();
 
   const [notes, setNotes] = useState<Record<string, string>>(() => ({
     [GENERAL_GUIDANCE_KEY]: (data.notes as Record<string, string>)[GENERAL_GUIDANCE_KEY] ?? "",
@@ -199,6 +214,15 @@ export function LogicStep({ data, chatBusy }: { data: StudioLoaderData; chatBusy
       [...questions, ...photoAxes].map((q) => [q.axisKey, (data.notes as Record<string, string>)[q.axisKey] ?? ""]),
     ),
   }));
+  // Display truth for the per-answer rows (see serialization note above).
+  const [rows, setRows] = useState<Record<string, { answers: Record<string, string>; extra: string }>>(() =>
+    Object.fromEntries(
+      questions.map((q) => [
+        q.axisKey,
+        parseNote((data.notes as Record<string, string>)[q.axisKey] ?? "", uniqueLabels(q.optionLabels)),
+      ]),
+    ),
+  );
   const notesRef = useRef(notes);
   const dirtyKeysRef = useRef<Set<string>>(new Set());
   const [notesDirty, setNotesDirty] = useState(false);
@@ -282,71 +306,101 @@ export function LogicStep({ data, chatBusy }: { data: StudioLoaderData; chatBusy
   }, [notesFetcher.state, notesFetcher.data]);
 
   // ---- AI note drafting ----
+  // One request PER QUESTION, sequential: a single long silent action for
+  // the whole quiz gets idled out by the proxy (guidance-generate streams
+  // heartbeats for the same reason), and per-question calls fill the rows
+  // incrementally. Prompt caching keeps calls after the first cheap.
   const [draftedBanner, setDraftedBanner] = useState<string | null>(null);
-  const requestDraft = (axisKeys?: string[]) => {
-    if (draftFetcher.state !== "idle") return;
-    setDraftedBanner(null);
-    const fd = new FormData();
-    fd.append("intent", "draft-notes");
-    if (axisKeys) fd.append("axisKeys", JSON.stringify(axisKeys));
-    draftFetcher.submit(fd, { method: "POST", action: "/studio" });
-  };
-  // Which draft request is in flight: "all" or a single axisKey.
-  const draftingKeys = draftFetcher.state !== "idle"
-    ? (draftFetcher.formData?.get("axisKeys") as string | null)
-    : undefined; // undefined = not drafting; null = drafting all
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const [drafting, setDrafting] = useState<string | null>(null); // "all" | axisKey
+  const [draftProgress, setDraftProgress] = useState<string | null>(null);
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
 
-  const draftProcessedRef = useRef<StudioActionData | null>(null);
-  useEffect(() => {
-    if (draftFetcher.state !== "idle" || !draftFetcher.data) return;
-    if (draftProcessedRef.current === draftFetcher.data) return;
-    draftProcessedRef.current = draftFetcher.data;
-    const result = draftFetcher.data;
-    if (!result.ok || !result.notesDraft) return;
-    // Merge non-destructively: only empty rows get the drafted text; typed
-    // rows and existing free text always win.
-    let touched = 0;
-    let firstTouched: string | null = null;
-    for (const dq of result.notesDraft.questions) {
-      const q = questions.find((x) => x.axisKey === dq.axisKey);
-      if (!q) continue;
-      const cur = parseNote(notesRef.current[q.axisKey] ?? "", q.optionLabels);
-      let changed = false;
-      for (const ans of dq.answers) {
-        const label = q.optionLabels.find(
-          (l) => l.trim().toLowerCase() === ans.label.trim().toLowerCase(),
-        );
-        if (!label) continue;
-        if ((cur.answers[label] ?? "").trim() === "" && ans.note.trim() !== "") {
-          cur.answers[label] = ans.note.trim().slice(0, ROW_MAX_LEN);
-          changed = true;
-        }
-      }
-      if (q.multiSelect && dq.combos.trim() && cur.extra.trim() === "") {
-        cur.extra = dq.combos.trim();
+  // Merge one drafted question non-destructively: only empty rows get the
+  // drafted text; typed rows and existing free text always win.
+  const mergeDraftedQuestion = (dq: { axisKey: string; answers: Array<{ label: string; note: string }>; combos: string }) => {
+    const q = questions.find((x) => x.axisKey === dq.axisKey);
+    if (!q) return false;
+    const labels = uniqueLabels(q.optionLabels);
+    const cur = rowsRef.current[q.axisKey] ?? parseNote(notesRef.current[q.axisKey] ?? "", labels);
+    const answers = { ...cur.answers };
+    let extra = cur.extra;
+    let changed = false;
+    for (const ans of dq.answers) {
+      const label = labels.find((l) => l.toLowerCase() === ans.label.trim().toLowerCase());
+      if (!label) continue;
+      if ((answers[label] ?? "").trim() === "" && ans.note.trim() !== "") {
+        answers[label] = ans.note.trim().slice(0, ROW_MAX_LEN);
         changed = true;
       }
-      if (changed) {
-        setNote(q.axisKey, composeNote(q.optionLabels, cur.answers, cur.extra));
-        touched += 1;
-        if (!firstTouched) firstTouched = q.axisKey;
+    }
+    if (q.multiSelect && (dq.combos ?? "").trim() && extra.trim() === "") {
+      extra = dq.combos.trim();
+      changed = true;
+    }
+    if (changed) {
+      const next = { answers, extra };
+      rowsRef.current = { ...rowsRef.current, [q.axisKey]: next };
+      setRows(rowsRef.current);
+      setNote(q.axisKey, composeNote(labels, answers, extra));
+    }
+    return changed;
+  };
+
+  const requestDraft = async (axisKeys?: string[]) => {
+    if (drafting) return;
+    const targets = axisKeys ?? questions.map((q) => q.axisKey);
+    if (targets.length === 0) return;
+    setDrafting(axisKeys ? axisKeys[0] : "all");
+    setDraftedBanner(null);
+    setDraftError(null);
+    let touched = 0;
+    let firstTouched: string | null = null;
+    try {
+      for (let i = 0; i < targets.length; i++) {
+        if (!mountedRef.current) return;
+        if (targets.length > 1) setDraftProgress(`Drafting notes ${i + 1} of ${targets.length}…`);
+        const fd = new FormData();
+        fd.append("intent", "draft-notes");
+        fd.append("axisKeys", JSON.stringify([targets[i]]));
+        const res = await fetch("/studio", { method: "POST", body: fd });
+        const body = (await res.json().catch(() => null)) as StudioActionData | null;
+        if (!mountedRef.current) return;
+        if (!body?.ok) throw new Error(body?.error ?? `Drafting failed (${res.status})`);
+        for (const dq of body.notesDraft?.questions ?? []) {
+          if (mergeDraftedQuestion(dq)) {
+            touched += 1;
+            if (!firstTouched) firstTouched = dq.axisKey;
+          }
+        }
+      }
+      setDraftedBanner(
+        touched > 0
+          ? `AI drafted notes for ${touched} ${touched === 1 ? "question" : "questions"} from your catalog. Review and edit anything, then generate.`
+          : "Nothing to draft: every answer already has notes.",
+      );
+      if (firstTouched) {
+        const open = firstTouched;
+        setExpanded((prev) => new Set(prev).add(open));
+      }
+    } catch (e) {
+      if (mountedRef.current) setDraftError(e instanceof Error ? e.message : "Drafting failed");
+    } finally {
+      if (mountedRef.current) {
+        setDrafting(null);
+        setDraftProgress(null);
       }
     }
-    if (touched > 0) {
-      setDraftedBanner(
-        `AI drafted notes for ${touched} ${touched === 1 ? "question" : "questions"} from your catalog. Review and edit anything, then generate.`,
-      );
-      if (firstTouched) setExpanded((prev) => new Set(prev).add(firstTouched));
-    } else {
-      setDraftedBanner("Nothing to draft: every answer already has notes.");
-    }
-  }, [draftFetcher.state, draftFetcher.data, questions]);
+  };
 
   const filledCount = questions.filter((q) => (notes[q.axisKey] ?? "").trim() !== "").length;
   const generateBlocked =
     questions.length === 0 || !data.aiConfigured || data.catalog.productCount === 0;
   const generating = genPhase !== null;
-  const draftBlocked = generateBlocked || chatBusy || draftFetcher.state !== "idle";
+  const draftBlocked = generateBlocked || chatBusy || drafting !== null;
 
   const runGenerate = async () => {
     if (generateRunningRef.current || generateBlocked) return;
@@ -418,14 +472,21 @@ export function LogicStep({ data, chatBusy }: { data: StudioLoaderData; chatBusy
               </BlockStack>
             </div>
             {data.aiConfigured && (
-              <Button
-                icon={MagicIcon}
-                onClick={() => requestDraft()}
-                loading={draftingKeys === null}
-                disabled={draftBlocked && draftingKeys !== null}
-              >
-                Draft all notes with AI
-              </Button>
+              <BlockStack gap="100" inlineAlign="end">
+                <Button
+                  icon={MagicIcon}
+                  onClick={() => requestDraft()}
+                  loading={drafting === "all"}
+                  disabled={draftBlocked && drafting !== "all"}
+                >
+                  Draft all notes with AI
+                </Button>
+                {draftProgress && (
+                  <Text as="span" variant="bodySm" tone="subdued">
+                    {draftProgress}
+                  </Text>
+                )}
+              </BlockStack>
             )}
           </InlineStack>
         </Card>
@@ -435,8 +496,10 @@ export function LogicStep({ data, chatBusy }: { data: StudioLoaderData; chatBusy
             {draftedBanner}
           </Banner>
         )}
-        {draftFetcher.data && !draftFetcher.data.ok && draftFetcher.data.intent === "draft-notes" && (
-          <Banner tone="critical">{draftFetcher.data.error}</Banner>
+        {draftError && (
+          <Banner tone="critical" onDismiss={() => setDraftError(null)}>
+            {draftError}
+          </Banner>
         )}
 
         {currentGuidance !== "" && !review && (
@@ -447,12 +510,17 @@ export function LogicStep({ data, chatBusy }: { data: StudioLoaderData; chatBusy
         )}
 
         {questions.map((q) => {
-          const parsed = parseNote(notes[q.axisKey] ?? "", q.optionLabels);
-          const setRow = (label: string, value: string) => {
-            const next = { ...parsed.answers, [label]: value };
-            setNote(q.axisKey, composeNote(q.optionLabels, next, parsed.extra));
+          const labels = uniqueLabels(q.optionLabels);
+          const parsed =
+            rows[q.axisKey] ?? parseNote(notes[q.axisKey] ?? "", labels);
+          const commitRows = (next: { answers: Record<string, string>; extra: string }) => {
+            setRows((prev) => ({ ...prev, [q.axisKey]: next }));
+            setNote(q.axisKey, composeNote(labels, next.answers, next.extra));
           };
+          const setRow = (label: string, value: string) =>
+            commitRows({ ...parsed, answers: { ...parsed.answers, [label]: value } });
           const filled = (notes[q.axisKey] ?? "").trim() !== "";
+          const overLimit = (notes[q.axisKey] ?? "").length > NOTE_MAX_LEN;
           return (
             <LogicCard
               key={q.axisKey}
@@ -475,14 +543,14 @@ export function LogicStep({ data, chatBusy }: { data: StudioLoaderData; chatBusy
                       variant="tertiary"
                       icon={MagicIcon}
                       onClick={() => requestDraft([q.axisKey])}
-                      loading={draftingKeys === JSON.stringify([q.axisKey])}
-                      disabled={draftBlocked && draftingKeys !== JSON.stringify([q.axisKey])}
+                      loading={drafting === q.axisKey}
+                      disabled={draftBlocked && drafting !== q.axisKey}
                     >
                       Draft with AI
                     </Button>
                   )}
                 </InlineStack>
-                {q.optionLabels.map((label) => (
+                {labels.map((label) => (
                   <InlineStack key={label} gap="300" blockAlign="center" wrap={false}>
                     <div style={{ width: 160, flexShrink: 0 }}>
                       <Text as="span" variant="bodySm" fontWeight="semibold">
@@ -508,7 +576,7 @@ export function LogicStep({ data, chatBusy }: { data: StudioLoaderData; chatBusy
                   multiline={2}
                   maxLength={NOTE_MAX_LEN}
                   value={parsed.extra}
-                  onChange={(v) => setNote(q.axisKey, composeNote(q.optionLabels, parsed.answers, v))}
+                  onChange={(v) => commitRows({ ...parsed, extra: v })}
                   placeholder={
                     q.multiSelect
                       ? "e.g. how combined picks interact, what to avoid"
@@ -517,6 +585,11 @@ export function LogicStep({ data, chatBusy }: { data: StudioLoaderData; chatBusy
                   disabled={chatBusy}
                   autoComplete="off"
                 />
+                {overLimit && (
+                  <Text as="p" variant="bodySm" tone="critical">
+                    These notes exceed {NOTE_MAX_LEN.toLocaleString()} characters and will be cut off when saved. Shorten them.
+                  </Text>
+                )}
               </BlockStack>
             </LogicCard>
           );

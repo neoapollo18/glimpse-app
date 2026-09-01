@@ -148,33 +148,38 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       getAssistantEngagement(session.shop, 30),
     ]);
 
-    // Product images (only the legacy product table uses them)
-    const response = await admin.graphql(`
-      query GetProducts($first: Int!) {
-        products(first: $first) {
-          edges {
-            node {
-              id
-              images(first: 1) {
-                edges {
-                  node {
-                    url
+    // Product images (only the legacy product table uses them). Best
+    // effort: a failed Admin GraphQL call must not 500 the whole page.
+    try {
+      const response = await admin.graphql(`
+        query GetProducts($first: Int!) {
+          products(first: $first) {
+            edges {
+              node {
+                id
+                images(first: 1) {
+                  edges {
+                    node {
+                      url
+                    }
                   }
                 }
               }
             }
           }
         }
-      }
-    `, {
-      variables: { first: 100 }
-    });
+      `, {
+        variables: { first: 100 }
+      });
 
-    const { data } = await response.json();
-    data.products.edges.forEach(({ node }: { node: any }) => {
-      const imageUrl = node.images?.edges?.[0]?.node?.url || "";
-      productImages[node.id] = imageUrl;
-    });
+      const { data } = await response.json();
+      (data?.products?.edges ?? []).forEach(({ node }: { node: any }) => {
+        const imageUrl = node.images?.edges?.[0]?.node?.url || "";
+        productImages[node.id] = imageUrl;
+      });
+    } catch (e) {
+      console.error("Analytics: product image fetch failed (thumbnails omitted):", e);
+    }
   }
 
   const safeAnalytics7: AnalyticsData = {
@@ -282,19 +287,18 @@ export default function Analytics() {
   const hasQuizData =
     quiz.views > 0 || quiz.starts > 0 || quiz.resultsShown > 0;
 
-  const buildQuizFunnel = (counts: QuizFunnelCounts) =>
-    [
-      { label: "Quiz viewed", count: counts.views },
-      { label: "Quiz started", count: counts.starts },
-      { label: "Photo step reached", count: counts.gateViews },
-      { label: "Photo uploaded", count: counts.photoUploads },
-      { label: "Results shown", count: counts.resultsShown },
-      { label: "Product clicked", count: counts.productClicks },
-      { label: "Added to cart", count: counts.addToCart },
-    ].map((stage, i, arr) => ({
-      ...stage,
-      of: i === 0 ? stage.count : arr[i - 1].count,
-    }));
+  // Step conversion is against the prior MANDATORY stage. The photo step
+  // is optional (skip and manual-shade paths reach results without an
+  // upload), so "Results shown" measures against the gate, not uploads.
+  const buildQuizFunnel = (counts: QuizFunnelCounts) => [
+    { label: "Quiz viewed", count: counts.views, of: counts.views, optional: false },
+    { label: "Quiz started", count: counts.starts, of: counts.views, optional: false },
+    { label: "Photo step reached", count: counts.gateViews, of: counts.starts, optional: false },
+    { label: "Photo uploaded", count: counts.photoUploads, of: counts.gateViews, optional: true },
+    { label: "Results shown", count: counts.resultsShown, of: counts.gateViews, optional: false },
+    { label: "Product clicked", count: counts.productClicks, of: counts.resultsShown, optional: false },
+    { label: "Added to cart", count: counts.addToCart, of: counts.productClicks, optional: false },
+  ];
 
   const quizFunnel = buildQuizFunnel(quiz);
   const quizMobileFunnel = buildQuizFunnel(quiz.byDevice.mobile);
@@ -416,7 +420,7 @@ export default function Analytics() {
                               </Text>
                               {stage.label === "Photo uploaded" && quiz.photoSkips > 0 && (
                                 <Text as="span" variant="bodySm" tone="subdued">
-                                  {quiz.photoSkips.toLocaleString()} skipped the photo
+                                  {quiz.photoSkips.toLocaleString()} skipped the photo (optional step)
                                 </Text>
                               )}
                             </InlineStack>
@@ -426,7 +430,17 @@ export default function Analytics() {
                               </Text>
                               {i > 0 && (
                                 <Box minWidth="52px">
-                                  <Badge tone={stepConversion >= 50 ? "success" : stepConversion >= 20 ? "attention" : "critical"}>
+                                  <Badge
+                                    tone={
+                                      stage.optional
+                                        ? undefined
+                                        : stepConversion >= 50
+                                          ? "success"
+                                          : stepConversion >= 20
+                                            ? "attention"
+                                            : "critical"
+                                    }
+                                  >
                                     {`${stepConversion.toFixed(0)}%`}
                                   </Badge>
                                 </Box>
@@ -456,7 +470,7 @@ export default function Analytics() {
                 </Box>
                 <Box padding="400" paddingBlockStart="300">
                   <Text as="span" variant="bodySm" tone="subdued">
-                    Percentages show step-over-step conversion from the prior stage. Counts are event volume, not unique shoppers. Shoppers who skip the photo step still reach results.
+                    Percentages show conversion from the prior required stage. The photo upload is optional (skip and manual-shade paths reach results without it), so results are measured against the photo step, not uploads. Counts are event volume, not unique shoppers.
                   </Text>
                 </Box>
               </Card>

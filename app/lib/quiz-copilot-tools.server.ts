@@ -135,11 +135,16 @@ export function applyUpdateQuestionOptions(draft: DraftShape, input: any, catalo
   const next = clone(draft);
   const q = next.flow.questions[idx];
   const axis = next.flow.axes.find((a) => a.key === q.axisKey)!;
-  // Preserve admin-set option images by AXIS VALUE identity (not array
-  // position — reorders/inserts/removals would reattach images to the wrong
-  // answers otherwise).
+  // Preserve admin-set option images AND authored bot responses by AXIS
+  // VALUE identity (not array position — reorders/inserts/removals would
+  // reattach them to the wrong answers otherwise). botResponse drives the
+  // chat widget's reply after an answer pick; nulling it here published
+  // silent data loss for chat/both-mode shops.
   const imageByValue = new Map(
     q.options.filter((o) => o.imageUrl).map((o) => [o.axisValueValue, o.imageUrl!]),
+  );
+  const botResponseByValue = new Map(
+    q.options.filter((o) => o.botResponse).map((o) => [o.axisValueValue, o.botResponse!]),
   );
   q.options = input.options.map((opt: any, j: number) => {
     // Auto-declare new axis values referenced by the new options.
@@ -154,7 +159,7 @@ export function applyUpdateQuestionOptions(draft: DraftShape, input: any, catalo
     return {
       label: String(opt.label ?? ""),
       axisValueValue: String(opt.axisValueValue ?? ""),
-      botResponse: null,
+      botResponse: botResponseByValue.get(String(opt.axisValueValue ?? "")) ?? null,
       reasonText: opt.reasonText ?? null,
       imageUrl: imageByValue.get(String(opt.axisValueValue ?? "")) ?? null,
       showIf: opt.showIf ?? null,
@@ -163,6 +168,39 @@ export function applyUpdateQuestionOptions(draft: DraftShape, input: any, catalo
       position: j,
     };
   });
+  // Answers removed by this replacement must not silently strand things
+  // that reference their axis value: matrix rules and other questions'
+  // showIf conditions would keep matching a value no shopper can pick.
+  const referenced = new Set(q.options.map((o) => o.axisValueValue));
+  const removedValues = axis.values.filter((v) => !referenced.has(v.value)).map((v) => v.value);
+  if (removedValues.length > 0) {
+    const orphanedRules = next.flow.rules.filter((r) =>
+      removedValues.includes(String((r.criteria as Record<string, unknown>)[q.axisKey] ?? "")),
+    );
+    const orphanedShowIf = next.flow.questions.filter(
+      (other) =>
+        other.axisKey !== q.axisKey &&
+        other.showIf?.axis_key === q.axisKey &&
+        removedValues.includes(other.showIf.axis_value),
+    );
+    if (orphanedRules.length > 0 || orphanedShowIf.length > 0) {
+      const parts: string[] = [];
+      if (orphanedRules.length > 0) {
+        parts.push(`${orphanedRules.length} advanced rule${orphanedRules.length > 1 ? "s" : ""}`);
+      }
+      for (const other of orphanedShowIf) {
+        parts.push(`the condition on "${other.prompt || other.axisKey}"`);
+      }
+      return {
+        ok: false,
+        error: `Removing answer value${removedValues.length > 1 ? "s" : ""} ${removedValues.join(", ")} would strand ${parts.join(" and ")}. Update or remove those first.`,
+      };
+    }
+    // Nothing references the dropped values: prune them from the axis so
+    // they don't linger as unpickable ghosts.
+    axis.values = axis.values.filter((v) => referenced.has(v.value));
+    axis.values.forEach((v, i) => { v.position = i; });
+  }
   const error = revalidate(next, catalog);
   if (error) return { ok: false, error };
   return {
@@ -304,13 +342,27 @@ export function applyUpdateCopy(draft: DraftShape, input: any, _catalog: Catalog
   if (keys.length === 0) return { ok: false, error: "fields is empty" };
   const bad = keys.filter((k) => !COPY_KEYS.has(k));
   if (bad.length) return { ok: false, error: `Unknown copy fields: ${bad.join(", ")}` };
+  // Reject shapes String() would mangle ("[object Object]" published to the
+  // storefront); null clears the field instead of storing the string "null".
+  for (const [k, v] of Object.entries(fields)) {
+    if (v == null) continue;
+    if (Array.isArray(v)) {
+      if (v.some((s) => typeof s !== "string" && typeof s !== "number")) {
+        return { ok: false, error: `${k}: array entries must be strings` };
+      }
+    } else if (typeof v !== "string" && typeof v !== "number" && typeof v !== "boolean") {
+      return { ok: false, error: `${k} must be a string (got ${typeof v})` };
+    }
+  }
   const next = clone(draft);
   for (const [k, v] of Object.entries(fields)) {
     next.settings[k] = BOOL_COPY_KEYS.has(k)
       ? v === true || v === "true"
-      : Array.isArray(v)
-        ? v.map((s) => String(s).slice(0, 400))
-        : String(v).slice(0, 400);
+      : v == null
+        ? null
+        : Array.isArray(v)
+          ? v.map((s) => String(s).slice(0, 400))
+          : String(v).slice(0, 400);
   }
   return {
     ok: true,
@@ -426,8 +478,14 @@ export function applyUpdateRecommendationMode(draft: DraftShape, input: any, cat
 export function applyUpdateGuidance(draft: DraftShape, input: any, _catalog: CatalogProduct[]): ApplyResult {
   const text = String(input.aiGuidance ?? "").trim();
   if (!text) return { ok: false, error: "aiGuidance is empty" };
+  // The guidance compiler is allowed up to 20k chars (guidance-generator
+  // ROLE_BLOCK); silently slicing here truncated compiled rulebooks midway
+  // through PRODUCT FACTS. Reject over-length instead so the caller sees it.
+  if (text.length > 20000) {
+    return { ok: false, error: `aiGuidance is ${text.length} chars; the limit is 20000. Shorten it.` };
+  }
   const next = clone(draft);
-  next.settings.ai_guidance = text.slice(0, 8000);
+  next.settings.ai_guidance = text;
   return {
     ok: true,
     draft: next,

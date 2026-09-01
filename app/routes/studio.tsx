@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "@remix-run/node";
-import { json } from "@remix-run/node";
+import { json, redirect } from "@remix-run/node";
 import { useFetcher, useLoaderData, useRevalidator, useRouteError, useSearchParams } from "@remix-run/react";
 import { boundary } from "@shopify/shopify-app-remix/server";
 import { AppProvider } from "@shopify/shopify-app-remix/react";
@@ -33,6 +33,7 @@ import { buildPreviewFlow, buildPreviewQuizConfig } from "../lib/quiz-preview.se
 import { withShopSaveLock } from "../lib/shop-save-lock.server";
 import { getLatestSessionId } from "../lib/quiz-copilot.server";
 import { isClaudeConfigured } from "../lib/claude.server";
+import { shopNeedsBilling } from "../lib/billing-gate.server";
 import { draftQuestionNotes, type NotesDraft } from "../lib/guidance-generator.server";
 import { GENERAL_GUIDANCE_KEY } from "../lib/quiz-guidance-shared";
 
@@ -77,6 +78,10 @@ export function ErrorBoundary() {
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
   const shopDomain = session.shop;
+  // Standalone route = not under app.tsx's billing gate; enforce it here.
+  if (await shopNeedsBilling(shopDomain, session.accessToken ?? "")) {
+    throw redirect("/app/welcome");
+  }
   const shop = await findShopByDomain(shopDomain);
   if (!shop) throw new Response("Shop not found", { status: 404 });
 
@@ -226,6 +231,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     throw err;
   }
   const shopDomain = session.shop;
+  if (await shopNeedsBilling(shopDomain, session.accessToken ?? "")) {
+    return json({ ok: false, error: "Your Gleame subscription isn't active. Visit Billing to continue." }, { status: 402 });
+  }
   const shop = await findShopByDomain(shopDomain);
   if (!shop) return json({ ok: false, error: "Shop not found" }, { status: 404 });
 
@@ -318,6 +326,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         // blank answers, ready to edit. Built directly (drafts are lazily
         // validated; the applier's revalidation would reject blank prompts)
         // and guarded so a stale tab can't blank an existing draft.
+        // The wizard's accent color is applied HERE: revalidation unmounts
+        // the wizard before its fetcher settles, so a client-side follow-up
+        // apply never ran.
+        const rawAccent = String(formData.get("accentColor") ?? "");
+        const accentColor = /^#[0-9a-fA-F]{6}$/.test(rawAccent) ? rawAccent : null;
         const result = await withShopSaveLock(shop.id, async () => {
           const existing = await getQuizDraft(shop.id);
           if (existing && existing.flow.questions.length > 0) {
@@ -355,7 +368,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               ],
               rules: [],
             },
-            settings: existing?.settings ?? {},
+            settings: {
+              ...(existing?.settings ?? {}),
+              ...(accentColor ? { quiz_accent_color: accentColor } : {}),
+            },
           };
           const saved = await saveQuizDraft(shop.id, blank, "manual");
           if (!saved.ok) return { ok: false as const, error: saved.error ?? "Save failed" };
@@ -364,7 +380,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return json({ ...result, intent });
       }
       case "discard-draft": {
-        const result = await discardQuizDraft(shop.id);
+        // Locked: an unlocked discard racing an in-flight apply-tool's
+        // read-modify-write let the applier's save re-insert the draft the
+        // merchant just discarded.
+        const result = await withShopSaveLock(shop.id, () => discardQuizDraft(shop.id));
         return json({ ...result, intent });
       }
       case "publish": {
@@ -374,7 +393,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       case "restore": {
         const versionId = formData.get("versionId") as string;
         if (!versionId) return json({ ok: false, error: "Missing versionId", intent });
-        const result = await restoreVersion(shop.id, versionId);
+        // Locked for the same reason as discard: a concurrent editor save
+        // based on the pre-restore draft must not overwrite the restore.
+        const result = await withShopSaveLock(shop.id, () => restoreVersion(shop.id, versionId));
         return json({ ...result, intent });
       }
       case "save-notes": {
@@ -528,10 +549,16 @@ export default function Studio() {
   // no in-progress typing is ever lost by the remount).
   const [chatEpoch, setChatEpoch] = useState(0);
   const pendingEpochBumpRef = useRef(false);
+  // Editors stay locked from the first applied chat change until the
+  // post-turn revalidation lands: chatBusy alone released at "done", and an
+  // edit typed in that gap flushed a stale full-question patch that
+  // reverted the AI's change.
+  const [postTurnLock, setPostTurnLock] = useState(false);
   const revalidator = useRevalidator();
   useEffect(() => {
     if (revalidator.state === "idle" && pendingEpochBumpRef.current) {
       pendingEpochBumpRef.current = false;
+      setPostTurnLock(false);
       setChatEpoch((n) => n + 1);
     }
   }, [revalidator.state]);
@@ -544,32 +571,61 @@ export default function Studio() {
   // echoes as acks (or boot noise to correct), never as user navigation —
   // otherwise every iframe (re)load yanked the selection back to Intro.
   const expectedStepRef = useRef<string | null>(null);
+  // Bounded corrections: a mismatch that can never converge (e.g. a step
+  // the widget refuses to land on) must not ping-pong goto/echo forever.
+  const expectedRetryRef = useRef(0);
+  // Post-ack grace: the widget may auto-skip a showIf-hidden screen right
+  // after honoring our goto and echo the NEXT screen — swallowing echoes
+  // briefly keeps gated questions selectable.
+  const echoMuteUntilRef = useRef(0);
   const stepForSlide = useCallback(
     (slideId: string) => {
+      if (slideId === "intro" || slideId === "theme") return "intro";
+      if (slideId === "photo") return "gate";
+      if (slideId === "results") return "results";
       const qi = questions.findIndex((q) => slideIdForQuestion(q.axisKey) === slideId);
-      return slideId === "intro" || slideId === "theme"
-        ? "intro"
-        : slideId === "photo"
-          ? "gate"
-          : slideId === "results"
-            ? "results"
-            : `q${qi + 1}`;
+      if (qi < 0) return "intro";
+      // Normalize to the screen's FIRST question: the widget renders and
+      // reports grouped questions by their screen representative, so
+      // expecting the raw index deadlocked the ack protocol in a goto/echo
+      // loop whenever a non-first grouped question was selected.
+      if (data.draft) {
+        const screen = buildScreens(data.draft.flow).find((s) => s.indices.includes(qi));
+        if (screen) return `q${screen.indices[0] + 1}`;
+      }
+      return `q${qi + 1}`;
     },
-    [questions],
+    [questions, data.draft],
   );
   const gotoPreviewStep = useCallback(
     (slideId: string) => {
       const previewStep = stepForSlide(slideId);
       expectedStepRef.current = previewStep;
-      iframeRef.current?.contentWindow?.postMessage({ type: "gleame-preview-goto", step: previewStep }, "*");
+      expectedRetryRef.current = 0;
+      iframeRef.current?.contentWindow?.postMessage(
+        { type: "gleame-preview-goto", step: previewStep },
+        window.location.origin,
+      );
     },
     [stepForSlide],
   );
   const reloadPreview = useCallback(() => setPreviewNonce((n) => n + 1), []);
+  // One reload per window, not one per streamed chat change event.
+  const reloadTimerRef = useRef<number | null>(null);
+  const scheduleReloadPreview = useCallback(() => {
+    if (reloadTimerRef.current != null) return;
+    reloadTimerRef.current = window.setTimeout(() => {
+      reloadTimerRef.current = null;
+      reloadPreview();
+    }, 400);
+  }, [reloadPreview]);
+  useEffect(() => () => {
+    if (reloadTimerRef.current != null) window.clearTimeout(reloadTimerRef.current);
+  }, []);
   const updatePreview = useCallback((payload: { flow?: unknown; config?: unknown }) => {
     iframeRef.current?.contentWindow?.postMessage(
       { type: "gleame-preview-update", flow: payload.flow, config: payload.config },
-      "*",
+      window.location.origin,
     );
   }, []);
 
@@ -602,18 +658,27 @@ export default function Studio() {
       const step = String(d.step ?? "");
 
       // Pending expectation: this echo is an ack of our own goto (clear it)
-      // or boot noise from an iframe (re)load (re-send the goto once).
+      // or boot noise from an iframe (re)load (re-send the goto, bounded).
       if (expectedStepRef.current !== null) {
         if (step === expectedStepRef.current) {
           expectedStepRef.current = null;
+          // Grace window: the widget may auto-skip a hidden screen right
+          // after this ack; don't let that follow-up echo steal selection.
+          echoMuteUntilRef.current = Date.now() + 800;
+        } else if (expectedRetryRef.current >= 3) {
+          // The widget won't land where we asked (e.g. unreachable step);
+          // stop correcting instead of ping-ponging goto/echo forever.
+          expectedStepRef.current = null;
         } else {
+          expectedRetryRef.current += 1;
           iframeRef.current?.contentWindow?.postMessage(
             { type: "gleame-preview-goto", step: expectedStepRef.current },
-            "*",
+            window.location.origin,
           );
         }
         return;
       }
+      if (Date.now() < echoMuteUntilRef.current) return;
 
       let slideId: string | null = null;
       if (step === "intro") slideId = "intro";
@@ -666,6 +731,10 @@ export default function Studio() {
     if (treeFetcher.data.ok) {
       setTreeError(null);
       if (treeFetcher.data.previewFlow || treeFetcher.data.previewConfig) {
+        // The widget re-renders on update and echoes its step POSITIONALLY;
+        // after a reorder that position maps to a different question, which
+        // used to yank the id-based selection. Mute echoes briefly.
+        echoMuteUntilRef.current = Date.now() + 800;
         updatePreview({ flow: treeFetcher.data.previewFlow, config: treeFetcher.data.previewConfig });
       }
       if (pendingSelectRef.current) {
@@ -799,11 +868,19 @@ export default function Studio() {
             step={step}
             selectedSlide={selectedSlide}
             chatEpoch={chatEpoch}
-            chatBusy={chatBusy}
+            chatBusy={chatBusy || postTurnLock}
             registerFlush={(fn) => {
               editorFlushRef.current = fn;
             }}
+            flushEditor={() => editorFlushRef.current?.()}
             onSelectSlide={selectSlide}
+            onDeleteQuestion={(axisKey, fallbackSlide) => {
+              // Hoisted here because the revalidation after a delete
+              // unmounts the question editor: its own fetcher effect never
+              // ran, leaving the preview on the deleted question.
+              pendingSelectRef.current = fallbackSlide;
+              submitTreeTool("remove_question", { axisKey, removeAxis: true });
+            }}
             onPreviewUpdate={updatePreview}
             onPreviewReload={reloadPreview}
             chat={
@@ -813,11 +890,13 @@ export default function Studio() {
                 selectedSlide={selectedSlide}
                 questions={questions}
                 onBusyChange={setChatBusy}
+                onBeforeSend={() => editorFlushRef.current?.()}
                 onChangeApplied={(target) => {
                   // Bump AFTER revalidation lands: an immediate remount would
                   // reinitialize editors from the pre-change loader snapshot.
                   pendingEpochBumpRef.current = true;
-                  reloadPreview();
+                  setPostTurnLock(true);
+                  scheduleReloadPreview();
                   const m = /^Q(\d+)$/i.exec(target);
                   if (m) {
                     const q = questions[Number(m[1]) - 1];

@@ -436,7 +436,19 @@
     return state.screen;
   }
 
+  // Previews live in an iframe whose session history is shared with the
+  // ADMIN tab: pushing #gq-* entries there makes the browser Back button
+  // walk quiz steps instead of admin pages. Previews keep their own
+  // in-memory step stack instead, and the quiz Back control pops it.
+  var previewStack = [];
+  var previewHere = null;
+
   function pushStep() {
+    if (PREVIEW) {
+      if (previewHere) previewStack.push(previewHere);
+      previewHere = { screen: state.screen, screenIndex: state.screenIndex };
+      return;
+    }
     try {
       history.pushState({ gq: { screen: state.screen, screenIndex: state.screenIndex } },
         '', '#gq-' + stepSlug());
@@ -444,10 +456,24 @@
   }
 
   function replaceStep() {
+    if (PREVIEW) {
+      previewHere = { screen: state.screen, screenIndex: state.screenIndex };
+      return;
+    }
     try {
       history.replaceState({ gq: { screen: state.screen, screenIndex: state.screenIndex } },
         '', '#gq-' + stepSlug());
     } catch (e) {}
+  }
+
+  function previewBack() {
+    var target = previewStack.pop() || { screen: 'intro', screenIndex: 0 };
+    target = clampStep(target);
+    state.screen = target.screen;
+    state.screenIndex = target.screenIndex || 0;
+    if (state.screen === 'results' || state.screen === 'intro') editReturn = false;
+    previewHere = { screen: state.screen, screenIndex: state.screenIndex };
+    render('back');
   }
 
   // Rewind answers/criteria for every question from screen `keepScreens` on.
@@ -1337,7 +1363,7 @@
     var back = el('button', 'gq-back',
       '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg><span>Back</span>');
     back.type = 'button';
-    back.onclick = function() { history.back(); };
+    back.onclick = function() { if (PREVIEW) { previewBack(); } else { history.back(); } };
     header.appendChild(back);
 
     // Progress indicator. Default is the nail pips — the signature element
@@ -2317,6 +2343,20 @@
         buildScreens();
         detectThemeTypography();
         applyStyleConfig();
+        // Answers are stored positionally (parallel to flow.questions).
+        // A structural edit (add/remove/reorder) can shift positions, so
+        // any axis mismatch resets the preview's answers — same rule as
+        // the session-restore path.
+        if (Array.isArray(state.answers)) {
+          for (var uai = 0; uai < state.answers.length; uai++) {
+            if (!state.answers[uai]) continue;
+            if (!flow.questions[uai] || state.answers[uai].axisKey !== flow.questions[uai].axisKey) {
+              state.answers = [];
+              state.criteria = {};
+              break;
+            }
+          }
+        }
         // PRESERVE the current step. clampStep gates question screens on
         // answered counts, and a preview stepped via goto has answered
         // nothing — clamping bounced the preview (and the studio's synced

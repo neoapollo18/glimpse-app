@@ -1,6 +1,6 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { trackTransformationEvent, trackAssistantEvent } from "../lib/supabase.server";
+import { trackTransformationEvent, trackAssistantEvent, findShopByDomain } from "../lib/supabase.server";
 import { checkRateLimit, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
 
 // Simple event tracking endpoint for widget views and add-to-cart events
@@ -68,6 +68,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       'quiz_photo_upload',
       'quiz_photo_skip',
       'quiz_shade_detected',
+      'quiz_shade_detect_failed',
       'quiz_shade_manual',
       'quiz_results_shown',
       'quiz_tryon_shown',
@@ -101,6 +102,32 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       });
     }
 
+    // Anti-pollution: when the browser sends an Origin, the event is
+    // attributed to the shop that OWNS that origin (exact shop_domain or
+    // alternate_domains), not to whatever shopDomain the body claims. A
+    // mismatched claim is silently dropped. No Origin header (legacy
+    // clients, some beacons) keeps the body claim as before.
+    let effectiveShopDomain = String(shopDomain);
+    const origin = request.headers.get("Origin") ?? request.headers.get("Referer");
+    if (origin) {
+      let originHost: string | null = null;
+      try {
+        originHost = new URL(origin).hostname.toLowerCase();
+      } catch {
+        originHost = null;
+      }
+      if (originHost && originHost !== effectiveShopDomain.toLowerCase()) {
+        const originShop = await findShopByDomain(originHost);
+        if (!originShop || originShop.shop_domain !== effectiveShopDomain) {
+          // Same opaque response as rate limiting: accept, don't process.
+          return json({ success: true }, {
+            headers: { "Access-Control-Allow-Origin": "*" }
+          });
+        }
+        effectiveShopDomain = originShop.shop_domain;
+      }
+    }
+
     // Validate and sanitize cart token (Shopify tokens are alphanumeric, typically 32 chars)
     let sanitizedCartToken: string | undefined = undefined;
     if (cartToken && typeof cartToken === 'string') {
@@ -119,7 +146,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // Track the event with cart token for conversion attribution (fire and forget for speed)
     if (isAssistantEvent) {
       trackAssistantEvent(
-        shopDomain,
+        effectiveShopDomain,
         eventType,
         widgetType || 'chat',
         sanitizedCartToken,
@@ -129,7 +156,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       });
     } else {
       trackTransformationEvent(
-        shopDomain,
+        effectiveShopDomain,
         productId,
         eventType,
         widgetType || 'unknown',

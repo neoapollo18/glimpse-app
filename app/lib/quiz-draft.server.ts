@@ -25,6 +25,8 @@ import {
 } from "./supabase.server";
 import { normalizeFlowOrder } from "./quiz-config-schema.server";
 import { withShopSaveLock } from "./shop-save-lock.server";
+import { draftProblems } from "../components/studio/draft-problems";
+import type { StudioFlow } from "../components/studio/types";
 
 export type SaveRecommendationConfigInput = Parameters<typeof saveRecommendationConfig>[1];
 
@@ -310,6 +312,17 @@ async function publishQuizDraftLocked(shopId: string): Promise<{ ok: boolean; er
     return { ok: false, error: "Draft is malformed (missing flow.axes)" };
   }
 
+  // The Publish checklist runs these client-side, but the server is the
+  // authority: a stale tab or a direct POST must not publish blank
+  // questions over a live config.
+  const structural = draftProblems(draft.flow as unknown as StudioFlow);
+  if (structural.length > 0) {
+    return {
+      ok: false,
+      error: `Draft isn't publishable: ${structural.slice(0, 3).map((p) => p.message).join("; ")}${structural.length > 3 ? ` (+${structural.length - 3} more)` : ""}`,
+    };
+  }
+
   const targetProblems = await checkRuleTargets(shopId, draft.flow);
   if (targetProblems.length > 0) {
     return { ok: false, error: `Draft references missing catalog items: ${targetProblems.slice(0, 5).join("; ")}` };
@@ -349,12 +362,22 @@ async function publishQuizDraftLocked(shopId: string): Promise<{ ok: boolean; er
   // Only write settings keys that exist on the live config row: a stale or
   // AI-invented quiz_* key would fail the whole upsert AFTER the flow went
   // live (half-published state). Unknown keys are dropped loudly instead.
-  const liveKeys = new Set(Object.keys(snapshot.settings).concat(Object.keys(await getChatAssistantConfig(shopDomain))));
+  const liveSettings = (await getChatAssistantConfig(shopDomain)) as unknown as Record<string, unknown>;
+  const liveKeys = new Set(Object.keys(snapshot.settings).concat(Object.keys(liveSettings)));
   const settingsToWrite: Record<string, unknown> = {};
   const droppedKeys: string[] = [];
+  const snapshotSettings = snapshot.settings as Record<string, unknown>;
   for (const [key, value] of Object.entries(filterSettings(draft.settings))) {
-    if (liveKeys.has(key)) settingsToWrite[key] = value;
-    else droppedKeys.push(key);
+    if (!liveKeys.has(key)) {
+      droppedKeys.push(key);
+      continue;
+    }
+    // Write only keys that actually CHANGED vs the pre-publish snapshot.
+    // Both sides are default-coalesced, so writing everything would pin
+    // NULL columns to literal default values on every publish.
+    if (JSON.stringify(value) !== JSON.stringify(snapshotSettings[key])) {
+      settingsToWrite[key] = value;
+    }
   }
   if (droppedKeys.length) {
     console.warn(`quiz-draft: publish dropped unknown settings keys for ${shopDomain}: ${droppedKeys.join(", ")}`);

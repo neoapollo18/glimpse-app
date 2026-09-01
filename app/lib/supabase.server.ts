@@ -820,6 +820,37 @@ export interface AssistantEngagement extends AssistantFunnelCounts {
   };
 }
 
+// One grouped query for every (event_type, device_type) count since a date
+// (migration 062 RPC). Returns null when the RPC is missing so callers can
+// fall back to per-event head counts — the old path issued up to ~100
+// round trips per analytics page view.
+// Map keys: "<event>|*" = device-agnostic total, "<event>|mobile", "<event>|desktop".
+async function getEventCounts(shopId: string, sinceIso: string): Promise<Map<string, number> | null> {
+  try {
+    const { data, error } = await supabase.rpc('get_event_counts', {
+      p_shop_id: shopId,
+      p_since: sinceIso,
+    });
+    if (error || !Array.isArray(data)) return null;
+    const map = new Map<string, number>();
+    for (const row of data as Array<{ event_type: string; device_type: string | null; cnt: number | string }>) {
+      const n = Number(row.cnt) || 0;
+      map.set(`${row.event_type}|*`, (map.get(`${row.event_type}|*`) ?? 0) + n);
+      if (row.device_type === 'mobile' || row.device_type === 'desktop') {
+        map.set(`${row.event_type}|${row.device_type}`, (map.get(`${row.event_type}|${row.device_type}`) ?? 0) + n);
+      }
+    }
+    return map;
+  } catch {
+    return null;
+  }
+}
+
+function sumCounts(map: Map<string, number>, events: string | string[], device: '*' | 'mobile' | 'desktop'): number {
+  const list = Array.isArray(events) ? events : [events];
+  return list.reduce((acc, ev) => acc + (map.get(`${ev}|${device}`) ?? 0), 0);
+}
+
 // Engagement funnel for the chat assistant. Counts are event volume (not unique
 // sessions) — the widget doesn't emit a session id today, so a shopper who
 // uploads twice counts twice. Good enough for tracking relative funnel health.
@@ -880,18 +911,26 @@ export async function getAssistantEngagement(
       ['heroCtaClicks', 'hero_cta_click'],
     ];
 
-    // Fire every count (total + per-device for each field) in parallel, then
-    // assemble. Each entry resolves to its field key and the three counts.
-    const rows = await Promise.all(
-      fields.map(async ([key, eventType]) => {
-        const [total, mobile, desktop] = await Promise.all([
-          countFor(eventType),
-          countFor(eventType, 'mobile'),
-          countFor(eventType, 'desktop'),
-        ]);
-        return { key, total, mobile, desktop };
-      }),
-    );
+    // Preferred: one grouped query (migration 062). Fallback: one count per
+    // (field x device) in parallel, for DBs without the RPC.
+    const grouped = await getEventCounts(shop.id, iso);
+    const rows = grouped
+      ? fields.map(([key, eventType]) => ({
+          key,
+          total: sumCounts(grouped, eventType, '*'),
+          mobile: sumCounts(grouped, eventType, 'mobile'),
+          desktop: sumCounts(grouped, eventType, 'desktop'),
+        }))
+      : await Promise.all(
+          fields.map(async ([key, eventType]) => {
+            const [total, mobile, desktop] = await Promise.all([
+              countFor(eventType),
+              countFor(eventType, 'mobile'),
+              countFor(eventType, 'desktop'),
+            ]);
+            return { key, total, mobile, desktop };
+          }),
+        );
 
     const total = {} as AssistantFunnelCounts;
     const mobile = {} as AssistantFunnelCounts;
@@ -979,16 +1018,25 @@ export async function getQuizEngagement(
       ['addToCart', 'quiz_add_to_cart'],
     ];
 
-    const rows = await Promise.all(
-      fields.map(async ([key, eventType]) => {
-        const [total, mobile, desktop] = await Promise.all([
-          countFor(eventType),
-          countFor(eventType, 'mobile'),
-          countFor(eventType, 'desktop'),
-        ]);
-        return { key, total, mobile, desktop };
-      }),
-    );
+    // Preferred: one grouped query (migration 062); fallback per-event counts.
+    const grouped = await getEventCounts(shop.id, iso);
+    const rows = grouped
+      ? fields.map(([key, eventType]) => ({
+          key,
+          total: sumCounts(grouped, eventType, '*'),
+          mobile: sumCounts(grouped, eventType, 'mobile'),
+          desktop: sumCounts(grouped, eventType, 'desktop'),
+        }))
+      : await Promise.all(
+          fields.map(async ([key, eventType]) => {
+            const [total, mobile, desktop] = await Promise.all([
+              countFor(eventType),
+              countFor(eventType, 'mobile'),
+              countFor(eventType, 'desktop'),
+            ]);
+            return { key, total, mobile, desktop };
+          }),
+        );
 
     const total = {} as QuizFunnelCounts;
     const mobile = {} as QuizFunnelCounts;

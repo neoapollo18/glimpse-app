@@ -24,6 +24,7 @@ import { serializeCatalog } from "./quiz-config-schema.server";
 import { buildSystemBlocks, loadCatalogForShop } from "./quiz-generator.server";
 import { getQuizDraft, saveQuizDraft, type QuizDraft } from "./quiz-draft.server";
 import { APPLIERS, COPILOT_TOOLS, type ChangeSummary, type DraftShape } from "./quiz-copilot-tools.server";
+import { withShopSaveLock } from "./shop-save-lock.server";
 import { supabase } from "./supabase.server";
 
 const MAX_TOOL_ITERATIONS = 6;
@@ -272,31 +273,50 @@ export async function runCopilotTurn(args: {
           results.push({ type: "tool_result", tool_use_id: toolUse.id, content: `Unknown tool ${toolUse.name}`, is_error: true });
           continue;
         }
-        const outcome = applier(draft as DraftShape, toolUse.input, catalog);
-        if (!outcome.ok) {
-          results.push({ type: "tool_result", tool_use_id: toolUse.id, content: `Rejected: ${outcome.error}`, is_error: true });
+        if (toolUse.name === "get_draft_details") {
+          // Read-only: answer from the freshest draft so the model never
+          // quotes a copy the merchant has since edited.
+          const fresh = (await getQuizDraft(shopId)) ?? draft;
+          draft = fresh;
+          const outcome = applier(fresh as DraftShape, toolUse.input, catalog);
+          if (!outcome.ok) {
+            results.push({ type: "tool_result", tool_use_id: toolUse.id, content: `Rejected: ${outcome.error}`, is_error: true });
+          } else {
+            results.push({ type: "tool_result", tool_use_id: toolUse.id, content: JSON.stringify(outcome.data ?? null) });
+          }
           continue;
         }
-        if (outcome.readOnly) {
-          results.push({ type: "tool_result", tool_use_id: toolUse.id, content: JSON.stringify(outcome.data ?? null) });
+        // Mutations join the same per-shop lock chain as manual studio
+        // saves, and re-read the draft INSIDE the lock: a turn can run for
+        // up to 90s, and applying tools to the turn-start copy silently
+        // reverted any manual edit saved in between.
+        const applied = await withShopSaveLock(shopId, async () => {
+          const fresh = (await getQuizDraft(shopId)) ?? draft;
+          const outcome = applier(fresh as DraftShape, toolUse.input, catalog);
+          if (!outcome.ok) return { ok: false as const, error: outcome.error };
+          const saved = await saveQuizDraft(shopId, outcome.draft as QuizDraft, "ai");
+          if (!saved.ok) return { ok: false as const, error: saved.error ?? "save failed" };
+          return {
+            ok: true as const,
+            before: fresh,
+            after: outcome.draft as QuizDraft,
+            summary: outcome.summary,
+          };
+        });
+        if (!applied.ok) {
+          results.push({ type: "tool_result", tool_use_id: toolUse.id, content: `Rejected: ${applied.error}`, is_error: true });
           continue;
         }
-        // Snapshot BEFORE the change so undo restores the pre-change draft.
+        // Snapshot the PRE-change draft so undo restores it.
         const snapshotId = `snap_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         session.snapshots.push({
           id: snapshotId,
-          label: outcome.summary.description,
-          draft,
+          label: applied.summary.description,
+          draft: applied.before,
           createdAt: new Date().toISOString(),
         });
-        draft = outcome.draft as QuizDraft;
-        const saved = await saveQuizDraft(shopId, draft, "ai");
-        if (!saved.ok) {
-          results.push({ type: "tool_result", tool_use_id: toolUse.id, content: `Draft save failed: ${saved.error}`, is_error: true });
-          session.snapshots.pop();
-          continue;
-        }
-        onEvent({ type: "change", ...(outcome.summary as ChangeSummary), snapshotId });
+        draft = applied.after;
+        onEvent({ type: "change", ...(applied.summary as ChangeSummary), snapshotId });
         results.push({ type: "tool_result", tool_use_id: toolUse.id, content: "Applied." });
       }
       session.messages.push({ role: "user", content: results });
@@ -342,7 +362,9 @@ export async function undoToSnapshot(args: {
   if (idx === -1) return { ok: false, error: "Snapshot not found (it may have been pruned)" };
 
   const snapshot = snapshots[idx];
-  const saved = await saveQuizDraft(shopId, snapshot.draft, "ai");
+  // Same lock chain as every other draft writer: an unlocked restore could
+  // land inside a manual save's read-modify-write and be silently undone.
+  const saved = await withShopSaveLock(shopId, () => saveQuizDraft(shopId, snapshot.draft, "ai"));
   if (!saved.ok) return { ok: false, error: saved.error };
 
   const messages = [...((data.messages ?? []) as Anthropic.MessageParam[])];

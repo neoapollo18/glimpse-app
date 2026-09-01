@@ -1124,8 +1124,14 @@ function DashboardView({
   const studioOpen = params.get("open") === "studio";
   const studioStep = params.get("step") ?? "build";
   // Per-tab token: BroadcastChannel reaches EVERY same-origin admin tab;
-  // without this a studio click navigated other dashboards too.
-  const [navToken] = useState(() => Math.random().toString(36).slice(2, 10));
+  // without this a studio click navigated other dashboards too. Minted
+  // client-side only — a render-time random value hydrates differently
+  // than the SSR pass, and the server-rendered iframe src would carry a
+  // token the listener never accepts.
+  const [navToken, setNavToken] = useState<string | null>(null);
+  useEffect(() => {
+    setNavToken(Math.random().toString(36).slice(2, 10));
+  }, []);
   const openStudio = () => {
     setParams(
       (prev) => {
@@ -1166,7 +1172,7 @@ function DashboardView({
     }
     return () => channel?.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [navToken]);
 
   const [mode, setMode] = useState<string>(quiz.assistantMode);
   useEffect(() => {
@@ -1342,8 +1348,8 @@ function DashboardView({
 
       {/* Mounted ONLY while open: rendering the App Bridge Modal closed
           calls .hide() on the not-yet-upgraded ui-modal element and crashes
-          the page. */}
-      {studioOpen && (
+          the page. Also gated on the client-minted navToken. */}
+      {studioOpen && navToken && (
         <Modal
           variant="max"
           open

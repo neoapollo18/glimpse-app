@@ -1,6 +1,7 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
+import { shopNeedsBilling } from "../lib/billing-gate.server";
 import { findShopByDomain } from "../lib/supabase.server";
 import { checkRateLimit, RATE_LIMITS } from "../lib/rate-limiter.server";
 import { isClaudeConfigured } from "../lib/claude.server";
@@ -31,6 +32,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     throw err;
   }
   const shopDomain = session.shop;
+  // Resource routes never run app.tsx's loader, so its billing gate does
+  // not cover them; without this an unsubscribed shop can drive paid work.
+  if (await shopNeedsBilling(shopDomain, session.accessToken ?? "")) {
+    return json({ ok: false, error: "Your Gleame subscription isn't active. Visit Billing to continue." }, { status: 402 });
+  }
 
   if (!isClaudeConfigured()) {
     return json({ ok: false, error: "AI quiz creation is not configured (missing ANTHROPIC_API_KEY)." }, { status: 503 });

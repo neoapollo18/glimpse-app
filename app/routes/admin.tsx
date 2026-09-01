@@ -862,12 +862,25 @@ export default function FoundersAdmin() {
     setTogglingSkinAnalysisShop(null);
   }, [skinAnalysisFetcher.data, skinAnalysisFetcher.state, togglingSkinAnalysisShop]);
 
-  // Apply VTO tri-state results when the fetcher settles.
+  // Apply VTO tri-state results when the fetcher settles. On failure
+  // (e.g. migration 060 not applied yet) REVERT the optimistic value —
+  // leaving it would show a state the DB never accepted.
+  const [vtoError, setVtoError] = useState<string | null>(null);
   useEffect(() => {
     if (vtoFetcher.state !== "idle" || !togglingVtoShop) return;
     const data = vtoFetcher.data;
     if (data?.success && (data.vtoValue === "auto" || data.vtoValue === "on" || data.vtoValue === "off")) {
       setVtoOverrides((prev) => ({ ...prev, [togglingVtoShop]: data.vtoValue }));
+      setVtoError(null);
+    } else {
+      setVtoOverrides((prev) => {
+        const next = { ...prev };
+        delete next[togglingVtoShop];
+        return next;
+      });
+      setVtoError(
+        `Try-on toggle failed for ${togglingVtoShop}: ${data?.error ?? "no response"}. Is migration 060 (vto_enabled) applied?`,
+      );
     }
     setTogglingVtoShop(null);
   }, [vtoFetcher.data, vtoFetcher.state, togglingVtoShop]);
@@ -1272,8 +1285,13 @@ export default function FoundersAdmin() {
                       ]}
                       value={vtoValue(shop)}
                       onChange={(v) => setVto(shop, v)}
-                      disabled={togglingVtoShop === shop.shop_domain}
+                      disabled={togglingVtoShop !== null}
                     />
+                    {vtoError && vtoError.includes(shop.shop_domain) && (
+                      <Text as="p" variant="bodySm" tone="critical">
+                        {vtoError}
+                      </Text>
+                    )}
                     <Button onClick={() => toggleShop(shop.id)}>
                       {expandedShop === shop.id ? "Collapse" : "View Products"}
                     </Button>

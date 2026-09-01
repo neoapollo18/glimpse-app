@@ -77,18 +77,10 @@ export function OnboardingWizard({
     fetch("/studio", { method: "POST", body: fd }).catch(() => {});
   };
 
-  // "Start from scratch" creates a blank one-question draft; when the
-  // loader revalidates with it, the studio unmounts this wizard.
-  const blankProcessedRef = useRef<StudioActionData | null>(null);
-  useEffect(() => {
-    if (blankFetcher.state !== "idle" || !blankFetcher.data) return;
-    if (blankProcessedRef.current === blankFetcher.data) return;
-    blankProcessedRef.current = blankFetcher.data;
-    if (blankFetcher.data.ok) {
-      applyBrandColors();
-      onDone("intro");
-    }
-  }, [blankFetcher.state, blankFetcher.data, onDone]);
+  // "Start from scratch" creates a blank one-question draft. The accent
+  // color rides along in the SAME action (applied server-side): Remix
+  // revalidates before the fetcher settles, so the revalidated loader
+  // unmounts this wizard and any completion effect here never runs.
 
   const generationAvailable = data.aiConfigured && data.catalog.syncEnabled && !skippedCatalog;
 
@@ -298,6 +290,7 @@ export function OnboardingWizard({
               onClick={() => {
                 const fd = new FormData();
                 fd.append("intent", "start-blank-draft");
+                if (accentColor) fd.append("accentColor", accentColor);
                 blankFetcher.submit(fd, { method: "POST", action: "/studio" });
               }}
             >
@@ -336,6 +329,7 @@ export function OnboardingWizard({
                   onClick={() => {
                     const fd = new FormData();
                     fd.append("intent", "start-blank-draft");
+                    if (accentColor) fd.append("accentColor", accentColor);
                     blankFetcher.submit(fd, { method: "POST", action: "/studio" });
                   }}
                 >

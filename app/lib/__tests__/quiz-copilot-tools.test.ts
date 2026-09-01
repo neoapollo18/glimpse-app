@@ -106,7 +106,9 @@ describe("applyUpdateQuestion", () => {
 });
 
 describe("applyUpdateQuestionOptions", () => {
-  it("replaces options and auto-declares new axis values", () => {
+  it("rejects removing an answer whose axis value a rule still references", () => {
+    // Rule references vibe=bold; replacing every option strands it — the
+    // old behavior kept the rule silently unfireable, now it's an error.
     const result = applyUpdateQuestionOptions(
       baseDraft(),
       {
@@ -118,13 +120,45 @@ describe("applyUpdateQuestionOptions", () => {
       },
       catalog,
     );
-    // Rule references vibe=bold which no option records anymore, but rules
-    // only need DECLARED values — old values stay on the axis.
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/rule/i);
+  });
+
+  it("replaces options, auto-declares new axis values, and prunes unreferenced ones", () => {
+    const draft = baseDraft();
+    draft.flow.rules = []; // nothing references the old values now
+    draft.settings.recommendation_mode = "ai"; // matrix with 0 rules is invalid
+    const result = applyUpdateQuestionOptions(
+      draft,
+      {
+        axisKey: "vibe",
+        options: [
+          { label: "Main Character", axisValueValue: "main_character", valueLabel: "Main Character" },
+          { label: "Clean Girl", axisValueValue: "clean_girl", valueLabel: "Clean Girl" },
+        ],
+      },
+      catalog,
+    );
     expect(result.ok).toBe(true);
     if (result.ok) {
       const axis = result.draft.flow.axes.find((a) => a.key === "vibe")!;
-      expect(axis.values.map((v) => v.value)).toContain("main_character");
+      expect(axis.values.map((v) => v.value)).toEqual(["main_character", "clean_girl"]);
       expect(result.draft.flow.questions[0].options).toHaveLength(2);
+    }
+  });
+
+  it("preserves authored botResponse by axis value across option rewrites", () => {
+    const draft = baseDraft();
+    draft.flow.questions[0].options[0].botResponse = "Bold it is!";
+    const result = applyUpdateQuestionOptions(
+      draft,
+      { axisKey: "vibe", options: [{ label: "Bolder", axisValueValue: "bold" }, { label: "Softer", axisValueValue: "soft" }] },
+      catalog,
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.draft.flow.questions[0].options[0].botResponse).toBe("Bold it is!");
+      expect(result.draft.flow.questions[0].options[1].botResponse).toBeNull();
     }
   });
 

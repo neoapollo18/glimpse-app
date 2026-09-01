@@ -60,9 +60,11 @@ export function EditPanel({
   chatEpoch,
   chatBusy,
   onSelectSlide,
+  onDeleteQuestion,
   onPreviewUpdate,
   onPreviewReload,
   registerFlush,
+  flushEditor,
   chat,
 }: {
   data: StudioLoaderData;
@@ -71,9 +73,11 @@ export function EditPanel({
   chatEpoch: number;
   chatBusy: boolean;
   onSelectSlide: (slideId: string) => void;
+  onDeleteQuestion?: (axisKey: string, fallbackSlide: string) => void;
   onPreviewUpdate: (payload: { flow?: unknown; config?: unknown }) => void;
   onPreviewReload: () => void;
   registerFlush?: (fn: (() => void) | null) => void;
+  flushEditor?: () => void;
   chat: React.ReactNode;
 }) {
   const editHidden = step !== "build";
@@ -91,7 +95,14 @@ export function EditPanel({
         <button
           className="studio-panel-tab"
           data-active={activeTab === "chat"}
-          onClick={() => setTab("chat")}
+          onClick={() => {
+            // Deliver pending debounced edits through the editor's own
+            // fetcher BEFORE unmounting it: the raw-fetch unmount backstop
+            // never revalidates, so its save was later reverted by the next
+            // stale autosave.
+            if (activeTab === "edit") flushEditor?.();
+            setTab("chat");
+          }}
           style={editHidden ? { flex: "unset", width: "100%" } : undefined}
         >
           Chat
@@ -108,6 +119,7 @@ export function EditPanel({
             chatEpoch={chatEpoch}
             chatBusy={chatBusy}
             onSelectSlide={onSelectSlide}
+            onDeleteQuestion={onDeleteQuestion}
             onPreviewUpdate={onPreviewUpdate}
             onPreviewReload={onPreviewReload}
             registerFlush={registerFlush}
@@ -124,6 +136,7 @@ function EditBody({
   chatEpoch,
   chatBusy,
   onSelectSlide,
+  onDeleteQuestion,
   onPreviewUpdate,
   onPreviewReload,
   registerFlush,
@@ -133,6 +146,7 @@ function EditBody({
   chatEpoch: number;
   chatBusy: boolean;
   onSelectSlide: (slideId: string) => void;
+  onDeleteQuestion?: (axisKey: string, fallbackSlide: string) => void;
   onPreviewUpdate: (payload: { flow?: unknown; config?: unknown }) => void;
   onPreviewReload: () => void;
   registerFlush?: (fn: (() => void) | null) => void;
@@ -181,6 +195,7 @@ function EditBody({
       question={question}
       chatBusy={chatBusy}
       onSelectSlide={onSelectSlide}
+      onDeleteQuestion={onDeleteQuestion}
       onPreviewUpdate={onPreviewUpdate}
       onPreviewReload={onPreviewReload}
       registerFlush={registerFlush}
@@ -199,6 +214,7 @@ function QuestionEditor({
   question,
   chatBusy,
   onSelectSlide,
+  onDeleteQuestion,
   onPreviewUpdate,
   onPreviewReload,
   registerFlush,
@@ -207,13 +223,13 @@ function QuestionEditor({
   question: StudioQuestion;
   chatBusy: boolean;
   onSelectSlide: (slideId: string) => void;
+  onDeleteQuestion?: (axisKey: string, fallbackSlide: string) => void;
   onPreviewUpdate: (payload: { flow?: unknown; config?: unknown }) => void;
   onPreviewReload: () => void;
   registerFlush?: (fn: (() => void) | null) => void;
 }) {
   const fetcher = useFetcher<StudioActionData>();
   const branchFetcher = useFetcher<StudioActionData>();
-  const deleteFetcher = useFetcher<StudioActionData>();
 
   const [prompt, setPrompt] = useState(question.prompt);
   const [helper, setHelper] = useState(question.helperText ?? "");
@@ -348,22 +364,9 @@ function QuestionEditor({
     }
   }, [fetcher.state, fetcher.data, onPreviewUpdate]);
 
-  // Delete result: navigate only after the server confirms; failures land
-  // in the shared error banner (the old flow navigated first, unmounting
-  // the component that owned the error state — rejections vanished).
-  const deleteProcessedRef = useRef<StudioActionData | null>(null);
-  useEffect(() => {
-    if (deleteFetcher.state !== "idle" || !deleteFetcher.data) return;
-    if (deleteProcessedRef.current === deleteFetcher.data) return;
-    deleteProcessedRef.current = deleteFetcher.data;
-    if (deleteFetcher.data.ok) {
-      onPreviewReload();
-      onSelectSlide(qIndex > 0 ? slideIdForQuestion(flow.questions[qIndex - 1].axisKey) : "intro");
-    } else if (deleteFetcher.data.error) {
-      setError(deleteFetcher.data.error);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deleteFetcher.state, deleteFetcher.data]);
+  // Delete is handled by the studio route (onDeleteQuestion): the
+  // revalidation after a successful delete unmounts this editor, so a
+  // local fetcher effect could never reliably run its completion.
 
   // Branch popover writes to OTHER questions and needs a full refresh.
   const branchProcessedRef = useRef<StudioActionData | null>(null);
@@ -441,12 +444,11 @@ function QuestionEditor({
             <InlineStack gap="200">
               <Button
                 tone="critical"
-                loading={deleteFetcher.state !== "idle"}
                 onClick={() => {
-                  submitTool(deleteFetcher, "remove_question", {
-                    axisKey: question.axisKey,
-                    removeAxis: true,
-                  });
+                  onDeleteQuestion?.(
+                    question.axisKey,
+                    qIndex > 0 ? slideIdForQuestion(flow.questions[qIndex - 1].axisKey) : "intro",
+                  );
                   setConfirmingDelete(false);
                 }}
               >

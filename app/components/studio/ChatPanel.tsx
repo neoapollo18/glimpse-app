@@ -100,6 +100,7 @@ export function ChatPanel({
   questions,
   onBusyChange,
   onChangeApplied,
+  onBeforeSend,
   seedMessage,
 }: {
   aiConfigured: boolean;
@@ -108,6 +109,9 @@ export function ChatPanel({
   questions: StudioQuestion[];
   onBusyChange: (busy: boolean) => void;
   onChangeApplied: (target: string) => void;
+  /** Flush pending debounced editor saves before the turn starts, so the
+   * copilot's server-side draft read includes what was just typed. */
+  onBeforeSend?: () => void;
   seedMessage?: string | null;
 }) {
   const revalidator = useRevalidator();
@@ -143,6 +147,7 @@ export function ChatPanel({
   const sendChat = async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || busy) return;
+    onBeforeSend?.();
     setBusy(true);
     setInput("");
     setItems((prev) => [...prev, { kind: "user", text: trimmed }]);
