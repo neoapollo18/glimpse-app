@@ -32,6 +32,12 @@ export function StudioTopBar({
   return (
     <>
       <div className="studio-topbar-left">
+        <img
+          src="/placeholders/gleametransparent.svg"
+          alt=""
+          aria-hidden
+          style={{ width: 20, height: 20, display: "block", flexShrink: 0 }}
+        />
         {publishing ? (
           <Badge tone="attention">Publishing…</Badge>
         ) : (

@@ -8,9 +8,10 @@ import type { ReactNode } from "react";
 const SHELL_CSS = `
   .studio-root { display: grid; grid-template-columns: 264px minmax(0, 1fr) 380px; grid-template-rows: 56px minmax(0, 1fr); height: 100dvh; overflow: hidden; background: #fff; font-size: 13px; }
   .studio-topbar { grid-column: 1 / -1; display: grid; grid-template-columns: 264px minmax(0, 1fr) 380px; align-items: center; border-bottom: 1px solid #E1E3E5; background: #fff; z-index: 20; }
-  .studio-topbar-left { display: flex; align-items: center; gap: 10px; padding: 0 16px; min-width: 0; }
-  .studio-topbar-center { display: flex; justify-content: center; min-width: 0; }
-  .studio-topbar-right { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 0 16px; }
+  .studio-topbar-left { display: flex; align-items: center; gap: 10px; padding: 0 16px; min-width: 0; height: 100%; }
+  .studio-topbar-left .Polaris-Badge { display: inline-flex; align-items: center; }
+  .studio-topbar-center { display: flex; justify-content: center; align-items: center; min-width: 0; height: 100%; }
+  .studio-topbar-right { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 0 16px; height: 100%; }
   .studio-rail { overflow-y: auto; border-right: 1px solid #E1E3E5; display: flex; flex-direction: column; min-height: 0; }
   .studio-canvas { background: #F6F6F7; min-width: 0; min-height: 0; position: relative; display: flex; flex-direction: column; }
   .studio-panel { border-left: 1px solid #E1E3E5; display: flex; flex-direction: column; min-height: 0; background: #fff; }
