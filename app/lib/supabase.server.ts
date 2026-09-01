@@ -912,6 +912,103 @@ export async function getAssistantEngagement(
   }
 }
 
+export interface QuizFunnelCounts {
+  views: number;          // quiz_view
+  starts: number;         // quiz_start
+  gateViews: number;      // quiz_gate_view (reached the photo step)
+  photoUploads: number;   // quiz_photo_upload
+  photoSkips: number;     // quiz_photo_skip
+  resultsShown: number;   // quiz_results_shown
+  productClicks: number;  // quiz_view_product
+  addToCart: number;      // quiz_add_to_cart
+}
+
+export interface QuizEngagement extends QuizFunnelCounts {
+  byDevice: {
+    mobile: QuizFunnelCounts;
+    desktop: QuizFunnelCounts;
+  };
+}
+
+// Engagement funnel for the Find-My-Fit quiz. Same caveats as the assistant
+// funnel: counts are event volume, not unique shoppers.
+export async function getQuizEngagement(
+  shopDomain: string,
+  daysBack: number = 7,
+): Promise<QuizEngagement | null> {
+  try {
+    const shop = await findShopByDomain(shopDomain);
+    if (!shop) {
+      console.log('Shop not found for quiz engagement:', shopDomain);
+      return null;
+    }
+
+    const dateThreshold = new Date();
+    dateThreshold.setDate(dateThreshold.getDate() - daysBack);
+    const iso = dateThreshold.toISOString();
+
+    const countFor = async (
+      eventType: string,
+      device?: 'mobile' | 'desktop',
+    ): Promise<number> => {
+      let query = supabase
+        .from('analytics_events')
+        .select('*', { count: 'exact', head: true })
+        .eq('shop_id', shop.id)
+        .eq('event_type', eventType)
+        .gte('created_at', iso);
+      if (device) {
+        query = query.eq('device_type', device);
+      }
+      const { count, error } = await query;
+      if (error) {
+        console.error(`Error counting quiz event ${eventType} (${device ?? 'all'}):`, error);
+        return 0;
+      }
+      return count || 0;
+    };
+
+    const fields: Array<[keyof QuizFunnelCounts, string]> = [
+      ['views', 'quiz_view'],
+      ['starts', 'quiz_start'],
+      ['gateViews', 'quiz_gate_view'],
+      ['photoUploads', 'quiz_photo_upload'],
+      ['photoSkips', 'quiz_photo_skip'],
+      ['resultsShown', 'quiz_results_shown'],
+      ['productClicks', 'quiz_view_product'],
+      ['addToCart', 'quiz_add_to_cart'],
+    ];
+
+    const rows = await Promise.all(
+      fields.map(async ([key, eventType]) => {
+        const [total, mobile, desktop] = await Promise.all([
+          countFor(eventType),
+          countFor(eventType, 'mobile'),
+          countFor(eventType, 'desktop'),
+        ]);
+        return { key, total, mobile, desktop };
+      }),
+    );
+
+    const total = {} as QuizFunnelCounts;
+    const mobile = {} as QuizFunnelCounts;
+    const desktop = {} as QuizFunnelCounts;
+    for (const row of rows) {
+      total[row.key] = row.total;
+      mobile[row.key] = row.mobile;
+      desktop[row.key] = row.desktop;
+    }
+
+    return {
+      ...total,
+      byDevice: { mobile, desktop },
+    };
+  } catch (error) {
+    console.error('Error in getQuizEngagement:', error);
+    return null;
+  }
+}
+
 // ============================================
 // VARIANT SUPPORT FUNCTIONS (Phase 2)
 // ============================================

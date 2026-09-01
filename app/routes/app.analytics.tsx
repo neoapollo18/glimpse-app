@@ -23,7 +23,7 @@ import {
 } from "@shopify/polaris-icons";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { getAnalytics, getConversionStats, getTopTrafficSources, getAssistantEngagement, type TrafficSourceStat, type AssistantEngagement, type AssistantFunnelCounts } from "../lib/supabase.server";
+import { getAnalytics, getConversionStats, getTopTrafficSources, getAssistantEngagement, getQuizEngagement, shopHasTryOnConfig, type TrafficSourceStat, type AssistantEngagement, type AssistantFunnelCounts, type QuizEngagement, type QuizFunnelCounts } from "../lib/supabase.server";
 import { useState, useCallback } from "react";
 
 interface WidgetBreakdown {
@@ -85,59 +85,97 @@ const EMPTY_ASSISTANT: AssistantEngagement = {
   },
 };
 
+const EMPTY_QUIZ_COUNTS: QuizFunnelCounts = {
+  views: 0,
+  starts: 0,
+  gateViews: 0,
+  photoUploads: 0,
+  photoSkips: 0,
+  resultsShown: 0,
+  productClicks: 0,
+  addToCart: 0,
+};
+
+const EMPTY_QUIZ: QuizEngagement = {
+  ...EMPTY_QUIZ_COUNTS,
+  byDevice: {
+    mobile: { ...EMPTY_QUIZ_COUNTS },
+    desktop: { ...EMPTY_QUIZ_COUNTS },
+  },
+};
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
 
-  const [
-    analytics7Days,
-    analytics30Days,
-    conversion7Days,
-    conversion30Days,
-    sources7Days,
-    sources30Days,
-    assistant7Days,
-    assistant30Days,
-  ] = await Promise.all([
-    getAnalytics(session.shop, 7),
-    getAnalytics(session.shop, 30),
-    getConversionStats(session.shop, 7),
-    getConversionStats(session.shop, 30),
-    getTopTrafficSources(session.shop, 7),
-    getTopTrafficSources(session.shop, 30),
-    getAssistantEngagement(session.shop, 7),
-    getAssistantEngagement(session.shop, 30),
+  // The try-on/assistant sections only exist for shops with VTO enabled
+  // (backend vto_enabled override, else auto-detected from configured
+  // products). Everyone else gets a quiz-only page — and we skip the
+  // legacy queries entirely.
+  const [showLegacy, quiz7Days, quiz30Days] = await Promise.all([
+    shopHasTryOnConfig(session.shop),
+    getQuizEngagement(session.shop, 7),
+    getQuizEngagement(session.shop, 30),
   ]);
 
-  // Fetch product images from Shopify
-  const response = await admin.graphql(`
-    query GetProducts($first: Int!) {
-      products(first: $first) {
-        edges {
-          node {
-            id
-            images(first: 1) {
-              edges {
-                node {
-                  url
+  let analytics7Days: Awaited<ReturnType<typeof getAnalytics>> = null;
+  let analytics30Days: Awaited<ReturnType<typeof getAnalytics>> = null;
+  let conversion7Days: Awaited<ReturnType<typeof getConversionStats>> = null;
+  let conversion30Days: Awaited<ReturnType<typeof getConversionStats>> = null;
+  let sources7Days: TrafficSourceStat[] = [];
+  let sources30Days: TrafficSourceStat[] = [];
+  let assistant7Days: AssistantEngagement | null = null;
+  let assistant30Days: AssistantEngagement | null = null;
+  const productImages: Record<string, string> = {};
+
+  if (showLegacy) {
+    [
+      analytics7Days,
+      analytics30Days,
+      conversion7Days,
+      conversion30Days,
+      sources7Days,
+      sources30Days,
+      assistant7Days,
+      assistant30Days,
+    ] = await Promise.all([
+      getAnalytics(session.shop, 7),
+      getAnalytics(session.shop, 30),
+      getConversionStats(session.shop, 7),
+      getConversionStats(session.shop, 30),
+      getTopTrafficSources(session.shop, 7),
+      getTopTrafficSources(session.shop, 30),
+      getAssistantEngagement(session.shop, 7),
+      getAssistantEngagement(session.shop, 30),
+    ]);
+
+    // Product images (only the legacy product table uses them)
+    const response = await admin.graphql(`
+      query GetProducts($first: Int!) {
+        products(first: $first) {
+          edges {
+            node {
+              id
+              images(first: 1) {
+                edges {
+                  node {
+                    url
+                  }
                 }
               }
             }
           }
         }
       }
-    }
-  `, {
-    variables: { first: 100 }
-  });
+    `, {
+      variables: { first: 100 }
+    });
 
-  const { data } = await response.json();
-  
-  // Create a map of shopify_id to image URL
-  const productImages: Record<string, string> = {};
-  data.products.edges.forEach(({ node }: { node: any }) => {
-    const imageUrl = node.images?.edges?.[0]?.node?.url || "";
-    productImages[node.id] = imageUrl;
-  });
+    const { data } = await response.json();
+    data.products.edges.forEach(({ node }: { node: any }) => {
+      const imageUrl = node.images?.edges?.[0]?.node?.url || "";
+      productImages[node.id] = imageUrl;
+    });
+  }
 
   const safeAnalytics7: AnalyticsData = {
     totalTransformations: analytics7Days?.totalTransformations || 0,
@@ -172,6 +210,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const attribution30 = buildAttribution(conversion30Days, sources30Days);
 
   return json({
+    showLegacy,
+    quiz7: quiz7Days ?? EMPTY_QUIZ,
+    quiz30: quiz30Days ?? EMPTY_QUIZ,
     analytics7: safeAnalytics7,
     analytics30: safeAnalytics30,
     attribution7,
@@ -183,7 +224,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export default function Analytics() {
-  const { analytics7, analytics30, attribution7, attribution30, assistant7, assistant30, productImages } = useLoaderData<typeof loader>();
+  const { showLegacy, quiz7, quiz30, analytics7, analytics30, attribution7, attribution30, assistant7, assistant30, productImages } = useLoaderData<typeof loader>();
   const [timeRange, setTimeRange] = useState("30");
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
 
@@ -236,6 +277,32 @@ export default function Analytics() {
   // events have a null device_type and aren't in either bucket.
   const classifiedOpens = mobileOpens + desktopOpens;
 
+  // Quiz funnel — same shape as the assistant funnel, over quiz_* events.
+  const quiz: QuizEngagement = timeRange === "7" ? quiz7 : quiz30;
+  const hasQuizData =
+    quiz.views > 0 || quiz.starts > 0 || quiz.resultsShown > 0;
+
+  const buildQuizFunnel = (counts: QuizFunnelCounts) =>
+    [
+      { label: "Quiz viewed", count: counts.views },
+      { label: "Quiz started", count: counts.starts },
+      { label: "Photo step reached", count: counts.gateViews },
+      { label: "Photo uploaded", count: counts.photoUploads },
+      { label: "Results shown", count: counts.resultsShown },
+      { label: "Product clicked", count: counts.productClicks },
+      { label: "Added to cart", count: counts.addToCart },
+    ].map((stage, i, arr) => ({
+      ...stage,
+      of: i === 0 ? stage.count : arr[i - 1].count,
+    }));
+
+  const quizFunnel = buildQuizFunnel(quiz);
+  const quizMobileFunnel = buildQuizFunnel(quiz.byDevice.mobile);
+  const quizDesktopFunnel = buildQuizFunnel(quiz.byDevice.desktop);
+  const quizMobileViews = quiz.byDevice.mobile.views;
+  const quizDesktopViews = quiz.byDevice.desktop.views;
+  const quizClassifiedViews = quizMobileViews + quizDesktopViews;
+
   const toggleProduct = useCallback((productId: string) => {
     setExpandedProducts((prev) => {
       const next = new Set(prev);
@@ -271,6 +338,231 @@ export default function Analytics() {
             />
           </InlineStack>
         </InlineStack>
+
+        {/* Quiz engagement funnel — the primary (and for most shops, only) section */}
+        <BlockStack gap="300">
+          <InlineStack gap="200" blockAlign="center">
+            <Text as="h2" variant="headingMd">Quiz performance</Text>
+            <Badge tone="magic">Quiz</Badge>
+          </InlineStack>
+
+          {!hasQuizData ? (
+            <Card padding="400">
+              <BlockStack gap="200">
+                <Text as="p" variant="bodyMd" fontWeight="semibold">
+                  No quiz activity yet
+                </Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Once shoppers take your quiz, you'll see views, completions, and add-to-cart performance here.
+                </Text>
+              </BlockStack>
+            </Card>
+          ) : (
+            <BlockStack gap="400">
+              <InlineGrid columns={{ xs: 1, sm: 3 }} gap="400">
+                <Card padding="400">
+                  <BlockStack gap="200">
+                    <Text as="span" variant="bodySm" tone="subdued">Quiz views</Text>
+                    <Text as="p" variant="headingXl" fontWeight="bold">
+                      {quiz.views.toLocaleString()}
+                    </Text>
+                    <Text as="span" variant="bodySm" tone="subdued">
+                      {quiz.starts.toLocaleString()} started answering
+                    </Text>
+                  </BlockStack>
+                </Card>
+
+                <Card padding="400">
+                  <BlockStack gap="200">
+                    <Text as="span" variant="bodySm" tone="subdued">Completion rate</Text>
+                    <Text as="p" variant="headingXl" fontWeight="bold">
+                      {pct(quiz.resultsShown, quiz.views).toFixed(1)}%
+                    </Text>
+                    <Text as="span" variant="bodySm" tone="subdued">
+                      {quiz.resultsShown.toLocaleString()} of {quiz.views.toLocaleString()} views reached results
+                    </Text>
+                  </BlockStack>
+                </Card>
+
+                <Card padding="400">
+                  <BlockStack gap="200">
+                    <Text as="span" variant="bodySm" tone="subdued">Results → product</Text>
+                    <Text as="p" variant="headingXl" fontWeight="bold">
+                      {pct(quiz.productClicks, quiz.resultsShown).toFixed(1)}%
+                    </Text>
+                    <Text as="span" variant="bodySm" tone="subdued">
+                      {quiz.productClicks.toLocaleString()} viewed a product from their results
+                    </Text>
+                  </BlockStack>
+                </Card>
+              </InlineGrid>
+
+              <Card padding="0">
+                <Box padding="400" paddingBlockEnd="300">
+                  <Text as="h3" variant="headingSm">Funnel — from seeing the quiz to adding to cart</Text>
+                </Box>
+                <Divider />
+                <Box padding="400" paddingBlockStart="300">
+                  <BlockStack gap="300">
+                    {quizFunnel.map((stage, i) => {
+                      const shareOfViews = pct(stage.count, quiz.views);
+                      const stepConversion = i === 0 ? 100 : pct(stage.count, stage.of);
+                      return (
+                        <BlockStack gap="150" key={stage.label}>
+                          <InlineStack align="space-between" blockAlign="center">
+                            <InlineStack gap="200" blockAlign="center">
+                              <Text as="span" variant="bodyMd" fontWeight="semibold">
+                                {stage.label}
+                              </Text>
+                              {stage.label === "Photo uploaded" && quiz.photoSkips > 0 && (
+                                <Text as="span" variant="bodySm" tone="subdued">
+                                  {quiz.photoSkips.toLocaleString()} skipped the photo
+                                </Text>
+                              )}
+                            </InlineStack>
+                            <InlineStack gap="300" blockAlign="center">
+                              <Text as="span" variant="bodyMd" fontWeight="semibold">
+                                {stage.count.toLocaleString()}
+                              </Text>
+                              {i > 0 && (
+                                <Box minWidth="52px">
+                                  <Badge tone={stepConversion >= 50 ? "success" : stepConversion >= 20 ? "attention" : "critical"}>
+                                    {`${stepConversion.toFixed(0)}%`}
+                                  </Badge>
+                                </Box>
+                              )}
+                            </InlineStack>
+                          </InlineStack>
+                          <div
+                            style={{
+                              height: "8px",
+                              borderRadius: "4px",
+                              background: "var(--p-color-bg-surface-secondary)",
+                              overflow: "hidden",
+                            }}
+                          >
+                            <div
+                              style={{
+                                height: "100%",
+                                width: `${Math.max(shareOfViews, stage.count > 0 ? 2 : 0)}%`,
+                                background: "var(--p-color-bg-fill-magic)",
+                              }}
+                            />
+                          </div>
+                        </BlockStack>
+                      );
+                    })}
+                  </BlockStack>
+                </Box>
+                <Box padding="400" paddingBlockStart="300">
+                  <Text as="span" variant="bodySm" tone="subdued">
+                    Percentages show step-over-step conversion from the prior stage. Counts are event volume, not unique shoppers. Shoppers who skip the photo step still reach results.
+                  </Text>
+                </Box>
+              </Card>
+
+              {/* Mobile vs desktop split of the quiz funnel */}
+              <Card padding="0">
+                <Box padding="400" paddingBlockEnd="300">
+                  <BlockStack gap="100">
+                    <Text as="h3" variant="headingSm">Mobile vs desktop</Text>
+                    <Text as="span" variant="bodySm" tone="subdued">
+                      How shoppers entered and moved through the quiz, split by device.
+                    </Text>
+                  </BlockStack>
+                </Box>
+                <Divider />
+                {quizClassifiedViews === 0 ? (
+                  <Box padding="400" paddingBlockStart="300">
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Device data is collecting. New quiz activity will appear here split by mobile and desktop.
+                    </Text>
+                  </Box>
+                ) : (
+                  <Box padding="400" paddingBlockStart="300">
+                    <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
+                      {[
+                        { label: "Mobile", views: quizMobileViews, funnel: quizMobileFunnel },
+                        { label: "Desktop", views: quizDesktopViews, funnel: quizDesktopFunnel },
+                      ].map((device) => (
+                        <Box
+                          key={device.label}
+                          padding="400"
+                          background="bg-surface-secondary"
+                          borderRadius="200"
+                        >
+                          <BlockStack gap="300">
+                            <InlineStack align="space-between" blockAlign="center">
+                              <Badge tone={device.label === "Mobile" ? "info" : "success"}>
+                                {device.label}
+                              </Badge>
+                              <Text as="span" variant="bodySm" tone="subdued">
+                                {pct(device.views, quizClassifiedViews).toFixed(0)}% of views
+                              </Text>
+                            </InlineStack>
+                            <BlockStack gap="050">
+                              <Text as="p" variant="headingLg" fontWeight="bold">
+                                {device.views.toLocaleString()}
+                              </Text>
+                              <Text as="span" variant="bodySm" tone="subdued">
+                                quiz views
+                              </Text>
+                            </BlockStack>
+                            <Divider />
+                            <BlockStack gap="200">
+                              {device.funnel.map((stage, i) => {
+                                const shareOfViews = pct(stage.count, device.views);
+                                const stepConversion = i === 0 ? 100 : pct(stage.count, stage.of);
+                                return (
+                                  <BlockStack gap="100" key={stage.label}>
+                                    <InlineStack align="space-between" blockAlign="center">
+                                      <Text as="span" variant="bodySm">
+                                        {stage.label}
+                                      </Text>
+                                      <InlineStack gap="200" blockAlign="center">
+                                        <Text as="span" variant="bodySm" fontWeight="semibold">
+                                          {stage.count.toLocaleString()}
+                                        </Text>
+                                        {i > 0 && (
+                                          <Text as="span" variant="bodySm" tone="subdued">
+                                            {`${stepConversion.toFixed(0)}%`}
+                                          </Text>
+                                        )}
+                                      </InlineStack>
+                                    </InlineStack>
+                                    <div
+                                      style={{
+                                        height: "6px",
+                                        borderRadius: "3px",
+                                        background: "var(--p-color-bg-surface)",
+                                        overflow: "hidden",
+                                      }}
+                                    >
+                                      <div
+                                        style={{
+                                          height: "100%",
+                                          width: `${Math.max(shareOfViews, stage.count > 0 ? 2 : 0)}%`,
+                                          background: "var(--p-color-bg-fill-magic)",
+                                        }}
+                                      />
+                                    </div>
+                                  </BlockStack>
+                                );
+                              })}
+                            </BlockStack>
+                          </BlockStack>
+                        </Box>
+                      ))}
+                    </InlineGrid>
+                  </Box>
+                )}
+              </Card>
+            </BlockStack>
+          )}
+        </BlockStack>
+
+        {showLegacy && (<>
+        <Divider />
 
         {/* Attribution — widget-driven conversion + revenue */}
         <BlockStack gap="300">
@@ -792,6 +1084,7 @@ export default function Analytics() {
             </BlockStack>
           </Card>
         )}
+        </>)}
       </BlockStack>
     </Page>
   );
