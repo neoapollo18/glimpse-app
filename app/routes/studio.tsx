@@ -489,6 +489,7 @@ export default function Studio() {
               onSelect={selectSlide}
               onAdd={addQuestion}
               onMove={moveQuestion}
+              onReorder={(axisKeysInOrder) => submitTreeTool("reorder_questions", { axisKeysInOrder })}
               flowMapOpen={flowMapOpen && step === "build"}
               onToggleFlowMap={() => setFlowMapOpen((v) => !v)}
               flashSlide={flashSlide}

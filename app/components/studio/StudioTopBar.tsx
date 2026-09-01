@@ -144,7 +144,7 @@ export function StudioTopBar({
 
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <Button variant="plain" url="/app/assistant/quiz">
-          Copy &amp; design
+          Design &amp; text
         </Button>
         <Button variant="primary" onClick={onPublishClick}>
           Publish

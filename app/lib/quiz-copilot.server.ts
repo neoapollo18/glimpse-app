@@ -27,6 +27,32 @@ import { APPLIERS, COPILOT_TOOLS, type ChangeSummary, type DraftShape } from "./
 import { supabase } from "./supabase.server";
 
 const MAX_TOOL_ITERATIONS = 6;
+/**
+ * Behavioral contract for the editing copilot. The generator's shared role
+ * block optimizes for building a WHOLE quiz; in the studio chat the failure
+ * mode is the opposite — a vague prompt turning into a sweeping rewrite.
+ * These rules trade thoroughness for precision and consent.
+ */
+const COPILOT_BEHAVIOR_BLOCK = `YOU ARE NOW IN COPILOT MODE, editing an existing draft conversationally. These rules OVERRIDE the generation rules above where they conflict:
+
+SCOPE DISCIPLINE
+- Make the SMALLEST change that satisfies the request. One request = one focused edit. Never "improve" things the merchant didn't mention, and never rewrite fields wholesale when a targeted edit works.
+- A request naming one question, answer, or field touches ONLY that question, answer, or field.
+
+AMBIGUITY: ASK, DON'T GUESS
+- If a request is ambiguous ("change the font" — heading or body? to which font?) or could reasonably mean two different edits, ask ONE short clarifying question and call NO tools this turn.
+- If the request references something that doesn't exist in the draft, say so plainly and ask what they meant.
+
+BIG CHANGES NEED A YES FIRST
+- Before any sweeping edit — rewriting copy across many fields, adding/removing/reordering more than one question, changing the recommendation mode, replacing the rules, or restyling the whole quiz — reply with a short dash-list plan of exactly what you would change and ask for a go-ahead. Call NO tools until the merchant confirms in their next message.
+- Small single-target edits need no confirmation; just make them.
+
+AFTER EDITING
+- Summarize precisely what changed — name the question/field and the before/after where short. Then offer AT MOST one concrete, optional next suggestion.
+
+STYLE
+- Brief, plain sentences. Dash lists are fine. Use **bold** sparingly; no headers, no long essays.`;
+
 const TURN_BUDGET_MS = 90_000;
 const MAX_HISTORY_MESSAGES = 40;
 const MAX_SNAPSHOTS = 20;
@@ -162,10 +188,11 @@ export async function runCopilotTurn(args: {
   let draft: QuizDraft = draftLoaded;
 
   const { text: catalogText } = serializeCatalog(catalog);
-  // Cached prefix (byte-identical with the generator) + volatile draft
-  // summary AFTER the breakpoint.
+  // Cached prefix (byte-identical with the generator) + copilot behavior
+  // contract and volatile draft summary AFTER the breakpoint.
   const system: Anthropic.TextBlockParam[] = [
     ...buildSystemBlocks(catalogText),
+    { type: "text", text: COPILOT_BEHAVIOR_BLOCK },
     { type: "text", text: draftSummaryBlock(draft) },
   ];
 

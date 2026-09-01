@@ -142,8 +142,8 @@ function EditBody({
     return (
       <FixedSlideNotice
         title="Intro slide"
-        body="The intro headline, buttons, and design live on the Copy & design page. You can also just tell Gleame in Chat, for example: change the headline to..."
-        actions={[{ content: "Open Copy & design", url: "/app/assistant/quiz" }]}
+        body="The intro headline, buttons, and design live on the Design & text page. You can also just tell Gleame in Chat, for example: change the headline to..."
+        actions={[{ content: "Open Design & text", url: "/app/assistant/quiz" }]}
       />
     );
   }
@@ -151,9 +151,9 @@ function EditBody({
     return (
       <FixedSlideNotice
         title="Photo step"
-        body="The photo step's copy is on the Copy & design page. Photo detection traits live in the advanced rules editor."
+        body="The photo step's text is on the Design & text page. Photo detection traits live in the advanced rules editor."
         actions={[
-          { content: "Open Copy & design", url: "/app/assistant/quiz" },
+          { content: "Open Design & text", url: "/app/assistant/quiz" },
           { content: "Advanced rules editor", url: "/app/assistant/recommendations" },
         ]}
       />
@@ -163,8 +163,8 @@ function EditBody({
     return (
       <FixedSlideNotice
         title="Results slide"
-        body="Results card copy and layout live on the Copy & design page. What gets recommended is set up in the Logic step."
-        actions={[{ content: "Open Copy & design", url: "/app/assistant/quiz" }]}
+        body="Results card text and layout live on the Design & text page. What gets recommended is set up in the Logic step."
+        actions={[{ content: "Open Design & text", url: "/app/assistant/quiz" }]}
       />
     );
   }

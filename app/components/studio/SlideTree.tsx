@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import { Tooltip } from "@shopify/polaris";
 import type { StudioFlow } from "./types";
 import { answerLabel } from "./types";
@@ -81,6 +81,7 @@ export function SlideTree({
   onSelect,
   onAdd,
   onMove,
+  onReorder,
   flowMapOpen,
   onToggleFlowMap,
   flashSlide,
@@ -93,6 +94,7 @@ export function SlideTree({
   onSelect: (slideId: string) => void;
   onAdd?: () => void;
   onMove?: (axisKey: string, direction: -1 | 1) => void;
+  onReorder?: (axisKeysInOrder: string[]) => void;
   flowMapOpen: boolean;
   onToggleFlowMap: () => void;
   flashSlide: string | null;
@@ -101,6 +103,20 @@ export function SlideTree({
   onReturnToBuild?: () => void;
 }) {
   const questions = flow?.questions ?? [];
+  // Drag-to-reorder: question rows only. dragQi = the question being
+  // dragged; overQi = the row the pointer is above (drop inserts before it,
+  // or at the end when hovering the last row's lower half is overkill —
+  // insert-before semantics keep it simple and predictable).
+  const [dragQi, setDragQi] = useState<number | null>(null);
+  const [overQi, setOverQi] = useState<number | null>(null);
+  const dropReorder = (targetQi: number) => {
+    if (dragQi === null || !onReorder) return;
+    const order = questions.map((q) => q.axisKey);
+    const [moved] = order.splice(dragQi, 1);
+    const insertAt = dragQi < targetQi ? targetQi - 1 : targetQi;
+    order.splice(insertAt, 0, moved);
+    if (order.some((k, i) => k !== questions[i].axisKey)) onReorder(order);
+  };
   const problems = flow ? draftProblems(flow) : [];
   const screens = flow ? buildScreens(flow) : [];
   const hasPhotoAxis = (flow?.axes ?? []).some((a) => a.source === "photo");
@@ -116,6 +132,7 @@ export function SlideTree({
       problem?: string;
       showMove?: boolean;
       axisKey?: string;
+      qi?: number;
       isFirst?: boolean;
       isLast?: boolean;
       untitled?: boolean;
@@ -126,8 +143,38 @@ export function SlideTree({
       className="studio-tree-row"
       data-selected={selectedSlide === slideId}
       data-flash={flashSlide === slideId}
-      style={{ paddingLeft: opts.indent ? 24 : 8, opacity: disabled ? 0.6 : 1 }}
+      style={{
+        paddingLeft: opts.indent ? 24 : 8,
+        opacity: disabled ? 0.6 : dragQi !== null && dragQi === opts.qi ? 0.4 : 1,
+        boxShadow:
+          overQi !== null && overQi === opts.qi && dragQi !== null && dragQi !== opts.qi
+            ? "inset 0 2px 0 #2C6ECB"
+            : undefined,
+      }}
       disabled={disabled}
+      draggable={!readOnly && !disabled && opts.qi != null && Boolean(onReorder)}
+      onDragStart={(e) => {
+        if (opts.qi == null) return;
+        setDragQi(opts.qi);
+        e.dataTransfer.effectAllowed = "move";
+      }}
+      onDragOver={(e) => {
+        if (dragQi === null || opts.qi == null) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        setOverQi(opts.qi);
+      }}
+      onDrop={(e) => {
+        if (opts.qi == null) return;
+        e.preventDefault();
+        dropReorder(opts.qi);
+        setDragQi(null);
+        setOverQi(null);
+      }}
+      onDragEnd={() => {
+        setDragQi(null);
+        setOverQi(null);
+      }}
       onClick={() => {
         if (readOnly && onReturnToBuild) onReturnToBuild();
         onSelect(slideId);
@@ -208,6 +255,7 @@ export function SlideTree({
                 untitled: !q.prompt.trim(),
                 showMove: !readOnly,
                 axisKey: q.axisKey,
+                qi,
                 isFirst: qi === 0,
                 isLast: qi === questions.length - 1,
               });
