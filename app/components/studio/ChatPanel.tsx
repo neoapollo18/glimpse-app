@@ -28,17 +28,62 @@ type CopilotEvent =
   | { type: "error"; error: string }
   | { type: "heartbeat" };
 
-/** Minimal chat formatting: the copilot writes **bold** markers; render
- * them as bold text instead of literal asterisks. No HTML injection — the
- * split output is plain strings and <strong> elements only. */
-function renderChatText(text: string) {
+/** Lightweight, injection-safe chat formatting: **bold** spans plus
+ * dash/star bullet lines rendered as a real list. Pure string splitting
+ * into strings and styled elements — no HTML parsing. */
+function renderInline(text: string, keyBase: string) {
   return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
     part.startsWith("**") && part.endsWith("**") ? (
-      <strong key={i}>{part.slice(2, -2)}</strong>
+      <strong key={`${keyBase}-${i}`}>{part.slice(2, -2)}</strong>
     ) : (
       part
     ),
   );
+}
+
+function renderChatText(text: string) {
+  const lines = text.split("\n");
+  const blocks: React.ReactNode[] = [];
+  let bullets: string[] = [];
+  let para: string[] = [];
+
+  const flushPara = () => {
+    if (para.length === 0) return;
+    blocks.push(
+      <div key={`p${blocks.length}`} style={{ whiteSpace: "pre-wrap" }}>
+        {renderInline(para.join("\n"), `p${blocks.length}`)}
+      </div>,
+    );
+    para = [];
+  };
+  const flushBullets = () => {
+    if (bullets.length === 0) return;
+    blocks.push(
+      <ul key={`u${blocks.length}`} style={{ margin: "2px 0", paddingLeft: 18, display: "flex", flexDirection: "column", gap: 3 }}>
+        {bullets.map((b, i) => (
+          <li key={i}>{renderInline(b, `u${blocks.length}-${i}`)}</li>
+        ))}
+      </ul>,
+    );
+    bullets = [];
+  };
+
+  for (const line of lines) {
+    const m = /^\s*[-*•]\s+(.*)$/.exec(line);
+    if (m) {
+      flushPara();
+      bullets.push(m[1]);
+    } else if (line.trim() === "") {
+      flushPara();
+      flushBullets();
+    } else {
+      flushBullets();
+      para.push(line);
+    }
+  }
+  flushPara();
+  flushBullets();
+  return <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{blocks}</div>;
 }
 
 const SUGGESTION_CHIPS = [
@@ -292,7 +337,7 @@ export function ChatPanel({
                 borderRadius: 12,
                 padding: "8px 12px",
                 fontSize: 13,
-                whiteSpace: "pre-wrap",
+                whiteSpace: isUser ? "pre-wrap" : "normal",
               }}
             >
               {isUser ? item.text : renderChatText(item.text)}
