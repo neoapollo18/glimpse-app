@@ -231,7 +231,7 @@ const GOAL_OPTIONS = [
   {
     id: "returns",
     label: "Reduce return rates",
-    description: "Minimize returns due to sizing or fit issues",
+    description: "Fewer wrong picks, shades, and sizes to send back",
     emoji: "📦",
   },
   {
@@ -312,14 +312,14 @@ function Step1Welcome({ onNext }: { onNext: () => void }) {
         >
           <BlockStack gap="300">
             <Text as="span" variant="headingXl">
-              👕
+              🎯
             </Text>
             <Text as="h3" variant="headingMd">
-              Show shoppers how they'd look
+              Match every shopper to the right products
             </Text>
             <Text as="p" variant="bodyMd" tone="subdued">
-              Allow shoppers to upload their photo and see how your products look
-              on them instantly.
+              A Find My Fit quiz in your brand's voice asks a few fun questions
+              and recommends the perfect products from your catalog.
             </Text>
           </BlockStack>
         </div>
@@ -340,8 +340,8 @@ function Step1Welcome({ onNext }: { onNext: () => void }) {
               Increase Conversion Rate & Reduce Returns
             </Text>
             <Text as="p" variant="bodyMd" tone="subdued">
-              Help customers make confident purchasing decisions with AI-powered
-              try-on.
+              Guided shoppers buy with confidence. AI drafts your quiz from
+              your real catalog in about a minute; you edit and publish.
             </Text>
           </BlockStack>
         </div>
@@ -607,7 +607,7 @@ function Step5BuildQuiz({
           Build your quiz
         </Text>
         <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
-          Create your Find My Fit quiz in the Quiz Builder. You'll work on a
+          Create your Find My Fit quiz in the Quiz Studio. You'll work on a
           draft — nothing goes live until you publish.
         </Text>
       </BlockStack>
@@ -626,11 +626,12 @@ function Step5BuildQuiz({
             🧩
           </Text>
           <Text as="p" variant="bodyMd" tone="subdued">
-            Pick your questions, map answers to products, and style it to match
-            your brand — then come back here to finish up.
+            Tell Gleame what you sell and it drafts the whole quiz from your
+            catalog — questions, answers, and styling. Edit anything next to a
+            live preview, then come back here to finish up.
           </Text>
           <Button variant="primary" onClick={onNavigateToBuilder}>
-            Open Quiz Builder
+            Open Quiz Studio
           </Button>
         </BlockStack>
       </div>
@@ -670,7 +671,7 @@ function Step6GoLive({
 
       <InlineStack align="center">
         <Button onClick={onNavigateToQuizSetup}>
-          Open Quiz Setup
+          Open Quiz Studio
         </Button>
       </InlineStack>
 
@@ -719,7 +720,8 @@ function Step6GoLive({
           </Text>
           <BlockStack gap="200">
             <Text as="p" variant="bodyMd">
-              1. Open Quiz Setup and finish the checklist (questions, copy, design)
+              1. Publish your quiz from the Quiz Studio (the Publish step
+              checks everything for you)
             </Text>
             <Text as="p" variant="bodyMd">
               2. In the theme editor, add the "Gleame Quiz" section to a page
@@ -759,8 +761,8 @@ function Step7Complete({
           You're all set!
         </Text>
         <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
-          Your store is ready for AI-powered virtual try-on. Customers can now
-          see how your products look on them before purchasing.
+          Your Find My Fit quiz is ready to match shoppers with the products
+          they'll love — and buy.
         </Text>
       </BlockStack>
 
@@ -778,13 +780,14 @@ function Step7Complete({
           </Text>
           <BlockStack gap="200">
             <Text as="p" variant="bodyMd">
-              • Add more products from the Products page
+              • Refine questions, design, and recommendation logic any time in
+              the Quiz Studio
             </Text>
             <Text as="p" variant="bodyMd">
-              • Track performance in Analytics
+              • Watch quiz views, completions, and add-to-carts in Analytics
             </Text>
             <Text as="p" variant="bodyMd">
-              • Fine-tune your quiz copy and design from the Quiz page
+              • Ask the Studio's AI chat to make changes for you
             </Text>
           </BlockStack>
         </BlockStack>
