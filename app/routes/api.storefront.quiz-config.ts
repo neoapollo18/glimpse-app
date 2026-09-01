@@ -63,6 +63,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       buttonRadius: config.quiz_button_radius,
       headingFontOverride: config.quiz_heading_font_override,
       bodyFontOverride: config.quiz_body_font_override,
+      headingWeightOverride: config.quiz_heading_weight_override,
       // Design tokens (migration 049). Null = the widget stylesheet's
       // defaults — the shipped design, unchanged.
       inkColor: config.quiz_ink_color,

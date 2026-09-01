@@ -114,6 +114,7 @@ export async function buildPreviewQuizConfig(shopDomain: string, draft: QuizDraf
     buttonRadius: config.quiz_button_radius,
     headingFontOverride: config.quiz_heading_font_override,
     bodyFontOverride: config.quiz_body_font_override,
+    headingWeightOverride: config.quiz_heading_weight_override,
     inkColor: config.quiz_ink_color,
     cardBgColor: config.quiz_card_bg_color,
     lineColor: config.quiz_line_color,

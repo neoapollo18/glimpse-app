@@ -665,6 +665,7 @@ export function ThemeEditor({
     quiz_animation_style: str(settings, "quiz_animation_style"),
     quiz_heading_font_override: str(settings, "quiz_heading_font_override"),
     quiz_body_font_override: str(settings, "quiz_body_font_override"),
+    quiz_heading_weight_override: str(settings, "quiz_heading_weight_override"),
   }));
 
   // Colors must reach the applier as #rrggbb or null (it rejects other
@@ -751,7 +752,28 @@ export function ThemeEditor({
         onChange={(v) => setEnum("quiz_animation_style", v)}
         disabled={disabled}
       />
-      <FontSelect label="Heading font" fieldKey="quiz_heading_font_override" values={values} onPick={setFont} disabled={disabled} />
+      <InlineStack gap="200" wrap={false} blockAlign="start">
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <FontSelect label="Heading font" fieldKey="quiz_heading_font_override" values={values} onPick={setFont} disabled={disabled} />
+        </div>
+        <div style={{ width: 118, flexShrink: 0 }}>
+          <Select
+            label="Weight"
+            options={[
+              { label: "Default", value: "" },
+              { label: "Light", value: "300" },
+              { label: "Regular", value: "400" },
+              { label: "Medium", value: "500" },
+              { label: "Semibold", value: "600" },
+              { label: "Bold", value: "700" },
+              { label: "Heavy", value: "800" },
+            ]}
+            value={values.quiz_heading_weight_override}
+            onChange={(v) => setEnum("quiz_heading_weight_override", v)}
+            disabled={disabled}
+          />
+        </div>
+      </InlineStack>
       <FontSelect label="Body font" fieldKey="quiz_body_font_override" values={values} onPick={setFont} disabled={disabled} />
     </BlockStack>
   );

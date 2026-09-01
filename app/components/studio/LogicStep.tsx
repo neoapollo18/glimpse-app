@@ -6,14 +6,16 @@ import {
   BlockStack,
   Button,
   Card,
+  Collapsible,
+  Icon,
   InlineStack,
   Select,
   Text,
   TextField,
 } from "@shopify/polaris";
+import { ChevronDownIcon, ChevronRightIcon, MagicIcon } from "@shopify/polaris-icons";
 import { readSseStream } from "../../lib/sse-client";
 import {
-  framingPrompt,
   photoFramingPrompt,
   GENERAL_FRAMING_PROMPT,
   GENERAL_GUIDANCE_KEY,
@@ -21,13 +23,20 @@ import {
 import type { StudioLoaderData, StudioActionData } from "../../routes/studio";
 import type { StudioFlow } from "./types";
 
-// The Logic step: describe what each answer means in plain words, generate
-// the recommendation logic with AI, review it, and save it TO THE DRAFT.
-// It goes live when the draft publishes — atomically with the questions the
-// logic references. Ported from the standalone logic page; notes still save
-// immediately (they're compiler inputs, not runtime config).
+// The Logic step: one collapsible card per question with a row per answer
+// ("Party → glitter, chrome, bold reds"), an AI draft button that pre-fills
+// the rows from the catalog, then generate → review → save TO THE DRAFT.
+// Notes still save immediately (they're compiler inputs, not runtime config);
+// the compiled logic goes live when the draft publishes.
+//
+// Storage stays one text blob per question: answer rows serialize to
+// "Label: text" lines plus a free-text remainder, so the guidance compiler
+// and pre-existing notes are untouched (legacy prose just lands in the
+// "Anything else" box).
 
 const NOTE_MAX_LEN = 4000;
+const ROW_MAX_LEN = 300;
+const EXPAND_EVENT = "gleame-logic-open";
 
 type GenerateEvent =
   | { type: "progress"; phase: string }
@@ -52,11 +61,8 @@ function useLogicModel(data: StudioLoaderData) {
     axisKey: q.axisKey,
     prompt: q.prompt,
     position: i + 1,
-    framing: framingPrompt({
-      prompt: q.prompt,
-      multiSelect: q.multiSelect ?? false,
-      optionLabels: q.options.map((o) => o.label),
-    }),
+    multiSelect: q.multiSelect ?? false,
+    optionLabels: q.options.map((o) => o.label),
   }));
   const photoAxes = flow.axes
     .filter((a) => a.source === "photo")
@@ -64,16 +70,48 @@ function useLogicModel(data: StudioLoaderData) {
   return { flow, questions, photoAxes };
 }
 
+// ---- Per-answer row serialization ------------------------------------------
+
+/** Split a note blob into per-answer texts (lines starting "Label:") plus the
+ * free-text remainder. Longest labels match first so a label that prefixes
+ * another can't steal its lines. */
+function parseNote(note: string, labels: string[]) {
+  const answers: Record<string, string> = {};
+  const extra: string[] = [];
+  const byLength = [...labels].sort((a, b) => b.length - a.length);
+  for (const raw of note.split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    const hit = byLength.find((l) => line.toLowerCase().startsWith(l.trim().toLowerCase() + ":"));
+    if (hit) {
+      const text = line.slice(line.indexOf(":") + 1).trim();
+      answers[hit] = answers[hit] ? `${answers[hit]} ${text}` : text;
+    } else {
+      extra.push(line);
+    }
+  }
+  return { answers, extra: extra.join("\n") };
+}
+
+function composeNote(labels: string[], answers: Record<string, string>, extra: string) {
+  const lines = labels
+    .filter((l) => (answers[l] ?? "").trim() !== "")
+    .map((l) => `${l.trim()}: ${answers[l].trim()}`);
+  if (extra.trim()) lines.push(extra.trim());
+  return lines.join("\n").slice(0, NOTE_MAX_LEN);
+}
+
+// ---- Rail ------------------------------------------------------------------
+
 function LogicRail({ data }: { data: StudioLoaderData }) {
   const { questions, photoAxes } = useLogicModel(data);
   const notes = data.notes as Record<string, string>;
-  const scrollTo = (id: string) =>
-    document.getElementById(`logic-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const open = (id: string) => window.dispatchEvent(new CustomEvent(EXPAND_EVENT, { detail: id }));
 
   return (
     <div style={{ padding: 8, display: "flex", flexDirection: "column", gap: 2 }}>
       {questions.map((q) => (
-        <button key={q.axisKey} className="studio-tree-row" onClick={() => scrollTo(q.axisKey)}>
+        <button key={q.axisKey} className="studio-tree-row" onClick={() => open(q.axisKey)}>
           <span className="studio-rail-wide" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
             {q.position}. {q.prompt.trim() || "Untitled question"}
           </span>
@@ -83,22 +121,77 @@ function LogicRail({ data }: { data: StudioLoaderData }) {
         </button>
       ))}
       {photoAxes.map((a) => (
-        <button key={a.axisKey} className="studio-tree-row" onClick={() => scrollTo(a.axisKey)}>
+        <button key={a.axisKey} className="studio-tree-row" onClick={() => open(a.axisKey)}>
           <span className="studio-rail-wide" style={{ flex: 1 }}>{a.label}</span>
           <Badge size="small">Photo</Badge>
         </button>
       ))}
-      <button className="studio-tree-row" onClick={() => scrollTo("general")}>
+      <button className="studio-tree-row" onClick={() => open("general")}>
         <span className="studio-rail-wide">Store-wide notes</span>
       </button>
     </div>
   );
 }
 
+// ---- Collapsible card shell ------------------------------------------------
+
+function LogicCard({
+  id,
+  title,
+  badge,
+  expanded,
+  onToggle,
+  children,
+}: {
+  id: string;
+  title: React.ReactNode;
+  badge: React.ReactNode;
+  expanded: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div id={`logic-${id}`}>
+      <Card padding="0">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            width: "100%",
+            padding: "14px 16px",
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            textAlign: "left",
+          }}
+        >
+          <span style={{ width: 16, height: 16, display: "inline-flex", flexShrink: 0 }}>
+            <Icon source={expanded ? ChevronDownIcon : ChevronRightIcon} tone="subdued" />
+          </span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <Text as="span" variant="headingSm">{title}</Text>
+          </span>
+          {badge}
+        </button>
+        <Collapsible open={expanded} id={`logic-body-${id}`} transition={{ duration: "150ms", timingFunction: "ease-in-out" }}>
+          <div style={{ padding: "0 16px 16px 40px" }}>{children}</div>
+        </Collapsible>
+      </Card>
+    </div>
+  );
+}
+
+// ---- Main step -------------------------------------------------------------
+
 export function LogicStep({ data, chatBusy }: { data: StudioLoaderData; chatBusy: boolean }) {
   const { questions, photoAxes } = useLogicModel(data);
   const notesFetcher = useFetcher<StudioActionData>();
   const activateFetcher = useFetcher<StudioActionData>();
+  const draftFetcher = useFetcher<StudioActionData>();
 
   const [notes, setNotes] = useState<Record<string, string>>(() => ({
     [GENERAL_GUIDANCE_KEY]: (data.notes as Record<string, string>)[GENERAL_GUIDANCE_KEY] ?? "",
@@ -110,6 +203,28 @@ export function LogicStep({ data, chatBusy }: { data: StudioLoaderData; chatBusy
   const dirtyKeysRef = useRef<Set<string>>(new Set());
   const [notesDirty, setNotesDirty] = useState(false);
   const [notesSaved, setNotesSaved] = useState(false);
+
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const toggle = (id: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  // Rail clicks: expand the card, then scroll to it once it has height.
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail;
+      setExpanded((prev) => new Set(prev).add(id));
+      requestAnimationFrame(() =>
+        document.getElementById(`logic-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      );
+    };
+    window.addEventListener(EXPAND_EVENT, onOpen);
+    return () => window.removeEventListener(EXPAND_EVENT, onOpen);
+  }, []);
 
   const [genPhase, setGenPhase] = useState<string | null>(null);
   const [genError, setGenError] = useState<string | null>(null);
@@ -166,10 +281,72 @@ export function LogicStep({ data, chatBusy }: { data: StudioLoaderData; chatBusy
     }
   }, [notesFetcher.state, notesFetcher.data]);
 
+  // ---- AI note drafting ----
+  const [draftedBanner, setDraftedBanner] = useState<string | null>(null);
+  const requestDraft = (axisKeys?: string[]) => {
+    if (draftFetcher.state !== "idle") return;
+    setDraftedBanner(null);
+    const fd = new FormData();
+    fd.append("intent", "draft-notes");
+    if (axisKeys) fd.append("axisKeys", JSON.stringify(axisKeys));
+    draftFetcher.submit(fd, { method: "POST", action: "/studio" });
+  };
+  // Which draft request is in flight: "all" or a single axisKey.
+  const draftingKeys = draftFetcher.state !== "idle"
+    ? (draftFetcher.formData?.get("axisKeys") as string | null)
+    : undefined; // undefined = not drafting; null = drafting all
+
+  const draftProcessedRef = useRef<StudioActionData | null>(null);
+  useEffect(() => {
+    if (draftFetcher.state !== "idle" || !draftFetcher.data) return;
+    if (draftProcessedRef.current === draftFetcher.data) return;
+    draftProcessedRef.current = draftFetcher.data;
+    const result = draftFetcher.data;
+    if (!result.ok || !result.notesDraft) return;
+    // Merge non-destructively: only empty rows get the drafted text; typed
+    // rows and existing free text always win.
+    let touched = 0;
+    let firstTouched: string | null = null;
+    for (const dq of result.notesDraft.questions) {
+      const q = questions.find((x) => x.axisKey === dq.axisKey);
+      if (!q) continue;
+      const cur = parseNote(notesRef.current[q.axisKey] ?? "", q.optionLabels);
+      let changed = false;
+      for (const ans of dq.answers) {
+        const label = q.optionLabels.find(
+          (l) => l.trim().toLowerCase() === ans.label.trim().toLowerCase(),
+        );
+        if (!label) continue;
+        if ((cur.answers[label] ?? "").trim() === "" && ans.note.trim() !== "") {
+          cur.answers[label] = ans.note.trim().slice(0, ROW_MAX_LEN);
+          changed = true;
+        }
+      }
+      if (q.multiSelect && dq.combos.trim() && cur.extra.trim() === "") {
+        cur.extra = dq.combos.trim();
+        changed = true;
+      }
+      if (changed) {
+        setNote(q.axisKey, composeNote(q.optionLabels, cur.answers, cur.extra));
+        touched += 1;
+        if (!firstTouched) firstTouched = q.axisKey;
+      }
+    }
+    if (touched > 0) {
+      setDraftedBanner(
+        `AI drafted notes for ${touched} ${touched === 1 ? "question" : "questions"} from your catalog. Review and edit anything, then generate.`,
+      );
+      if (firstTouched) setExpanded((prev) => new Set(prev).add(firstTouched));
+    } else {
+      setDraftedBanner("Nothing to draft: every answer already has notes.");
+    }
+  }, [draftFetcher.state, draftFetcher.data, questions]);
+
   const filledCount = questions.filter((q) => (notes[q.axisKey] ?? "").trim() !== "").length;
   const generateBlocked =
     questions.length === 0 || !data.aiConfigured || data.catalog.productCount === 0;
   const generating = genPhase !== null;
+  const draftBlocked = generateBlocked || chatBusy || draftFetcher.state !== "idle";
 
   const runGenerate = async () => {
     if (generateRunningRef.current || generateBlocked) return;
@@ -227,12 +404,40 @@ export function LogicStep({ data, chatBusy }: { data: StudioLoaderData; chatBusy
 
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-      <div style={{ maxWidth: 680, margin: "0 auto", padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
-        <Banner tone="info" title="Describe your logic in plain words. The AI writes the rules.">
-          Under each question, tell us what its answers should mean for
-          recommendations: which products fit, what to avoid, what matters
-          most. Then hit Generate. Nothing goes live until you publish.
-        </Banner>
+      <div style={{ maxWidth: 680, margin: "0 auto", padding: 24, display: "flex", flexDirection: "column", gap: 12 }}>
+        <Card>
+          <InlineStack gap="400" blockAlign="center" wrap={false}>
+            <div style={{ flex: 1 }}>
+              <BlockStack gap="100">
+                <Text as="h3" variant="headingSm">Tell the AI what each answer means</Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Open a question, fill in a few words per answer (or let AI draft
+                  them from your catalog), then generate. Nothing goes live until
+                  you publish.
+                </Text>
+              </BlockStack>
+            </div>
+            {data.aiConfigured && (
+              <Button
+                icon={MagicIcon}
+                onClick={() => requestDraft()}
+                loading={draftingKeys === null}
+                disabled={draftBlocked && draftingKeys !== null}
+              >
+                Draft all notes with AI
+              </Button>
+            )}
+          </InlineStack>
+        </Card>
+
+        {draftedBanner && (
+          <Banner tone="success" onDismiss={() => setDraftedBanner(null)}>
+            {draftedBanner}
+          </Banner>
+        )}
+        {draftFetcher.data && !draftFetcher.data.ok && draftFetcher.data.intent === "draft-notes" && (
+          <Banner tone="critical">{draftFetcher.data.error}</Banner>
+        )}
 
         {currentGuidance !== "" && !review && (
           <Banner tone="success" title="Your draft already has recommendation logic">
@@ -241,91 +446,140 @@ export function LogicStep({ data, chatBusy }: { data: StudioLoaderData; chatBusy
           </Banner>
         )}
 
-        {questions.map((q) => (
-          <div key={q.axisKey} id={`logic-${q.axisKey}`}>
-            <Card>
+        {questions.map((q) => {
+          const parsed = parseNote(notes[q.axisKey] ?? "", q.optionLabels);
+          const setRow = (label: string, value: string) => {
+            const next = { ...parsed.answers, [label]: value };
+            setNote(q.axisKey, composeNote(q.optionLabels, next, parsed.extra));
+          };
+          const filled = (notes[q.axisKey] ?? "").trim() !== "";
+          return (
+            <LogicCard
+              key={q.axisKey}
+              id={q.axisKey}
+              title={`Q${q.position}: ${q.prompt.trim() || "Untitled question"}`}
+              badge={
+                filled ? <Badge tone="success">Described</Badge> : <Badge tone="attention">Not filled in</Badge>
+              }
+              expanded={expanded.has(q.axisKey)}
+              onToggle={() => toggle(q.axisKey)}
+            >
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
-                  <Text as="h3" variant="headingMd">
-                    Q{q.position}: {q.prompt.trim() || "Untitled question"}
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    For each answer: which products, collections, or traits fit.
                   </Text>
-                  {(notes[q.axisKey] ?? "").trim() === "" ? (
-                    <Badge tone="attention">Not filled in</Badge>
-                  ) : (
-                    <Badge tone="success">Described</Badge>
+                  {data.aiConfigured && (
+                    <Button
+                      size="slim"
+                      variant="tertiary"
+                      icon={MagicIcon}
+                      onClick={() => requestDraft([q.axisKey])}
+                      loading={draftingKeys === JSON.stringify([q.axisKey])}
+                      disabled={draftBlocked && draftingKeys !== JSON.stringify([q.axisKey])}
+                    >
+                      Draft with AI
+                    </Button>
                   )}
                 </InlineStack>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  {q.framing}
-                </Text>
+                {q.optionLabels.map((label) => (
+                  <InlineStack key={label} gap="300" blockAlign="center" wrap={false}>
+                    <div style={{ width: 160, flexShrink: 0 }}>
+                      <Text as="span" variant="bodySm" fontWeight="semibold">
+                        {label}
+                      </Text>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <TextField
+                        label={`Note for answer ${label}`}
+                        labelHidden
+                        maxLength={ROW_MAX_LEN}
+                        value={parsed.answers[label] ?? ""}
+                        onChange={(v) => setRow(label, v)}
+                        placeholder="Products, collections, or traits that fit"
+                        disabled={chatBusy}
+                        autoComplete="off"
+                      />
+                    </div>
+                  </InlineStack>
+                ))}
                 <TextField
-                  label={`Notes for "${q.prompt}"`}
-                  labelHidden
-                  multiline={4}
+                  label="Anything else (optional)"
+                  multiline={2}
                   maxLength={NOTE_MAX_LEN}
-                  value={notes[q.axisKey] ?? ""}
-                  onChange={(v) => setNote(q.axisKey, v)}
-                  placeholder="e.g. Everyday: the breathable line and sheer nudes. Party: glitter, chrome, bold reds."
+                  value={parsed.extra}
+                  onChange={(v) => setNote(q.axisKey, composeNote(q.optionLabels, parsed.answers, v))}
+                  placeholder={
+                    q.multiSelect
+                      ? "e.g. how combined picks interact, what to avoid"
+                      : "e.g. what to avoid, bestsellers to favor"
+                  }
                   disabled={chatBusy}
                   autoComplete="off"
                 />
               </BlockStack>
-            </Card>
-          </div>
-        ))}
+            </LogicCard>
+          );
+        })}
 
         {photoAxes.map((a) => (
-          <div key={a.axisKey} id={`logic-${a.axisKey}`}>
-            <Card>
-              <BlockStack gap="300">
-                <InlineStack align="space-between" blockAlign="center">
-                  <Text as="h3" variant="headingMd">
-                    {a.label}
-                  </Text>
-                  <Badge>From the shopper's photo</Badge>
-                </InlineStack>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  {a.framing}
-                </Text>
-                <TextField
-                  label={`Notes for detected ${a.label}`}
-                  labelHidden
-                  multiline={3}
-                  maxLength={NOTE_MAX_LEN}
-                  value={notes[a.axisKey] ?? ""}
-                  onChange={(v) => setNote(a.axisKey, v)}
-                  placeholder="Optional"
-                  disabled={chatBusy}
-                  autoComplete="off"
-                />
-              </BlockStack>
-            </Card>
-          </div>
-        ))}
-
-        <div id="logic-general">
-          <Card>
+          <LogicCard
+            key={a.axisKey}
+            id={a.axisKey}
+            title={a.label}
+            badge={<Badge>From the shopper's photo</Badge>}
+            expanded={expanded.has(a.axisKey)}
+            onToggle={() => toggle(a.axisKey)}
+          >
             <BlockStack gap="300">
-              <Text as="h3" variant="headingMd">
-                Store-wide notes
-              </Text>
               <Text as="p" variant="bodySm" tone="subdued">
-                {GENERAL_FRAMING_PROMPT}
+                {a.framing}
               </Text>
               <TextField
-                label="Store-wide notes"
+                label={`Notes for detected ${a.label}`}
                 labelHidden
-                multiline={4}
+                multiline={3}
                 maxLength={NOTE_MAX_LEN}
-                value={notes[GENERAL_GUIDANCE_KEY] ?? ""}
-                onChange={(v) => setNote(GENERAL_GUIDANCE_KEY, v)}
-                placeholder="e.g. Our bestsellers are the Silk Set and Coral Crush. Feature them when they fit."
+                value={notes[a.axisKey] ?? ""}
+                onChange={(v) => setNote(a.axisKey, v)}
+                placeholder="Optional"
                 disabled={chatBusy}
                 autoComplete="off"
               />
             </BlockStack>
-          </Card>
-        </div>
+          </LogicCard>
+        ))}
+
+        <LogicCard
+          id="general"
+          title="Store-wide notes"
+          badge={
+            (notes[GENERAL_GUIDANCE_KEY] ?? "").trim() !== "" ? (
+              <Badge tone="success">Described</Badge>
+            ) : (
+              <Badge>Optional</Badge>
+            )
+          }
+          expanded={expanded.has("general")}
+          onToggle={() => toggle("general")}
+        >
+          <BlockStack gap="300">
+            <Text as="p" variant="bodySm" tone="subdued">
+              {GENERAL_FRAMING_PROMPT}
+            </Text>
+            <TextField
+              label="Store-wide notes"
+              labelHidden
+              multiline={4}
+              maxLength={NOTE_MAX_LEN}
+              value={notes[GENERAL_GUIDANCE_KEY] ?? ""}
+              onChange={(v) => setNote(GENERAL_GUIDANCE_KEY, v)}
+              placeholder="e.g. Our bestsellers are the Silk Set and Coral Crush. Feature them when they fit."
+              disabled={chatBusy}
+              autoComplete="off"
+            />
+          </BlockStack>
+        </LogicCard>
 
         {genError && (
           <Banner tone="critical" onDismiss={() => setGenError(null)}>

@@ -298,3 +298,132 @@ export async function generateGuidance(args: {
     usage,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Notes drafter — writes a FIRST PASS of the merchant's per-answer notes from
+// the catalog, so the Logic step starts as a review task instead of a blank
+// page. Output goes to the editor UI only; nothing is saved server-side.
+
+const NotesDraftSchema = z.object({
+  questions: z.array(
+    z.object({
+      axisKey: z.string(),
+      answers: z.array(z.object({ label: z.string(), note: z.string() })),
+      // How multi-select combinations should interact; empty when N/A.
+      combos: z.string(),
+    }),
+  ),
+});
+
+export type NotesDraft = z.infer<typeof NotesDraftSchema>;
+
+const DRAFT_NOTES_ROLE = `You draft merchandising notes for a Shopify "find my fit" quiz. The merchant will review and edit them, then a separate step compiles them into ranking rules.
+
+For each quiz question given, write one short note PER ANSWER: which of this store's actual products, collections, or product traits fit a shopper who picks that answer. Ground every note in the catalog you are given.
+
+RULES:
+- One line per answer, at most ~20 words. Plain, specific, no marketing voice.
+- Name only products, collections, product types, or traits that appear in the catalog. Never invent.
+- Prefer traits and families over long product lists ("the sheer nudes and milky pinks" beats naming 12 SKUs). Name specific products only when they are clearly the match.
+- If an answer expresses no preference ("surprise me", "open to anything"), write exactly: no constraint.
+- If the catalog genuinely offers nothing for an answer, write what to fall back to rather than inventing.
+- "combos": for multi-select questions only, one short line on how picking several answers should combine (e.g. "picks are OR'd; favor products matching most picks"); otherwise an empty string.
+- If the merchant already wrote a note for an answer, write your draft to COMPLEMENT it (their text is kept; do not repeat it).`;
+
+export interface DraftNotesResult {
+  ok: boolean;
+  error?: string;
+  draft?: NotesDraft;
+  usage: ClaudeUsage[];
+}
+
+export async function draftQuestionNotes(args: {
+  shopId: string;
+  shopDomain: string;
+  /** Limit drafting to these axis keys (per-question button); omit for all. */
+  axisKeys?: string[];
+}): Promise<DraftNotesResult> {
+  const { shopId, shopDomain, axisKeys } = args;
+  const usage: ClaudeUsage[] = [];
+
+  const catalog = await loadCatalogForShop(shopId);
+  const activeCount = catalog.filter((p) => p.status == null || p.status === "active").length;
+  if (activeCount === 0) {
+    return { ok: false, error: "No products found. Sync your catalog first.", usage };
+  }
+
+  // Studio-only feature: always draft against the DRAFT flow.
+  const [config, notes] = await Promise.all([
+    getQuizDraft(shopId).then((d) => d ?? captureLiveConfig(shopId)),
+    getQuestionGuidance(shopId),
+  ]);
+  let questions = config.flow.questions;
+  if (axisKeys && axisKeys.length > 0) {
+    questions = questions.filter((q) => axisKeys.includes(q.axisKey));
+  }
+  if (questions.length === 0) {
+    return { ok: false, error: "No quiz questions to draft notes for.", usage };
+  }
+
+  const { text: catalogText } = serializeCatalog(catalog);
+  const system: Anthropic.TextBlockParam[] = [
+    { type: "text", text: DRAFT_NOTES_ROLE },
+    { type: "text", text: catalogText, cache_control: { type: "ephemeral" } },
+  ];
+
+  const questionLines = questions.map((q, i) => {
+    const opts = q.options
+      .map((o) => `    - "${o.label}"${o.selectAll ? " (open to anything)" : ""}`)
+      .join("\n");
+    const existing = notes[q.axisKey]?.trim();
+    return [
+      `Question ${i + 1} [${q.axisKey}]${q.multiSelect ? " (multi-select)" : ""}: "${q.prompt}"`,
+      `  Answers:`,
+      opts,
+      existing ? `  Merchant's existing notes (complement, don't repeat): ${existing}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  });
+
+  const input = [
+    `Draft per-answer merchandising notes for these quiz questions. Return one entry per question, keyed by the [axis_key] shown, with one note per answer label exactly as given.`,
+    ``,
+    ...questionLines,
+  ].join("\n");
+
+  try {
+    const client = claudeClient();
+    const response = await callClaudeWithRetry(async () => {
+      const stream = client.messages.stream({
+        model: CLAUDE_MODEL_MAIN,
+        max_tokens: 16000,
+        thinking: { type: "adaptive" },
+        output_config: { format: zodOutputFormat(NotesDraftSchema) },
+        system,
+        messages: [{ role: "user", content: input }],
+      });
+      return stream.finalMessage();
+    }, "draft-notes");
+    logClaudeUsage(shopDomain, "draft-notes", response.usage as ClaudeUsage);
+    usage.push(response.usage as ClaudeUsage);
+
+    const text = response.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("");
+    const parsed = NotesDraftSchema.safeParse(JSON.parse(text));
+    if (!parsed.success) {
+      return { ok: false, error: "The AI returned an unreadable draft. Try again.", usage };
+    }
+    // Only pass through questions that actually exist in the flow.
+    const known = new Set(questions.map((q) => q.axisKey));
+    return {
+      ok: true,
+      draft: { questions: parsed.data.questions.filter((q) => known.has(q.axisKey)) },
+      usage,
+    };
+  } catch (e) {
+    return { ok: false, error: `Drafting failed: ${(e as Error).message}`, usage };
+  }
+}

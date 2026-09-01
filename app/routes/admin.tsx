@@ -200,6 +200,10 @@ interface Shop {
   missingSessionScopes: string[] | null;
   /** Feature flag for AI skin analysis. Default false; flipped here in /admin. */
   is_skin_analysis_enabled?: boolean;
+  /** VTO/assistant surfaces override (migration 060). NULL = auto-detect
+   * from configured try-on prompts; true/false forces on/off. Gates the
+   * try-on nav, home strip, and the legacy analytics sections. */
+  vto_enabled?: boolean | null;
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -742,6 +746,35 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ success: true, isEnabled: enabled });
   }
 
+  if (actionType === "update-vto-enabled") {
+    // Founders-only tri-state for the try-on/assistant surfaces
+    // (shops.vto_enabled, migration 060): auto = detect from configured
+    // try-on prompts, on/off = force. Admin nav, quiz-first home, and the
+    // analytics page all read it through shopHasTryOnConfig (15s cache, so
+    // the flip lands within seconds).
+    const targetShopDomain = formData.get("targetShopDomain") as string;
+    const value = formData.get("value");
+    if (!targetShopDomain || typeof targetShopDomain !== "string") {
+      return json({ success: false, error: "Missing targetShopDomain" });
+    }
+    if (value !== "auto" && value !== "on" && value !== "off") {
+      return json({ success: false, error: "value must be auto | on | off" });
+    }
+    const vtoEnabled = value === "auto" ? null : value === "on";
+
+    const { error: updateError } = await supabase
+      .from("shops")
+      .update({ vto_enabled: vtoEnabled })
+      .eq("shop_domain", targetShopDomain);
+
+    if (updateError) {
+      console.error(`[vto-toggle] failed for ${targetShopDomain}:`, updateError);
+      return json({ success: false, error: updateError.message });
+    }
+    console.log(`✅ VTO surfaces set to ${value.toUpperCase()} for ${targetShopDomain}`);
+    return json({ success: true, vtoValue: value });
+  }
+
   if (actionType === "refresh-sessions") {
     // Per-shop manual refresh. Writes monthly_sessions/sessions_updated_at in
     // Supabase exactly like the cron; does NOT call Mantle — flex billing
@@ -811,6 +844,10 @@ export default function FoundersAdmin() {
   // Optimistic overrides for the skin-analysis feature flag toggle.
   const [skinAnalysisOverrides, setSkinAnalysisOverrides] = useState<Record<string, boolean>>({});
   const [togglingSkinAnalysisShop, setTogglingSkinAnalysisShop] = useState<string | null>(null);
+  // Optimistic overrides for the VTO/assistant surfaces tri-state.
+  const vtoFetcher = useFetcher<any>();
+  const [vtoOverrides, setVtoOverrides] = useState<Record<string, "auto" | "on" | "off">>({});
+  const [togglingVtoShop, setTogglingVtoShop] = useState<string | null>(null);
 
   // Apply skin-analysis toggle results to local state when the fetcher settles.
   useEffect(() => {
@@ -824,6 +861,16 @@ export default function FoundersAdmin() {
     }
     setTogglingSkinAnalysisShop(null);
   }, [skinAnalysisFetcher.data, skinAnalysisFetcher.state, togglingSkinAnalysisShop]);
+
+  // Apply VTO tri-state results when the fetcher settles.
+  useEffect(() => {
+    if (vtoFetcher.state !== "idle" || !togglingVtoShop) return;
+    const data = vtoFetcher.data;
+    if (data?.success && (data.vtoValue === "auto" || data.vtoValue === "on" || data.vtoValue === "off")) {
+      setVtoOverrides((prev) => ({ ...prev, [togglingVtoShop]: data.vtoValue }));
+    }
+    setTogglingVtoShop(null);
+  }, [vtoFetcher.data, vtoFetcher.state, togglingVtoShop]);
 
   // Apply session refresh results to local state when the fetcher settles.
   useEffect(() => {
@@ -950,6 +997,21 @@ export default function FoundersAdmin() {
 
   const isSkinAnalysisEnabled = (shop: Shop) =>
     skinAnalysisOverrides[shop.shop_domain] ?? Boolean(shop.is_skin_analysis_enabled);
+
+  const vtoValue = (shop: Shop): "auto" | "on" | "off" =>
+    vtoOverrides[shop.shop_domain] ??
+    (shop.vto_enabled === true ? "on" : shop.vto_enabled === false ? "off" : "auto");
+
+  const setVto = (shop: Shop, value: string) => {
+    if (value !== "auto" && value !== "on" && value !== "off") return;
+    setTogglingVtoShop(shop.shop_domain);
+    setVtoOverrides((prev) => ({ ...prev, [shop.shop_domain]: value }));
+    const formData = new FormData();
+    formData.append("action", "update-vto-enabled");
+    formData.append("targetShopDomain", shop.shop_domain);
+    formData.append("value", value);
+    vtoFetcher.submit(formData, { method: "POST" });
+  };
 
   const toggleSkinAnalysis = (shop: Shop) => {
     const next = !isSkinAnalysisEnabled(shop);
@@ -1199,6 +1261,18 @@ export default function FoundersAdmin() {
                       checked={isSkinAnalysisEnabled(shop)}
                       onChange={() => toggleSkinAnalysis(shop)}
                       disabled={togglingSkinAnalysisShop === shop.shop_domain}
+                    />
+                    <Select
+                      label="Try-on + assistant"
+                      labelInline
+                      options={[
+                        { label: "Auto (from config)", value: "auto" },
+                        { label: "On", value: "on" },
+                        { label: "Off", value: "off" },
+                      ]}
+                      value={vtoValue(shop)}
+                      onChange={(v) => setVto(shop, v)}
+                      disabled={togglingVtoShop === shop.shop_domain}
                     />
                     <Button onClick={() => toggleShop(shop.id)}>
                       {expandedShop === shop.id ? "Collapse" : "View Products"}

@@ -322,6 +322,7 @@ export function applyUpdateCopy(draft: DraftShape, input: any, _catalog: Catalog
 const DESIGN_KEYS = new Set([
   ...GENERATED_DESIGN_KEYS,
   "quiz_heading_font_override", "quiz_body_font_override",
+  "quiz_heading_weight_override",
 ]);
 
 // Non-color token constraints mirror the DB CHECKs from migration 049. An
@@ -333,6 +334,8 @@ const DESIGN_ENUMS: Record<string, readonly string[]> = {
   quiz_progress_style: ["pips", "bar", "counter", "none"],
   quiz_intro_layout: ["split", "centered"],
   quiz_animation_style: ["full", "minimal", "off"],
+  // Mirrors the DB CHECK from migration 061.
+  quiz_heading_weight_override: ["300", "400", "500", "600", "700", "800"],
 };
 
 export function applyUpdateDesignTokens(draft: DraftShape, input: any, _catalog: CatalogProduct[]): ApplyResult {

@@ -32,12 +32,27 @@ export function StudioTopBar({
   return (
     <>
       <div className="studio-topbar-left">
-        <img
-          src="/placeholders/gleametransparent.svg"
-          alt=""
+        {/* Rounded tile clips the square logo mark; sized to the badge row
+            so the two sit on one visual centerline. */}
+        <span
           aria-hidden
-          style={{ width: 20, height: 20, display: "block", flexShrink: 0 }}
-        />
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: 6,
+            overflow: "hidden",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+          }}
+        >
+          <img
+            src="/placeholders/gleametransparent.svg"
+            alt=""
+            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          />
+        </span>
         {publishing ? (
           <Badge tone="attention">Publishing…</Badge>
         ) : (

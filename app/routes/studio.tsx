@@ -33,6 +33,7 @@ import { buildPreviewFlow, buildPreviewQuizConfig } from "../lib/quiz-preview.se
 import { withShopSaveLock } from "../lib/shop-save-lock.server";
 import { getLatestSessionId } from "../lib/quiz-copilot.server";
 import { isClaudeConfigured } from "../lib/claude.server";
+import { draftQuestionNotes, type NotesDraft } from "../lib/guidance-generator.server";
 import { GENERAL_GUIDANCE_KEY } from "../lib/quiz-guidance-shared";
 
 import { StudioShell } from "../components/studio/StudioShell";
@@ -207,6 +208,8 @@ export type StudioActionData = {
    * no-reload gleame-preview-update postMessage. */
   previewFlow?: unknown;
   previewConfig?: unknown;
+  /** AI-drafted logic notes (draft-notes intent). */
+  notesDraft?: NotesDraft;
 };
 
 const NOTE_KEY_RE = /^[a-z_][a-z0-9_]*$/;
@@ -385,6 +388,30 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           if (!saved.ok) return json({ ok: false, error: saved.error ?? "Save failed", intent });
         }
         return json({ ok: true, intent });
+      }
+      case "draft-notes": {
+        // AI first-pass of the Logic notes. Returns the draft to the client
+        // only — the merchant reviews/edits and the rows save via save-notes.
+        if (!isClaudeConfigured()) {
+          return json({ ok: false, error: "AI drafting isn't available for this installation.", intent });
+        }
+        let axisKeys: string[] | undefined;
+        const rawKeys = formData.get("axisKeys");
+        if (typeof rawKeys === "string" && rawKeys) {
+          try {
+            const parsed = JSON.parse(rawKeys);
+            if (Array.isArray(parsed) && parsed.every((k) => typeof k === "string" && NOTE_KEY_RE.test(k))) {
+              axisKeys = parsed;
+            } else {
+              return json({ ok: false, error: "Malformed request", intent }, { status: 400 });
+            }
+          } catch {
+            return json({ ok: false, error: "Malformed request", intent }, { status: 400 });
+          }
+        }
+        const drafted = await draftQuestionNotes({ shopId: shop.id, shopDomain, axisKeys });
+        if (!drafted.ok) return json({ ok: false, error: drafted.error, intent });
+        return json({ ok: true, intent, notesDraft: drafted.draft });
       }
       case "activate-guidance": {
         // Studio semantics: guidance + mode land in the DRAFT settings and

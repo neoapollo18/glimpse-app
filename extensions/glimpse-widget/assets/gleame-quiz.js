@@ -347,6 +347,7 @@
 
     if (config && config.headingFontOverride) heading = config.headingFontOverride;
     if (config && config.bodyFontOverride) body = config.bodyFontOverride;
+    if (config && config.headingWeightOverride) headingWeight = String(config.headingWeightOverride);
 
     root.style.setProperty('--gq-font-heading', heading || 'Georgia, "Times New Roman", serif');
     root.style.setProperty('--gq-font-body', body || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif');
@@ -2314,6 +2315,7 @@
           state.screenIndex = 0;
         }
         buildScreens();
+        detectThemeTypography();
         applyStyleConfig();
         // PRESERVE the current step. clampStep gates question screens on
         // answered counts, and a preview stepped via goto has answered
