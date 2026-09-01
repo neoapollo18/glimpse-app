@@ -172,7 +172,6 @@ export default function App() {
             Dashboard
           </Link>
           <Link to="/app/quiz">Quiz</Link>
-          <Link to="/app/quiz-builder">Quiz Builder</Link>
           {isTryOnEnabled && <Link to="/app/products">Products</Link>}
           {isTryOnEnabled && <Link to="/app/assistant">AI Assistant</Link>}
           {isSkinAnalysisEnabled && <Link to="/app/skin-analysis">Skin Analysis</Link>}

@@ -1,6 +1,6 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { useLoaderData, useFetcher } from "@remix-run/react";
+import { useLoaderData, useFetcher, useSearchParams, useRevalidator } from "@remix-run/react";
 import {
   Page,
   Card,
@@ -12,7 +12,7 @@ import {
   Banner,
   Select,
 } from "@shopify/polaris";
-import { TitleBar } from "@shopify/app-bridge-react";
+import { Modal, TitleBar } from "@shopify/app-bridge-react";
 import { useState } from "react";
 import { authenticate } from "../shopify.server";
 import {
@@ -105,6 +105,34 @@ export default function QuizHub() {
   const { shopDomain, assistantMode, assistantEnabled, recommendationMode, hasGuidance, hasNotes, counts } =
     useLoaderData<typeof loader>();
   const fetcher = useFetcher<{ success?: boolean; error?: string }>();
+  const [params, setParams] = useSearchParams();
+  const revalidator = useRevalidator();
+  // Studio takeover: an App Bridge max modal hosting the standalone /studio
+  // route. Deep link contract: /app/quiz?open=studio&step=build|logic|publish
+  const studioOpen = params.get("open") === "studio";
+  const studioStep = params.get("step") ?? "build";
+  const openStudio = (step?: string) => {
+    setParams(
+      (p) => {
+        p.set("open", "studio");
+        if (step) p.set("step", step);
+        return p;
+      },
+      { replace: true },
+    );
+  };
+  const closeStudio = () => {
+    setParams(
+      (p) => {
+        p.delete("open");
+        p.delete("step");
+        return p;
+      },
+      { replace: true },
+    );
+    // Publishes/discards inside the studio must refresh the hub status.
+    revalidator.revalidate();
+  };
 
   // assistantMode/assistantEnabled are the persisted truth — Remix
   // revalidates the loader after the fetcher action, so no optimistic
@@ -201,12 +229,12 @@ export default function QuizHub() {
           </BlockStack>
         </Card>
 
-        {/* Step 2: logic */}
+        {/* Step 2: the studio */}
         <Card>
           <BlockStack gap="400">
             <InlineStack align="space-between" blockAlign="center">
               <Text as="h2" variant="headingMd">
-                2. Questions &amp; recommendation logic
+                2. Build your quiz
               </Text>
               <Badge
                 tone={logicReady ? "success" : "attention"}
@@ -231,44 +259,18 @@ export default function QuizHub() {
                   .{" "}
                 </>
               )}
-              {!logicReady && hasNotes && counts !== null && counts.questions > 0
-                ? "You've described your answers. Generate and activate your logic on the Recommendation logic page to finish."
-                : "Write your questions, then describe what each answer should mean for recommendations. Gleame turns that into the matching logic."}
+              Questions, branching, recommendation logic, live preview, and
+              the Gleame AI, all in one full-screen editor. New stores get a
+              guided setup that drafts the whole quiz from the catalog.
             </Text>
-            {counts !== null && counts.questions === 0 ? (
-              <>
-                <InlineStack gap="300">
-                  <Button variant="primary" url="/app/quiz-builder">
-                    Open Quiz Builder
-                  </Button>
-                  <Button variant="plain" url="/app/quiz/questions">
-                    Or write questions by hand
-                  </Button>
-                </InlineStack>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Fastest start: the Quiz Builder drafts your whole quiz from
-                  your catalog, and you review before it goes live.
-                </Text>
-              </>
-            ) : (
-              <>
-                <InlineStack gap="300">
-                  <Button variant="primary" url="/app/quiz/questions">
-                    Edit questions
-                  </Button>
-                  <Button url="/app/quiz/logic">Recommendation logic</Button>
-                </InlineStack>
-                <InlineStack gap="200" blockAlign="center">
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Want a full redesign? The Quiz Builder drafts a new quiz
-                    from your catalog.
-                  </Text>
-                  <Button variant="plain" url="/app/quiz-builder">
-                    Open Quiz Builder
-                  </Button>
-                </InlineStack>
-              </>
-            )}
+            <InlineStack gap="300">
+              <Button variant="primary" onClick={() => openStudio("build")}>
+                Open Quiz Studio
+              </Button>
+              <Button variant="plain" url="/app/assistant/recommendations">
+                Advanced rules editor
+              </Button>
+            </InlineStack>
           </BlockStack>
         </Card>
 
@@ -314,6 +316,15 @@ export default function QuizHub() {
           </BlockStack>
         </Card>
       </BlockStack>
+
+      <Modal
+        variant="max"
+        open={studioOpen}
+        src={studioOpen ? `/studio?step=${studioStep}` : undefined}
+        onHide={closeStudio}
+      >
+        <TitleBar title="Quiz Studio" />
+      </Modal>
     </Page>
   );
 }

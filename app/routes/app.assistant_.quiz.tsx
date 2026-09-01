@@ -458,7 +458,7 @@ export default function AssistantQuiz() {
       backAction={{ content: "Quiz", url: "/app/quiz" }}
       title="Quiz copy & design"
       primaryAction={{ content: "Save", onAction: handleSave, loading: isSaving, disabled: !dirty }}
-      secondaryActions={[{ content: "Preview in Quiz Builder", url: "/app/quiz-builder" }]}
+      secondaryActions={[{ content: "Preview in Quiz Studio", url: "/app/quiz?open=studio" }]}
     >
       <TitleBar title="Quiz copy & design" />
       <BlockStack gap="500">

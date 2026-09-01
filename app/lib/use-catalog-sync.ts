@@ -1,10 +1,12 @@
-// Shared chunked catalog-sync driver for the two surfaces that run it (the
-// onboarding wizard's Connect Catalog step and the Quiz Builder card). Each
-// completed page immediately submits the next cursor to the Quiz Builder
-// route's sync-catalog action until the catalog is fully synced.
+// Shared chunked catalog-sync driver for every surface that runs it (the
+// dashboard onboarding step, the Quiz Studio wizard, and its top-bar chip).
+// Each completed page immediately submits the next cursor to the
+// /app/api/catalog-sync resource route until the catalog is fully synced.
 
 import { useFetcher } from "@remix-run/react";
 import { useEffect, useRef, useState } from "react";
+
+const CATALOG_SYNC_ACTION = "/app/api/catalog-sync";
 
 export interface CatalogSyncResponse {
   ok: boolean;
@@ -28,7 +30,7 @@ export function useCatalogSync(options: { onComplete?: () => void } = {}) {
     const fd = new FormData();
     fd.append("intent", "sync-catalog");
     if (cursor) fd.append("cursor", cursor);
-    fetcher.submit(fd, { method: "POST", action: "/app/quiz-builder" });
+    fetcher.submit(fd, { method: "POST", action: CATALOG_SYNC_ACTION });
   };
 
   const start = (resumeCursor?: string) => {

@@ -28,7 +28,7 @@ import {
 } from "./claude.server";
 import { serializeCatalog } from "./quiz-config-schema.server";
 import { loadCatalogForShop } from "./quiz-generator.server";
-import { captureLiveConfig } from "./quiz-draft.server";
+import { captureLiveConfig, getQuizDraft } from "./quiz-draft.server";
 import { getQuestionGuidance, getChatAssistantConfig } from "./supabase.server";
 import { GENERAL_GUIDANCE_KEY } from "./quiz-guidance-shared";
 
@@ -171,9 +171,14 @@ async function callCompiler(
 export async function generateGuidance(args: {
   shopId: string;
   shopDomain: string;
+  /** "draft" compiles against the quiz DRAFT (Studio); "live" (default)
+   * against the published config. Matters because draft axis keys and
+   * questions can differ from live, and summaries/warnings must reference
+   * what the merchant is actually looking at. */
+  source?: "live" | "draft";
   onProgress?: (phase: string) => void;
 }): Promise<GenerateGuidanceResult> {
-  const { shopId, shopDomain, onProgress } = args;
+  const { shopId, shopDomain, source = "live", onProgress } = args;
   const usage: ClaudeUsage[] = [];
 
   onProgress?.("Reading your catalog…");
@@ -189,13 +194,15 @@ export async function generateGuidance(args: {
   }
 
   onProgress?.("Reading your answers…");
-  const [live, notes, chatConfig] = await Promise.all([
-    captureLiveConfig(shopId),
+  const [config, notes, chatConfig] = await Promise.all([
+    source === "draft"
+      ? getQuizDraft(shopId).then((d) => d ?? captureLiveConfig(shopId))
+      : captureLiveConfig(shopId),
     getQuestionGuidance(shopId),
     getChatAssistantConfig(shopDomain),
   ]);
 
-  const userQuestions = live.flow.questions;
+  const userQuestions = config.flow.questions;
   if (userQuestions.length === 0) {
     return {
       ok: false,
@@ -223,15 +230,22 @@ export async function generateGuidance(args: {
     { type: "text", text: catalogText, cache_control: { type: "ephemeral" } },
   ];
 
-  const priorityIds = Array.isArray(chatConfig.priority_product_ids)
-    ? (chatConfig.priority_product_ids as string[])
+  // Draft settings override live for the knobs baked into the rulebook
+  // (num_recommendations etc.) so the generated text matches what will
+  // actually publish.
+  const settings =
+    source === "draft"
+      ? { ...chatConfig, ...(config.settings as Record<string, unknown>) }
+      : (chatConfig as unknown as Record<string, unknown>);
+  const priorityIds = Array.isArray(settings.priority_product_ids)
+    ? (settings.priority_product_ids as string[])
     : [];
   const input = buildInputMessage({
-    flow: live.flow,
+    flow: config.flow,
     notes,
-    numRecommendations: Number(chatConfig.num_recommendations) || 3,
+    numRecommendations: Number(settings.num_recommendations) || 3,
     priorityProductIds: priorityIds,
-    previousGuidance: String(chatConfig.ai_guidance ?? ""),
+    previousGuidance: String(settings.ai_guidance ?? ""),
   });
   const messages: Anthropic.MessageParam[] = [{ role: "user", content: input }];
 

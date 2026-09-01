@@ -977,7 +977,7 @@ function OnboardingWizard({
               onBack={() => goToStep(4)}
               onNavigateToBuilder={() => {
                 persistToServer({ intent: "updateStep", step: "5" });
-                setPendingNav("/app/quiz-builder");
+                setPendingNav("/app/quiz?open=studio");
               }}
             />
           )}

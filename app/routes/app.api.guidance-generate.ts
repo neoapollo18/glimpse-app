@@ -78,6 +78,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // stale DB notes. Presence-guarded: only keys submitted by the form are
   // touched.
   const formData = await request.formData();
+  // Studio compiles against the DRAFT flow; the legacy logic page (and any
+  // caller omitting the field) stays on live.
+  const source = formData.get("source") === "draft" ? ("draft" as const) : ("live" as const);
   const NOTE_KEY_RE = /^[a-z_][a-z0-9_]*$/;
   for (const [field, value] of formData.entries()) {
     if (!field.startsWith("notes:") || typeof value !== "string") continue;
@@ -110,6 +113,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         const result = await generateGuidance({
           shopId: shop.id,
           shopDomain,
+          source,
           onProgress: (phase) => send({ type: "progress", phase }),
         });
         if (result.ok) {

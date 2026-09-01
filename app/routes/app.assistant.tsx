@@ -553,7 +553,7 @@ export default function AssistantConfig() {
                     </Text>
                   </BlockStack>
                   <BlockStack gap="200" inlineAlign="end">
-                    <Button url="/app/quiz/logic" variant="primary">
+                    <Button url="/app/quiz?open=studio&step=logic" variant="primary">
                       Edit recommendation logic
                     </Button>
                     <Button url="/app/assistant/recommendations" variant="plain">
