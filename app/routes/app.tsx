@@ -10,8 +10,8 @@ import { useEffect, useState } from "react";
 import jwt from "jsonwebtoken";
 
 import { authenticate } from "../shopify.server";
-import { identifyAndGetCustomer } from "../lib/mantle.server";
-import { ensureShopExists, isShopGrandfathered, markShopAsGrandfathered, shopHasTryOnConfig } from "../lib/supabase.server";
+import { shopNeedsBilling } from "../lib/billing-gate.server";
+import { ensureShopExists, shopHasTryOnConfig } from "../lib/supabase.server";
 import { isSkinAnalysisEnabledForShop } from "../lib/skin-analysis.server";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
@@ -31,53 +31,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   const isOnBillingPage = url.pathname.includes('/app/billing') || url.pathname.includes('/app/welcome');
 
-  let needsBilling = false;
-
-  // Always check subscription status
-  try {
-    // First check if shop is grandfathered (existing user with data)
-    const grandfathered = await isShopGrandfathered(shopDomain);
-    
-    if (grandfathered) {
-      // Grandfathered users get free access
-      console.log('✅ Shop is grandfathered, allowing access:', shopDomain);
-      // Ensure subscription_status is marked as grandfathered for transform API
-      await markShopAsGrandfathered(shopDomain);
-    } else {
-      // Not grandfathered - check if they have an active subscription or are in grace period
-      try {
-        const { customer } = await identifyAndGetCustomer(shopDomain, accessToken);
-        const subscription = customer?.subscription;
-        const hasActiveSubscription = subscription?.active === true;
-        
-        // Check for grace period: subscription was cancelled but still within billing period
-        let isInGracePeriod = false;
-        if (!hasActiveSubscription && subscription?.currentPeriodEnd) {
-          const periodEnd = new Date(subscription.currentPeriodEnd);
-          isInGracePeriod = periodEnd > new Date();
-          if (isInGracePeriod) {
-            console.log('⏳ Shop in grace period until:', periodEnd.toISOString(), shopDomain);
-          }
-        }
-        
-        if (!hasActiveSubscription && !isInGracePeriod) {
-          // Not grandfathered AND no active subscription AND not in grace period → need billing
-          console.log('🚫 Billing gate: User needs billing:', shopDomain);
-          needsBilling = true;
-        }
-      } catch (mantleError) {
-        // Fail closed: if we can't verify subscription, require billing.
-        // This prevents free access during Mantle outages.
-        // Merchants can still reach /app/welcome and /app/billing to fix their state.
-        console.error('Mantle error (requiring billing):', mantleError);
-        needsBilling = true;
-      }
-    }
-  } catch (error) {
-    // If grandfathered check fails, fail closed — require billing
-    console.error('Grandfathered check error (requiring billing):', error);
-    needsBilling = true;
-  }
+  // MANTLE SHUTDOWN (late Aug 2026): the subscription check lived on
+  // Mantle's API and failed closed, which locked every non-grandfathered
+  // merchant out the moment Mantle died. Enforcement is OFF until the
+  // Shopify-native billing replacement lands (billing-gate.server.ts owns
+  // the flag). Nothing on a request path may call Mantle.
+  const needsBilling = await shopNeedsBilling(shopDomain, accessToken);
 
   // Generate Intercom JWT for Identity Verification
   const intercomSecretKey = process.env.INTERCOM_SECRET_KEY || "";

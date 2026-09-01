@@ -2025,6 +2025,11 @@ export async function updateShopSubscriptionStatus(
  * Returns true if shop can use transformations
  */
 export async function shopHasValidAccess(shopDomain: string): Promise<boolean> {
+  // MANTLE SHUTDOWN: subscription_status stopped syncing when Mantle died,
+  // so gating storefront APIs on it would dark-launch merchants' live
+  // quizzes as statuses drift stale. Free access until Shopify-native
+  // billing ships (then this reads the new subscription state).
+  if (process.env.BILLING_ENFORCED !== "true") return true;
   const { data, error } = await supabase
     .from('shops')
     .select('subscription_status, subscription_expires_at')

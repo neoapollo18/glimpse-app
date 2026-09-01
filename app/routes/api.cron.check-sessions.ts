@@ -1,9 +1,11 @@
 /**
- * Cron Job: Send Session Usage to Mantle for Flex Billing
- * 
- * This endpoint should be called by an external cron service (e.g., cron-job.org, Render cron)
- * to send session counts to Mantle. Mantle's flex billing handles automatic tier upgrades.
- * 
+ * Cron Job: refresh monthly session counts per shop.
+ *
+ * Called by an external cron service (e.g. Render cron). Counts feed the
+ * founders admin dashboard and the upcoming Shopify-native billing's
+ * session-tier matching. (The Mantle usage sync that used to live here
+ * died with Mantle, late Aug 2026.)
+ *
  * Security: Protected by CRON_SECRET environment variable
  */
 
@@ -11,7 +13,6 @@ import { timingSafeEqual } from "node:crypto";
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import prisma from "../db.server";
-import { identifyAndGetCustomer, sendUsageEvent } from "../lib/mantle.server";
 import { updateShopMonthlySessions } from "../lib/supabase.server";
 
 // Shopify Admin API helper for direct calls (without authenticate middleware)
@@ -102,7 +103,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  console.log('🕐 Starting session usage sync to Mantle...');
+  console.log('🕐 Starting session count refresh…');
 
   const results: {
     checked: number;
@@ -114,7 +115,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   } = {
     checked: 0,
     cached: 0,  // Sessions saved to Supabase
-    sent: 0,    // Sessions sent to Mantle (billing renewal)
+    sent: 0,    // Unused since the Mantle shutdown (kept for response shape)
     skipped: 0, // No active subscription
     errors: 0,
     errorDetails: [],
@@ -136,25 +137,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     console.log(`📊 Found ${sessions.length} shops to check`);
 
-    // Check how close billing period end needs to be to trigger Mantle update
-    // Since cron runs weekly, send to Mantle if billing renews within 7 days
-    const BILLING_RENEWAL_WINDOW_DAYS = 7;
-
     for (const session of sessions) {
       const { shop, accessToken } = session;
       results.checked++;
 
       try {
-        // Get current subscription and API token from Mantle
-        const { customer, apiToken } = await identifyAndGetCustomer(shop, accessToken);
-        const subscription = customer.subscription;
-        
-        // Skip if no active subscription
-        if (!subscription?.active) {
-          console.log(`⏭️ ${shop}: No active subscription, skipping`);
-          results.skipped++;
-          continue;
-        }
+        // MANTLE SHUTDOWN: no subscription lookup and no usage sends —
+        // Mantle's API is gone. Session counts still get collected: the
+        // admin dashboard shows them and the upcoming Shopify-native
+        // billing needs them for tier matching.
 
         // Fetch current sessions from Shopify
         const sessionCount = await fetchSessionsDirectly(shop, accessToken);
@@ -176,30 +167,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           continue;
         }
 
-        // Always save session count to Supabase (for tracking/admin dashboard)
+        // Save session count to Supabase (admin dashboard + future
+        // Shopify-billing tier matching).
         await updateShopMonthlySessions(shop, sessionCount);
+        results.cached++;
         console.log(`💾 ${shop}: Saved ${sessionCount.toLocaleString()} sessions to Supabase`);
-
-        // Only send to Mantle if billing period is ending soon
-        const currentPeriodEnd = subscription.currentPeriodEnd 
-          ? new Date(subscription.currentPeriodEnd) 
-          : null;
-        
-        const now = new Date();
-        const shouldSendToMantle = currentPeriodEnd && 
-          (currentPeriodEnd.getTime() - now.getTime()) <= BILLING_RENEWAL_WINDOW_DAYS * 24 * 60 * 60 * 1000;
-
-        if (shouldSendToMantle) {
-          // Send usage event to Mantle - flex billing handles tier changes automatically
-          await sendUsageEvent(apiToken, 'monthly_sessions', { 
-            sessions: sessionCount 
-          });
-          results.sent++;
-          console.log(`📤 ${shop}: Sent ${sessionCount.toLocaleString()} sessions to Mantle (billing renews ${currentPeriodEnd?.toLocaleDateString()})`);
-        } else {
-          results.cached++;
-          console.log(`📊 ${shop}: ${sessionCount.toLocaleString()} sessions cached (billing renews ${currentPeriodEnd?.toLocaleDateString() || 'unknown'})`);
-        }
 
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
@@ -209,7 +181,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       }
     }
 
-    console.log(`🏁 Usage sync complete: ${results.checked} checked, ${results.cached} cached, ${results.sent} sent to Mantle, ${results.skipped} skipped, ${results.errors} errors`);
+    console.log(`🏁 Usage sync complete: ${results.checked} checked, ${results.cached} cached, ${results.skipped} skipped, ${results.errors} errors`);
 
     return json({
       success: true,
