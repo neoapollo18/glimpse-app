@@ -567,6 +567,52 @@ export function ResultsEditor({
   );
 }
 
+// Curated, theme-safe font stacks — merchants pick, never type CSS. A
+// stored value outside this list (set via chat or the old page) shows as a
+// Custom option so it round-trips untouched.
+const FONT_CHOICES: Array<{ label: string; value: string }> = [
+  { label: "Match your theme (default)", value: "" },
+  { label: "Modern sans (Helvetica)", value: '"Helvetica Neue", Helvetica, Arial, sans-serif' },
+  { label: "System sans (crisp)", value: 'Inter, system-ui, sans-serif' },
+  { label: "Classic serif (Georgia)", value: 'Georgia, "Times New Roman", serif' },
+  { label: "Editorial serif (Palatino)", value: '"Palatino Linotype", Palatino, Georgia, serif' },
+  { label: "Friendly rounded (Trebuchet)", value: '"Trebuchet MS", Verdana, sans-serif' },
+  { label: "Typewriter (Courier)", value: '"Courier New", Courier, monospace' },
+];
+
+function FontSelect({
+  label,
+  fieldKey,
+  values,
+  onPick,
+  disabled,
+}: {
+  label: string;
+  fieldKey: string;
+  values: Record<string, string>;
+  onPick: (key: string, value: string) => void;
+  disabled?: boolean;
+}) {
+  const value = values[fieldKey] ?? "";
+  const options = FONT_CHOICES.some((c) => c.value === value)
+    ? FONT_CHOICES
+    : [...FONT_CHOICES, { label: `Custom (${value.split(",")[0].replace(/"/g, "").trim()})`, value }];
+  return (
+    <Select
+      label={label}
+      options={options}
+      value={value}
+      onChange={(v) => onPick(fieldKey, v)}
+      disabled={disabled}
+      helpText={
+        value && !FONT_CHOICES.some((c) => c.value === value)
+          ? "Custom font set via chat. Pick an option to replace it."
+          : undefined
+      }
+    />
+  );
+}
+
 // ---------------------------------------------------------------------
 // Theme (design tokens)
 // ---------------------------------------------------------------------
@@ -676,8 +722,8 @@ export function ThemeEditor({
         onChange={(v) => setEnum("quiz_animation_style", v)}
         disabled={disabled}
       />
-      <TextField label="Heading font override" value={values.quiz_heading_font_override} onChange={(v) => setFont("quiz_heading_font_override", v)} disabled={disabled} placeholder="Blank = match your theme" autoComplete="off" />
-      <TextField label="Body font override" value={values.quiz_body_font_override} onChange={(v) => setFont("quiz_body_font_override", v)} disabled={disabled} placeholder="Blank = match your theme" autoComplete="off" />
+      <FontSelect label="Heading font" fieldKey="quiz_heading_font_override" values={values} onPick={setFont} disabled={disabled} />
+      <FontSelect label="Body font" fieldKey="quiz_body_font_override" values={values} onPick={setFont} disabled={disabled} />
     </BlockStack>
   );
 }
