@@ -2426,9 +2426,12 @@ export async function getOnboardingState(shopDomain: string): Promise<Onboarding
 /**
  * Ensure a shop row exists in the database.
  * New merchants hit onboarding before configuring products, so the row
- * created by getOrCreateShop (product flow) may not exist yet.
+ * created by getOrCreateShop (product flow) may not exist yet. Exported:
+ * the quiz-first admin never touches the product flow, so app.tsx creates
+ * the row on first admin load (without it, every quiz/studio/analytics
+ * lookup logs "No shop found" and the studio 404s).
  */
-async function ensureShopExists(shopDomain: string): Promise<void> {
+export async function ensureShopExists(shopDomain: string): Promise<void> {
   const { data } = await supabase
     .from('shops')
     .select('id')

@@ -29,37 +29,64 @@ export async function identifyAndGetCustomer(shopDomain: string, accessToken: st
   }
   
   const client = getMantleClient();
-  
-  // First identify the customer to get their API token
-  // Try without accessToken first - Mantle may not need it for basic identify
-  const identifyParams: {
-    platform: "shopify";
-    myshopifyDomain: string;
-    accessToken?: string;
-  } = {
-    platform: "shopify",
-    myshopifyDomain: shopDomain,
+
+  // Identify the customer to get their API token. Mantle occasionally
+  // returns a non-JSON 500 (the client library then throws a JSON parse
+  // SyntaxError like `Unexpected token 'I', "Internal S"...`); a bad or
+  // stale accessToken can also trip their Shopify-details fetch. So:
+  // attempt WITH the token, then retry WITHOUT it (identify doesn't
+  // strictly need it), and translate parse garbage into a readable error.
+  const identify = async (withToken: boolean) => {
+    const identifyParams: {
+      platform: "shopify";
+      myshopifyDomain: string;
+      accessToken?: string;
+    } = {
+      platform: "shopify",
+      myshopifyDomain: shopDomain,
+    };
+    if (withToken && accessToken) identifyParams.accessToken = accessToken;
+    const result = await client.identify(identifyParams);
+    if ("error" in result) {
+      const errorResult = result as { error: string; details?: string };
+      throw new Error(`${errorResult.error}${errorResult.details ? `: ${errorResult.details}` : ''}`);
+    }
+    return result.apiToken;
   };
-  
-  // Include accessToken if provided (allows Mantle to fetch shop details)
-  if (accessToken) {
-    identifyParams.accessToken = accessToken;
+
+  let apiToken: string;
+  try {
+    apiToken = await identify(Boolean(accessToken));
+  } catch (first) {
+    console.error(`Mantle identify failed for ${shopDomain} (retrying without accessToken):`, first);
+    try {
+      apiToken = await identify(false);
+    } catch (second) {
+      const msg = second instanceof Error ? second.message : String(second);
+      // JSON-parse garbage means Mantle's API itself errored — say that
+      // instead of leaking "Unexpected token 'I'..." to the merchant.
+      throw new Error(
+        /unexpected token|not valid json/i.test(msg)
+          ? "Our billing provider is having a moment. Wait a few seconds and hit Try again."
+          : msg,
+      );
+    }
   }
-  
-  const identifyResult = await client.identify(identifyParams);
-  
-  // Check if it's an error
-  if ("error" in identifyResult) {
-    const errorResult = identifyResult as { error: string; details?: string };
-    throw new Error(`${errorResult.error}${errorResult.details ? `: ${errorResult.details}` : ''}`);
-  }
-  
-  const apiToken = identifyResult.apiToken;
   
   // Now get the customer details using the API token
   const customerClient = getCustomerClient(apiToken);
-  const customerResult = await customerClient.getCustomer();
-  
+  let customerResult;
+  try {
+    customerResult = await customerClient.getCustomer();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(
+      /unexpected token|not valid json/i.test(msg)
+        ? "Our billing provider is having a moment. Wait a few seconds and hit Try again."
+        : msg,
+    );
+  }
+
   if ("error" in customerResult) {
     throw new Error(customerResult.error);
   }

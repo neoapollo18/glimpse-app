@@ -11,7 +11,7 @@ import jwt from "jsonwebtoken";
 
 import { authenticate } from "../shopify.server";
 import { identifyAndGetCustomer } from "../lib/mantle.server";
-import { isShopGrandfathered, markShopAsGrandfathered, shopHasTryOnConfig } from "../lib/supabase.server";
+import { ensureShopExists, isShopGrandfathered, markShopAsGrandfathered, shopHasTryOnConfig } from "../lib/supabase.server";
 import { isSkinAnalysisEnabledForShop } from "../lib/skin-analysis.server";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
@@ -21,6 +21,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopDomain = session.shop;
   const accessToken = session.accessToken || "";
+
+  // Fresh installs have no shops row until they touch the (legacy) product
+  // flow — but the quiz-first admin only ever reads. Create it here so
+  // quiz/studio/analytics lookups work from the first load.
+  await ensureShopExists(shopDomain);
 
   // Get current path to know if we're on billing or welcome page
   const url = new URL(request.url);
