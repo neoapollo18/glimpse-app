@@ -2312,9 +2312,14 @@
         }
         buildScreens();
         applyStyleConfig();
-        var clamped = clampStep({ screen: state.screen, screenIndex: state.screenIndex || 0 });
-        state.screen = clamped.screen;
-        state.screenIndex = clamped.screenIndex || 0;
+        // PRESERVE the current step. clampStep gates question screens on
+        // answered counts, and a preview stepped via goto has answered
+        // nothing — clamping bounced the preview (and the studio's synced
+        // editor) back to the intro on every settings edit.
+        if (state.screen === 'question') {
+          state.screenIndex = Math.max(0, Math.min(screens.length - 1, state.screenIndex || 0));
+          if (screens.length === 0) { state.screen = 'intro'; state.screenIndex = 0; }
+        }
         replaceStep();
         render('forward');
       }

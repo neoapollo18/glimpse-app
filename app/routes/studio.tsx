@@ -124,9 +124,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // "Fit your store": prefill the onboarding wizard from what the store
   // already tells us — Shopify brand settings (accent color, slogan) and
   // the dominant product type in the synced catalog. Best-effort; the
-  // wizard works fine with nulls.
+  // wizard works fine with nulls. ONLY fetched while the wizard can show:
+  // these ran on every autosave revalidation and made editing feel slow.
+  const wizardRelevant = draft === null || draft.flow.questions.length === 0;
   let storeBrand: { accentColor: string | null; slogan: string | null } | null = null;
   try {
+    if (!wizardRelevant) throw new Error("skip");
     const res = await admin.graphql(
       `#graphql
       query StudioBrand {
@@ -150,6 +153,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
   let topProductType: string | null = null;
   try {
+    if (!wizardRelevant) throw new Error("skip");
     const { data: typeRows } = await supabase
       .from("products")
       .select("product_type")
