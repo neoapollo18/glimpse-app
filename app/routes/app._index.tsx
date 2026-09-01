@@ -1342,9 +1342,6 @@ function DashboardView({
           <Button variant="plain" onClick={() => navigate("/app/assistant/recommendations")}>
             Advanced rules editor
           </Button>
-          <Button variant="plain" onClick={() => navigate("/app/assistant/quiz")}>
-            Advanced design page
-          </Button>
           {quiz.vtoEnabled && (
             <Button variant="plain" onClick={() => navigate("/app/products")}>
               Try-on product settings

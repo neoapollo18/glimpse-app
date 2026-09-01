@@ -288,10 +288,15 @@ const COPY_KEYS = new Set([
   "quiz_upsell_title", "quiz_upsell_body", "quiz_upsell_cta",
   "quiz_shade_headline", "quiz_shade_body", "quiz_shade_cta_photo", "quiz_shade_cta_manual",
   "quiz_visual_caption",
-  // Studio slide editors (landing visual + alt audience)
+  // Studio slide editors (landing visual + alt audience + shade rail toggle)
   "quiz_before_image_url", "quiz_after_image_url",
   "quiz_alt_audience_label", "quiz_alt_audience_url",
+  "quiz_manual_shade_enabled",
 ]);
+
+// Copy keys that are booleans on the live config row — String() coercion
+// would store "true"/"false" and break the typed column at publish.
+const BOOL_COPY_KEYS = new Set(["quiz_manual_shade_enabled"]);
 
 export function applyUpdateCopy(draft: DraftShape, input: any, _catalog: CatalogProduct[]): ApplyResult {
   const fields = input.fields ?? {};
@@ -301,7 +306,11 @@ export function applyUpdateCopy(draft: DraftShape, input: any, _catalog: Catalog
   if (bad.length) return { ok: false, error: `Unknown copy fields: ${bad.join(", ")}` };
   const next = clone(draft);
   for (const [k, v] of Object.entries(fields)) {
-    next.settings[k] = Array.isArray(v) ? v.map((s) => String(s).slice(0, 400)) : String(v).slice(0, 400);
+    next.settings[k] = BOOL_COPY_KEYS.has(k)
+      ? Boolean(v)
+      : Array.isArray(v)
+        ? v.map((s) => String(s).slice(0, 400))
+        : String(v).slice(0, 400);
   }
   return {
     ok: true,

@@ -530,7 +530,7 @@ export default function AssistantConfig() {
                       page" or "Both".
                     </Text>
                   </BlockStack>
-                  <Button url="/app/assistant/quiz" variant="primary">
+                  <Button url="/app?open=studio" variant="primary">
                     Customize quiz page
                   </Button>
                 </InlineStack>

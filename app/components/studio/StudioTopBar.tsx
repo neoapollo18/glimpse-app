@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Badge, Button, Popover, Box, BlockStack, Text, ProgressBar } from "@shopify/polaris";
 import { useCatalogSync } from "../../lib/use-catalog-sync";
-import { navigateParent } from "./navigate-parent";
 import type { StudioStep } from "../../routes/studio";
 
 const STEPS: Array<{ id: StudioStep; label: string }> = [
@@ -129,9 +128,6 @@ export function StudioTopBar({
       </div>
 
       <div className="studio-topbar-right">
-        <Button variant="plain" onClick={() => navigateParent("/app/assistant/quiz")}>
-          Design &amp; text
-        </Button>
         <Button variant="primary" onClick={onPublishClick}>
           Publish
         </Button>

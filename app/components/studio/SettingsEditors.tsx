@@ -4,6 +4,7 @@ import {
   Banner,
   BlockStack,
   Button,
+  Checkbox,
   InlineStack,
   Select,
   Spinner,
@@ -12,7 +13,6 @@ import {
   TextField,
 } from "@shopify/polaris";
 import type { StudioActionData } from "../../routes/studio";
-import { navigateParent } from "./navigate-parent";
 
 // In-studio editors for the fixed slides (Intro, Photo, Results) and the
 // Theme item. These edit DRAFT SETTINGS through the same update_copy /
@@ -219,6 +219,91 @@ function ColorField({
   );
 }
 
+function ImageField({
+  label,
+  fieldKey,
+  values,
+  setValue,
+  disabled,
+}: {
+  label: string;
+  fieldKey: string;
+  values: Record<string, string>;
+  setValue: (key: string, value: string) => void;
+  disabled?: boolean;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState(false);
+  const value = values[fieldKey] ?? "";
+
+  const upload = async (file: File) => {
+    setUploading(true);
+    setUploadError(false);
+    try {
+      const fd = new FormData();
+      fd.append("image", file);
+      const res = await fetch("/api/upload-avatar", { method: "POST", body: fd });
+      const data = await res.json();
+      if (data.avatarUrl) setValue(fieldKey, data.avatarUrl);
+      else setUploadError(true);
+    } catch {
+      setUploadError(true);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <BlockStack gap="150">
+      <TextField
+        label={label}
+        value={value}
+        onChange={(v) => setValue(fieldKey, v)}
+        disabled={disabled}
+        placeholder="https://… (empty = hidden)"
+        autoComplete="off"
+      />
+      <InlineStack gap="200" blockAlign="center">
+        {value && (
+          <img
+            src={value}
+            alt=""
+            style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 8, border: "1px solid #E1E3E5" }}
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = "none";
+            }}
+          />
+        )}
+        <Button size="slim" loading={uploading} disabled={disabled} onClick={() => inputRef.current?.click()}>
+          Upload image
+        </Button>
+        {value && (
+          <Button size="slim" variant="plain" tone="critical" disabled={disabled} onClick={() => setValue(fieldKey, "")}>
+            Remove
+          </Button>
+        )}
+        {uploadError && (
+          <Text as="span" variant="bodySm" tone="critical">
+            Upload failed. Try a smaller JPG or PNG.
+          </Text>
+        )}
+      </InlineStack>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: "none" }}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) upload(file);
+          e.target.value = "";
+        }}
+      />
+    </BlockStack>
+  );
+}
+
 // ---------------------------------------------------------------------
 // Intro
 // ---------------------------------------------------------------------
@@ -240,6 +325,8 @@ export function IntroEditor({
     quiz_before_image_url: str(settings, "quiz_before_image_url"),
     quiz_after_image_url: str(settings, "quiz_after_image_url"),
     quiz_visual_caption: str(settings, "quiz_visual_caption"),
+    quiz_alt_audience_label: str(settings, "quiz_alt_audience_label"),
+    quiz_alt_audience_url: str(settings, "quiz_alt_audience_url"),
   }));
   const [trustItems, setTrustItems] = useState<string[]>(
     Array.isArray(settings.quiz_trust_items) ? (settings.quiz_trust_items as string[]) : [],
@@ -310,13 +397,16 @@ export function IntroEditor({
           </Button>
         </InlineStack>
       </BlockStack>
-      <CopyField label="Before image URL" fieldKey="quiz_before_image_url" values={values} setValue={setValue} disabled={disabled} placeholder="https://… (empty = hidden)" />
-      <CopyField label="After image URL" fieldKey="quiz_after_image_url" values={values} setValue={setValue} disabled={disabled} placeholder="https://… (empty = hidden)" />
+      <ImageField label="Before image" fieldKey="quiz_before_image_url" values={values} setValue={setValue} disabled={disabled} />
+      <ImageField label="After image" fieldKey="quiz_after_image_url" values={values} setValue={setValue} disabled={disabled} />
       <CopyField label="Visual caption" fieldKey="quiz_visual_caption" values={values} setValue={setValue} disabled={disabled} helpText="Small caption under the before/after visual" />
-      <InlineStack>
-        <Button variant="plain" onClick={() => navigateParent("/app/assistant/quiz")}>
-          More options (advanced page)
-        </Button>
+      <InlineStack gap="200">
+        <div style={{ flex: 1, minWidth: 130 }}>
+          <CopyField label="Alternate audience label" fieldKey="quiz_alt_audience_label" values={values} setValue={setValue} disabled={disabled} helpText='e.g. "Shopping for someone else?"' />
+        </div>
+        <div style={{ flex: 1, minWidth: 130 }}>
+          <CopyField label="Alternate audience link" fieldKey="quiz_alt_audience_url" values={values} setValue={setValue} disabled={disabled} placeholder="https://… or /pages/…" />
+        </div>
       </InlineStack>
     </BlockStack>
   );
@@ -342,7 +432,12 @@ export function PhotoEditor({
     quiz_gate_photo_label: str(settings, "quiz_gate_photo_label"),
     quiz_gate_skip_label: str(settings, "quiz_gate_skip_label"),
     quiz_privacy_note: str(settings, "quiz_privacy_note"),
+    quiz_shade_headline: str(settings, "quiz_shade_headline"),
+    quiz_shade_body: str(settings, "quiz_shade_body"),
+    quiz_shade_cta_photo: str(settings, "quiz_shade_cta_photo"),
+    quiz_shade_cta_manual: str(settings, "quiz_shade_cta_manual"),
   }));
+  const [manualShade, setManualShade] = useState<boolean>(settings.quiz_manual_shade_enabled !== false);
   const setValue = (key: string, value: string) => {
     setValues((prev) => ({ ...prev, [key]: value }));
     schedule("copy", key, value);
@@ -367,10 +462,28 @@ export function PhotoEditor({
         </div>
       </InlineStack>
       <CopyField label="Privacy note" fieldKey="quiz_privacy_note" values={values} setValue={setValue} disabled={disabled} helpText="Small reassurance line under the photo button" />
-      <InlineStack>
-        <Button variant="plain" onClick={() => navigateParent("/app/assistant/quiz")}>
-          Shade picker options (advanced page)
-        </Button>
+      <Text as="h4" variant="headingSm">
+        Shade picker
+      </Text>
+      <Checkbox
+        label="Manual shade picker on this step"
+        checked={manualShade}
+        disabled={disabled}
+        onChange={(v) => {
+          setManualShade(v);
+          schedule("copy", "quiz_manual_shade_enabled", v);
+        }}
+        helpText='When off, the "No photo handy?" shade rail is hidden here; the results page picker stays available either way.'
+      />
+      <CopyField label="Shade step headline" fieldKey="quiz_shade_headline" values={values} setValue={setValue} disabled={disabled} />
+      <CopyField label="Shade step body" fieldKey="quiz_shade_body" values={values} setValue={setValue} disabled={disabled} multiline={2} />
+      <InlineStack gap="200">
+        <div style={{ flex: 1, minWidth: 130 }}>
+          <CopyField label="Photo button label" fieldKey="quiz_shade_cta_photo" values={values} setValue={setValue} disabled={disabled} />
+        </div>
+        <div style={{ flex: 1, minWidth: 130 }}>
+          <CopyField label="Manual picker button label" fieldKey="quiz_shade_cta_manual" values={values} setValue={setValue} disabled={disabled} />
+        </div>
       </InlineStack>
     </BlockStack>
   );
@@ -398,6 +511,8 @@ export function ResultsEditor({
     quiz_also_matched_label: str(settings, "quiz_also_matched_label"),
     quiz_view_product_label: str(settings, "quiz_view_product_label"),
     quiz_retake_label: str(settings, "quiz_retake_label"),
+    quiz_show_matches_label: str(settings, "quiz_show_matches_label"),
+    quiz_add_button_template: str(settings, "quiz_add_button_template"),
     quiz_upsell_title: str(settings, "quiz_upsell_title"),
     quiz_upsell_body: str(settings, "quiz_upsell_body"),
     quiz_upsell_cta: str(settings, "quiz_upsell_cta"),
@@ -434,6 +549,14 @@ export function ResultsEditor({
           <CopyField label="Retake link" fieldKey="quiz_retake_label" values={values} setValue={setValue} disabled={disabled} />
         </div>
       </InlineStack>
+      <InlineStack gap="200">
+        <div style={{ flex: 1, minWidth: 130 }}>
+          <CopyField label="Show matches label" fieldKey="quiz_show_matches_label" values={values} setValue={setValue} disabled={disabled} />
+        </div>
+        <div style={{ flex: 1, minWidth: 130 }}>
+          <CopyField label="Add to cart template" fieldKey="quiz_add_button_template" values={values} setValue={setValue} disabled={disabled} helpText="{price} inserts the price" />
+        </div>
+      </InlineStack>
       <Text as="h4" variant="headingSm">
         Try-on upsell
       </Text>
@@ -462,6 +585,7 @@ export function ThemeEditor({
     quiz_accent_color: str(settings, "quiz_accent_color"),
     quiz_ink_color: str(settings, "quiz_ink_color"),
     quiz_card_bg_color: str(settings, "quiz_card_bg_color"),
+    quiz_line_color: str(settings, "quiz_line_color"),
     quiz_cta_color: str(settings, "quiz_cta_color"),
     quiz_button_radius: str(settings, "quiz_button_radius"),
     quiz_card_radius: str(settings, "quiz_card_radius"),
@@ -509,6 +633,7 @@ export function ThemeEditor({
       <ColorField label="Accent color" fieldKey="quiz_accent_color" values={values} setValue={setColor} disabled={disabled} helpText="Buttons, highlights, and **starred** headline words" />
       <ColorField label="Text color" fieldKey="quiz_ink_color" values={values} setValue={setColor} disabled={disabled} />
       <ColorField label="Card background" fieldKey="quiz_card_bg_color" values={values} setValue={setColor} disabled={disabled} />
+      <ColorField label="Border color" fieldKey="quiz_line_color" values={values} setValue={setColor} disabled={disabled} helpText="Card and option borders" />
       <ColorField label="Button color" fieldKey="quiz_cta_color" values={values} setValue={setColor} disabled={disabled} />
       <InlineStack gap="200">
         <div style={{ flex: 1, minWidth: 120 }}>
@@ -553,11 +678,6 @@ export function ThemeEditor({
       />
       <TextField label="Heading font override" value={values.quiz_heading_font_override} onChange={(v) => setFont("quiz_heading_font_override", v)} disabled={disabled} placeholder="Blank = match your theme" autoComplete="off" />
       <TextField label="Body font override" value={values.quiz_body_font_override} onChange={(v) => setFont("quiz_body_font_override", v)} disabled={disabled} placeholder="Blank = match your theme" autoComplete="off" />
-      <InlineStack>
-        <Button variant="plain" onClick={() => navigateParent("/app/assistant/quiz")}>
-          More options (advanced page)
-        </Button>
-      </InlineStack>
     </BlockStack>
   );
 }
