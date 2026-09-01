@@ -93,7 +93,7 @@ export function ChatPanel({
     try {
       const fd = new FormData();
       fd.append("intent", "message");
-      fd.append("message", trimmed);
+      fd.append("text", trimmed);
       if (sessionIdRef.current) fd.append("sessionId", sessionIdRef.current);
       const res = await fetch("/app/api/quiz-copilot", { method: "POST", body: fd });
       if (!res.ok || !res.body) {
