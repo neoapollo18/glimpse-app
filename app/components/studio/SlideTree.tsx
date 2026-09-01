@@ -289,7 +289,6 @@ export function SlideTree({
 
         {hasPhotoAxis && row("photo", "Photo", { glyph: "◉" })}
         {row("results", "Results", { glyph: "⚑" })}
-        {row("theme", "Theme", { glyph: "✎" })}
 
         {!readOnly && onAdd && (
           <>
@@ -326,7 +325,33 @@ export function SlideTree({
       </div>
 
       {!readOnly && (
-        <div style={{ borderTop: "1px solid #E1E3E5", padding: 8 }}>
+        <div style={{ borderTop: "1px solid #E1E3E5", padding: 8, display: "flex", flexDirection: "column", gap: 2 }}>
+          <div
+            role="button"
+            tabIndex={disabled ? -1 : 0}
+            className="studio-tree-row"
+            data-selected={selectedSlide === "theme"}
+            style={{ opacity: disabled ? 0.6 : 1, pointerEvents: disabled ? "none" : undefined }}
+            onClick={() => onSelect("theme")}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onSelect("theme");
+              }
+            }}
+          >
+            <span
+              aria-hidden
+              style={{ display: "inline-flex", alignItems: "center", flexShrink: 0, width: 20, justifyContent: "center" }}
+            >
+              <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#1A1A1E", marginRight: -3, zIndex: 2, border: "1.5px solid #fff" }} />
+              <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#B692F6", marginRight: -3, zIndex: 1, border: "1.5px solid #fff" }} />
+              <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#FDA47A", border: "1.5px solid #fff" }} />
+            </span>
+            <span className="studio-rail-wide" style={{ fontWeight: 600 }}>
+              Theme &amp; fonts
+            </span>
+          </div>
           <button
             className="studio-tree-row"
             data-selected={flowMapOpen}
