@@ -13,7 +13,70 @@ import { timingSafeEqual } from "node:crypto";
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import prisma from "../db.server";
-import { updateShopMonthlySessions } from "../lib/supabase.server";
+import {
+  getShopBillingState,
+  updateShopBillingState,
+  updateShopMonthlySessions,
+} from "../lib/supabase.server";
+import {
+  directGraphql,
+  getActiveSubscription,
+  postTierUsage,
+  tierForSessions,
+} from "../lib/shopify-billing.server";
+
+/**
+ * Shopify-native flex billing: post ONE usage record per billing cycle
+ * equal to the shop's session-tier fee. Idempotent via a cycle key
+ * (subscriptionId:currentPeriodEnd) stored on the shop row AND Shopify's
+ * own idempotencyKey. Also adopts Mantle-created flex subscriptions
+ * ($0 recurring + usage line): posting to their existing line needs no
+ * merchant re-approval. Flat-price Mantle subs are left alone (they
+ * already charge the right amount on their own).
+ */
+async function maybePostTierUsage(
+  shop: string,
+  accessToken: string,
+  sessions: number,
+): Promise<string> {
+  const graphql = directGraphql(shop, accessToken);
+  const sub = await getActiveSubscription(graphql);
+  if (!sub || sub.status !== "ACTIVE") return "no active subscription";
+  if (!sub.usageLineItemId) return "flat-price subscription (left alone)";
+  if ((sub.recurringPriceUsd ?? 0) > 0) {
+    return `flat+usage subscription at $${sub.recurringPriceUsd} (left alone)`;
+  }
+
+  // Honor the free trial: recurring trials don't cover usage charges, so
+  // don't post any fee until the trial window has passed.
+  if (sub.trialDays > 0 && sub.createdAt) {
+    const trialEnd = new Date(sub.createdAt).getTime() + sub.trialDays * 86_400_000;
+    if (Date.now() < trialEnd) return "in trial";
+  }
+
+  const state = await getShopBillingState(shop);
+  const { tier, fee } = tierForSessions(sessions);
+  const cycleKey = `${sub.id}:${sub.currentPeriodEnd ?? "unknown"}`;
+  if (state?.last_usage_cycle_key === cycleKey) return "already posted this cycle";
+
+  if (fee > 0) {
+    const posted = await postTierUsage(graphql, {
+      usageLineItemId: sub.usageLineItemId,
+      feeUsd: fee,
+      description: `Gleame ${tier.name} plan — ${sessions.toLocaleString()} monthly sessions`,
+      idempotencyKey: cycleKey,
+    });
+    if (!posted.ok) throw new Error(`usage record failed: ${posted.error}`);
+  }
+  await updateShopBillingState(shop, {
+    shopify_subscription_id: sub.id,
+    usage_line_item_id: sub.usageLineItemId,
+    current_tier: tier.name,
+    current_period_end: sub.currentPeriodEnd,
+    last_usage_cycle_key: cycleKey,
+  });
+  return fee > 0 ? `posted $${fee} (${tier.name})` : `free tier (${sessions.toLocaleString()} sessions)`;
+}
 
 // Shopify Admin API helper for direct calls (without authenticate middleware)
 async function fetchSessionsDirectly(shop: string, accessToken: string): Promise<number | null> {
@@ -167,11 +230,22 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           continue;
         }
 
-        // Save session count to Supabase (admin dashboard + future
-        // Shopify-billing tier matching).
+        // Save session count to Supabase (admin dashboard + tier matching).
         await updateShopMonthlySessions(shop, sessionCount);
         results.cached++;
         console.log(`💾 ${shop}: Saved ${sessionCount.toLocaleString()} sessions to Supabase`);
+
+        // Shopify-native billing: post this cycle's tier fee if due.
+        try {
+          const billing = await maybePostTierUsage(shop, accessToken, sessionCount);
+          if (billing.startsWith("posted")) results.sent++;
+          console.log(`💳 ${shop}: ${billing}`);
+        } catch (billingError) {
+          const msg = billingError instanceof Error ? billingError.message : String(billingError);
+          console.error(`❌ ${shop}: billing usage post failed:`, msg);
+          results.errors++;
+          results.errorDetails.push(`${shop} (billing): ${msg}`);
+        }
 
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);

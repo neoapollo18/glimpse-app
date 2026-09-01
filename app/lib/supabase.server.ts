@@ -2025,34 +2025,42 @@ export async function updateShopSubscriptionStatus(
  * Returns true if shop can use transformations
  */
 export async function shopHasValidAccess(shopDomain: string): Promise<boolean> {
-  // MANTLE SHUTDOWN: subscription_status stopped syncing when Mantle died,
-  // so gating storefront APIs on it would dark-launch merchants' live
-  // quizzes as statuses drift stale. Free access until Shopify-native
-  // billing ships (then this reads the new subscription state).
+  // Enforcement is off until Shopify-native billing is fully migrated
+  // (BILLING_ENFORCED, see billing-gate.server.ts).
   if (process.env.BILLING_ENFORCED !== "true") return true;
   const { data, error } = await supabase
     .from('shops')
-    .select('subscription_status, subscription_expires_at')
+    .select('*')
     .eq('shop_domain', shopDomain)
     .single();
-  
+
   if (error || !data) {
     // Shop not found - no access
     return false;
   }
-  
-  const { subscription_status, subscription_expires_at } = data;
-  
+
+  const row = data as Record<string, unknown>;
+  const subscription_status = row.subscription_status as string | null;
+
   // Grandfathered users always have access
   if (subscription_status === 'grandfathered') {
     return true;
   }
-  
-  // Active or trial subscriptions have access
+
+  // Free tier: under 2.5k monthly sessions needs no subscription. A shop
+  // with no session data yet also passes (fail open on unknown traffic).
+  const sessions = (row.monthly_sessions as number | null) ?? 0;
+  if (sessions <= 2500) {
+    return true;
+  }
+
+  // Active or trial subscriptions have access (kept fresh by the
+  // app_subscriptions/update webhook)
   if (subscription_status === 'active' || subscription_status === 'trial') {
     return true;
   }
-  
+
+  const subscription_expires_at = row.subscription_expires_at as string | null;
   // Grace period - check if still within the grace window
   if (subscription_status === 'grace_period' && subscription_expires_at) {
     const expiresAt = new Date(subscription_expires_at);
@@ -2060,7 +2068,7 @@ export async function shopHasValidAccess(shopDomain: string): Promise<boolean> {
       return true;
     }
   }
-  
+
   // No access for 'cancelled', 'none', or expired grace period
   return false;
 }
@@ -2070,6 +2078,61 @@ export async function shopHasValidAccess(shopDomain: string): Promise<boolean> {
  */
 export async function markShopAsGrandfathered(shopDomain: string): Promise<void> {
   await updateShopSubscriptionStatus(shopDomain, 'grandfathered', null);
+}
+
+// ---------------------------------------------------------------------
+// Shopify-native billing state (migration 063; Mantle replacement)
+// ---------------------------------------------------------------------
+
+export interface ShopBillingState {
+  subscription_status: string | null;
+  monthly_sessions: number | null;
+  shopify_subscription_id: string | null;
+  usage_line_item_id: string | null;
+  current_tier: string | null;
+  current_period_end: string | null;
+  last_usage_cycle_key: string | null;
+}
+
+export async function getShopBillingState(shopDomain: string): Promise<ShopBillingState | null> {
+  // select('*') so a pre-migration DB reads missing columns as undefined
+  // instead of erroring the query.
+  const { data, error } = await supabase
+    .from('shops')
+    .select('*')
+    .eq('shop_domain', shopDomain)
+    .single();
+  if (error || !data) return null;
+  const row = data as Record<string, unknown>;
+  return {
+    subscription_status: (row.subscription_status as string | null) ?? null,
+    monthly_sessions: (row.monthly_sessions as number | null) ?? null,
+    shopify_subscription_id: (row.shopify_subscription_id as string | null) ?? null,
+    usage_line_item_id: (row.usage_line_item_id as string | null) ?? null,
+    current_tier: (row.current_tier as string | null) ?? null,
+    current_period_end: (row.current_period_end as string | null) ?? null,
+    last_usage_cycle_key: (row.last_usage_cycle_key as string | null) ?? null,
+  };
+}
+
+export async function updateShopBillingState(
+  shopDomain: string,
+  patch: Partial<Omit<ShopBillingState, 'monthly_sessions'>>,
+): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await supabase
+    .from('shops')
+    .update(patch)
+    .eq('shop_domain', shopDomain)
+    .select('id');
+  if (error) {
+    console.error(`updateShopBillingState failed for ${shopDomain}:`, error.message);
+    return { ok: false, error: error.message };
+  }
+  if (!data?.length) {
+    console.error(`updateShopBillingState matched 0 rows for ${shopDomain}`);
+    return { ok: false, error: 'Shop not found' };
+  }
+  return { ok: true };
 }
 
 /**

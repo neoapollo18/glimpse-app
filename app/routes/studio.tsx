@@ -80,7 +80,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shopDomain = session.shop;
   // Standalone route = not under app.tsx's billing gate; enforce it here.
   if (await shopNeedsBilling(shopDomain, session.accessToken ?? "")) {
-    throw redirect("/app/welcome");
+    throw redirect("/app/billing");
   }
   const shop = await findShopByDomain(shopDomain);
   if (!shop) throw new Response("Shop not found", { status: 404 });

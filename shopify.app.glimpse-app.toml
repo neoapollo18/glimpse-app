@@ -20,6 +20,10 @@ api_version = "2025-07"
   topics = [ "app/uninstalled" ]
   uri = "/webhooks/app/uninstalled"
 
+  [[webhooks.subscriptions]]
+  topics = [ "app_subscriptions/update" ]
+  uri = "/webhooks/app/subscriptions_update"
+
   # orders/create powers the conversion attribution + customerJourneySummary
   # enrichment in app/routes/webhooks.orders.tsx. Requires Protected Customer
   # Data Access (Level 1, approved 2026-04-29).
