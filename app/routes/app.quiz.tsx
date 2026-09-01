@@ -317,14 +317,21 @@ export default function QuizHub() {
         </Card>
       </BlockStack>
 
-      <Modal
-        variant="max"
-        open={studioOpen}
-        src={studioOpen ? `/studio?step=${studioStep}` : undefined}
-        onHide={closeStudio}
-      >
-        <TitleBar title="Quiz Studio" />
-      </Modal>
+      {/* Mounted ONLY while open: the App Bridge Modal wrapper calls
+          .hide() on the ui-modal element when rendered closed, which
+          crashes the page if the custom element hasn't upgraded yet
+          ("t.hide is not a function"). Conditional mount sidesteps the
+          closed state entirely; onHide unmounts it again. */}
+      {studioOpen && (
+        <Modal
+          variant="max"
+          open
+          src={`/studio?step=${studioStep}`}
+          onHide={closeStudio}
+        >
+          <TitleBar title="Quiz Studio" />
+        </Modal>
+      )}
     </Page>
   );
 }
