@@ -2290,6 +2290,9 @@
 
   function initPreviewListener() {
     window.addEventListener('message', function(ev) {
+      // Studio messages only: same-origin parent (the preview is an iframe
+      // inside the studio, both served from the app origin).
+      if (ev.origin !== window.location.origin) return;
       var d = ev.data || {};
       if (d.type === 'gleame-preview-goto') {
         previewGoto(d.step);

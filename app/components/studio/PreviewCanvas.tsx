@@ -17,10 +17,12 @@ export function PreviewCanvas({
   iframeRef,
   previewToken,
   nonce,
+  onLoad,
 }: {
   iframeRef: MutableRefObject<HTMLIFrameElement | null>;
   previewToken: string | null;
   nonce: number;
+  onLoad?: () => void;
 }) {
   // Pin the token so routine revalidations never remount the iframe, but
   // adopt the freshest one on intentional reloads (nonce bumps) so a
@@ -160,6 +162,7 @@ export function PreviewCanvas({
             ref={iframeRef}
             title="Quiz preview"
             src={`/quiz-preview.html?token=${encodeURIComponent(stableTokenRef.current)}&v=${nonce}`}
+            onLoad={onLoad}
             style={{
               width: "100%",
               height: isMobile ? frame.height : undefined,

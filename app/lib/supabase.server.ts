@@ -1762,7 +1762,20 @@ export async function updateProductPromptDirect(
  * configured transformation prompt. FAILS OPEN (true) — a DB hiccup must
  * never hide nav links from live merchants.
  */
+// app.tsx AND the home loader both call this on every navigation; the
+// answer changes on config-edit cadence, not request cadence.
+const tryOnConfigCache = new Map<string, { at: number; value: boolean }>();
+const TRY_ON_CACHE_TTL_MS = 15_000;
+
 export async function shopHasTryOnConfig(shopDomain: string): Promise<boolean> {
+  const cached = tryOnConfigCache.get(shopDomain);
+  if (cached && Date.now() - cached.at < TRY_ON_CACHE_TTL_MS) return cached.value;
+  const value = await shopHasTryOnConfigUncached(shopDomain);
+  tryOnConfigCache.set(shopDomain, { at: Date.now(), value });
+  return value;
+}
+
+async function shopHasTryOnConfigUncached(shopDomain: string): Promise<boolean> {
   try {
     const shop = await findShopByDomain(shopDomain);
     if (!shop) return true;

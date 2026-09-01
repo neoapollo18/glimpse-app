@@ -307,7 +307,7 @@ export function applyUpdateCopy(draft: DraftShape, input: any, _catalog: Catalog
   const next = clone(draft);
   for (const [k, v] of Object.entries(fields)) {
     next.settings[k] = BOOL_COPY_KEYS.has(k)
-      ? Boolean(v)
+      ? v === true || v === "true"
       : Array.isArray(v)
         ? v.map((s) => String(s).slice(0, 400))
         : String(v).slice(0, 400);
@@ -324,6 +324,17 @@ const DESIGN_KEYS = new Set([
   "quiz_heading_font_override", "quiz_body_font_override",
 ]);
 
+// Non-color token constraints mirror the DB CHECKs from migration 049. An
+// out-of-range radius or invalid enum sails through draft save and preview,
+// then permanently breaks publish AFTER the flow is live (half-published
+// shop, same failure on every retry) — reject/clamp here instead.
+const DESIGN_RADIUS_KEYS = new Set(["quiz_button_radius", "quiz_card_radius"]);
+const DESIGN_ENUMS: Record<string, readonly string[]> = {
+  quiz_progress_style: ["pips", "bar", "counter", "none"],
+  quiz_intro_layout: ["split", "centered"],
+  quiz_animation_style: ["full", "minimal", "off"],
+};
+
 export function applyUpdateDesignTokens(draft: DraftShape, input: any, _catalog: CatalogProduct[]): ApplyResult {
   const fields = input.fields ?? {};
   const keys = Object.keys(fields);
@@ -333,6 +344,14 @@ export function applyUpdateDesignTokens(draft: DraftShape, input: any, _catalog:
   for (const [k, v] of Object.entries(fields)) {
     if (k.endsWith("_color") && v != null && !HEX_RE.test(String(v))) {
       return { ok: false, error: `${k} must be #rrggbb (got "${v}")` };
+    }
+    if (DESIGN_RADIUS_KEYS.has(k) && v != null) {
+      const n = Number(v);
+      if (!Number.isFinite(n)) return { ok: false, error: `${k} must be a number 0-60 (got "${v}")` };
+      fields[k] = Math.max(0, Math.min(60, Math.round(n)));
+    }
+    if (k in DESIGN_ENUMS && v != null && !DESIGN_ENUMS[k].includes(String(v))) {
+      return { ok: false, error: `${k} must be one of ${DESIGN_ENUMS[k].join(" | ")} (got "${v}")` };
     }
   }
   const next = clone(draft);

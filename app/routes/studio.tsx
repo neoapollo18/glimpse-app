@@ -1,6 +1,6 @@
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { useFetcher, useLoaderData, useRouteError, useSearchParams } from "@remix-run/react";
+import { useFetcher, useLoaderData, useRevalidator, useRouteError, useSearchParams } from "@remix-run/react";
 import { boundary } from "@shopify/shopify-app-remix/server";
 import { AppProvider } from "@shopify/shopify-app-remix/react";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
@@ -37,7 +37,7 @@ import { GENERAL_GUIDANCE_KEY } from "../lib/quiz-guidance-shared";
 
 import { StudioShell } from "../components/studio/StudioShell";
 import { StudioTopBar } from "../components/studio/StudioTopBar";
-import { SlideTree, slideIdForQuestion } from "../components/studio/SlideTree";
+import { SlideTree, slideIdForQuestion, buildScreens } from "../components/studio/SlideTree";
 import { PreviewCanvas } from "../components/studio/PreviewCanvas";
 import { EditPanel } from "../components/studio/EditPanel";
 import { ChatPanel } from "../components/studio/ChatPanel";
@@ -462,6 +462,7 @@ export default function Studio() {
   })();
   const setStep = useCallback(
     (next: StudioStep) => {
+      editorFlushRef.current?.();
       setParams(
         (p) => {
           p.set("step", next);
@@ -499,24 +500,43 @@ export default function Studio() {
   // state remounts with the fresh draft (manual edits are chat-gated, so
   // no in-progress typing is ever lost by the remount).
   const [chatEpoch, setChatEpoch] = useState(0);
+  const pendingEpochBumpRef = useRef(false);
+  const revalidator = useRevalidator();
+  useEffect(() => {
+    if (revalidator.state === "idle" && pendingEpochBumpRef.current) {
+      pendingEpochBumpRef.current = false;
+      setChatEpoch((n) => n + 1);
+    }
+  }, [revalidator.state]);
   const [flashSlide, setFlashSlide] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [previewNonce, setPreviewNonce] = useState(0);
 
-  const gotoPreviewStep = useCallback(
+  // Step we last COMMANDED the preview to show. The widget echoes every
+  // render as gleame-preview-at; while an expectation is pending we treat
+  // echoes as acks (or boot noise to correct), never as user navigation —
+  // otherwise every iframe (re)load yanked the selection back to Intro.
+  const expectedStepRef = useRef<string | null>(null);
+  const stepForSlide = useCallback(
     (slideId: string) => {
       const qi = questions.findIndex((q) => slideIdForQuestion(q.axisKey) === slideId);
-      const previewStep =
-        slideId === "intro" || slideId === "theme"
-          ? "intro"
-          : slideId === "photo"
-            ? "gate"
-            : slideId === "results"
-              ? "results"
-              : `q${qi + 1}`;
-      iframeRef.current?.contentWindow?.postMessage({ type: "gleame-preview-goto", step: previewStep }, "*");
+      return slideId === "intro" || slideId === "theme"
+        ? "intro"
+        : slideId === "photo"
+          ? "gate"
+          : slideId === "results"
+            ? "results"
+            : `q${qi + 1}`;
     },
     [questions],
+  );
+  const gotoPreviewStep = useCallback(
+    (slideId: string) => {
+      const previewStep = stepForSlide(slideId);
+      expectedStepRef.current = previewStep;
+      iframeRef.current?.contentWindow?.postMessage({ type: "gleame-preview-goto", step: previewStep }, "*");
+    },
+    [stepForSlide],
   );
   const reloadPreview = useCallback(() => setPreviewNonce((n) => n + 1), []);
   const updatePreview = useCallback((payload: { flow?: unknown; config?: unknown }) => {
@@ -526,8 +546,16 @@ export default function Studio() {
     );
   }, []);
 
+  // Editors register their pending-edit flush here; switching slides or
+  // steps delivers in-flight debounced edits through the editor's own
+  // fetcher BEFORE the switch (the unmount raw-fetch stays as a backstop
+  // for modal close, but racing the next loader read is worse than
+  // flushing up front).
+  const editorFlushRef = useRef<(() => void) | null>(null);
+
   const selectSlide = useCallback(
     (slideId: string) => {
+      editorFlushRef.current?.();
       setSelectedSlide(slideId);
       gotoPreviewStep(slideId);
     },
@@ -541,9 +569,25 @@ export default function Studio() {
   selectedSlideRef.current = selectedSlide;
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return;
       const d = e.data as { type?: string; step?: string } | null;
       if (!d || d.type !== "gleame-preview-at") return;
       const step = String(d.step ?? "");
+
+      // Pending expectation: this echo is an ack of our own goto (clear it)
+      // or boot noise from an iframe (re)load (re-send the goto once).
+      if (expectedStepRef.current !== null) {
+        if (step === expectedStepRef.current) {
+          expectedStepRef.current = null;
+        } else {
+          iframeRef.current?.contentWindow?.postMessage(
+            { type: "gleame-preview-goto", step: expectedStepRef.current },
+            "*",
+          );
+        }
+        return;
+      }
+
       let slideId: string | null = null;
       if (step === "intro") slideId = "intro";
       else if (step === "gate") slideId = "photo";
@@ -553,14 +597,34 @@ export default function Studio() {
         if (q) slideId = slideIdForQuestion(q.axisKey);
       }
       if (!slideId) return;
-      // Theme maps its goto to the intro step — don't let the echo steal
+      // Theme maps its goto to the intro step — don't let an echo steal
       // the Theme selection.
       if (selectedSlideRef.current === "theme" && slideId === "intro") return;
+      // Grouped screens report their FIRST question; if the current
+      // selection lives on that same screen, keep it (otherwise later
+      // questions in a group were unselectable).
+      if (data.draft && selectedSlideRef.current.startsWith("q:")) {
+        const screens = buildScreens(data.draft.flow);
+        const selIdx = questions.findIndex(
+          (q) => slideIdForQuestion(q.axisKey) === selectedSlideRef.current,
+        );
+        const repIdx = questions.findIndex((q) => slideIdForQuestion(q.axisKey) === slideId);
+        const sameScreen = screens.some(
+          (scr) => scr.indices.includes(selIdx) && scr.indices.includes(repIdx),
+        );
+        if (sameScreen) return;
+      }
       if (slideId !== selectedSlideRef.current) setSelectedSlide(slideId);
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [questions, setSelectedSlide]);
+  }, [questions, setSelectedSlide, data.draft]);
+
+  // A freshly (re)loaded iframe boots at the intro — steer it back to the
+  // current slide instead of letting its boot echo win.
+  const onPreviewLoad = useCallback(() => {
+    gotoPreviewStep(selectedSlideRef.current);
+  }, [gotoPreviewStep]);
 
   // Tree structural edits (add/reorder) go through the same apply-tool path
   // as the panel editors; the response carries fresh preview payloads.
@@ -698,6 +762,7 @@ export default function Studio() {
               iframeRef={iframeRef}
               previewToken={data.previewToken}
               nonce={previewNonce}
+              onLoad={onPreviewLoad}
             />
           )
         }
@@ -708,6 +773,9 @@ export default function Studio() {
             selectedSlide={selectedSlide}
             chatEpoch={chatEpoch}
             chatBusy={chatBusy}
+            registerFlush={(fn) => {
+              editorFlushRef.current = fn;
+            }}
             onSelectSlide={selectSlide}
             onPreviewUpdate={updatePreview}
             onPreviewReload={reloadPreview}
@@ -719,7 +787,9 @@ export default function Studio() {
                 questions={questions}
                 onBusyChange={setChatBusy}
                 onChangeApplied={(target) => {
-                  setChatEpoch((n) => n + 1);
+                  // Bump AFTER revalidation lands: an immediate remount would
+                  // reinitialize editors from the pre-change loader snapshot.
+                  pendingEpochBumpRef.current = true;
                   reloadPreview();
                   const m = /^Q(\d+)$/i.exec(target);
                   if (m) {

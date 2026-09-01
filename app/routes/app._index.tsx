@@ -8,23 +8,12 @@ import {
   Card,
   BlockStack,
   InlineStack,
-  Box,
-  Icon,
-  Badge,
   Button,
   ProgressBar,
-  IndexTable,
-  EmptyState,
   InlineGrid,
   Banner,
   Select,
 } from "@shopify/polaris";
-import {
-  ProductIcon,
-  ViewIcon,
-  PlusCircleIcon,
-  EditIcon,
-} from "@shopify/polaris-icons";
 import { Modal, TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import {
@@ -65,11 +54,7 @@ interface ProductStat {
 interface LoaderData {
   shopDomain: string;
   ownerName: string;
-  configuredProducts: ConfiguredProduct[];
   configuredProductsCount: number;
-  activeProducts: number;
-  productStats: ProductStat[];
-  allStepsComplete: boolean;
   onboarding: {
     step: number;
     completed: boolean;
@@ -150,18 +135,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     (p: any) => typeof p.transformation_prompt === "string" && p.transformation_prompt.length > 0,
   );
   const configuredProductsCount = configuredProducts.length;
-  const activeProducts = analytics?.productBreakdown?.length || 0;
-  const productStats = (analytics?.productBreakdown || []) as ProductStat[];
-  const allStepsComplete = configuredProductsCount > 0 && activeProducts > 0;
 
   return json<LoaderData>({
     shopDomain,
     ownerName,
-    configuredProducts,
     configuredProductsCount,
-    activeProducts,
-    productStats,
-    allStepsComplete,
     onboarding,
     quiz,
     totalTransformations: (analytics as any)?.totalTransformations ?? 0,
@@ -878,10 +856,14 @@ function OnboardingWizard({
       fetcher.state === "idle"
     ) {
       navigate(pendingNav);
+      // Studio deep links need the dashboard (which hosts the studio modal)
+      // to render — the wizard itself has no modal host, so without this
+      // the button set ?open=studio and nothing happened.
+      if (pendingNav.includes("open=studio")) onComplete();
       setPendingNav(null);
     }
     prevFetcherState.current = fetcher.state;
-  }, [fetcher.state, pendingNav, navigate]);
+  }, [fetcher.state, pendingNav, navigate, onComplete]);
 
   // Persist step 1 on first mount if DB has step 0 (step 1 is never persisted otherwise)
   useEffect(() => {
@@ -1039,7 +1021,7 @@ function OnboardingWizard({
               onBack={() => goToStep(4)}
               onNavigateToBuilder={() => {
                 persistToServer({ intent: "updateStep", step: "5" });
-                setPendingNav("/app/quiz?open=studio");
+                setPendingNav("/app?open=studio");
               }}
             />
           )}
@@ -1141,6 +1123,9 @@ function DashboardView({
   const revalidator = useRevalidator();
   const studioOpen = params.get("open") === "studio";
   const studioStep = params.get("step") ?? "build";
+  // Per-tab token: BroadcastChannel reaches EVERY same-origin admin tab;
+  // without this a studio click navigated other dashboards too.
+  const [navToken] = useState(() => Math.random().toString(36).slice(2, 10));
   const openStudio = () => {
     setParams(
       (prev) => {
@@ -1169,8 +1154,10 @@ function DashboardView({
     try {
       channel = new BroadcastChannel("gleame-studio-nav");
       channel.onmessage = (e: MessageEvent) => {
-        const url = String((e.data as { url?: string } | null)?.url ?? "");
+        const data = e.data as { url?: string; token?: string } | null;
+        const url = String(data?.url ?? "");
         if (!url.startsWith("/app")) return;
+        if (data?.token !== navToken) return; // another tab's studio
         closeStudio();
         navigate(url);
       };
@@ -1182,6 +1169,9 @@ function DashboardView({
   }, []);
 
   const [mode, setMode] = useState<string>(quiz.assistantMode);
+  useEffect(() => {
+    setMode(quiz.assistantMode);
+  }, [quiz.assistantMode]);
   const saveMode = () => {
     const fd = new FormData();
     fd.append("intent", "set-mode");
@@ -1354,7 +1344,12 @@ function DashboardView({
           calls .hide() on the not-yet-upgraded ui-modal element and crashes
           the page. */}
       {studioOpen && (
-        <Modal variant="max" open src={`/studio?step=${studioStep}`} onHide={closeStudio}>
+        <Modal
+          variant="max"
+          open
+          src={`/studio?step=${studioStep}&navtoken=${navToken}`}
+          onHide={closeStudio}
+        >
           <TitleBar title="Quiz Studio" />
         </Modal>
       )}

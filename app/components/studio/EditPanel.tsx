@@ -62,6 +62,7 @@ export function EditPanel({
   onSelectSlide,
   onPreviewUpdate,
   onPreviewReload,
+  registerFlush,
   chat,
 }: {
   data: StudioLoaderData;
@@ -72,6 +73,7 @@ export function EditPanel({
   onSelectSlide: (slideId: string) => void;
   onPreviewUpdate: (payload: { flow?: unknown; config?: unknown }) => void;
   onPreviewReload: () => void;
+  registerFlush?: (fn: (() => void) | null) => void;
   chat: React.ReactNode;
 }) {
   const editHidden = step !== "build";
@@ -108,6 +110,7 @@ export function EditPanel({
             onSelectSlide={onSelectSlide}
             onPreviewUpdate={onPreviewUpdate}
             onPreviewReload={onPreviewReload}
+            registerFlush={registerFlush}
           />
         </div>
       )}
@@ -123,6 +126,7 @@ function EditBody({
   onSelectSlide,
   onPreviewUpdate,
   onPreviewReload,
+  registerFlush,
 }: {
   data: StudioLoaderData;
   selectedSlide: string;
@@ -131,6 +135,7 @@ function EditBody({
   onSelectSlide: (slideId: string) => void;
   onPreviewUpdate: (payload: { flow?: unknown; config?: unknown }) => void;
   onPreviewReload: () => void;
+  registerFlush?: (fn: (() => void) | null) => void;
 }) {
   const flow = data.draft?.flow as StudioFlow | undefined;
   if (!flow) {
@@ -178,6 +183,7 @@ function EditBody({
       onSelectSlide={onSelectSlide}
       onPreviewUpdate={onPreviewUpdate}
       onPreviewReload={onPreviewReload}
+      registerFlush={registerFlush}
     />
   );
 }
@@ -195,6 +201,7 @@ function QuestionEditor({
   onSelectSlide,
   onPreviewUpdate,
   onPreviewReload,
+  registerFlush,
 }: {
   flow: StudioFlow;
   question: StudioQuestion;
@@ -202,6 +209,7 @@ function QuestionEditor({
   onSelectSlide: (slideId: string) => void;
   onPreviewUpdate: (payload: { flow?: unknown; config?: unknown }) => void;
   onPreviewReload: () => void;
+  registerFlush?: (fn: (() => void) | null) => void;
 }) {
   const fetcher = useFetcher<StudioActionData>();
   const branchFetcher = useFetcher<StudioActionData>();
@@ -281,6 +289,18 @@ function QuestionEditor({
     fd.append("calls", JSON.stringify(calls));
     fetcher.submit(fd, { method: "POST", action: "/studio" });
   };
+
+  // Slide/step switches call this through the studio registry so pending
+  // debounced edits are delivered via the fetcher BEFORE unmount (the
+  // unmount raw-fetch below stays as a backstop for modal close).
+  useEffect(() => {
+    registerFlush?.(() => {
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+      flush();
+    });
+    return () => registerFlush?.(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [registerFlush]);
 
   const scheduleSave = (kind: "question" | "options") => {
     dirtyRef.current[kind] = true;

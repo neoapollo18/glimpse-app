@@ -95,11 +95,34 @@ function useSettingsAutosave(onPreviewUpdate: (p: { flow?: unknown; config?: unk
   useEffect(
     () => () => {
       if (timer.current !== null) clearTimeout(timer.current);
+      // Deliver anything still pending: unmounting inside the debounce
+      // window (or with edits queued behind an in-flight submit) must not
+      // silently drop copy/theme edits. Fire-and-forget; the next mount
+      // reloads fresh data.
+      const calls: Array<{ tool: string; input: unknown }> = [];
+      if (Object.keys(pending.current.copy).length > 0) {
+        calls.push({ tool: "update_copy", input: { fields: pending.current.copy } });
+      }
+      if (Object.keys(pending.current.design).length > 0) {
+        calls.push({ tool: "update_design_tokens", input: { fields: pending.current.design } });
+      }
+      if (calls.length > 0) {
+        pending.current = { copy: {}, design: {} };
+        const fd = new FormData();
+        fd.append("intent", "apply-tools");
+        fd.append("calls", JSON.stringify(calls));
+        fetch("/studio", { method: "POST", body: fd }).catch(() => {});
+      }
     },
     [],
   );
 
-  return { schedule, saveState, error, clearError: () => setError(null) };
+  const flushNow = () => {
+    if (timer.current !== null) clearTimeout(timer.current);
+    flush();
+  };
+
+  return { schedule, saveState, error, clearError: () => setError(null), flushNow };
 }
 
 function EditorHeader({
@@ -189,6 +212,7 @@ function ColorField({
   helpText?: string;
 }) {
   const value = values[fieldKey] ?? "";
+  const invalid = value !== "" && !/^#[0-9a-fA-F]{6}$/.test(value);
   return (
     <TextField
       label={label}
@@ -197,6 +221,7 @@ function ColorField({
       disabled={disabled}
       placeholder="Blank = default"
       helpText={helpText}
+      error={invalid ? "Use a 6-digit hex like #1a1a1a (not saved until valid)" : undefined}
       autoComplete="off"
       connectedLeft={
         <input
@@ -653,7 +678,11 @@ export function ThemeEditor({
   const setNumber = (key: string, value: string) => {
     setValues((prev) => ({ ...prev, [key]: value }));
     const n = Number(value);
-    schedule("design", key, value.trim() === "" || !Number.isFinite(n) ? null : Math.round(n));
+    schedule(
+      "design",
+      key,
+      value.trim() === "" || !Number.isFinite(n) ? null : Math.max(0, Math.min(60, Math.round(n))),
+    );
   };
   const setEnum = (key: string, value: string) => {
     setValues((prev) => ({ ...prev, [key]: value }));
