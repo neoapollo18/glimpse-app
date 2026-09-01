@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useRevalidator } from "@remix-run/react";
-import { Badge, Button, Spinner, Text, TextField, InlineStack } from "@shopify/polaris";
+import { Badge, Button, Text, TextField, InlineStack } from "@shopify/polaris";
 import { readSseStream } from "../../lib/sse-client";
 import type { StudioQuestion } from "./types";
 
@@ -27,6 +27,19 @@ type CopilotEvent =
   | { type: "done"; sessionId: string }
   | { type: "error"; error: string }
   | { type: "heartbeat" };
+
+/** Minimal chat formatting: the copilot writes **bold** markers; render
+ * them as bold text instead of literal asterisks. No HTML injection — the
+ * split output is plain strings and <strong> elements only. */
+function renderChatText(text: string) {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+    part.startsWith("**") && part.endsWith("**") ? (
+      <strong key={i}>{part.slice(2, -2)}</strong>
+    ) : (
+      part
+    ),
+  );
+}
 
 const SUGGESTION_CHIPS = [
   "Shorten the quiz",
@@ -282,18 +295,11 @@ export function ChatPanel({
                 whiteSpace: "pre-wrap",
               }}
             >
-              {item.text}
+              {isUser ? item.text : renderChatText(item.text)}
             </div>
           );
         })}
-        {busy && (
-          <InlineStack gap="150" blockAlign="center">
-            <Spinner size="small" />
-            <Text as="span" variant="bodySm" tone="subdued">
-              Thinking…
-            </Text>
-          </InlineStack>
-        )}
+        {busy && <span className="studio-thinking">Thinking</span>}
       </div>
 
       <div style={{ padding: "8px 12px", borderTop: "1px solid #E1E3E5" }}>

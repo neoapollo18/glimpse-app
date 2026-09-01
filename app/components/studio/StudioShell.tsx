@@ -17,6 +17,8 @@ const SHELL_CSS = `
   .studio-tree-row[data-selected="true"] { background: #F1F1F1; box-shadow: inset 3px 0 0 #1a1a1a; }
   .studio-tree-row[data-flash="true"] { animation: studio-flash 1.5s ease-out; }
   @keyframes studio-flash { 0% { background: #FFF8E1; } 100% { background: transparent; } }
+  .studio-thinking { font-size: 13px; font-weight: 500; background: linear-gradient(90deg, #8C9196 25%, #1a1a1a 50%, #8C9196 75%); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: studio-shimmer 1.4s linear infinite; }
+  @keyframes studio-shimmer { 0% { background-position: 200% 0; } 100% { background-position: 0% 0; } }
   .studio-step-pill { border: 0; background: transparent; border-radius: 999px; padding: 6px 14px; font-size: 13px; font-weight: 600; color: #6D7175; cursor: pointer; }
   .studio-step-pill[data-active="true"] { background: #1a1a1a; color: #fff; }
   .studio-panel-tabs { display: flex; border-bottom: 1px solid #E1E3E5; }

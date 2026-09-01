@@ -519,7 +519,7 @@ function QuestionEditor({
         onClick={() => setBehaviorOpen((v) => !v)}
         style={disclosureStyle}
       >
-        <span style={{ fontWeight: 600 }}>Behavior</span>
+        <span style={{ fontWeight: 600 }}>Format</span>
         <span style={{ color: "#6D7175", fontSize: 12 }}>
           {[multiSelect ? `Multi-select${maxPicks ? ` · max ${maxPicks}` : ""}` : null, optionStyle ? OPTION_STYLE_CHOICES.find((c) => c.value === optionStyle)?.label.split(":")[0] : null]
             .filter(Boolean)
