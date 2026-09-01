@@ -265,6 +265,7 @@ export function SlideTree({
 
         {hasPhotoAxis && row("photo", "Photo", { glyph: "◉" })}
         {row("results", "Results", { glyph: "⚑" })}
+        {row("theme", "Theme", { glyph: "✎" })}
 
         {!readOnly && onAdd && (
           <>

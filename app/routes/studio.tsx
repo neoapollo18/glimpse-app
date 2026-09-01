@@ -15,6 +15,7 @@ import {
   upsertQuestionGuidance,
   deleteQuestionGuidance,
   getRecommendationCounts,
+  getChatAssistantConfig,
 } from "../lib/supabase.server";
 import {
   getQuizDraft,
@@ -78,7 +79,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shop = await findShopByDomain(shopDomain);
   if (!shop) throw new Response("Shop not found", { status: 404 });
 
-  const [draftInitial, versions, shopRowRes, copilotSessionId, notes, counts] = await Promise.all([
+  const [draftInitial, versions, shopRowRes, copilotSessionId, notes, counts, liveConfig] = await Promise.all([
     getQuizDraft(shop.id).catch((e) => {
       console.error("[studio] draft load failed:", e.message);
       return null;
@@ -88,6 +89,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     getLatestSessionId(shop.id).catch(() => null),
     getQuestionGuidance(shop.id).catch(() => ({}) as Record<string, string>),
     getRecommendationCounts(shop.id).catch(() => null),
+    getChatAssistantConfig(shopDomain).catch(() => null),
   ]);
   const shopRow = shopRowRes.data;
   const liveQuestionCount = counts?.questions ?? 0;
@@ -107,6 +109,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
+  // Settings the slide editors show: live quiz_* values as the base (the
+  // preview merges the same way), with draft settings overriding. A
+  // generated draft only carries the keys the AI set; everything else
+  // falls back to what's live.
+  const settings: Record<string, unknown> = {};
+  if (liveConfig) {
+    for (const [k, v] of Object.entries(liveConfig as unknown as Record<string, unknown>)) {
+      if (k.startsWith("quiz_")) settings[k] = v;
+    }
+  }
+  Object.assign(settings, (draft?.settings ?? {}) as Record<string, unknown>);
+
   const previewToken = process.env.SHOPIFY_API_SECRET
     ? jwt.sign({ shopId: shop.id, shopDomain }, process.env.SHOPIFY_API_SECRET, { expiresIn: "12h" })
     : null;
@@ -119,6 +133,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     seeded,
     versions,
     notes,
+    settings,
     aiConfigured: isClaudeConfigured(),
     previewToken,
     copilotSessionId,
@@ -342,7 +357,7 @@ export default function Studio() {
   const questions = data.draft?.flow.questions ?? [];
   const selectedSlide = ((): string => {
     const s = params.get("slide");
-    if (s === "intro" || s === "photo" || s === "results") return s;
+    if (s === "intro" || s === "photo" || s === "results" || s === "theme") return s;
     if (s?.startsWith("q:") && questions.some((q) => slideIdForQuestion(q.axisKey) === s)) return s;
     return questions.length > 0 ? slideIdForQuestion(questions[0].axisKey) : "intro";
   })();
@@ -373,7 +388,13 @@ export default function Studio() {
     (slideId: string) => {
       const qi = questions.findIndex((q) => slideIdForQuestion(q.axisKey) === slideId);
       const previewStep =
-        slideId === "intro" ? "intro" : slideId === "photo" ? "gate" : slideId === "results" ? "results" : `q${qi + 1}`;
+        slideId === "intro" || slideId === "theme"
+          ? "intro"
+          : slideId === "photo"
+            ? "gate"
+            : slideId === "results"
+              ? "results"
+              : `q${qi + 1}`;
       iframeRef.current?.contentWindow?.postMessage({ type: "gleame-preview-goto", step: previewStep }, "*");
     },
     [questions],

@@ -288,6 +288,9 @@ const COPY_KEYS = new Set([
   "quiz_upsell_title", "quiz_upsell_body", "quiz_upsell_cta",
   "quiz_shade_headline", "quiz_shade_body", "quiz_shade_cta_photo", "quiz_shade_cta_manual",
   "quiz_visual_caption",
+  // Studio slide editors (landing visual + alt audience)
+  "quiz_before_image_url", "quiz_after_image_url",
+  "quiz_alt_audience_label", "quiz_alt_audience_url",
 ]);
 
 export function applyUpdateCopy(draft: DraftShape, input: any, _catalog: CatalogProduct[]): ApplyResult {

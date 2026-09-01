@@ -17,6 +17,7 @@ import {
   Divider,
 } from "@shopify/polaris";
 import type { StudioLoaderData, StudioStep, StudioActionData } from "../../routes/studio";
+import { IntroEditor, PhotoEditor, ResultsEditor, ThemeEditor } from "./SettingsEditors";
 import type { StudioFlow, StudioQuestion, StudioOption } from "./types";
 import { answerLabel } from "./types";
 import { slideIdForQuestion } from "./SlideTree";
@@ -138,34 +139,25 @@ function EditBody({
       </Text>
     );
   }
+  const settings = (data.settings ?? {}) as Record<string, unknown>;
   if (selectedSlide === "intro") {
     return (
-      <FixedSlideNotice
-        title="Intro slide"
-        body="The intro headline, buttons, and design live on the Design & text page. You can also just tell Gleame in Chat, for example: change the headline to..."
-        actions={[{ content: "Open Design & text", url: "/app/assistant/quiz" }]}
-      />
+      <IntroEditor key={`intro:${chatEpoch}`} settings={settings} chatBusy={chatBusy} onPreviewUpdate={onPreviewUpdate} />
     );
   }
   if (selectedSlide === "photo") {
     return (
-      <FixedSlideNotice
-        title="Photo step"
-        body="The photo step's text is on the Design & text page. Photo detection traits live in the advanced rules editor."
-        actions={[
-          { content: "Open Design & text", url: "/app/assistant/quiz" },
-          { content: "Advanced rules editor", url: "/app/assistant/recommendations" },
-        ]}
-      />
+      <PhotoEditor key={`photo:${chatEpoch}`} settings={settings} chatBusy={chatBusy} onPreviewUpdate={onPreviewUpdate} />
     );
   }
   if (selectedSlide === "results") {
     return (
-      <FixedSlideNotice
-        title="Results slide"
-        body="Results card text and layout live on the Design & text page. What gets recommended is set up in the Logic step."
-        actions={[{ content: "Open Design & text", url: "/app/assistant/quiz" }]}
-      />
+      <ResultsEditor key={`results:${chatEpoch}`} settings={settings} chatBusy={chatBusy} onPreviewUpdate={onPreviewUpdate} />
+    );
+  }
+  if (selectedSlide === "theme") {
+    return (
+      <ThemeEditor key={`theme:${chatEpoch}`} settings={settings} chatBusy={chatBusy} onPreviewUpdate={onPreviewUpdate} />
     );
   }
   const question = flow.questions.find((q) => slideIdForQuestion(q.axisKey) === selectedSlide);
@@ -186,34 +178,6 @@ function EditBody({
       onPreviewUpdate={onPreviewUpdate}
       onPreviewReload={onPreviewReload}
     />
-  );
-}
-
-function FixedSlideNotice({
-  title,
-  body,
-  actions,
-}: {
-  title: string;
-  body: string;
-  actions: Array<{ content: string; url: string }>;
-}) {
-  return (
-    <BlockStack gap="300">
-      <Text as="h3" variant="headingMd">
-        {title}
-      </Text>
-      <Text as="p" variant="bodySm" tone="subdued">
-        {body}
-      </Text>
-      <InlineStack gap="200">
-        {actions.map((a) => (
-          <Button key={a.url} url={a.url} size="slim">
-            {a.content}
-          </Button>
-        ))}
-      </InlineStack>
-    </BlockStack>
   );
 }
 
