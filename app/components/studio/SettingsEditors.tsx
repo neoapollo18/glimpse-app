@@ -12,6 +12,7 @@ import {
   TextField,
 } from "@shopify/polaris";
 import type { StudioActionData } from "../../routes/studio";
+import { navigateParent } from "./navigate-parent";
 
 // In-studio editors for the fixed slides (Intro, Photo, Results) and the
 // Theme item. These edit DRAFT SETTINGS through the same update_copy /
@@ -313,7 +314,7 @@ export function IntroEditor({
       <CopyField label="After image URL" fieldKey="quiz_after_image_url" values={values} setValue={setValue} disabled={disabled} placeholder="https://… (empty = hidden)" />
       <CopyField label="Visual caption" fieldKey="quiz_visual_caption" values={values} setValue={setValue} disabled={disabled} helpText="Small caption under the before/after visual" />
       <InlineStack>
-        <Button variant="plain" url="/app/assistant/quiz">
+        <Button variant="plain" onClick={() => navigateParent("/app/assistant/quiz")}>
           More options (advanced page)
         </Button>
       </InlineStack>
@@ -367,7 +368,7 @@ export function PhotoEditor({
       </InlineStack>
       <CopyField label="Privacy note" fieldKey="quiz_privacy_note" values={values} setValue={setValue} disabled={disabled} helpText="Small reassurance line under the photo button" />
       <InlineStack>
-        <Button variant="plain" url="/app/assistant/quiz">
+        <Button variant="plain" onClick={() => navigateParent("/app/assistant/quiz")}>
           Shade picker options (advanced page)
         </Button>
       </InlineStack>
@@ -553,7 +554,7 @@ export function ThemeEditor({
       <TextField label="Heading font override" value={values.quiz_heading_font_override} onChange={(v) => setFont("quiz_heading_font_override", v)} disabled={disabled} placeholder="Blank = match your theme" autoComplete="off" />
       <TextField label="Body font override" value={values.quiz_body_font_override} onChange={(v) => setFont("quiz_body_font_override", v)} disabled={disabled} placeholder="Blank = match your theme" autoComplete="off" />
       <InlineStack>
-        <Button variant="plain" url="/app/assistant/quiz">
+        <Button variant="plain" onClick={() => navigateParent("/app/assistant/quiz")}>
           More options (advanced page)
         </Button>
       </InlineStack>

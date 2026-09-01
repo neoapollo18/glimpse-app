@@ -11,6 +11,7 @@ import {
 } from "@shopify/polaris";
 import type { StudioLoaderData, StudioActionData } from "../../routes/studio";
 import type { DraftProblem } from "./draft-problems";
+import { navigateParent } from "./navigate-parent";
 
 // The Publish step: an inline canvas panel (never a nested modal — the
 // studio IS the takeover). Checklist problems link back to the offending
@@ -69,7 +70,7 @@ export function PublishStep({
               storefront.
             </Text>
             <InlineStack gap="300" align="center">
-              <Button variant="primary" url="/app">
+              <Button variant="primary" onClick={() => navigateParent("/app")}>
                 Finish setup
               </Button>
               <Button onClick={() => setPublished(false)}>Keep editing</Button>

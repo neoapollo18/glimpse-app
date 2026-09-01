@@ -1162,6 +1162,25 @@ function DashboardView({
     revalidator.revalidate();
   };
 
+  // The studio (max-modal iframe) can't navigate the app frame itself;
+  // it broadcasts, we close the modal and route.
+  useEffect(() => {
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel("gleame-studio-nav");
+      channel.onmessage = (e: MessageEvent) => {
+        const url = String((e.data as { url?: string } | null)?.url ?? "");
+        if (!url.startsWith("/app")) return;
+        closeStudio();
+        navigate(url);
+      };
+    } catch {
+      // BroadcastChannel unsupported: studio falls back to _top navigation.
+    }
+    return () => channel?.close();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [mode, setMode] = useState<string>(quiz.assistantMode);
   const saveMode = () => {
     const fd = new FormData();
