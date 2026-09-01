@@ -1,5 +1,13 @@
 import { Fragment, useState } from "react";
-import { Banner, Tooltip } from "@shopify/polaris";
+import { Banner, Icon, Tooltip } from "@shopify/polaris";
+import {
+  HomeIcon,
+  CameraIcon,
+  FlagIcon,
+  ArrowUpIcon,
+  ArrowDownIcon,
+  MergeIcon,
+} from "@shopify/polaris-icons";
 import type { StudioFlow } from "./types";
 import { answerLabel } from "./types";
 import { draftProblems, problemsForSlide } from "./draft-problems";
@@ -46,14 +54,22 @@ function WarningDot({ message }: { message: string }) {
 function BranchIcon({ label }: { label: string }) {
   return (
     <Tooltip content={label}>
-      <span aria-hidden style={{ color: "#6D7175", fontSize: 11, flexShrink: 0 }}>
-        ⑂
+      <span aria-hidden style={{ width: 14, height: 14, display: "inline-flex", flexShrink: 0 }}>
+        <Icon source={MergeIcon} tone="subdued" />
       </span>
     </Tooltip>
   );
 }
 
-function NumberChip({ children, glyph }: { children?: string; glyph?: string }) {
+function NumberChip({
+  children,
+  glyph,
+  icon,
+}: {
+  children?: string;
+  glyph?: string;
+  icon?: React.FunctionComponent<React.SVGProps<SVGSVGElement>>;
+}) {
   return (
     <span
       style={{
@@ -70,7 +86,13 @@ function NumberChip({ children, glyph }: { children?: string; glyph?: string }) 
         flexShrink: 0,
       }}
     >
-      {glyph ?? children}
+      {icon ? (
+        <span style={{ width: 14, height: 14, display: "inline-flex" }}>
+          <Icon source={icon} tone="subdued" />
+        </span>
+      ) : (
+        glyph ?? children
+      )}
     </span>
   );
 }
@@ -131,6 +153,7 @@ export function SlideTree({
     label: string,
     opts: {
       glyph?: string;
+      icon?: React.FunctionComponent<React.SVGProps<SVGSVGElement>>;
       number?: number;
       indent?: boolean;
       branchTip?: string;
@@ -204,7 +227,7 @@ export function SlideTree({
         }
       }}
     >
-      <NumberChip glyph={opts.glyph}>{opts.number != null ? String(opts.number) : ""}</NumberChip>
+      <NumberChip glyph={opts.glyph} icon={opts.icon}>{opts.number != null ? String(opts.number) : ""}</NumberChip>
       <span
         className="studio-rail-wide"
         style={{
@@ -229,7 +252,7 @@ export function SlideTree({
             }}
             style={moveBtnStyle(opts.isFirst)}
           >
-            ↑
+            <Icon source={ArrowUpIcon} />
           </button>
           <button
             aria-label="Move down"
@@ -240,7 +263,7 @@ export function SlideTree({
             }}
             style={moveBtnStyle(opts.isLast)}
           >
-            ↓
+            <Icon source={ArrowDownIcon} />
           </button>
         </span>
       )}
@@ -251,7 +274,7 @@ export function SlideTree({
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
       <div style={{ padding: 8, display: "flex", flexDirection: "column", gap: 2, flex: 1 }}>
-        {row("intro", "Intro", { glyph: "⌂" })}
+        {row("intro", "Intro", { icon: HomeIcon })}
 
         {screens.map((screen) => (
           <Fragment key={screen.indices[0]}>
@@ -287,8 +310,8 @@ export function SlideTree({
           </Fragment>
         ))}
 
-        {hasPhotoAxis && row("photo", "Photo", { glyph: "◉" })}
-        {row("results", "Results", { glyph: "⚑" })}
+        {hasPhotoAxis && row("photo", "Photo", { icon: CameraIcon })}
+        {row("results", "Results", { icon: FlagIcon })}
 
         {!readOnly && onAdd && (
           <>
@@ -358,7 +381,7 @@ export function SlideTree({
             data-selected={flowMapOpen}
             onClick={onToggleFlowMap}
           >
-            <NumberChip glyph="⑂" />
+            <NumberChip icon={MergeIcon} />
             <span className="studio-rail-wide">Flow map</span>
           </button>
         </div>

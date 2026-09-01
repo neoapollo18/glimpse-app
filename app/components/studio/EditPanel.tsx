@@ -16,6 +16,7 @@ import {
   Spinner,
   Divider,
 } from "@shopify/polaris";
+import { XSmallIcon } from "@shopify/polaris-icons";
 import type { StudioLoaderData, StudioStep, StudioActionData } from "../../routes/studio";
 import { IntroEditor, PhotoEditor, ResultsEditor, ThemeEditor } from "./SettingsEditors";
 import type { StudioFlow, StudioQuestion, StudioOption } from "./types";
@@ -704,9 +705,8 @@ function AnswerRow({
             disabled={!canRemove || disabled}
             onClick={onRemove}
             accessibilityLabel="Remove answer"
-          >
-            ✕
-          </Button>
+            icon={XSmallIcon}
+          />
         </InlineStack>
 
         {detailsOpen && (
