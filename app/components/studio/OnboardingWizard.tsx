@@ -51,9 +51,10 @@ export function OnboardingWizard({
     },
   });
 
-  const [category, setCategory] = useState("");
+  const [category, setCategory] = useState(data.topProductType ?? "");
   const [brandVoice, setBrandVoice] = useState("");
-  const [accentColor, setAccentColor] = useState("");
+  const [accentColor, setAccentColor] = useState(data.storeBrand?.accentColor ?? "");
+  const prefilled = Boolean(data.topProductType || data.storeBrand?.accentColor);
   const [quizLength, setQuizLength] = useState("standard");
   const [modePreference, setModePreference] = useState("auto");
   const [extraNotes, setExtraNotes] = useState("");
@@ -199,6 +200,11 @@ export function OnboardingWizard({
           <Text as="h2" variant="headingLg">
             Tell Gleame about your store
           </Text>
+          {prefilled && (
+            <Text as="p" variant="bodySm" tone="subdued">
+              We prefilled what we could from your store. Edit anything.
+            </Text>
+          )}
           {!generationAvailable && (
             <Banner tone="info">
               {!data.aiConfigured
@@ -215,7 +221,7 @@ export function OnboardingWizard({
           />
           <TextField
             label="Brand voice"
-            placeholder="e.g. playful and bold"
+            placeholder={data.storeBrand?.slogan ? `e.g. ${data.storeBrand.slogan}` : "e.g. playful and bold"}
             value={brandVoice}
             onChange={setBrandVoice}
             autoComplete="off"

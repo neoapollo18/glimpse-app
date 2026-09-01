@@ -31,6 +31,7 @@ import {
   getRecommendationCounts,
   getChatAssistantConfig,
   findShopByDomain,
+  shopHasTryOnConfig,
   getConfiguredProducts,
   getAnalytics,
   getOnboardingState,
@@ -83,6 +84,7 @@ interface LoaderData {
     assistantMode: string;
     quizLive: boolean;
     hasDraft: boolean;
+    vtoEnabled: boolean;
   };
   totalTransformations: number;
 }
@@ -117,12 +119,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     getChatAssistantConfig(shopDomain).catch(() => null),
     findShopByDomain(shopDomain).catch(() => null),
   ]);
-  const [counts, draftExists] = shopRow
+  const [counts, draftExists, vtoEnabled] = shopRow
     ? await Promise.all([
         getRecommendationCounts(shopRow.id).catch(() => null),
         hasQuizDraft(shopRow.id).catch(() => false),
+        shopHasTryOnConfig(shopDomain).catch(() => true),
       ])
-    : [null, false];
+    : [null, false, true];
   const quiz = {
     questions: counts?.questions ?? 0,
     rules: counts?.rules ?? 0,
@@ -134,6 +137,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         (chatConfig?.assistant_mode === "quiz" || chatConfig?.assistant_mode === "both"),
     ),
     hasDraft: draftExists,
+    vtoEnabled,
   };
 
   console.log(`[Onboarding Loader] shop=${shopDomain}, step=${onboarding.step}, completed=${onboarding.completed}`);
@@ -1157,113 +1161,146 @@ function DashboardView({
   return (
     <Page>
       <TitleBar title="Gleame" />
-      <BlockStack gap="600">
-        {/* Hero */}
-        <InlineStack align="space-between" blockAlign="center">
-          <BlockStack gap="100">
-            <Text as="h1" variant="headingXl">
-              Welcome back, {displayName}
-            </Text>
-            <Text as="p" variant="bodyMd" tone="subdued">
-              Your quiz matches every shopper to their perfect product.
-            </Text>
-            <InlineStack gap="200">
-              <Badge tone={quiz.quizLive ? "success" : "attention"}>
-                {quiz.quizLive ? "Quiz live" : "Quiz off"}
-              </Badge>
-              {quiz.hasDraft && <Badge tone="attention">Draft in progress</Badge>}
-              {logicReady && <Badge tone="success">Logic ready</Badge>}
-            </InlineStack>
-          </BlockStack>
-          <InlineStack gap="200">
-            <Button onClick={() => navigate("/app/analytics")}>View analytics</Button>
-            <Button variant="primary" size="large" onClick={openStudio}>
-              Open Quiz Studio
-            </Button>
-          </InlineStack>
-        </InlineStack>
+      <BlockStack gap="500">
+        {/* Hero: one clear door. Status is a sentence, not badge soup. */}
+        <Card>
+          <Box padding="400">
+            <BlockStack gap="400">
+              <BlockStack gap="150">
+                <Text as="h1" variant="headingXl">
+                  Welcome back, {displayName}
+                </Text>
+                <Text as="p" variant="bodyLg" tone="subdued">
+                  {quiz.questions === 0
+                    ? "Let's build your quiz. Gleame drafts the whole thing from your catalog in about a minute."
+                    : quiz.quizLive
+                      ? quiz.hasDraft
+                        ? "Your quiz is live. You have unpublished edits waiting in the Studio."
+                        : "Your quiz is live and matching shoppers to products."
+                      : "Your quiz isn't live yet. Build it in the Studio, then turn it on below."}
+                </Text>
+              </BlockStack>
+              <InlineStack gap="300" blockAlign="center">
+                <Button variant="primary" size="large" onClick={openStudio}>
+                  {quiz.questions === 0 ? "Build my quiz" : "Open Quiz Studio"}
+                </Button>
+                <Button variant="plain" onClick={() => navigate("/app/analytics")}>
+                  View analytics
+                </Button>
+              </InlineStack>
+            </BlockStack>
+          </Box>
+        </Card>
 
         {fetcher.data?.error && <Banner tone="critical">{fetcher.data.error}</Banner>}
 
-        {/* Status cards */}
-        <InlineGrid columns={{ xs: 1, sm: 3 }} gap="400">
+        {/* Go-live strip: only while the quiz isn't on the storefront */}
+        {!quiz.quizLive && quiz.questions > 0 && (
           <Card>
-            <BlockStack gap="200">
-              <Text as="span" variant="bodyMd" tone="subdued">
-                Your quiz
+            <BlockStack gap="300">
+              <Text as="h2" variant="headingMd">
+                Make it live
               </Text>
-              <Text as="p" variant="headingXl" fontWeight="bold">
-                {quiz.questions} {quiz.questions === 1 ? "question" : "questions"}
-              </Text>
-              <Text as="span" variant="bodySm" tone="subdued">
-                {quiz.rules > 0 ? `${quiz.rules} rules · ` : ""}
-                {HOME_MODE_LABELS[quiz.mode] ?? quiz.mode} matching
-              </Text>
-              <Button variant="plain" onClick={openStudio}>
-                Edit in Studio →
-              </Button>
-            </BlockStack>
-          </Card>
-
-          <Card>
-            <BlockStack gap="200">
-              <Text as="span" variant="bodyMd" tone="subdued">
-                Shoppers matched
-              </Text>
-              <Text as="p" variant="headingXl" fontWeight="bold">
-                {totalTransformations}
-              </Text>
-              <Text as="span" variant="bodySm" tone="subdued">
-                selfie try-ons in the last year
-              </Text>
-              <Button variant="plain" onClick={() => navigate("/app/analytics")}>
-                View analytics →
-              </Button>
-            </BlockStack>
-          </Card>
-
-          <Card>
-            <BlockStack gap="200">
-              <Text as="span" variant="bodyMd" tone="subdued">
-                Storefront
-              </Text>
-              <Select
-                label="Where Gleame appears"
-                labelHidden
-                options={[
-                  { label: "Chat bubble only", value: "chat" },
-                  { label: "Quiz page only", value: "quiz" },
-                  { label: "Both", value: "both" },
-                ]}
-                value={mode}
-                onChange={setMode}
-              />
-              <InlineStack gap="200">
+              <InlineStack gap="400" blockAlign="end" wrap>
+                <div style={{ minWidth: 220 }}>
+                  <Select
+                    label="Where Gleame appears"
+                    options={[
+                      { label: "Chat bubble only", value: "chat" },
+                      { label: "Quiz page only", value: "quiz" },
+                      { label: "Both", value: "both" },
+                    ]}
+                    value={mode}
+                    onChange={setMode}
+                  />
+                </div>
                 <Button
-                  size="slim"
-                  variant="primary"
                   onClick={saveMode}
                   loading={fetcher.state !== "idle"}
                   disabled={mode === quiz.assistantMode}
                 >
                   Save
                 </Button>
-                <Button size="slim" url={themeEditorUrl} external>
-                  Add to theme
+                <Button url={themeEditorUrl} external>
+                  Add the quiz section to your theme
                 </Button>
               </InlineStack>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Two steps: set the storefront to "Quiz page" or "Both", then
+                add the Gleame Quiz section to a page in the theme editor.
+              </Text>
             </BlockStack>
           </Card>
-        </InlineGrid>
-
-        {!quiz.quizLive && (
-          <Banner tone="warning" title="Your quiz is not live yet">
-            Build it in the Studio, set the storefront to "Quiz page" or
-            "Both", and add the Gleame Quiz section to a page in your theme.
-          </Banner>
         )}
 
-        {/* Advanced row */}
+        {/* Secondary stats */}
+        <InlineGrid columns={{ xs: 1, sm: quiz.quizLive ? 3 : 2 }} gap="400">
+          <Card>
+            <BlockStack gap="100">
+              <Text as="span" variant="bodySm" tone="subdued">
+                Your quiz
+              </Text>
+              <Text as="p" variant="headingLg" fontWeight="bold">
+                {quiz.questions} {quiz.questions === 1 ? "question" : "questions"}
+              </Text>
+              <Text as="span" variant="bodySm" tone="subdued">
+                {quiz.rules > 0 ? `${quiz.rules} rules · ` : ""}
+                {HOME_MODE_LABELS[quiz.mode] ?? quiz.mode} matching
+                {quiz.hasDraft ? " · draft in progress" : ""}
+              </Text>
+            </BlockStack>
+          </Card>
+          <Card>
+            <BlockStack gap="100">
+              <Text as="span" variant="bodySm" tone="subdued">
+                Shoppers matched
+              </Text>
+              <Text as="p" variant="headingLg" fontWeight="bold">
+                {totalTransformations}
+              </Text>
+              <Text as="span" variant="bodySm" tone="subdued">
+                selfie try-ons in the last year
+              </Text>
+            </BlockStack>
+          </Card>
+          {quiz.quizLive && (
+            <Card>
+              <BlockStack gap="100">
+                <Text as="span" variant="bodySm" tone="subdued">
+                  Storefront
+                </Text>
+                <div style={{ maxWidth: 200 }}>
+                  <Select
+                    label="Where Gleame appears"
+                    labelHidden
+                    options={[
+                      { label: "Chat bubble only", value: "chat" },
+                      { label: "Quiz page only", value: "quiz" },
+                      { label: "Both", value: "both" },
+                    ]}
+                    value={mode}
+                    onChange={setMode}
+                  />
+                </div>
+                <InlineStack gap="200">
+                  <Button
+                    size="slim"
+                    onClick={saveMode}
+                    loading={fetcher.state !== "idle"}
+                    disabled={mode === quiz.assistantMode}
+                  >
+                    Save
+                  </Button>
+                  <Button size="slim" variant="plain" url={themeEditorUrl} external>
+                    Theme editor
+                  </Button>
+                </InlineStack>
+              </BlockStack>
+            </Card>
+          )}
+        </InlineGrid>
+
+        {/* Advanced row */}{/* Advanced row */}
         <InlineStack gap="300">
           <Button variant="plain" onClick={() => navigate("/app/assistant/recommendations")}>
             Advanced rules editor
@@ -1271,9 +1308,11 @@ function DashboardView({
           <Button variant="plain" onClick={() => navigate("/app/assistant/quiz")}>
             Advanced design page
           </Button>
-          <Button variant="plain" onClick={() => navigate("/app/products")}>
-            Try-on product settings
-          </Button>
+          {quiz.vtoEnabled && (
+            <Button variant="plain" onClick={() => navigate("/app/products")}>
+              Try-on product settings
+            </Button>
+          )}
         </InlineStack>
       </BlockStack>
 

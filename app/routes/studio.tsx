@@ -74,7 +74,7 @@ export function ErrorBoundary() {
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shopDomain = session.shop;
   const shop = await findShopByDomain(shopDomain);
   if (!shop) throw new Response("Shop not found", { status: 404 });
@@ -121,6 +121,51 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
   Object.assign(settings, (draft?.settings ?? {}) as Record<string, unknown>);
 
+  // "Fit your store": prefill the onboarding wizard from what the store
+  // already tells us — Shopify brand settings (accent color, slogan) and
+  // the dominant product type in the synced catalog. Best-effort; the
+  // wizard works fine with nulls.
+  let storeBrand: { accentColor: string | null; slogan: string | null } | null = null;
+  try {
+    const res = await admin.graphql(
+      `#graphql
+      query StudioBrand {
+        shop {
+          brandSettings: brand {
+            slogan
+            colors { primary { background } }
+          }
+        }
+      }`,
+    );
+    const body = await res.json();
+    const brand = body?.data?.shop?.brandSettings;
+    const bg = brand?.colors?.primary?.[0]?.background ?? brand?.colors?.primary?.background ?? null;
+    storeBrand = {
+      accentColor: typeof bg === "string" && /^#[0-9a-fA-F]{6}$/.test(bg) ? bg : null,
+      slogan: brand?.slogan ?? null,
+    };
+  } catch {
+    storeBrand = null;
+  }
+  let topProductType: string | null = null;
+  try {
+    const { data: typeRows } = await supabase
+      .from("products")
+      .select("product_type")
+      .eq("shop_id", shop.id)
+      .not("product_type", "is", null)
+      .limit(200);
+    const tally = new Map<string, number>();
+    for (const r of typeRows ?? []) {
+      const t = String((r as any).product_type ?? "").trim();
+      if (t) tally.set(t, (tally.get(t) ?? 0) + 1);
+    }
+    topProductType = [...tally.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  } catch {
+    topProductType = null;
+  }
+
   const previewToken = process.env.SHOPIFY_API_SECRET
     ? jwt.sign({ shopId: shop.id, shopDomain }, process.env.SHOPIFY_API_SECRET, { expiresIn: "12h" })
     : null;
@@ -138,6 +183,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     previewToken,
     copilotSessionId,
     liveQuestionCount,
+    storeBrand,
+    topProductType,
     catalog: {
       syncEnabled: (shopRow as any)?.catalog_sync_enabled === true,
       lastSyncedAt: ((shopRow as any)?.catalog_last_synced_at as string | null) ?? null,

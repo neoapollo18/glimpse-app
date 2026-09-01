@@ -1766,6 +1766,17 @@ export async function shopHasTryOnConfig(shopDomain: string): Promise<boolean> {
   try {
     const shop = await findShopByDomain(shopDomain);
     if (!shop) return true;
+    // Explicit backend override first (migration 060): true/false wins,
+    // NULL falls through to auto-detection. select('*') so a pre-migration
+    // DB (missing column) reads as undefined = auto instead of erroring
+    // the whole query.
+    const { data: shopRow } = await supabase
+      .from('shops')
+      .select('*')
+      .eq('id', shop.id)
+      .single();
+    const override = (shopRow as Record<string, unknown> | null)?.vto_enabled;
+    if (override === true || override === false) return override;
     const { count, error } = await supabase
       .from('products')
       .select('id', { count: 'exact', head: true })
