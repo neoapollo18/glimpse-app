@@ -137,6 +137,7 @@ async function callCompiler(
   messages: Anthropic.MessageParam[],
   shopDomain: string,
   label: string,
+  onToken?: (deltaChars: number) => void,
 ): Promise<{ output: GuidanceOutput; usage: ClaudeUsage }> {
   const client = claudeClient();
   const response = await callClaudeWithRetry(async () => {
@@ -148,6 +149,7 @@ async function callCompiler(
       system,
       messages,
     });
+    if (onToken) stream.on("text", (delta) => onToken(delta.length));
     return stream.finalMessage();
   }, label);
 
@@ -250,16 +252,28 @@ export async function generateGuidance(args: {
   const messages: Anthropic.MessageParam[] = [{ role: "user", content: input }];
 
   onProgress?.("Writing your recommendation logic…");
+  // Throttled live progress: the compile call runs for minutes and a
+  // static phase string reads as hung.
+  let streamedChars = 0;
+  let lastTokenEmit = 0;
+  const tokenProgress = (deltaChars: number) => {
+    streamedChars += deltaChars;
+    const now = Date.now();
+    if (now - lastTokenEmit > 1500) {
+      lastTokenEmit = now;
+      onProgress?.(`Writing your recommendation logic… (~${Math.round(streamedChars / 6).toLocaleString()} words)`);
+    }
+  };
   let output: GuidanceOutput | null = null;
   try {
-    const first = await callCompiler(system, messages, shopDomain, "guidance-generate");
+    const first = await callCompiler(system, messages, shopDomain, "guidance-generate", tokenProgress);
     usage.push(first.usage);
     output = first.output;
   } catch (e) {
     // One retry from scratch on a malformed response — structured output
     // makes this rare, and a second clean call beats giving up.
     try {
-      const retry = await callCompiler(system, messages, shopDomain, "guidance-generate-retry");
+      const retry = await callCompiler(system, messages, shopDomain, "guidance-generate-retry", tokenProgress);
       usage.push(retry.usage);
       output = retry.output;
     } catch (e2) {

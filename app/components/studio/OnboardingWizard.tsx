@@ -64,23 +64,79 @@ export function OnboardingWizard({
   const [genError, setGenError] = useState<string | null>(null);
   const generateRunningRef = useRef(false);
 
-  // Brand colors picked during onboarding are applied to the draft the
-  // moment it exists (generated or blank) through the same design-tokens
-  // applier the Theme editor uses — so nobody ever has to find a color
-  // field on another page.
-  const applyBrandColors = () => {
-    if (!/^#[0-9a-fA-F]{6}$/.test(accentColor)) return;
-    const fd = new FormData();
-    fd.append("intent", "apply-tool");
-    fd.append("tool", "update_design_tokens");
-    fd.append("input", JSON.stringify({ fields: { quiz_accent_color: accentColor } }));
-    fetch("/studio", { method: "POST", body: fd }).catch(() => {});
+  // The accent color is applied SERVER-SIDE (quiz-generate and
+  // start-blank-draft both accept it): any client-side follow-up apply was
+  // lost whenever the SSE stream cut or the revalidation unmounted this
+  // wizard before the follow-up ran.
+
+  // ---- Progress feedback ----
+  // The drafting call runs for minutes. Three layers keep it honest:
+  // 1. a smooth bar easing toward a per-phase cap (never a frozen bar),
+  // 2. elapsed time + a "connection quiet" hint off heartbeat recency,
+  // 3. WATCH MODE when the stream cuts: the server keeps generating and
+  //    saves the draft at the end, so we poll the loader until the draft
+  //    appears (which unmounts this wizard) instead of declaring failure.
+  const [barPct, setBarPct] = useState(0);
+  const [elapsedS, setElapsedS] = useState(0);
+  const [quiet, setQuiet] = useState(false);
+  const [watching, setWatching] = useState(false);
+  const phaseRef = useRef<string | null>(null);
+  const watchingRef = useRef(false);
+  const genStartRef = useRef(0);
+  const lastEventAtRef = useRef(0);
+  const watchTimerRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (watchTimerRef.current != null) window.clearInterval(watchTimerRef.current);
+    },
+    [],
+  );
+
+  const setPhase = (phase: string | null) => {
+    phaseRef.current = phase;
+    setGenPhase(phase);
+  };
+  const capForPhase = (phase: string | null) => {
+    if (watchingRef.current) return 97;
+    if (!phase) return 0;
+    if (phase.startsWith("Starting")) return 8;
+    if (phase.startsWith("Reading")) return 16;
+    if (phase.startsWith("Drafting")) return 80;
+    if (phase.startsWith("Fixing")) return 92;
+    if (phase.startsWith("Saving")) return 97;
+    return 60;
   };
 
-  // "Start from scratch" creates a blank one-question draft. The accent
-  // color rides along in the SAME action (applied server-side): Remix
-  // revalidates before the fetcher settles, so the revalidated loader
-  // unmounts this wizard and any completion effect here never runs.
+  useEffect(() => {
+    if (stepIndex !== 2) return;
+    const id = window.setInterval(() => {
+      setBarPct((p) => p + Math.max(0, capForPhase(phaseRef.current) - p) * 0.035);
+      setElapsedS(Math.round((Date.now() - genStartRef.current) / 1000));
+      setQuiet(
+        lastEventAtRef.current > 0 && Date.now() - lastEventAtRef.current > 25_000 && !watchingRef.current,
+      );
+    }, 250);
+    return () => window.clearInterval(id);
+  }, [stepIndex]);
+
+  const startWatching = () => {
+    watchingRef.current = true;
+    setWatching(true);
+    const startedAt = Date.now();
+    watchTimerRef.current = window.setInterval(() => {
+      if (Date.now() - startedAt > 4 * 60_000) {
+        if (watchTimerRef.current != null) window.clearInterval(watchTimerRef.current);
+        watchTimerRef.current = null;
+        watchingRef.current = false;
+        setWatching(false);
+        setGenError("Generation didn't finish. Try again — your answers are still filled in.");
+        return;
+      }
+      // When the draft lands, the revalidated loader flips needsOnboarding
+      // and unmounts this wizard — that IS the success path here.
+      revalidator.revalidate();
+    }, 5_000);
+  };
 
   const generationAvailable = data.aiConfigured && data.catalog.syncEnabled && !skippedCatalog;
 
@@ -88,26 +144,35 @@ export function OnboardingWizard({
     if (generateRunningRef.current || !category.trim()) return;
     generateRunningRef.current = true;
     setStepIndex(2);
-    setGenPhase("Starting…");
+    setPhase("Starting…");
     setGenError(null);
+    setBarPct(2);
+    setWatching(false);
+    watchingRef.current = false;
+    genStartRef.current = Date.now();
+    lastEventAtRef.current = Date.now();
     const fd = new FormData();
     fd.append("category", category);
     fd.append("brandVoice", brandVoice);
     fd.append("quizLength", quizLength);
     fd.append("modePreference", modePreference);
     fd.append("extraNotes", extraNotes);
+    if (/^#[0-9a-fA-F]{6}$/.test(accentColor)) fd.append("accentColor", accentColor);
     let gotTerminal = false;
+    let streamStarted = false;
     try {
       const res = await fetch("/app/api/quiz-generate", { method: "POST", body: fd });
       if (!res.ok || !res.body) {
         const body = await res.json().catch(() => null);
         throw new Error(body?.error ?? `Request failed (${res.status})`);
       }
+      streamStarted = true;
       await readSseStream<GenerateEvent>(res, (event) => {
-        if (event.type === "progress") setGenPhase(event.phase);
+        lastEventAtRef.current = Date.now();
+        if (event.type === "progress") setPhase(event.phase);
         else if (event.type === "result") {
           gotTerminal = true;
-          applyBrandColors();
+          setBarPct(100);
           revalidator.revalidate();
           onDone("intro");
         } else if (event.type === "error") {
@@ -116,16 +181,24 @@ export function OnboardingWizard({
         }
       });
       if (!gotTerminal) {
-        setGenError("Generation was interrupted. A draft may still exist; reload to check, or try again.");
-        revalidator.revalidate();
+        // The connection died mid-stream, but the server keeps going and
+        // saves the draft at the end — watch for it instead of failing.
+        startWatching();
       }
     } catch (err) {
-      setGenError(err instanceof Error ? err.message : "Generation failed");
+      if (streamStarted) {
+        startWatching();
+      } else {
+        setGenError(err instanceof Error ? err.message : "Generation failed");
+      }
     } finally {
-      setGenPhase(null);
+      if (!watchingRef.current) setPhase(null);
       generateRunningRef.current = false;
     }
   };
+
+  const formatElapsed = (s: number) =>
+    s >= 60 ? `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s` : `${s}s`;
 
   const dots = (
     <InlineStack gap="150" align="center">
@@ -312,13 +385,20 @@ export function OnboardingWizard({
           </Text>
           <div role="status">
             <Text as="p" variant="bodyLg">
-              {genPhase ?? "…"}
+              {watching
+                ? "Still working — the connection dropped, but generation continues on our server. This closes by itself when your quiz is ready."
+                : genPhase ?? (genError ? "Stopped." : "…")}
             </Text>
           </div>
-          <ProgressBar progress={genPhase ? 50 : 5} />
-          <Text as="p" variant="bodySm" tone="subdued">
-            Takes about a minute. It only ever writes to your draft.
-          </Text>
+          <ProgressBar progress={Math.min(99, Math.round(barPct))} />
+          {!genError && (
+            <Text as="p" variant="bodySm" tone="subdued">
+              Working for {formatElapsed(elapsedS)}
+              {quiet ? " — the connection has gone quiet, still trying" : ""}.
+              Usually one to three minutes depending on catalog size. It only
+              ever writes to your draft.
+            </Text>
+          )}
           {genError && (
             <BlockStack gap="200">
               <Banner tone="critical">{genError}</Banner>

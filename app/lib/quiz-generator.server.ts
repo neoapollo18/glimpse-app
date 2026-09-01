@@ -186,6 +186,7 @@ async function callGenerator(
   messages: Anthropic.MessageParam[],
   shopDomain: string,
   label: string,
+  onToken?: (deltaChars: number) => void,
 ): Promise<GeneratorCall> {
   const client = claudeClient();
   // NOT structured outputs: this schema blows both API grammar caps (24
@@ -202,6 +203,9 @@ async function callGenerator(
       system,
       messages,
     });
+    // Live progress for the minutes-long call: without it the client sees
+    // a frozen phase string and reads the whole flow as hung.
+    if (onToken) stream.on("text", (delta) => onToken(delta.length));
     return stream.finalMessage();
   }, label);
 
@@ -239,9 +243,25 @@ export async function generateQuizConfig(args: {
   shopDomain: string;
   brief: BrandBrief;
   onProgress?: (phase: string) => void;
+  /** Brand accent picked in the onboarding wizard, applied to the draft's
+   * design settings server-side. The client-side follow-up apply was lost
+   * whenever the SSE stream cut before the result event. */
+  accentColor?: string | null;
 }): Promise<GenerateResult> {
-  const { shopId, shopDomain, brief, onProgress } = args;
+  const { shopId, shopDomain, brief, onProgress, accentColor } = args;
   const usage: ClaudeUsage[] = [];
+
+  // Throttled token progress: "Drafting your quiz… (~N words)" every ~1.5s.
+  let streamedChars = 0;
+  let lastTokenEmit = 0;
+  const tokenProgress = (label: string) => (deltaChars: number) => {
+    streamedChars += deltaChars;
+    const now = Date.now();
+    if (now - lastTokenEmit > 1500) {
+      lastTokenEmit = now;
+      onProgress?.(`${label} (~${Math.round(streamedChars / 6).toLocaleString()} words)`);
+    }
+  };
 
   onProgress?.("Reading your catalog…");
   const catalog = await loadCatalogForShop(shopId);
@@ -264,7 +284,7 @@ export async function generateQuizConfig(args: {
   let config: GeneratedQuizConfig;
   let repairUsed = false;
   try {
-    let call = await callGenerator(system, messages, shopDomain, "quiz-generate");
+    let call = await callGenerator(system, messages, shopDomain, "quiz-generate", tokenProgress("Drafting your quiz…"));
     usage.push(call.usage);
     if (call.parseErrors) {
       onProgress?.("Fixing a few issues…");
@@ -278,7 +298,7 @@ export async function generateQuizConfig(args: {
             call.parseErrors.join("\n- "),
         },
       );
-      call = await callGenerator(system, messages, shopDomain, "quiz-generate-repair");
+      call = await callGenerator(system, messages, shopDomain, "quiz-generate-repair", tokenProgress("Fixing a few issues…"));
       usage.push(call.usage);
       if (call.parseErrors) {
         return {
@@ -309,7 +329,7 @@ export async function generateQuizConfig(args: {
       },
     );
     try {
-      const repaired = await callGenerator(system, messages, shopDomain, "quiz-generate-repair");
+      const repaired = await callGenerator(system, messages, shopDomain, "quiz-generate-repair", tokenProgress("Fixing a few issues…"));
       usage.push(repaired.usage);
       if (repaired.parseErrors) {
         return {
@@ -350,6 +370,9 @@ export async function generateQuizConfig(args: {
   } catch {
     (draft.settings as Record<string, unknown>).enabled = true;
     (draft.settings as Record<string, unknown>).assistant_mode = "quiz";
+  }
+  if (accentColor && /^#[0-9a-fA-F]{6}$/.test(accentColor)) {
+    (draft.settings as Record<string, unknown>).quiz_accent_color = accentColor;
   }
   // Locked save with an overwrite guard: generation runs for a minute or
   // more, and the unconditional save could stomp a draft the merchant
