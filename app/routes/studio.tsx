@@ -87,7 +87,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     listVersions(shop.id).catch(() => []),
     supabase.from("shops").select("*").eq("id", shop.id).single(),
     getLatestSessionId(shop.id).catch(() => null),
-    getQuestionGuidance(shop.id).catch(() => ({}) as Record<string, string>),
+    getQuestionGuidance(shop.id),
     getRecommendationCounts(shop.id).catch(() => null),
     getChatAssistantConfig(shopDomain).catch(() => null),
   ]);
@@ -180,6 +180,47 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   try {
     switch (intent) {
+      case "apply-tools": {
+        // Batched edits from one editor flush (e.g. question patch + options
+        // replace). ONE submission per flush — two sequential fetcher
+        // submits abort the first request client-side and silently dropped
+        // the question patch.
+        let calls: Array<{ tool: string; input: unknown }>;
+        try {
+          calls = JSON.parse((formData.get("calls") as string) || "[]");
+        } catch {
+          return json({ ok: false, error: "Malformed edit", intent }, { status: 400 });
+        }
+        if (!Array.isArray(calls) || calls.length === 0 || calls.length > 5) {
+          return json({ ok: false, error: "Malformed edit", intent }, { status: 400 });
+        }
+        for (const c of calls) {
+          if (!c?.tool || !(c.tool in APPLIERS) || c.tool === "get_draft_details") {
+            return json({ ok: false, error: "Unknown edit", intent }, { status: 400 });
+          }
+        }
+        const batchResult = await withShopSaveLock(shop.id, async () => {
+          let draft = await getQuizDraft(shop.id);
+          if (!draft) return { ok: false as const, error: "No draft to edit. Reload the studio." };
+          const catalog = await loadCatalogForShop(shop.id);
+          for (const c of calls) {
+            const applied = APPLIERS[c.tool](draft as DraftShape, c.input, catalog);
+            if (!applied.ok) return { ok: false as const, error: applied.error };
+            draft = applied.draft as QuizDraft;
+          }
+          const saved = await saveQuizDraft(shop.id, draft, "manual");
+          if (!saved.ok) return { ok: false as const, error: saved.error ?? "Save failed" };
+          return { ok: true as const, draft };
+        });
+        if (!batchResult.ok) return json({ ok: false, error: batchResult.error, intent });
+        const batchConfig = await buildPreviewQuizConfig(shopDomain, batchResult.draft).catch(() => null);
+        return json({
+          ok: true,
+          intent,
+          previewFlow: buildPreviewFlow(batchResult.draft),
+          previewConfig: batchConfig,
+        });
+      }
       case "apply-tool": {
         const tool = formData.get("tool") as string;
         if (!tool || !(tool in APPLIERS) || tool === "get_draft_details") {
@@ -220,31 +261,53 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
       case "start-blank-draft": {
         // "Start from scratch" in the wizard: one untitled question with two
-        // blank answers, ready to edit. Uses the same applier the + Add
-        // question button uses so shape/validation stay identical.
-        const blank: QuizDraft = { flow: { axes: [], questions: [], rules: [] }, settings: {} };
-        const catalog = await loadCatalogForShop(shop.id);
-        const applied = APPLIERS.add_question(
-          blank as DraftShape,
-          {
-            axis: { key: "question_1", label: "Question 1", values: [
-              { value: "option_1", label: "Option 1" },
-              { value: "option_2", label: "Option 2" },
-            ] },
-            question: {
-              prompt: "",
-              options: [
-                { label: "", axisValueValue: "option_1" },
-                { label: "", axisValueValue: "option_2" },
+        // blank answers, ready to edit. Built directly (drafts are lazily
+        // validated; the applier's revalidation would reject blank prompts)
+        // and guarded so a stale tab can't blank an existing draft.
+        const result = await withShopSaveLock(shop.id, async () => {
+          const existing = await getQuizDraft(shop.id);
+          if (existing && existing.flow.questions.length > 0) {
+            return { ok: true as const }; // already have content; nothing to do
+          }
+          const blank: QuizDraft = {
+            flow: {
+              axes: [
+                {
+                  key: "question_1",
+                  label: "Question 1",
+                  source: "user_question",
+                  position: 0,
+                  values: [
+                    { value: "option_1", label: "Option 1", position: 0 },
+                    { value: "option_2", label: "Option 2", position: 1 },
+                  ],
+                },
               ],
+              questions: [
+                {
+                  axisKey: "question_1",
+                  prompt: "",
+                  helperText: null,
+                  multiSelect: false,
+                  maxSelections: null,
+                  screenGroup: null,
+                  showIf: null,
+                  optionStyle: null,
+                  options: [
+                    { label: "", axisValueValue: "option_1", botResponse: null, position: 0 },
+                    { label: "", axisValueValue: "option_2", botResponse: null, position: 1 },
+                  ],
+                },
+              ],
+              rules: [],
             },
-          },
-          catalog,
-        );
-        const next = applied.ok ? (applied.draft as QuizDraft) : blank;
-        const saved = await saveQuizDraft(shop.id, next, "manual");
-        if (!saved.ok) return json({ ok: false, error: saved.error, intent });
-        return json({ ok: true, intent });
+            settings: existing?.settings ?? {},
+          };
+          const saved = await saveQuizDraft(shop.id, blank, "manual");
+          if (!saved.ok) return { ok: false as const, error: saved.error ?? "Save failed" };
+          return { ok: true as const };
+        });
+        return json({ ...result, intent });
       }
       case "discard-draft": {
         const result = await discardQuizDraft(shop.id);
@@ -305,8 +368,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
       case "delete-all-orphan-notes": {
         const draft = await getQuizDraft(shop.id);
+        if (!draft) {
+          // Without a draft "orphaned" is undefined — bailing beats deleting
+          // every note a shop has.
+          return json({ ok: false, error: "No draft loaded. Reload the studio.", intent });
+        }
         const notes = await getQuestionGuidance(shop.id);
-        const knownKeys = new Set((draft?.flow.axes ?? []).map((a) => a.key));
+        const knownKeys = new Set(draft.flow.axes.map((a) => a.key));
         for (const key of Object.keys(notes)) {
           if (key === GENERAL_GUIDANCE_KEY || knownKeys.has(key)) continue;
           const deleted = await deleteQuestionGuidance(shop.id, key);
@@ -420,11 +488,13 @@ export default function Studio() {
   const treeFetcher = useFetcher<StudioActionData>();
   const pendingSelectRef = useRef<string | null>(null);
   const treeProcessedRef = useRef<StudioActionData | null>(null);
+  const [treeError, setTreeError] = useState<string | null>(null);
   useEffect(() => {
     if (treeFetcher.state !== "idle" || !treeFetcher.data) return;
     if (treeProcessedRef.current === treeFetcher.data) return;
     treeProcessedRef.current = treeFetcher.data;
     if (treeFetcher.data.ok) {
+      setTreeError(null);
       if (treeFetcher.data.previewFlow || treeFetcher.data.previewConfig) {
         updatePreview({ flow: treeFetcher.data.previewFlow, config: treeFetcher.data.previewConfig });
       }
@@ -432,6 +502,9 @@ export default function Studio() {
         selectSlide(pendingSelectRef.current);
         pendingSelectRef.current = null;
       }
+    } else {
+      pendingSelectRef.current = null;
+      setTreeError(treeFetcher.data.error ?? "Couldn't apply that change.");
     }
   }, [treeFetcher.state, treeFetcher.data, updatePreview, selectSlide]);
 
@@ -505,6 +578,8 @@ export default function Studio() {
             <LogicStep.Rail data={data} />
           ) : (
             <SlideTree
+              error={treeError}
+              onDismissError={() => setTreeError(null)}
               flow={data.draft?.flow ?? null}
               selectedSlide={selectedSlide}
               onSelect={selectSlide}

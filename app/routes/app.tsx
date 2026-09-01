@@ -171,7 +171,6 @@ export default function App() {
           <Link to="/app" rel="home">
             Dashboard
           </Link>
-          <Link to="/app/quiz">Quiz</Link>
           {isTryOnEnabled && <Link to="/app/products">Products</Link>}
           {isTryOnEnabled && <Link to="/app/assistant">AI Assistant</Link>}
           {isSkinAnalysisEnabled && <Link to="/app/skin-analysis">Skin Analysis</Link>}

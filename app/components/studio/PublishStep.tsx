@@ -69,7 +69,7 @@ export function PublishStep({
               storefront.
             </Text>
             <InlineStack gap="300" align="center">
-              <Button variant="primary" url="/app/quiz">
+              <Button variant="primary" url="/app">
                 Finish setup
               </Button>
               <Button onClick={() => setPublished(false)}>Keep editing</Button>
@@ -147,7 +147,7 @@ export function PublishStep({
               Heads up: any changes made outside the studio since this draft
               was created are replaced too.
             </Text>
-            {fetcher.data && fetcher.data.intent === "publish" && !fetcher.data.ok && fetcher.data.error && (
+            {fetcher.data && !fetcher.data.ok && fetcher.data.error && (
               <Banner tone="critical">{fetcher.data.error}</Banner>
             )}
             <InlineStack gap="200">

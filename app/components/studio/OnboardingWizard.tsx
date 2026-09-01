@@ -53,6 +53,7 @@ export function OnboardingWizard({
 
   const [category, setCategory] = useState("");
   const [brandVoice, setBrandVoice] = useState("");
+  const [accentColor, setAccentColor] = useState("");
   const [quizLength, setQuizLength] = useState("standard");
   const [modePreference, setModePreference] = useState("auto");
   const [extraNotes, setExtraNotes] = useState("");
@@ -62,6 +63,19 @@ export function OnboardingWizard({
   const [genError, setGenError] = useState<string | null>(null);
   const generateRunningRef = useRef(false);
 
+  // Brand colors picked during onboarding are applied to the draft the
+  // moment it exists (generated or blank) through the same design-tokens
+  // applier the Theme editor uses — so nobody ever has to find a color
+  // field on another page.
+  const applyBrandColors = () => {
+    if (!/^#[0-9a-fA-F]{6}$/.test(accentColor)) return;
+    const fd = new FormData();
+    fd.append("intent", "apply-tool");
+    fd.append("tool", "update_design_tokens");
+    fd.append("input", JSON.stringify({ fields: { quiz_accent_color: accentColor } }));
+    fetch("/studio", { method: "POST", body: fd }).catch(() => {});
+  };
+
   // "Start from scratch" creates a blank one-question draft; when the
   // loader revalidates with it, the studio unmounts this wizard.
   const blankProcessedRef = useRef<StudioActionData | null>(null);
@@ -69,7 +83,10 @@ export function OnboardingWizard({
     if (blankFetcher.state !== "idle" || !blankFetcher.data) return;
     if (blankProcessedRef.current === blankFetcher.data) return;
     blankProcessedRef.current = blankFetcher.data;
-    if (blankFetcher.data.ok) onDone("intro");
+    if (blankFetcher.data.ok) {
+      applyBrandColors();
+      onDone("intro");
+    }
   }, [blankFetcher.state, blankFetcher.data, onDone]);
 
   const generationAvailable = data.aiConfigured && data.catalog.syncEnabled && !skippedCatalog;
@@ -97,6 +114,7 @@ export function OnboardingWizard({
         if (event.type === "progress") setGenPhase(event.phase);
         else if (event.type === "result") {
           gotTerminal = true;
+          applyBrandColors();
           revalidator.revalidate();
           onDone("intro");
         } else if (event.type === "error") {
@@ -201,6 +219,30 @@ export function OnboardingWizard({
             value={brandVoice}
             onChange={setBrandVoice}
             autoComplete="off"
+          />
+          <TextField
+            label="Brand accent color"
+            value={accentColor}
+            onChange={setAccentColor}
+            placeholder="Blank = elegant default"
+            helpText="Buttons and highlights across the quiz. You can refine every color later in the Theme panel."
+            autoComplete="off"
+            connectedLeft={
+              <input
+                type="color"
+                value={/^#[0-9a-fA-F]{6}$/.test(accentColor) ? accentColor : "#1a1a1a"}
+                onChange={(e) => setAccentColor(e.target.value)}
+                style={{
+                  width: 34,
+                  height: 34,
+                  padding: 2,
+                  border: "1px solid #c9cccf",
+                  borderRadius: "8px 0 0 8px",
+                  cursor: "pointer",
+                  background: "#fff",
+                }}
+              />
+            }
           />
           <Select
             label="Quiz length"

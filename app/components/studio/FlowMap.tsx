@@ -62,11 +62,17 @@ export function FlowMap({
     // Columns: 0 intro, 1..maxDepth+1 screens by depth, then photo, results.
     const nodes: MapNode[] = [];
     const colRows: number[] = [];
+    // Per-column stacking by ACTUAL node height: grouped screens render
+    // several prompts and overflow a fixed slot.
+    const colY: number[] = [];
     const place = (col: number, kind: MapNode["kind"], id: string, questionIndices: number[] = []) => {
       const row = colRows[col] ?? 0;
       colRows[col] = row + 1;
       const w = kind === "screen" ? NODE_W : SMALL_W;
-      const h = kind === "screen" ? NODE_H : SMALL_H;
+      const h =
+        kind === "screen" ? NODE_H + Math.max(0, questionIndices.length - 1) * 44 : SMALL_H;
+      const y = colY[col] ?? PAD;
+      colY[col] = y + h + ROW_GAP;
       const node: MapNode = {
         id,
         col,
@@ -76,7 +82,7 @@ export function FlowMap({
         kind,
         questionIndices,
         x: PAD + col * (NODE_W + COL_GAP),
-        y: PAD + row * (NODE_H + ROW_GAP),
+        y,
       };
       nodes.push(node);
       return node;
@@ -125,7 +131,7 @@ export function FlowMap({
     });
 
     const width = PAD * 2 + (Math.max(...nodes.map((n) => n.col)) + 1) * (NODE_W + COL_GAP);
-    const height = PAD * 2 + Math.max(1, ...colRows.map((r) => r ?? 0)) * (NODE_H + ROW_GAP);
+    const height = PAD + Math.max(NODE_H + ROW_GAP, ...colY.map((y) => y ?? 0));
     return { nodes, plainEdges, branchEdges, problems, width, height, flow };
   }, [flow]);
 

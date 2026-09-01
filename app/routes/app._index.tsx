@@ -1,6 +1,6 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { useLoaderData, useNavigate, useFetcher } from "@remix-run/react";
+import { useLoaderData, useNavigate, useFetcher, useSearchParams, useRevalidator } from "@remix-run/react";
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Page,
@@ -16,6 +16,8 @@ import {
   IndexTable,
   EmptyState,
   InlineGrid,
+  Banner,
+  Select,
 } from "@shopify/polaris";
 import {
   ProductIcon,
@@ -23,9 +25,12 @@ import {
   PlusCircleIcon,
   EditIcon,
 } from "@shopify/polaris-icons";
-import { TitleBar } from "@shopify/app-bridge-react";
+import { Modal, TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import {
+  getRecommendationCounts,
+  getChatAssistantConfig,
+  findShopByDomain,
   getConfiguredProducts,
   getAnalytics,
   getOnboardingState,
@@ -35,6 +40,7 @@ import {
 } from "../lib/supabase.server";
 import { sendOnboardingCompleteEmail } from "../lib/email.server";
 import { useCatalogSync } from "../lib/use-catalog-sync";
+import { hasQuizDraft } from "../lib/quiz-draft.server";
 
 // ============================================================
 // Types
@@ -69,6 +75,16 @@ interface LoaderData {
     goals: string[];
     attribution: string[];
   };
+  quiz: {
+    questions: number;
+    rules: number;
+    mode: string;
+    hasGuidance: boolean;
+    assistantMode: string;
+    quizLive: boolean;
+    hasDraft: boolean;
+  };
+  totalTransformations: number;
 }
 
 // ============================================================
@@ -94,11 +110,31 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("Error fetching shop owner name:", error);
   }
 
-  const [allProducts, analytics, onboarding] = await Promise.all([
+  const [allProducts, analytics, onboarding, chatConfig, shopRow] = await Promise.all([
     getConfiguredProducts(shopDomain),
     getAnalytics(shopDomain, 365),
     getOnboardingState(shopDomain),
+    getChatAssistantConfig(shopDomain).catch(() => null),
+    findShopByDomain(shopDomain).catch(() => null),
   ]);
+  const [counts, draftExists] = shopRow
+    ? await Promise.all([
+        getRecommendationCounts(shopRow.id).catch(() => null),
+        hasQuizDraft(shopRow.id).catch(() => false),
+      ])
+    : [null, false];
+  const quiz = {
+    questions: counts?.questions ?? 0,
+    rules: counts?.rules ?? 0,
+    mode: (chatConfig?.recommendation_mode as string) ?? "matrix",
+    hasGuidance: Boolean(String(chatConfig?.ai_guidance ?? "").trim()),
+    assistantMode: (chatConfig?.assistant_mode as string) ?? "chat",
+    quizLive: Boolean(
+      chatConfig?.enabled &&
+        (chatConfig?.assistant_mode === "quiz" || chatConfig?.assistant_mode === "both"),
+    ),
+    hasDraft: draftExists,
+  };
 
   console.log(`[Onboarding Loader] shop=${shopDomain}, step=${onboarding.step}, completed=${onboarding.completed}`);
 
@@ -123,6 +159,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     productStats,
     allStepsComplete,
     onboarding,
+    quiz,
+    totalTransformations: (analytics as any)?.totalTransformations ?? 0,
   });
 };
 
@@ -144,6 +182,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   console.log(`[Onboarding Action] intent=${intent}, step=${stepRaw}, shop=${shopDomain}`);
 
   switch (intent) {
+    case "set-mode": {
+      // Storefront surface toggle (moved here from the old quiz hub).
+      const mode = formData.get("assistant_mode") as string;
+      if (mode !== "chat" && mode !== "quiz" && mode !== "both") {
+        return json({ ok: false, error: "Invalid mode" }, { status: 400 });
+      }
+      const { saveChatAssistantConfig } = await import("../lib/supabase.server");
+      try {
+        await saveChatAssistantConfig(shopDomain, {
+          assistant_mode: mode,
+          ...(mode === "quiz" || mode === "both" ? { enabled: true } : {}),
+        });
+      } catch (err) {
+        return json(
+          { ok: false, error: err instanceof Error ? err.message : "Failed to save" },
+          { status: 500 },
+        );
+      }
+      return json({ ok: true, intent });
+    }
     case "updateStep": {
       const step = parseInt(stepRaw!, 10);
       console.log(`[Onboarding Action] Saving step ${step} for ${shopDomain}`);
@@ -989,7 +1047,7 @@ function OnboardingWizard({
               onSkip={() => goToStep(7)}
               onNavigateToQuizSetup={() => {
                 persistToServer({ intent: "updateStep", step: "6" });
-                setPendingNav("/app/quiz");
+                setPendingNav("/app?open=studio");
               }}
             />
           )}
@@ -1025,21 +1083,29 @@ function OnboardingWizard({
 // Dashboard View (existing dashboard)
 // ============================================================
 
+// Quiz-first home: intro + status + one obvious door into Quiz Studio
+// (which hosts everything else). Replaces both the old try-on dashboard
+// and the standalone quiz hub page.
+
+const THEME_EXT_UUID = "1013fc3f-b18d-aa39-07f6-10dfd57397a6749693b0";
+
+const HOME_MODE_LABELS: Record<string, string> = {
+  matrix: "Rules only",
+  ai: "AI",
+  hybrid: "Rules + AI",
+};
+
 function DashboardView({
   ownerName,
   shopDomain,
-  configuredProducts,
-  configuredProductsCount,
-  activeProducts,
-  productStats,
+  quiz,
+  totalTransformations,
   navigate,
 }: {
   ownerName: string;
   shopDomain: string;
-  configuredProducts: ConfiguredProduct[];
-  configuredProductsCount: number;
-  activeProducts: number;
-  productStats: ProductStat[];
+  quiz: LoaderData["quiz"];
+  totalTransformations: number;
   navigate: ReturnType<typeof useNavigate>;
 }) {
   const ownerFirstName = ownerName ? ownerName.split(" ")[0] : "";
@@ -1049,173 +1115,176 @@ function DashboardView({
     .replace(/\b\w/g, (c) => c.toUpperCase());
   const displayName = ownerFirstName || storeName;
 
-  const productsWithStats = configuredProducts.map((product) => {
-    const stats = productStats.find((s) => s.product_id === product.id);
-    return {
-      ...product,
-      transformations: stats?.transformations || 0,
-      isActive: (stats?.transformations || 0) > 0,
-    };
-  });
+  const fetcher = useFetcher<{ ok?: boolean; error?: string }>();
+  const [params, setParams] = useSearchParams();
+  const revalidator = useRevalidator();
+  const studioOpen = params.get("open") === "studio";
+  const studioStep = params.get("step") ?? "build";
+  const openStudio = () => {
+    setParams(
+      (prev) => {
+        prev.set("open", "studio");
+        return prev;
+      },
+      { replace: true },
+    );
+  };
+  const closeStudio = () => {
+    setParams(
+      (prev) => {
+        prev.delete("open");
+        prev.delete("step");
+        return prev;
+      },
+      { replace: true },
+    );
+    revalidator.revalidate();
+  };
+
+  const [mode, setMode] = useState<string>(quiz.assistantMode);
+  const saveMode = () => {
+    const fd = new FormData();
+    fd.append("intent", "set-mode");
+    fd.append("assistant_mode", mode);
+    fetcher.submit(fd, { method: "POST" });
+  };
+
+  const logicReady =
+    quiz.questions > 0 && (quiz.rules > 0 || (quiz.mode !== "matrix" && quiz.hasGuidance));
+  const storeHandle = shopDomain.replace(".myshopify.com", "");
+  const themeEditorUrl = `https://admin.shopify.com/store/${storeHandle}/themes/current/editor?template=index&addAppBlockId=${THEME_EXT_UUID}/gleame-quiz&target=newAppsSection`;
 
   return (
     <Page>
-      <TitleBar title="Dashboard" />
+      <TitleBar title="Gleame" />
       <BlockStack gap="600">
-        {/* Greeting */}
+        {/* Hero */}
         <InlineStack align="space-between" blockAlign="center">
           <BlockStack gap="100">
             <Text as="h1" variant="headingXl">
-              Welcome back, {displayName}!
+              Welcome back, {displayName}
             </Text>
             <Text as="p" variant="bodyMd" tone="subdued">
-              Here's how your AI transformations are performing.
+              Your quiz matches every shopper to their perfect product.
             </Text>
+            <InlineStack gap="200">
+              <Badge tone={quiz.quizLive ? "success" : "attention"}>
+                {quiz.quizLive ? "Quiz live" : "Quiz off"}
+              </Badge>
+              {quiz.hasDraft && <Badge tone="attention">Draft in progress</Badge>}
+              {logicReady && <Badge tone="success">Logic ready</Badge>}
+            </InlineStack>
           </BlockStack>
-          <Button onClick={() => navigate("/app/analytics")}>
-            View Analytics
-          </Button>
+          <InlineStack gap="200">
+            <Button onClick={() => navigate("/app/analytics")}>View analytics</Button>
+            <Button variant="primary" size="large" onClick={openStudio}>
+              Open Quiz Studio
+            </Button>
+          </InlineStack>
         </InlineStack>
 
-        {/* Stats Cards */}
-        <InlineGrid columns={{ xs: 1, sm: 2 }} gap="400">
+        {fetcher.data?.error && <Banner tone="critical">{fetcher.data.error}</Banner>}
+
+        {/* Status cards */}
+        <InlineGrid columns={{ xs: 1, sm: 3 }} gap="400">
           <Card>
             <BlockStack gap="200">
-              <InlineStack align="space-between" blockAlign="center">
-                <Text as="span" variant="bodyMd" tone="subdued">
-                  Products Configured
-                </Text>
-                <Box
-                  background="bg-fill-info"
-                  padding="100"
-                  borderRadius="full"
-                >
-                  <Icon source={ProductIcon} tone="info" />
-                </Box>
-              </InlineStack>
-              <Text as="p" variant="headingXl" fontWeight="bold">
-                {configuredProductsCount}
+              <Text as="span" variant="bodyMd" tone="subdued">
+                Your quiz
               </Text>
-              <Button
-                variant="plain"
-                onClick={() => navigate("/app/products")}
-              >
-                Manage products →
+              <Text as="p" variant="headingXl" fontWeight="bold">
+                {quiz.questions} {quiz.questions === 1 ? "question" : "questions"}
+              </Text>
+              <Text as="span" variant="bodySm" tone="subdued">
+                {quiz.rules > 0 ? `${quiz.rules} rules · ` : ""}
+                {HOME_MODE_LABELS[quiz.mode] ?? quiz.mode} matching
+              </Text>
+              <Button variant="plain" onClick={openStudio}>
+                Edit in Studio →
               </Button>
             </BlockStack>
           </Card>
 
           <Card>
             <BlockStack gap="200">
-              <InlineStack align="space-between" blockAlign="center">
-                <Text as="span" variant="bodyMd" tone="subdued">
-                  Widgets Active
-                </Text>
-                <Box
-                  background="bg-fill-success"
-                  padding="100"
-                  borderRadius="full"
-                >
-                  <Icon source={ViewIcon} tone="success" />
-                </Box>
-              </InlineStack>
+              <Text as="span" variant="bodyMd" tone="subdued">
+                Shoppers matched
+              </Text>
               <Text as="p" variant="headingXl" fontWeight="bold">
-                {activeProducts}
+                {totalTransformations}
               </Text>
               <Text as="span" variant="bodySm" tone="subdued">
-                products with transformations
+                selfie try-ons in the last year
               </Text>
+              <Button variant="plain" onClick={() => navigate("/app/analytics")}>
+                View analytics →
+              </Button>
+            </BlockStack>
+          </Card>
+
+          <Card>
+            <BlockStack gap="200">
+              <Text as="span" variant="bodyMd" tone="subdued">
+                Storefront
+              </Text>
+              <Select
+                label="Where Gleame appears"
+                labelHidden
+                options={[
+                  { label: "Chat bubble only", value: "chat" },
+                  { label: "Quiz page only", value: "quiz" },
+                  { label: "Both", value: "both" },
+                ]}
+                value={mode}
+                onChange={setMode}
+              />
+              <InlineStack gap="200">
+                <Button
+                  size="slim"
+                  variant="primary"
+                  onClick={saveMode}
+                  loading={fetcher.state !== "idle"}
+                  disabled={mode === quiz.assistantMode}
+                >
+                  Save
+                </Button>
+                <Button size="slim" url={themeEditorUrl} external>
+                  Add to theme
+                </Button>
+              </InlineStack>
             </BlockStack>
           </Card>
         </InlineGrid>
 
-        {/* Configured Products */}
-        <Card>
-          <BlockStack gap="400">
-            <InlineStack align="space-between" blockAlign="center">
-              <Text as="h2" variant="headingMd">
-                Configured Products
-              </Text>
-              <Button
-                icon={PlusCircleIcon}
-                onClick={() => navigate("/app/products")}
-              >
-                Add Product
-              </Button>
-            </InlineStack>
+        {!quiz.quizLive && (
+          <Banner tone="warning" title="Your quiz is not live yet">
+            Build it in the Studio, set the storefront to "Quiz page" or
+            "Both", and add the Gleame Quiz section to a page in your theme.
+          </Banner>
+        )}
 
-            {productsWithStats.length === 0 ? (
-              <EmptyState
-                heading="No products configured yet"
-                action={{
-                  content: "Add Product",
-                  onAction: () => navigate("/app/products"),
-                }}
-                image=""
-              >
-                <p>Configure your first product to start using Gleame.</p>
-              </EmptyState>
-            ) : (
-              <IndexTable
-                resourceName={{
-                  singular: "product",
-                  plural: "products",
-                }}
-                itemCount={productsWithStats.length}
-                headings={[
-                  { title: "Product" },
-                  { title: "Status" },
-                  { title: "Transformations" },
-                  { title: "Actions" },
-                ]}
-                selectable={false}
-              >
-                {productsWithStats.map((product, index) => (
-                  <IndexTable.Row
-                    id={product.id}
-                    key={product.id}
-                    position={index}
-                  >
-                    <IndexTable.Cell>
-                      <Text
-                        as="span"
-                        variant="bodyMd"
-                        fontWeight="semibold"
-                      >
-                        {product.product_name.length > 43
-                          ? `${product.product_name.substring(0, 43)}...`
-                          : product.product_name}
-                      </Text>
-                    </IndexTable.Cell>
-                    <IndexTable.Cell>
-                      <Badge
-                        tone={product.isActive ? "success" : "attention"}
-                      >
-                        {product.isActive ? "Active" : "Pending"}
-                      </Badge>
-                    </IndexTable.Cell>
-                    <IndexTable.Cell>
-                      <Text as="span" variant="bodyMd">
-                        {product.transformations}
-                      </Text>
-                    </IndexTable.Cell>
-                    <IndexTable.Cell>
-                      <Button
-                        icon={EditIcon}
-                        size="slim"
-                        variant="plain"
-                        onClick={() => navigate("/app/products")}
-                      >
-                        Edit
-                      </Button>
-                    </IndexTable.Cell>
-                  </IndexTable.Row>
-                ))}
-              </IndexTable>
-            )}
-          </BlockStack>
-        </Card>
+        {/* Advanced row */}
+        <InlineStack gap="300">
+          <Button variant="plain" onClick={() => navigate("/app/assistant/recommendations")}>
+            Advanced rules editor
+          </Button>
+          <Button variant="plain" onClick={() => navigate("/app/assistant/quiz")}>
+            Advanced design page
+          </Button>
+          <Button variant="plain" onClick={() => navigate("/app/products")}>
+            Try-on product settings
+          </Button>
+        </InlineStack>
       </BlockStack>
+
+      {/* Mounted ONLY while open: rendering the App Bridge Modal closed
+          calls .hide() on the not-yet-upgraded ui-modal element and crashes
+          the page. */}
+      {studioOpen && (
+        <Modal variant="max" open src={`/studio?step=${studioStep}`} onHide={closeStudio}>
+          <TitleBar title="Quiz Studio" />
+        </Modal>
+      )}
     </Page>
   );
 }
@@ -1228,11 +1297,10 @@ export default function Dashboard() {
   const {
     shopDomain,
     ownerName,
-    configuredProducts,
     configuredProductsCount,
-    activeProducts,
-    productStats,
     onboarding,
+    quiz,
+    totalTransformations,
   } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
 
@@ -1275,10 +1343,8 @@ export default function Dashboard() {
     <DashboardView
       ownerName={ownerName}
       shopDomain={shopDomain}
-      configuredProducts={configuredProducts}
-      configuredProductsCount={configuredProductsCount}
-      activeProducts={activeProducts}
-      productStats={productStats}
+      quiz={quiz}
+      totalTransformations={totalTransformations}
       navigate={navigate}
     />
   );

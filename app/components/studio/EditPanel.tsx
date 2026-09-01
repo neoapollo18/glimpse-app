@@ -226,37 +226,59 @@ function QuestionEditor({
   const stateRef = useRef({ prompt, helper, multiSelect, maxPicks, optionStyle, screenGroup, showIf, options });
   stateRef.current = { prompt, helper, multiSelect, maxPicks, optionStyle, screenGroup, showIf, options };
 
-  const flush = () => {
+  const buildCalls = (): Array<{ tool: string; input: unknown }> => {
     const s = stateRef.current;
     const dirty = dirtyRef.current;
-    if (!dirty.question && !dirty.options) return;
+    const calls: Array<{ tool: string; input: unknown }> = [];
     const max = s.maxPicks.trim() === "" ? null : Number(s.maxPicks);
     if (dirty.question) {
-      const patch: Record<string, unknown> = {
-        prompt: s.prompt,
-        helperText: s.helper.trim() === "" ? null : s.helper,
-        multiSelect: s.multiSelect,
-        maxSelections: s.multiSelect && Number.isFinite(max as number) ? max : null,
-        optionStyle: s.optionStyle || null,
-        screenGroup: s.screenGroup.trim() === "" ? null : s.screenGroup.trim(),
-        showIf: s.showIf,
-      };
-      submitTool(fetcher, "update_question", { axisKey: question.axisKey, patch });
-    }
-    if (dirty.options) {
-      submitTool(fetcher, "update_question_options", {
-        axisKey: question.axisKey,
-        options: s.options.map((o) => ({
-          label: o.label,
-          axisValueValue: o.axisValueValue,
-          reasonText: o.reasonText ?? null,
-          showIf: o.showIf ?? null,
-          selectAll: o.selectAll ?? false,
-          displayMeta: o.displayMeta ?? null,
-        })),
+      calls.push({
+        tool: "update_question",
+        input: {
+          axisKey: question.axisKey,
+          patch: {
+            prompt: s.prompt,
+            helperText: s.helper.trim() === "" ? null : s.helper,
+            multiSelect: s.multiSelect,
+            maxSelections: s.multiSelect && Number.isFinite(max as number) ? max : null,
+            optionStyle: s.optionStyle || null,
+            screenGroup: s.screenGroup.trim() === "" ? null : s.screenGroup.trim(),
+            showIf: s.showIf,
+          },
+        },
       });
     }
+    if (dirty.options) {
+      calls.push({
+        tool: "update_question_options",
+        input: {
+          axisKey: question.axisKey,
+          options: s.options.map((o) => ({
+            label: o.label,
+            axisValueValue: o.axisValueValue,
+            // Keeps auto-declared axis values labeled like their answer.
+            valueLabel: o.label,
+            reasonText: o.reasonText ?? null,
+            showIf: o.showIf ?? null,
+            selectAll: o.selectAll ?? false,
+            displayMeta: o.displayMeta ?? null,
+          })),
+        },
+      });
+    }
+    return calls;
+  };
+
+  const flush = () => {
+    const calls = buildCalls();
+    if (calls.length === 0) return;
     dirtyRef.current = { question: false, options: false };
+    // ONE submission per flush: two back-to-back fetcher.submit calls abort
+    // the first request and silently dropped the question patch.
+    const fd = new FormData();
+    fd.append("intent", "apply-tools");
+    fd.append("calls", JSON.stringify(calls));
+    fetcher.submit(fd, { method: "POST", action: "/studio" });
   };
 
   const scheduleSave = (kind: "question" | "options") => {
@@ -270,6 +292,18 @@ function QuestionEditor({
   useEffect(
     () => () => {
       if (timerRef.current !== null) clearTimeout(timerRef.current);
+      // Deliver anything still pending: switching slides/steps inside the
+      // debounce window must not silently drop edits. Fire-and-forget fetch
+      // (the fetcher is gone with the component); the next mount reloads
+      // fresh data anyway.
+      const calls = buildCalls();
+      if (calls.length > 0) {
+        dirtyRef.current = { question: false, options: false };
+        const fd = new FormData();
+        fd.append("intent", "apply-tools");
+        fd.append("calls", JSON.stringify(calls));
+        fetch("/studio", { method: "POST", body: fd }).catch(() => {});
+      }
     },
     [],
   );
@@ -292,6 +326,23 @@ function QuestionEditor({
       setError(fetcher.data.error);
     }
   }, [fetcher.state, fetcher.data, onPreviewUpdate]);
+
+  // Delete result: navigate only after the server confirms; failures land
+  // in the shared error banner (the old flow navigated first, unmounting
+  // the component that owned the error state — rejections vanished).
+  const deleteProcessedRef = useRef<StudioActionData | null>(null);
+  useEffect(() => {
+    if (deleteFetcher.state !== "idle" || !deleteFetcher.data) return;
+    if (deleteProcessedRef.current === deleteFetcher.data) return;
+    deleteProcessedRef.current = deleteFetcher.data;
+    if (deleteFetcher.data.ok) {
+      onPreviewReload();
+      onSelectSlide(qIndex > 0 ? slideIdForQuestion(flow.questions[qIndex - 1].axisKey) : "intro");
+    } else if (deleteFetcher.data.error) {
+      setError(deleteFetcher.data.error);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deleteFetcher.state, deleteFetcher.data]);
 
   // Branch popover writes to OTHER questions and needs a full refresh.
   const branchProcessedRef = useRef<StudioActionData | null>(null);
@@ -376,10 +427,6 @@ function QuestionEditor({
                     removeAxis: true,
                   });
                   setConfirmingDelete(false);
-                  onSelectSlide(
-                    qIndex > 0 ? slideIdForQuestion(flow.questions[qIndex - 1].axisKey) : "intro",
-                  );
-                  onPreviewReload();
                 }}
               >
                 Delete question
@@ -389,10 +436,6 @@ function QuestionEditor({
           </BlockStack>
         </Banner>
       )}
-      {deleteFetcher.data && !deleteFetcher.data.ok && deleteFetcher.data.error && (
-        <Banner tone="critical">{deleteFetcher.data.error}</Banner>
-      )}
-
       <TextField
         label="Question"
         value={prompt}
@@ -453,7 +496,7 @@ function QuestionEditor({
             index={i}
             later={later}
             disabled={disabled}
-            canRemove={options.length > 1}
+            canRemove={options.length > 2}
             onChange={(patch) => {
               setOptions((prev) => prev.map((o, j) => (j === i ? { ...o, ...patch } : o)));
               scheduleSave("options");

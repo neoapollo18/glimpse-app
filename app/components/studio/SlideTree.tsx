@@ -1,5 +1,5 @@
 import { Fragment, useState } from "react";
-import { Tooltip } from "@shopify/polaris";
+import { Banner, Tooltip } from "@shopify/polaris";
 import type { StudioFlow } from "./types";
 import { answerLabel } from "./types";
 import { draftProblems, problemsForSlide } from "./draft-problems";
@@ -76,6 +76,8 @@ function NumberChip({ children, glyph }: { children?: string; glyph?: string }) 
 }
 
 export function SlideTree({
+  error,
+  onDismissError,
   flow,
   selectedSlide,
   onSelect,
@@ -89,6 +91,8 @@ export function SlideTree({
   readOnly,
   onReturnToBuild,
 }: {
+  error?: string | null;
+  onDismissError?: () => void;
   flow: StudioFlow | null;
   selectedSlide: string;
   onSelect: (slideId: string) => void;
@@ -109,11 +113,12 @@ export function SlideTree({
   // insert-before semantics keep it simple and predictable).
   const [dragQi, setDragQi] = useState<number | null>(null);
   const [overQi, setOverQi] = useState<number | null>(null);
+  const [overAfter, setOverAfter] = useState(false);
   const dropReorder = (targetQi: number) => {
     if (dragQi === null || !onReorder) return;
     const order = questions.map((q) => q.axisKey);
     const [moved] = order.splice(dragQi, 1);
-    const insertAt = dragQi < targetQi ? targetQi - 1 : targetQi;
+    const insertAt = Math.min(dragQi < targetQi ? targetQi - 1 : targetQi, order.length);
     order.splice(insertAt, 0, moved);
     if (order.some((k, i) => k !== questions[i].axisKey)) onReorder(order);
   };
@@ -138,23 +143,29 @@ export function SlideTree({
       untitled?: boolean;
     } = {},
   ) => (
-    <button
+    <div
       key={slideId}
+      role="button"
+      tabIndex={disabled ? -1 : 0}
       className="studio-tree-row"
       data-selected={selectedSlide === slideId}
       data-flash={flashSlide === slideId}
       style={{
         paddingLeft: opts.indent ? 24 : 8,
         opacity: disabled ? 0.6 : dragQi !== null && dragQi === opts.qi ? 0.4 : 1,
+        pointerEvents: disabled ? "none" : undefined,
         boxShadow:
           overQi !== null && overQi === opts.qi && dragQi !== null && dragQi !== opts.qi
-            ? "inset 0 2px 0 #2C6ECB"
+            ? overAfter && opts.qi === questions.length - 1
+              ? "inset 0 -2px 0 #2C6ECB"
+              : "inset 0 2px 0 #2C6ECB"
             : undefined,
       }}
-      disabled={disabled}
       draggable={!readOnly && !disabled && opts.qi != null && Boolean(onReorder)}
       onDragStart={(e) => {
         if (opts.qi == null) return;
+        // Firefox refuses to start a drag without data.
+        e.dataTransfer.setData("text/plain", String(opts.qi));
         setDragQi(opts.qi);
         e.dataTransfer.effectAllowed = "move";
       }}
@@ -163,21 +174,34 @@ export function SlideTree({
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
         setOverQi(opts.qi);
+        // Hovering the lower half of the LAST row means "insert after" so
+        // questions can be dragged to the end.
+        const rect = e.currentTarget.getBoundingClientRect();
+        setOverAfter(opts.qi === questions.length - 1 && e.clientY > rect.top + rect.height / 2);
       }}
       onDrop={(e) => {
         if (opts.qi == null) return;
         e.preventDefault();
-        dropReorder(opts.qi);
+        dropReorder(overAfter ? opts.qi + 1 : opts.qi);
         setDragQi(null);
         setOverQi(null);
+        setOverAfter(false);
       }}
       onDragEnd={() => {
         setDragQi(null);
         setOverQi(null);
+        setOverAfter(false);
       }}
       onClick={() => {
         if (readOnly && onReturnToBuild) onReturnToBuild();
         onSelect(slideId);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          if (readOnly && onReturnToBuild) onReturnToBuild();
+          onSelect(slideId);
+        }
       }}
     >
       <NumberChip glyph={opts.glyph}>{opts.number != null ? String(opts.number) : ""}</NumberChip>
@@ -221,7 +245,7 @@ export function SlideTree({
         </span>
       )}
       {opts.problem && <WarningDot message={opts.problem} />}
-    </button>
+    </div>
   );
 
   return (
@@ -272,8 +296,12 @@ export function SlideTree({
             <button
               className="studio-tree-row"
               onClick={onAdd}
-              disabled={disabled}
-              style={{ color: "#2C6ECB", fontWeight: 600, opacity: disabled ? 0.6 : 1 }}
+              disabled={disabled || questions.length >= 12}
+              style={{
+                color: "#2C6ECB",
+                fontWeight: 600,
+                opacity: disabled || questions.length >= 12 ? 0.5 : 1,
+              }}
             >
               <NumberChip glyph="+" />
               <span className="studio-rail-wide">Add question</span>
@@ -283,11 +311,17 @@ export function SlideTree({
                 className="studio-rail-wide"
                 style={{ padding: "2px 8px", fontSize: 11, color: "#6D7175" }}
               >
-                Long quizzes lose shoppers. Consider trimming before adding
-                more.
+                12 questions is the limit (long quizzes lose shoppers).
               </div>
             )}
           </>
+        )}
+        {error && (
+          <div style={{ padding: 8 }} className="studio-rail-wide">
+            <Banner tone="critical" onDismiss={onDismissError}>
+              {error}
+            </Banner>
+          </div>
         )}
       </div>
 

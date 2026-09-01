@@ -140,6 +140,20 @@ export function LogicStep({ data, chatBusy }: { data: StudioLoaderData; chatBusy
     for (const key of dirtyKeysRef.current) fd.append(`notes:${key}`, notesRef.current[key] ?? "");
     notesFetcher.submit(fd, { method: "POST", action: "/studio" });
   };
+  // Leaving the Logic step (unmount) must not drop typed notes: deliver
+  // dirty keys fire-and-forget.
+  useEffect(
+    () => () => {
+      const keys = [...dirtyKeysRef.current];
+      if (keys.length === 0) return;
+      const fd = new FormData();
+      fd.append("intent", "save-notes");
+      for (const key of keys) fd.append(`notes:${key}`, notesRef.current[key] ?? "");
+      fetch("/studio", { method: "POST", body: fd }).catch(() => {});
+    },
+    [],
+  );
+
   const notesProcessedRef = useRef<StudioActionData | null>(null);
   useEffect(() => {
     if (notesFetcher.state !== "idle" || !notesFetcher.data) return;

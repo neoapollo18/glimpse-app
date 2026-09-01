@@ -1,11 +1,10 @@
-import { useRef, useState, type MutableRefObject } from "react";
+import { useEffect, useRef, useState, type MutableRefObject } from "react";
 
 // The live preview: the REAL storefront quiz (gleame-quiz.js) fed by
 // /quiz-preview.html (draft-first), in a phone bezel or a desktop browser
-// frame. One persistent iframe across the device toggle so quiz state
-// survives switching. The token is pinned to the first value so routine
-// loader revalidations never hard-reload the iframe; intentional reloads
-// bump `nonce` (key remount).
+// frame. Scale-to-fit is measured in JS (ResizeObserver) — cq units inside
+// a transform string are not valid CSS and the browser silently dropped
+// the earlier attempt, letting the bezel overflow short canvases.
 
 type Device = "mobile" | "desktop";
 
@@ -23,8 +22,30 @@ export function PreviewCanvas({
   previewToken: string | null;
   nonce: number;
 }) {
+  // Pin the token so routine revalidations never remount the iframe, but
+  // adopt the freshest one on intentional reloads (nonce bumps) so a
+  // long-lived studio tab doesn't outlive the 12h JWT.
   const stableTokenRef = useRef(previewToken);
+  const lastNonceRef = useRef(nonce);
+  if (nonce !== lastNonceRef.current) {
+    lastNonceRef.current = nonce;
+    if (previewToken) stableTokenRef.current = previewToken;
+  }
+
   const [device, setDevice] = useState<Device>("mobile");
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const [stage, setStage] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect;
+      if (rect) setStage({ width: rect.width, height: rect.height });
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   if (!stableTokenRef.current) {
     return (
@@ -36,6 +57,15 @@ export function PreviewCanvas({
 
   const frame = FRAMES[device];
   const isMobile = device === "mobile";
+  const chrome = isMobile ? 20 : 32; // bezel border / browser bar allowance
+  const scale =
+    stage.width > 0
+      ? Math.min(
+          1,
+          (stage.height - 8) / (frame.height + chrome),
+          (stage.width - 16) / (frame.width + chrome),
+        )
+      : 1;
 
   return (
     <div
@@ -44,7 +74,6 @@ export function PreviewCanvas({
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        justifyContent: "center",
         padding: "16px 24px 24px",
         minHeight: 0,
       }}
@@ -57,6 +86,7 @@ export function PreviewCanvas({
           borderRadius: 999,
           padding: 3,
           marginBottom: 12,
+          flexShrink: 0,
         }}
       >
         {(["mobile", "desktop"] as const).map((d) => (
@@ -80,6 +110,7 @@ export function PreviewCanvas({
         ))}
       </div>
       <div
+        ref={stageRef}
         style={{
           flex: 1,
           minHeight: 0,
@@ -87,7 +118,7 @@ export function PreviewCanvas({
           alignItems: "center",
           justifyContent: "center",
           width: "100%",
-          containerType: "size",
+          overflow: "hidden",
         }}
       >
         <div
@@ -98,7 +129,7 @@ export function PreviewCanvas({
             overflow: "hidden",
             background: "#fff",
             boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
-            transform: `scale(min(1, calc((100cqh - 20px) / ${frame.height + 40}), calc((100cqw - 24px) / ${frame.width})))`,
+            transform: `scale(${scale})`,
             transformOrigin: "center",
             flexShrink: 0,
           }}
