@@ -252,7 +252,9 @@ export function SlideTree({
             }}
             style={moveBtnStyle(opts.isFirst)}
           >
-            <Icon source={ArrowUpIcon} />
+            <span style={{ width: 14, height: 14, display: "inline-flex", pointerEvents: "none" }}>
+              <Icon source={ArrowUpIcon} />
+            </span>
           </button>
           <button
             aria-label="Move down"
@@ -263,7 +265,9 @@ export function SlideTree({
             }}
             style={moveBtnStyle(opts.isLast)}
           >
-            <Icon source={ArrowDownIcon} />
+            <span style={{ width: 14, height: 14, display: "inline-flex", pointerEvents: "none" }}>
+              <Icon source={ArrowDownIcon} />
+            </span>
           </button>
         </span>
       )}
@@ -392,14 +396,16 @@ export function SlideTree({
 
 function moveBtnStyle(disabled?: boolean): React.CSSProperties {
   return {
-    width: 22,
-    height: 22,
+    width: 24,
+    height: 24,
+    padding: 0,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
     border: "1px solid #E1E3E5",
     borderRadius: 6,
     background: "#fff",
     cursor: disabled ? "default" : "pointer",
     opacity: disabled ? 0.4 : 1,
-    fontSize: 11,
-    lineHeight: 1,
   };
 }
