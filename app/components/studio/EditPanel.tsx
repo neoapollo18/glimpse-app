@@ -587,7 +587,7 @@ function QuestionEditor({
       <Divider />
 
       <button onClick={() => setVisibilityOpen((v) => !v)} style={disclosureStyle}>
-        <span style={{ fontWeight: 600 }}>Visibility</span>
+        <span style={{ fontWeight: 600 }}>Branching</span>
         <span style={{ color: "#6D7175", fontSize: 12 }}>
           {showIf
             ? `Only when "${answerLabel(flow, showIf.axis_key, showIf.axis_value)}" is picked`
