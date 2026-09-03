@@ -107,7 +107,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const [counts, draftExists, vtoEnabled] = shopRow
     ? await Promise.all([
         getRecommendationCounts(shopRow.id).catch(() => null),
-        hasQuizDraft(shopRow.id).catch(() => false),
+        hasQuizDraft(shopRow.id, { excludeSeeded: true }).catch(() => false),
         shopHasTryOnConfig(shopDomain).catch(() => true),
       ])
     : [null, false, true];
@@ -577,9 +577,11 @@ function Step4ConnectCatalog({
       </div>
 
       <InlineStack align="space-between">
-        <Button onClick={onBack}>Back</Button>
+        {/* All exits disabled mid-sync: unmounting this step kills the
+            page-by-page chain silently, leaving a partial catalog. */}
+        <Button onClick={onBack} disabled={progress !== null}>Back</Button>
         <InlineStack gap="200" blockAlign="center">
-          <Button variant="plain" onClick={onBookCall}>
+          <Button variant="plain" onClick={onBookCall} disabled={progress !== null}>
             Prefer we set it up? Book a call
           </Button>
           <Button variant="primary" onClick={onNext} disabled={progress !== null}>
@@ -1384,11 +1386,16 @@ export default function Dashboard() {
   // Skip onboarding if:
   // 1. Explicitly completed, OR
   // 2. 2+ products configured (merchant is clearly set up), OR
-  // 3. Has products but never started onboarding (pre-existing merchant)
+  // 3. Has products but never started onboarding (pre-existing merchant), OR
+  // 4. The QUIZ is live — the golden path's whole goal; without this a
+  //    merchant who published from step 5 was dropped back into the wizard
+  //    on every dashboard visit until they hand-clicked through to step 7.
+  const quizIsLive = quiz.questions > 0 && quiz.quizLive;
   const shouldSkipOnboarding =
     onboarding.completed ||
     configuredProductsCount >= 2 ||
-    (configuredProductsCount > 0 && onboarding.step === 0);
+    (configuredProductsCount > 0 && onboarding.step === 0) ||
+    quizIsLive;
 
   const [onboardingCompleted, setOnboardingCompleted] =
     useState(shouldSkipOnboarding);
@@ -1398,11 +1405,12 @@ export default function Dashboard() {
     if (
       onboarding.completed ||
       configuredProductsCount >= 2 ||
-      (configuredProductsCount > 0 && onboarding.step === 0)
+      (configuredProductsCount > 0 && onboarding.step === 0) ||
+      quizIsLive
     ) {
       setOnboardingCompleted(true);
     }
-  }, [onboarding.completed, configuredProductsCount, onboarding.step]);
+  }, [onboarding.completed, configuredProductsCount, onboarding.step, quizIsLive]);
 
   if (!onboardingCompleted) {
     return (

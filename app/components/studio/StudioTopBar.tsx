@@ -67,7 +67,7 @@ export function StudioTopBar({
             <Badge tone="critical">Needs attention</Badge>
           </button>
         )}
-        {!catalog.syncEnabled && (
+        {(!catalog.syncEnabled || !catalog.productCount) && (
           <Popover
             active={syncOpen}
             onClose={() => setSyncOpen(false)}

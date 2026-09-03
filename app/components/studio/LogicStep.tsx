@@ -398,7 +398,7 @@ export function LogicStep({ data, chatBusy }: { data: StudioLoaderData; chatBusy
 
   const filledCount = questions.filter((q) => (notes[q.axisKey] ?? "").trim() !== "").length;
   const generateBlocked =
-    questions.length === 0 || !data.aiConfigured || data.catalog.productCount === 0;
+    questions.length === 0 || !data.aiConfigured || !data.catalog.syncEnabled || !data.catalog.productCount;
   const generating = genPhase !== null;
   const draftBlocked = generateBlocked || chatBusy || drafting !== null;
 

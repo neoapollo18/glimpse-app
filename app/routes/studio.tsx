@@ -34,6 +34,7 @@ import { buildPreviewFlow, buildPreviewQuizConfig } from "../lib/quiz-preview.se
 import { withShopSaveLock } from "../lib/shop-save-lock.server";
 import { getLatestSessionId } from "../lib/quiz-copilot.server";
 import { isClaudeConfigured } from "../lib/claude.server";
+import { getGenStatus } from "../lib/gen-status.server";
 import { shopNeedsBilling } from "../lib/billing-gate.server";
 import { draftQuestionNotes, type NotesDraft } from "../lib/guidance-generator.server";
 import { GENERAL_GUIDANCE_KEY } from "../lib/quiz-guidance-shared";
@@ -64,6 +65,15 @@ import { draftProblems } from "../components/studio/draft-problems";
 // ---------------------------------------------------------------------
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
+
+// Catalog sync submits one fetcher action per 8-product page; each would
+// otherwise re-run this heavy loader (a 400-product store = ~50 loader
+// runs). The sync UIs render from the hook's own progress state, and the
+// completion handler revalidates explicitly.
+export const shouldRevalidate = ({ formAction, defaultShouldRevalidate }: { formAction?: string; defaultShouldRevalidate: boolean }) => {
+  if (formAction?.includes("/app/api/catalog-sync")) return false;
+  return defaultShouldRevalidate;
+};
 
 export const headers: HeadersFunction = (headersArgs) => {
   return boundary.headers(headersArgs);
@@ -134,48 +144,54 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // wizard works fine with nulls. ONLY fetched while the wizard can show:
   // these ran on every autosave revalidation and made editing feel slow.
   const wizardRelevant = draft === null || draft.flow.questions.length === 0;
-  let storeBrand: { accentColor: string | null; slogan: string | null } | null = null;
-  try {
-    if (!wizardRelevant) throw new Error("skip");
-    const res = await admin.graphql(
-      `#graphql
-      query StudioBrand {
-        shop {
-          brandSettings: brand {
-            slogan
-            colors { primary { background } }
-          }
+  // Independent fetches — run in parallel (they were serial, and this is
+  // exactly the first-open path where load time is most visible).
+  const [storeBrand, topProductType] = await Promise.all([
+    (async (): Promise<{ accentColor: string | null; slogan: string | null } | null> => {
+      if (!wizardRelevant) return null;
+      try {
+        const res = await admin.graphql(
+          `#graphql
+          query StudioBrand {
+            shop {
+              brandSettings: brand {
+                slogan
+                colors { primary { background } }
+              }
+            }
+          }`,
+        );
+        const body = await res.json();
+        const brand = body?.data?.shop?.brandSettings;
+        const bg = brand?.colors?.primary?.[0]?.background ?? brand?.colors?.primary?.background ?? null;
+        return {
+          accentColor: typeof bg === "string" && /^#[0-9a-fA-F]{6}$/.test(bg) ? bg : null,
+          slogan: brand?.slogan ?? null,
+        };
+      } catch {
+        return null;
+      }
+    })(),
+    (async (): Promise<string | null> => {
+      if (!wizardRelevant) return null;
+      try {
+        const { data: typeRows } = await supabase
+          .from("products")
+          .select("product_type")
+          .eq("shop_id", shop.id)
+          .not("product_type", "is", null)
+          .limit(200);
+        const tally = new Map<string, number>();
+        for (const r of typeRows ?? []) {
+          const t = String((r as any).product_type ?? "").trim();
+          if (t) tally.set(t, (tally.get(t) ?? 0) + 1);
         }
-      }`,
-    );
-    const body = await res.json();
-    const brand = body?.data?.shop?.brandSettings;
-    const bg = brand?.colors?.primary?.[0]?.background ?? brand?.colors?.primary?.background ?? null;
-    storeBrand = {
-      accentColor: typeof bg === "string" && /^#[0-9a-fA-F]{6}$/.test(bg) ? bg : null,
-      slogan: brand?.slogan ?? null,
-    };
-  } catch {
-    storeBrand = null;
-  }
-  let topProductType: string | null = null;
-  try {
-    if (!wizardRelevant) throw new Error("skip");
-    const { data: typeRows } = await supabase
-      .from("products")
-      .select("product_type")
-      .eq("shop_id", shop.id)
-      .not("product_type", "is", null)
-      .limit(200);
-    const tally = new Map<string, number>();
-    for (const r of typeRows ?? []) {
-      const t = String((r as any).product_type ?? "").trim();
-      if (t) tally.set(t, (tally.get(t) ?? 0) + 1);
-    }
-    topProductType = [...tally.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
-  } catch {
-    topProductType = null;
-  }
+        return [...tally.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+      } catch {
+        return null;
+      }
+    })(),
+  ]);
 
   const previewToken = process.env.SHOPIFY_API_SECRET
     ? jwt.sign({ shopId: shop.id, shopDomain }, process.env.SHOPIFY_API_SECRET, { expiresIn: "12h" })
@@ -196,6 +212,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     liveQuestionCount,
     storeBrand,
     topProductType,
+    genStatus: getGenStatus(shop.id),
     catalog: {
       syncEnabled: (shopRow as any)?.catalog_sync_enabled === true,
       lastSyncedAt: ((shopRow as any)?.catalog_last_synced_at as string | null) ?? null,
@@ -372,6 +389,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             settings: {
               ...(existing?.settings ?? {}),
               ...(accentColor ? { quiz_accent_color: accentColor } : {}),
+              // Same activation the generator sets: without it a hand-built
+              // quiz publishes into a storefront surface that renders
+              // nothing (defaults: enabled=false, mode=chat) while the
+              // Publish screen says "shoppers see it right away".
+              enabled: true,
+              assistant_mode:
+                (existing?.settings as Record<string, unknown> | undefined)?.assistant_mode === "chat" ||
+                (existing?.settings as Record<string, unknown> | undefined)?.assistant_mode === "both"
+                  ? "both"
+                  : "quiz",
             },
           };
           const saved = await saveQuizDraft(shop.id, blank, "manual");
@@ -803,6 +830,20 @@ export default function Studio() {
   const problems = data.draft ? draftProblems(data.draft.flow) : [];
   const needsOnboarding = !data.hasDraft && data.liveQuestionCount === 0;
 
+  // Watch-mode landing: when a stream-cut generation finally writes the
+  // draft, the wizard unmounts via revalidation and onDone never runs —
+  // reload the stale "Nothing to preview yet" iframe and surface any
+  // recorded generation warnings here instead.
+  const prevNeedsOnboardingRef = useRef(needsOnboarding);
+  useEffect(() => {
+    if (prevNeedsOnboardingRef.current && !needsOnboarding) {
+      reloadPreview();
+      const warnings = data.genStatus?.warnings ?? [];
+      if (warnings.length > 0) setGenNotice(warnings.slice(0, 2).join(" "));
+    }
+    prevNeedsOnboardingRef.current = needsOnboarding;
+  }, [needsOnboarding, reloadPreview, data.genStatus]);
+
   return (
     <AppProvider isEmbeddedApp apiKey={data.apiKey}>
       <StudioShell
@@ -931,6 +972,10 @@ export default function Studio() {
               onDone={(firstSlide, notice) => {
                 selectSlide(firstSlide);
                 if (notice) setGenNotice(notice);
+                // The iframe booted against the EMPTY pre-generation config
+                // and is showing "Nothing to preview yet" — without a
+                // reload, a successful generation looks like a failure.
+                reloadPreview();
               }}
             />
           ) : null

@@ -3924,23 +3924,48 @@ export async function getShopVariantsFlat(
   variantTitle: string;
   displayColor: string | null;
 }>> {
+  // PAGED past PostgREST's silent 1000-row cap: shade-heavy catalogs exceed
+  // it, and truncation here made publish reject valid rules ("references
+  // missing catalog items") with no client-side warning to match.
+  const PAGE = 1000;
+  const pageAll = async (
+    build: (from: number, to: number) => PromiseLike<{ data: any[] | null; error: any }>,
+  ): Promise<{ data: any[]; error: any }> => {
+    const rows: any[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await build(from, from + PAGE - 1);
+      if (error) return { data: rows, error };
+      rows.push(...(data ?? []));
+      if (!data || data.length < PAGE) break;
+    }
+    return { data: rows, error: null };
+  };
+
   const [variantsRes, productsRes] = await Promise.all([
     // select('*') rather than naming status explicitly: naming a column that
     // doesn't exist yet errors the whole query and silently empties the
     // picker. '*' keeps this working whether or not migration 057 has run.
-    supabase
-      .from('product_variants')
-      .select('*, products!inner ( id, shop_id, product_name )')
-      .eq('products.shop_id', shopId)
-      .order('created_at', { ascending: true }),
+    pageAll((from, to) =>
+      supabase
+        .from('product_variants')
+        .select('*, products!inner ( id, shop_id, product_name )')
+        .eq('products.shop_id', shopId)
+        .order('created_at', { ascending: true })
+        .range(from, to),
+    ),
     // NOTE: do NOT .order('created_at') here — the products table may not have
     // that column, and a bad ORDER BY makes the whole query error out, which
     // silently drops every product from the picker (you'd see only variants).
-    // Final ordering is done in JS below by product_name.
-    supabase
-      .from('products')
-      .select('*')
-      .eq('shop_id', shopId),
+    // Final ordering is done in JS below by product_name; paged reads still
+    // need SOME stable order, and id is guaranteed to exist.
+    pageAll((from, to) =>
+      supabase
+        .from('products')
+        .select('*')
+        .eq('shop_id', shopId)
+        .order('id', { ascending: true })
+        .range(from, to),
+    ),
   ]);
 
   if (variantsRes.error) console.error('getShopVariantsFlat variants error', variantsRes.error);

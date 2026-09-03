@@ -83,13 +83,21 @@ async function domainForShop(shopId: string): Promise<string> {
 }
 
 /** Cheap draft-existence check (no config jsonb fetch) for pages that only
- * need to warn "an unpublished draft exists". */
-export async function hasQuizDraft(shopId: string): Promise<boolean> {
-  const { count, error } = await supabase
+ * need to warn "an unpublished draft exists". excludeSeeded ignores drafts
+ * auto-seeded from live and never edited (created_by='seed') — the studio
+ * loader re-seeds seconds after every publish, and counting those made the
+ * dashboard claim "unpublished edits" forever after a clean publish. */
+export async function hasQuizDraft(
+  shopId: string,
+  opts?: { excludeSeeded?: boolean },
+): Promise<boolean> {
+  let query = supabase
     .from("quiz_config_versions")
     .select("id", { count: "exact", head: true })
     .eq("shop_id", shopId)
     .eq("status", "draft");
+  if (opts?.excludeSeeded) query = query.neq("created_by", "seed");
+  const { count, error } = await query;
   if (error) {
     console.error("hasQuizDraft error", error);
     return false;
@@ -111,7 +119,7 @@ export async function getQuizDraft(shopId: string): Promise<QuizDraft | null> {
 export async function saveQuizDraft(
   shopId: string,
   draft: QuizDraft,
-  createdBy: "ai" | "manual" = "manual",
+  createdBy: "ai" | "manual" | "seed" = "manual",
 ): Promise<{ ok: boolean; error?: string }> {
   const now = new Date().toISOString();
   // Update-then-insert against the one-draft-per-shop partial unique index,
@@ -268,7 +276,9 @@ export async function initDraftFromLive(shopId: string): Promise<QuizDraft> {
   const existing = await getQuizDraft(shopId);
   if (existing) return existing;
   const draft = await captureLiveConfig(shopId);
-  const saved = await saveQuizDraft(shopId, draft, "manual");
+  // "seed": an auto-seeded, never-edited draft — any real edit overwrites
+  // created_by via saveQuizDraft, which is what flips "unpublished edits".
+  const saved = await saveQuizDraft(shopId, draft, "seed");
   if (!saved.ok) throw new Error(`quiz-draft: init failed: ${saved.error}`);
   return draft;
 }
@@ -315,6 +325,9 @@ async function publishQuizDraftLocked(shopId: string): Promise<{ ok: boolean; er
   // The Publish checklist runs these client-side, but the server is the
   // authority: a stale tab or a direct POST must not publish blank
   // questions over a live config.
+  if (!Array.isArray(draft.flow.questions) || draft.flow.questions.length === 0) {
+    return { ok: false, error: "Draft has no questions — nothing to publish." };
+  }
   const structural = draftProblems(draft.flow as unknown as StudioFlow);
   if (structural.length > 0) {
     return {

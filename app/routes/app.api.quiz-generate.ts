@@ -6,6 +6,7 @@ import { findShopByDomain } from "../lib/supabase.server";
 import { checkRateLimit, RATE_LIMITS } from "../lib/rate-limiter.server";
 import { isClaudeConfigured } from "../lib/claude.server";
 import { generateQuizConfig, type BrandBrief } from "../lib/quiz-generator.server";
+import { recordGenStart, recordGenOutcome } from "../lib/gen-status.server";
 
 // AI quiz generation endpoint (admin-authenticated, NOT storefront).
 // Streams SSE progress events; the client uses fetch + a stream reader
@@ -83,6 +84,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       // Heartbeats keep Render's proxy from idling out the connection.
       const heartbeat = setInterval(() => send({ type: "heartbeat" }), 10_000);
 
+      // Outcome is ALSO recorded server-side: when the stream cuts, the
+      // wizard's watch mode reads it from the studio loader — otherwise a
+      // post-cut failure left the merchant watching a bar for the full
+      // watch budget, and post-cut warnings were silently dropped.
+      recordGenStart(shop.id);
       try {
         const result = await generateQuizConfig({
           shopId: shop.id,
@@ -92,12 +98,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           onProgress: (phase, streamed) => send({ type: "progress", phase, streamed }),
         });
         if (result.ok) {
+          recordGenOutcome(shop.id, { warnings: result.warnings });
           send({ type: "result", summary: result.summary, warnings: result.warnings });
         } else {
+          recordGenOutcome(shop.id, { error: result.error, warnings: result.warnings });
           send({ type: "error", error: result.error, warnings: result.warnings });
         }
       } catch (err) {
         console.error("[quiz-generate] failed:", err);
+        recordGenOutcome(shop.id, { error: err instanceof Error ? err.message : "Generation failed" });
         send({ type: "error", error: err instanceof Error ? err.message : "Generation failed" });
       } finally {
         clearInterval(heartbeat);

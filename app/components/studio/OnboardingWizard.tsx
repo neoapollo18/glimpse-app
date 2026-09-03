@@ -136,6 +136,24 @@ export function OnboardingWizard({
     return () => window.clearInterval(id);
   }, [stepIndex]);
 
+  // Watch mode is otherwise blind to server-side failure (a post-cut
+  // generation that fails writes no draft): the loader surfaces the
+  // recorded outcome; stop the watch on a failure newer than this run.
+  useEffect(() => {
+    if (!watching) return;
+    const status = data.genStatus;
+    if (status?.error && status.at >= genStartRef.current) {
+      if (watchTimerRef.current != null) window.clearInterval(watchTimerRef.current);
+      watchTimerRef.current = null;
+      watchingRef.current = false;
+      setWatching(false);
+      setPhase(null);
+      setBarPct(0);
+      setGenError(status.error);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watching, data.genStatus]);
+
   const startWatching = () => {
     // A retry must never race a stale watcher from the previous attempt.
     if (watchTimerRef.current != null) window.clearInterval(watchTimerRef.current);
@@ -206,6 +224,11 @@ export function OnboardingWizard({
         } else if (event.type === "error") {
           gotTerminal = true;
           setGenError(event.error);
+          // If the error is "a draft already exists" (e.g. a retry racing a
+          // slow first run that eventually saved), the revalidated loader
+          // unmounts this wizard into the studio — without this the merchant
+          // was stranded behind the overlay with no way forward.
+          revalidator.revalidate();
         }
       });
       if (!gotTerminal) {

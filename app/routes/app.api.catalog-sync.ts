@@ -43,9 +43,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       if (!enabled.ok) return json({ ok: false, error: enabled.error, intent });
     }
     const page = await syncCatalogPage(admin, shopDomain, cursor);
+    // Per-page errors are WARNINGS, not terminal: ok:false made the client
+    // stop the whole chain on one bad product, leaving a partial catalog
+    // with sync marked enabled (so no sync affordance anywhere). Keep
+    // paging; surface the messages for logging/UI.
+    if (page.errors.length) {
+      console.warn(`[catalog-sync] ${shopDomain} page warnings:`, page.errors.slice(0, 5).join("; "));
+    }
     return json({
-      ok: page.errors.length === 0,
-      error: page.errors.length ? page.errors.slice(0, 3).join("; ") : undefined,
+      ok: true,
+      warning: page.errors.length ? page.errors.slice(0, 3).join("; ") : undefined,
       intent,
       nextCursor: page.nextCursor,
       synced: page.synced,
