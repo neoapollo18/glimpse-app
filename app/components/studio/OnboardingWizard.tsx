@@ -113,7 +113,13 @@ export function OnboardingWizard({
     if (phase.startsWith("Drafting")) {
       return 20 + Math.min(66, (streamedRef.current / EXPECTED_DRAFT_CHARS) * 66);
     }
-    if (phase.startsWith("Fixing")) return 92;
+    // The repair pass is a SECOND full model call (minutes): stream through
+    // its own band instead of parking at a fixed cap. The bar never moves
+    // backwards (easing clamps at the current value), so the band starting
+    // below the drafting band's end is safe.
+    if (phase.startsWith("Fixing")) {
+      return 80 + Math.min(15, (streamedRef.current / EXPECTED_DRAFT_CHARS) * 15);
+    }
     if (phase.startsWith("Saving")) return 97;
     return 60;
   };
@@ -137,7 +143,11 @@ export function OnboardingWizard({
     setWatching(true);
     const startedAt = Date.now();
     watchTimerRef.current = window.setInterval(() => {
-      if (Date.now() - startedAt > 4 * 60_000) {
+      // Generous budget: a generation that needs the repair round-trip is
+      // TWO full model calls (~3 min each worst case) plus save — the old
+      // 4-minute cutoff declared failure while the server was still
+      // legitimately working.
+      if (Date.now() - startedAt > 10 * 60_000) {
         if (watchTimerRef.current != null) window.clearInterval(watchTimerRef.current);
         watchTimerRef.current = null;
         watchingRef.current = false;
@@ -421,8 +431,8 @@ export function OnboardingWizard({
             <Text as="p" variant="bodySm" tone="subdued">
               Working for {formatElapsed(elapsedS)}
               {quiet ? " — the connection has gone quiet, still trying" : ""}.
-              Usually one to three minutes depending on catalog size. It only
-              ever writes to your draft.
+              Usually one to three minutes; occasionally longer while Gleame
+              double-checks details. It only ever writes to your draft.
             </Text>
           )}
           {genError && (

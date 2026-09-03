@@ -147,6 +147,7 @@ function briefToPrompt(brief: BrandBrief): string {
     `Category (merchant-stated): ${brief.category}`,
     `Brand voice: ${brief.brandVoice}`,
     `THE CATALOG IS GROUND TRUTH: build the quiz around what the catalog actually sells (the quiz can only recommend real products). If the catalog's products clearly do not match the merchant-stated category, still follow the catalog — and add a warning that tells the merchant plainly, e.g. "You told us you sell nail polish, but your synced catalog is mostly hair extensions, so the quiz was built for what's actually in your catalog."`,
+    `MERCHANDISING REQUESTS (bundles, upsells, discounts) map onto what the quiz can actually do — never invent config fields for them: "bundle/mix-and-match N products" → recommend N complementary products together (numRecommendations if available, plus aiGuidance ASSEMBLY rules like "fill the last slot with a product that complements the top pick"); "upsell accessories" → an aiGuidance assembly rule reserving a slot for an accessory/add-on product from the catalog, with reasonText framing it as the perfect add-on; rule quantity covers multi-unit recommendations of one product. The quiz CANNOT create discounts or change prices — if the merchant asks for a discount, honor the bundling intent and add a warning that discounts must be set up in Shopify (e.g. an automatic discount for buying 3+), which pairs perfectly with the quiz recommending 3 products.`,
     `Quiz length: ${brief.quizLength === "short" ? "short (3-4 questions)" : "standard (5-7 questions)"}`,
     `Recommendation mode preference: ${brief.modePreference === "auto" ? "you decide based on the catalog" : brief.modePreference}`,
     brief.priorityProductIds?.length
@@ -258,17 +259,20 @@ export async function generateQuizConfig(args: {
   const usage: ClaudeUsage[] = [];
 
   // Throttled token progress (~1.5s): plain phase text + machine-readable
-  // char count. No word counts in the label — "(~1,200 words)" read as
-  // gibberish to merchants.
-  let streamedChars = 0;
+  // char count. PER-CALL counter — sharing one across generate + repair
+  // made the repair phase report inflated counts and froze the client's
+  // within-phase progress mapping.
   let lastTokenEmit = 0;
-  const tokenProgress = (label: string) => (deltaChars: number) => {
-    streamedChars += deltaChars;
-    const now = Date.now();
-    if (now - lastTokenEmit > 1500) {
-      lastTokenEmit = now;
-      onProgress?.(label, streamedChars);
-    }
+  const tokenProgress = (label: string) => {
+    let chars = 0;
+    return (deltaChars: number) => {
+      chars += deltaChars;
+      const now = Date.now();
+      if (now - lastTokenEmit > 1500) {
+        lastTokenEmit = now;
+        onProgress?.(label, chars);
+      }
+    };
   };
 
   onProgress?.("Reading your catalog…");
