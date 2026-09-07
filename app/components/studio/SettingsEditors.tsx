@@ -13,6 +13,7 @@ import {
   TextField,
 } from "@shopify/polaris";
 import type { StudioActionData } from "../../routes/studio";
+import { postStudioAction } from "./studio-data";
 
 // In-studio editors for the fixed slides (Intro, Photo, Results) and the
 // Theme item. These edit DRAFT SETTINGS through the same update_copy /
@@ -111,7 +112,7 @@ function useSettingsAutosave(onPreviewUpdate: (p: { flow?: unknown; config?: unk
         const fd = new FormData();
         fd.append("intent", "apply-tools");
         fd.append("calls", JSON.stringify(calls));
-        fetch("/studio", { method: "POST", body: fd }).catch(() => {});
+        postStudioAction(fd).catch(() => {});
       }
     },
     [],

@@ -15,6 +15,7 @@ import {
 } from "@shopify/polaris";
 import { ChevronDownIcon, ChevronRightIcon, MagicIcon } from "@shopify/polaris-icons";
 import { readSseStream } from "../../lib/sse-client";
+import { postStudioAction } from "./studio-data";
 import {
   photoFramingPrompt,
   GENERAL_FRAMING_PROMPT,
@@ -288,7 +289,7 @@ export function LogicStep({ data, chatBusy }: { data: StudioLoaderData; chatBusy
       const fd = new FormData();
       fd.append("intent", "save-notes");
       for (const key of keys) fd.append(`notes:${key}`, notesRef.current[key] ?? "");
-      fetch("/studio", { method: "POST", body: fd }).catch(() => {});
+      postStudioAction(fd).catch(() => {});
     },
     [],
   );
@@ -366,7 +367,7 @@ export function LogicStep({ data, chatBusy }: { data: StudioLoaderData; chatBusy
         const fd = new FormData();
         fd.append("intent", "draft-notes");
         fd.append("axisKeys", JSON.stringify([targets[i]]));
-        const res = await fetch("/studio", { method: "POST", body: fd });
+        const res = await postStudioAction(fd);
         const body = (await res.json().catch(() => null)) as StudioActionData | null;
         if (!mountedRef.current) return;
         if (!body?.ok) throw new Error(body?.error ?? `Drafting failed (${res.status})`);

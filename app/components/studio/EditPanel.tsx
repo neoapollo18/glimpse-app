@@ -22,6 +22,7 @@ import { IntroEditor, PhotoEditor, ResultsEditor, ThemeEditor } from "./Settings
 import type { StudioFlow, StudioQuestion, StudioOption } from "./types";
 import { answerLabel } from "./types";
 import { slideIdForQuestion } from "./SlideTree";
+import { postStudioAction } from "./studio-data";
 
 // Right panel: Edit | Chat tabs. Edit renders the contextual editor for the
 // selected slide; every manual edit goes through the SAME appliers the AI
@@ -331,7 +332,7 @@ function QuestionEditor({
     const fd = new FormData();
     fd.append("intent", "apply-tools");
     fd.append("calls", JSON.stringify(calls));
-    fetch("/studio", { method: "POST", body: fd })
+    postStudioAction(fd)
       .then(async (res) => {
         const body = (await res.json().catch(() => null)) as StudioActionData | null;
         if (body?.ok) {
