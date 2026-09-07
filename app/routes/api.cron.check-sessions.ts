@@ -46,8 +46,9 @@ import {
  *   already billed the in-flight period.
  * - Trials: +3 day buffer over createdAt because the 14-day clock starts
  *   at merchant APPROVAL, which can lag creation by ~2 days.
- * - Fees above the line's remaining approved cap are skipped (flagged in
- *   logs), never error-looped.
+ * - Fees above the line's remaining approved cap are skipped (flagged via
+ *   the BILLING_NEEDS_MIGRATION error log + the cron summary's
+ *   needsMigration list), never error-looped.
  * - Flat-price subscriptions (Mantle-created) are left alone entirely.
  * Also reconciles shops.subscription_status with reality — the webhook
  * is best-effort and the storefront gate reads this column.
@@ -90,7 +91,18 @@ async function maybePostTierUsage(
   }
 
   const { tier, fee } = tierForSessions(sessions);
-  const cycleKey = `${sub.id}:${sub.currentPeriodEnd ?? "unknown"}`;
+
+  // currentPeriodEnd is the cycle-rotation signal. A key built from a null
+  // period ("sub-id:unknown") can never rotate: once claimed, every future
+  // run would see "already posted this cycle" forever. Skip this run (loudly)
+  // and retry once Shopify reports a period end.
+  if (!sub.currentPeriodEnd) {
+    console.error(
+      `BILLING_NO_PERIOD_END ${shop}: active subscription ${sub.id} has null currentPeriodEnd — skipping usage post this run`,
+    );
+    return "active subscription has no currentPeriodEnd (skipped; retries next run)";
+  }
+  const cycleKey = `${sub.id}:${sub.currentPeriodEnd}`;
   if (state.last_usage_cycle_key === cycleKey) return "already posted this cycle";
 
   const persistMeta = () =>
@@ -125,6 +137,14 @@ async function maybePostTierUsage(
   // flag for a re-approval migration instead of error-looping.
   const remainingCap = (sub.usageCappedUsd ?? 0) - (sub.usageBalanceUsd ?? 0);
   if (fee > remainingCap) {
+    // Silent revenue leak until a human runs the re-approval migration —
+    // stable grep-able prefix so it's loud on every run, and the caller
+    // surfaces it in the cron summary's needsMigration list. (No shops
+    // column exists for a persistent flag; the cycle is deliberately NOT
+    // claimed so this re-fires until migrated.)
+    console.error(
+      `BILLING_NEEDS_MIGRATION ${shop}: fee $${fee} exceeds remaining approved cap $${remainingCap} on ${sub.id}`,
+    );
     return `NEEDS MIGRATION: fee $${fee} exceeds remaining approved cap $${remainingCap}`;
   }
 
@@ -133,12 +153,24 @@ async function maybePostTierUsage(
   if (claim.error) throw new Error(`cycle claim failed: ${claim.error}`);
   if (!claim.claimed) return "cycle claimed by a concurrent run";
 
-  const posted = await postTierUsage(graphql, {
-    usageLineItemId: sub.usageLineItemId,
-    feeUsd: fee,
-    description: `Gleame ${tier.name} plan — ${sessions.toLocaleString()} monthly sessions`,
-    idempotencyKey: cycleKey,
-  });
+  // directGraphql THROWS on HTTP/network errors (it only returns {ok:false}
+  // for Shopify userErrors), so the claim must be released on both paths —
+  // otherwise a transient 500 leaves last_usage_cycle_key committed and the
+  // shop's fee for the whole cycle is silently never posted. The
+  // usageBalanceUsd guard above keeps the retry safe if the record actually
+  // landed despite the error.
+  let posted;
+  try {
+    posted = await postTierUsage(graphql, {
+      usageLineItemId: sub.usageLineItemId,
+      feeUsd: fee,
+      description: `Gleame ${tier.name} plan — ${sessions.toLocaleString()} monthly sessions`,
+      idempotencyKey: cycleKey,
+    });
+  } catch (err) {
+    await releaseUsageCycle(shop, cycleKey, state.last_usage_cycle_key);
+    throw err;
+  }
   if (!posted.ok) {
     await releaseUsageCycle(shop, cycleKey, state.last_usage_cycle_key);
     throw new Error(`usage record failed: ${posted.error}`);
@@ -216,9 +248,16 @@ async function fetchSessionsDirectly(shop: string, accessToken: string): Promise
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  // Verify cron secret for security
+  // Verify cron secret for security. Preferred transport is the header
+  // (query strings land in access/proxy logs and the cron provider's config):
+  //   curl -H "Authorization: Bearer $CRON_SECRET" .../api/cron/check-sessions
+  // DEPRECATED: the ?secret= query param is kept only until the external
+  // scheduler is reconfigured to send the header — remove it after that,
+  // then rotate CRON_SECRET.
   const url = new URL(request.url);
-  const secret = url.searchParams.get('secret');
+  const auth = request.headers.get('Authorization') ?? '';
+  const bearer = auth.startsWith('Bearer ') ? auth.slice('Bearer '.length) : '';
+  const secret = bearer || url.searchParams.get('secret');
 
   // Constant-time comparison — a plain !== leaks how many leading bytes
   // matched via timing. timingSafeEqual requires equal-length buffers, so a
@@ -244,6 +283,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     skipped: number;
     errors: number;
     errorDetails: string[];
+    needsMigration: string[];
   } = {
     checked: 0,
     cached: 0,  // Sessions saved to Supabase
@@ -251,6 +291,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     skipped: 0, // No active subscription
     errors: 0,
     errorDetails: [],
+    needsMigration: [], // Shops whose fee exceeds the approved cap (re-approval needed)
   };
 
   try {
@@ -308,6 +349,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         try {
           const billing = await maybePostTierUsage(shop, accessToken, sessionCount);
           if (billing.startsWith("posted")) results.sent++;
+          if (billing.startsWith("NEEDS MIGRATION")) results.needsMigration.push(`${shop}: ${billing}`);
           console.log(`💳 ${shop}: ${billing}`);
         } catch (billingError) {
           const msg = billingError instanceof Error ? billingError.message : String(billingError);

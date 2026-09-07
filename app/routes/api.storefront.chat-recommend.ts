@@ -18,12 +18,15 @@ import {
 import { transformCandidateImage } from "../lib/tryon-transform.server";
 import { classifyPhotoAxes } from "../lib/photo-axis-classifier.server";
 import { checkRateLimit, getClientIP } from "../lib/rate-limiter.server";
+import { isValidImageFile } from "../lib/storefront-api.server";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, X-Requested-With",
 };
+
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
 // CORS preflight — Remix routes OPTIONS to the LOADER, not the action (same
 // pattern as quiz-recommend/track-event). Without a loader, preflights got a
@@ -98,6 +101,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         { status: 400, headers: CORS_HEADERS }
       );
     }
+    // Same cap as quiz-tryon/quiz-shade: this is a public endpoint and the
+    // whole file gets buffered + base64-encoded below, so an unbounded
+    // upload is a memory DoS.
+    if (imageFile.size > MAX_IMAGE_BYTES) {
+      return json({ error: "Image too large" }, { status: 413, headers: CORS_HEADERS });
+    }
+    if (!isValidImageFile(imageFile)) {
+      return json(
+        { error: "Please upload an image file (JPG, PNG, HEIC, etc.)." },
+        { status: 400, headers: CORS_HEADERS }
+      );
+    }
 
     // Verify shop
     const verifiedShop = await findShopByDomain(shopDomain);
@@ -123,6 +138,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return json(
         { error: "Too many requests. Please wait a moment." },
         { status: 429, headers: { ...CORS_HEADERS, "Retry-After": ipLimit.retryAfterSeconds.toString() } }
+      );
+    }
+    // Per-shop backstop: the per-IP key is spoofable via X-Forwarded-For
+    // rotation, and each request here fans out to ~10-25 paid Gemini calls
+    // (photo-axis classification + up to 8 transforms + backfill). Sized much
+    // tighter than quiz-tryon's 1000/hr because of that fan-out.
+    const shopLimit = checkRateLimit(
+      `chat-recommend:shop:${verifiedDomain}:hour`,
+      150,
+      60 * 60 * 1000
+    );
+    if (!shopLimit.allowed) {
+      return json(
+        { error: "Too many requests. Please wait a moment." },
+        { status: 429, headers: { ...CORS_HEADERS, "Retry-After": shopLimit.retryAfterSeconds.toString() } }
       );
     }
 

@@ -25,33 +25,33 @@ import {
   saveChatAssistantConfig,
   type ChatAssistantConfig,
 } from "../lib/supabase.server";
+import {
+  ADMIN_ALLOWED_SHOPS,
+  mintAdminToken,
+  verifyAdminToken,
+} from "../lib/admin-auth.server";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
-const ALLOWED_SHOPS = [
-  "testingaaronandevansaas.myshopify.com",
-  "hx5hqt-na.myshopify.com",
-];
-
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
-  if (!ALLOWED_SHOPS.includes(session.shop)) {
+  if (!ADMIN_ALLOWED_SHOPS.includes(session.shop)) {
     throw new Response("Forbidden", { status: 403 });
   }
 
   const configs = await getAllChatAssistantConfigs();
-  return json({ configs });
+  return json({ configs, adminToken: mintAdminToken(session.shop) });
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  // Authenticate via Prisma session (same pattern as admin.tsx action)
-  const url = new URL(request.url);
-  const shopParam = url.searchParams.get("shop");
-  if (!shopParam || !ALLOWED_SHOPS.includes(shopParam)) {
+  // No App Bridge on this page, so POSTs can't carry a Shopify session token.
+  // Require the loader-minted HMAC adminToken instead (see lib/admin-auth) —
+  // the loader ran authenticate.admin + the allowlist check to mint it.
+  const formData = await request.formData();
+  if (!verifyAdminToken(formData.get("adminToken") as string | null)) {
     return json({ success: false, error: "Forbidden" }, { status: 403 });
   }
 
-  const formData = await request.formData();
   const intent = formData.get("intent") as string;
 
   if (intent === "toggle") {
@@ -68,7 +68,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function AdminAssistant() {
-  const { configs } = useLoaderData<typeof loader>();
+  const { configs, adminToken } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<{ success?: boolean }>();
 
   return (
@@ -135,6 +135,7 @@ export default function AdminAssistant() {
                             formData.append("intent", "toggle");
                             formData.append("shopDomain", config.shop_domain);
                             formData.append("enabled", String(!config.enabled));
+                            formData.append("adminToken", adminToken);
                             fetcher.submit(formData, { method: "POST" });
                           }}
                         >

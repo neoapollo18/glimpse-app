@@ -3,10 +3,10 @@ import { json } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import { shopNeedsBilling } from "../lib/billing-gate.server";
 import { findShopByDomain } from "../lib/supabase.server";
-import { checkRateLimit, RATE_LIMITS } from "../lib/rate-limiter.server";
+import { checkRateLimits, RATE_LIMITS } from "../lib/rate-limiter.server";
 import { isClaudeConfigured } from "../lib/claude.server";
 import { generateQuizConfig, type BrandBrief } from "../lib/quiz-generator.server";
-import { recordGenStart, recordGenOutcome } from "../lib/gen-status.server";
+import { recordGenStart, recordGenHeartbeat, recordGenOutcome } from "../lib/gen-status.server";
 
 // AI quiz generation endpoint (admin-authenticated, NOT storefront).
 // Streams SSE progress events; the client uses fetch + a stream reader
@@ -43,10 +43,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ ok: false, error: "AI quiz creation is not configured (missing ANTHROPIC_API_KEY)." }, { status: 503 });
   }
 
-  const hourly = checkRateLimit(`quiz-generate:shop:${shopDomain}:hour`, RATE_LIMITS.QUIZ_GENERATE_PER_SHOP_HOUR.limit, RATE_LIMITS.QUIZ_GENERATE_PER_SHOP_HOUR.windowMs);
-  const daily = checkRateLimit(`quiz-generate:shop:${shopDomain}:day`, RATE_LIMITS.QUIZ_GENERATE_PER_SHOP_DAY.limit, RATE_LIMITS.QUIZ_GENERATE_PER_SHOP_DAY.windowMs);
-  if (!hourly.allowed || !daily.allowed) {
-    const retryAfterSeconds = Math.max(hourly.retryAfterSeconds, daily.retryAfterSeconds);
+  // Atomic across both windows: a blocked request must not burn the sibling
+  // window's quota (retrying while hourly-blocked used to drain the day).
+  const limit = checkRateLimits([
+    { key: `quiz-generate:shop:${shopDomain}:hour`, limit: RATE_LIMITS.QUIZ_GENERATE_PER_SHOP_HOUR.limit, windowMs: RATE_LIMITS.QUIZ_GENERATE_PER_SHOP_HOUR.windowMs },
+    { key: `quiz-generate:shop:${shopDomain}:day`, limit: RATE_LIMITS.QUIZ_GENERATE_PER_SHOP_DAY.limit, windowMs: RATE_LIMITS.QUIZ_GENERATE_PER_SHOP_DAY.windowMs },
+  ]);
+  if (!limit.allowed) {
+    const retryAfterSeconds = limit.retryAfterSeconds;
     const wait =
       retryAfterSeconds > 7200
         ? `${Math.ceil(retryAfterSeconds / 3600)} hours`
@@ -81,14 +85,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           closed = true;
         }
       };
-      // Heartbeats keep Render's proxy from idling out the connection.
-      const heartbeat = setInterval(() => send({ type: "heartbeat" }), 10_000);
-
       // Outcome is ALSO recorded server-side: when the stream cuts, the
       // wizard's watch mode reads it from the studio loader — otherwise a
       // post-cut failure left the merchant watching a bar for the full
-      // watch budget, and post-cut warnings were silently dropped.
-      recordGenStart(shop.id);
+      // watch budget, and post-cut warnings were silently dropped. The
+      // token scopes heartbeat/outcome writes to THIS run so concurrent
+      // runs for one shop can't cross-talk status.
+      const genToken = recordGenStart(shop.id);
+      // Heartbeats keep Render's proxy from idling out the connection, and
+      // keep the server-side status fresh so watch mode can tell a live
+      // generation from one that died without recording an outcome.
+      const heartbeat = setInterval(() => {
+        send({ type: "heartbeat" });
+        recordGenHeartbeat(shop.id, genToken);
+      }, 10_000);
+
       try {
         const result = await generateQuizConfig({
           shopId: shop.id,
@@ -98,15 +109,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           onProgress: (phase, streamed) => send({ type: "progress", phase, streamed }),
         });
         if (result.ok) {
-          recordGenOutcome(shop.id, { warnings: result.warnings });
+          recordGenOutcome(shop.id, genToken, { warnings: result.warnings });
           send({ type: "result", summary: result.summary, warnings: result.warnings });
         } else {
-          recordGenOutcome(shop.id, { error: result.error, warnings: result.warnings });
+          recordGenOutcome(shop.id, genToken, { error: result.error, warnings: result.warnings });
           send({ type: "error", error: result.error, warnings: result.warnings });
         }
       } catch (err) {
         console.error("[quiz-generate] failed:", err);
-        recordGenOutcome(shop.id, { error: err instanceof Error ? err.message : "Generation failed" });
+        recordGenOutcome(shop.id, genToken, { error: err instanceof Error ? err.message : "Generation failed" });
         send({ type: "error", error: err instanceof Error ? err.message : "Generation failed" });
       } finally {
         clearInterval(heartbeat);

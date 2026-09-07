@@ -104,9 +104,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     // Anti-pollution: when the browser sends an Origin, the event is
     // attributed to the shop that OWNS that origin (exact shop_domain or
-    // alternate_domains), not to whatever shopDomain the body claims. A
-    // mismatched claim is silently dropped. No Origin header (legacy
-    // clients, some beacons) keeps the body claim as before.
+    // alternate_domains) when we can resolve it. Only a resolved origin
+    // belonging to a DIFFERENT shop than the body claims (real spoofing)
+    // is dropped; an UNKNOWN origin host is the normal case for a
+    // custom-domain storefront never added to alternate_domains, so fall
+    // back to verifying the body-claimed shop exists rather than silently
+    // discarding the whole funnel. No Origin header (legacy clients, some
+    // beacons) keeps the body claim as before.
     let effectiveShopDomain = String(shopDomain);
     const origin = request.headers.get("Origin") ?? request.headers.get("Referer");
     if (origin) {
@@ -118,13 +122,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
       if (originHost && originHost !== effectiveShopDomain.toLowerCase()) {
         const originShop = await findShopByDomain(originHost);
-        if (!originShop || originShop.shop_domain !== effectiveShopDomain) {
-          // Same opaque response as rate limiting: accept, don't process.
-          return json({ success: true }, {
-            headers: { "Access-Control-Allow-Origin": "*" }
-          });
+        if (originShop) {
+          if (originShop.shop_domain !== effectiveShopDomain) {
+            // Origin owned by a different shop — spoofed claim.
+            // Same opaque response as rate limiting: accept, don't process.
+            return json({ success: true }, {
+              headers: { "Access-Control-Allow-Origin": "*" }
+            });
+          }
+          effectiveShopDomain = originShop.shop_domain;
+        } else {
+          // Unknown origin (custom domain not in alternate_domains):
+          // verify the claimed shop exists before attributing to it.
+          const claimedShop = await findShopByDomain(effectiveShopDomain.toLowerCase());
+          if (!claimedShop) {
+            return json({ success: true }, {
+              headers: { "Access-Control-Allow-Origin": "*" }
+            });
+          }
+          effectiveShopDomain = claimedShop.shop_domain;
         }
-        effectiveShopDomain = originShop.shop_domain;
       }
     }
 

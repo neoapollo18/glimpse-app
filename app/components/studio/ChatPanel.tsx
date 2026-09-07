@@ -192,13 +192,18 @@ export function ChatPanel({
           true,
         );
       }
-      if (sawChange || !gotTerminal) revalidator.revalidate();
     } catch (err) {
       appendAssistantText(
         `Something went wrong: ${err instanceof Error ? err.message : "please try again"}`,
         true,
       );
     } finally {
+      // Revalidate in finally, not the try: a thrown SSE read (connection
+      // reset mid-stream) after an applied change must still refresh loader
+      // data. The studio's postTurnLock is only released when that
+      // revalidation completes, so skipping it froze every editor behind
+      // "Gleame is making changes" until a full reload.
+      if (sawChange || !gotTerminal) revalidator.revalidate();
       setBusy(false);
     }
   };
@@ -212,9 +217,16 @@ export function ChatPanel({
     const res = await fetch("/app/api/quiz-copilot", { method: "POST", body: fd });
     const body = await res.json().catch(() => null);
     if (body?.ok) {
-      setItems((prev) =>
-        prev.map((it) => (it.kind === "change" && it.snapshotId === snapshotId ? { ...it, undone: true } : it)),
-      );
+      // The server restores the pre-change draft and prunes every LATER
+      // snapshot (they describe reverted states) — so mark this card AND all
+      // change cards after it as undone. Leaving later cards live showed
+      // "Applied" badges for reverted changes and Undo buttons that could
+      // only fail with "Snapshot not found".
+      setItems((prev) => {
+        const idx = prev.findIndex((it) => it.kind === "change" && it.snapshotId === snapshotId);
+        if (idx < 0) return prev;
+        return prev.map((it, i) => (it.kind === "change" && i >= idx ? { ...it, undone: true } : it));
+      });
       onChangeApplied("");
       revalidator.revalidate();
     } else {

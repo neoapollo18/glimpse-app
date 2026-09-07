@@ -6,7 +6,8 @@
 //
 // Invariants (load-bearing for live merchants):
 // - Gated per shop by shops.catalog_sync_enabled (DEFAULT FALSE). ORLY and
-//   L&M stay FALSE forever; webhooks bail before any write.
+//   L&M stay FALSE forever (hard-enforced by CATALOG_SYNC_DENYLIST in
+//   enableCatalogSync); webhooks bail before any write.
 // - Sync NEVER writes config columns: transformation_prompt,
 //   reference_image_url(s), multi_set_prompt, multi_set_reference_urls,
 //   ai_model, category_id, funnel_responses, display_color, tagline. The
@@ -117,6 +118,16 @@ function normalizeStatus(value: unknown): "active" | "draft" | "archived" {
 
 const numericId = (gid: string): string => gid.split("/").pop() ?? gid;
 
+// Hand-managed brand shops whose products/product_variants are curated by
+// onboarding scripts (scripts/brand-configs/*.json): catalog_sync_enabled
+// must stay FALSE forever for them. Enforced HERE, not just by the column
+// default — the studio top bar offers one-click enable to any admin session,
+// and nothing ever sets the flag back to false.
+const CATALOG_SYNC_DENYLIST = new Set([
+  "orlybeauty.myshopify.com", // ORLY (scripts/brand-configs/orly-attributes.json)
+  "locks-mane.myshopify.com", // Locks & Mane (scripts/brand-configs/locks-and-mane.json)
+]);
+
 export async function isCatalogSyncEnabled(shopDomain: string): Promise<boolean> {
   const { data, error } = await supabase
     .from("shops")
@@ -131,6 +142,10 @@ export async function isCatalogSyncEnabled(shopDomain: string): Promise<boolean>
 }
 
 export async function enableCatalogSync(shopDomain: string): Promise<{ ok: boolean; error?: string }> {
+  if (CATALOG_SYNC_DENYLIST.has(shopDomain)) {
+    console.warn(`[CatalogSync] refusing to enable sync for hand-managed shop ${shopDomain}`);
+    return { ok: false, error: "Catalog sync is disabled for this shop — its catalog is hand-managed." };
+  }
   const { data, error } = await supabase
     .from("shops")
     .update({ catalog_sync_enabled: true })
@@ -158,6 +173,10 @@ export async function syncCatalogPage(
     throw new Error(`[CatalogSync] sync not enabled for ${shopDomain}`);
   }
 
+  // Snapshot freshness marker: DB variant rows written at/after this instant
+  // (e.g. by a products/update webhook landing mid-page) are NEWER than the
+  // GraphQL snapshot below and must not be swept as "vanished".
+  const fetchStartedAt = Date.now();
   const response = await admin.graphql(PRODUCTS_PAGE_QUERY, {
     variables: { first: PAGE_SIZE, after: cursor ?? null, variants: VARIANTS_PER_PRODUCT },
   });
@@ -195,26 +214,38 @@ export async function syncCatalogPage(
     })),
   }));
 
-  const errors = await upsertCatalogProducts(shop.id, products);
+  const { written, errors } = await upsertCatalogProducts(shop.id, products, fetchStartedAt);
   invalidateCatalogCache(shop.id);
 
   const { hasNextPage, endCursor } = body.data.products.pageInfo;
   const nextCursor = hasNextPage ? endCursor : null;
 
-  const { data: shopUpdate, error: shopUpdateError } = await supabase
+  // Compare-and-swap on the cursor we were handed: two concurrent chains
+  // (two tabs, dashboard + studio chip) otherwise race last-writer-wins,
+  // and a slow stale chain can overwrite a finished chain's null cursor
+  // with a bogus mid-catalog resume point.
+  let bookkeeping = supabase
     .from("shops")
     .update({
       catalog_sync_cursor: nextCursor,
       catalog_last_synced_at: new Date().toISOString(),
       ...(total != null ? { catalog_product_count: total } : {}),
     })
-    .eq("id", shop.id)
-    .select("id");
-  if (shopUpdateError || !shopUpdate?.length) {
-    errors.push(`shops bookkeeping update failed: ${shopUpdateError?.message ?? "0 rows"}`);
+    .eq("id", shop.id);
+  bookkeeping = cursor
+    ? bookkeeping.eq("catalog_sync_cursor", cursor)
+    : bookkeeping.is("catalog_sync_cursor", null);
+  const { data: shopUpdate, error: shopUpdateError } = await bookkeeping.select("id");
+  if (shopUpdateError) {
+    errors.push(`shops bookkeeping update failed: ${shopUpdateError.message}`);
+  } else if (!shopUpdate?.length) {
+    errors.push("sync cursor not updated: another catalog sync advanced it concurrently");
   }
 
-  return { nextCursor, synced: products.length, total, errors };
+  // synced = product rows actually WRITTEN to the DB, not products fetched
+  // from Shopify — counting fetches let a page whose upserts all failed
+  // still report full success to the client.
+  return { nextCursor, synced: written, total, errors };
 }
 
 /**
@@ -224,9 +255,16 @@ export async function syncCatalogPage(
  * of row keys, and a stray key would make missing values overwrite existing
  * rows with NULL.
  */
-async function upsertCatalogProducts(shopId: string, products: SyncedProduct[]): Promise<string[]> {
+async function upsertCatalogProducts(
+  shopId: string,
+  products: SyncedProduct[],
+  // Epoch ms of when the incoming product data was fetched; variant rows
+  // synced at/after this are fresher than the snapshot and exempt from the
+  // vanished-variant sweep.
+  fetchedAt: number,
+): Promise<{ written: number; errors: string[] }> {
   const errors: string[] = [];
-  if (products.length === 0) return errors;
+  if (products.length === 0) return { written: 0, errors };
   const now = new Date().toISOString();
 
   // Legacy rows may store the bare numeric Shopify id instead of the GID
@@ -241,7 +279,7 @@ async function upsertCatalogProducts(shopId: string, products: SyncedProduct[]):
     .in("shopify_id", [...gids, ...numerics]);
   if (existingError) {
     errors.push(`existing-products lookup failed: ${existingError.message}`);
-    return errors;
+    return { written: 0, errors };
   }
   const byShopifyId = new Map((existingRows ?? []).map((r) => [r.shopify_id as string, r.id as string]));
   for (const p of products) {
@@ -281,9 +319,10 @@ async function upsertCatalogProducts(shopId: string, products: SyncedProduct[]):
     .from("products")
     .upsert(productRows, { onConflict: "shop_id,shopify_id" })
     .select("id, shopify_id");
-  if (upsertError || (upserted?.length ?? 0) !== productRows.length) {
-    errors.push(`product upsert wrote ${upserted?.length ?? 0}/${productRows.length}: ${upsertError?.message ?? ""}`);
-    if (!upserted?.length) return errors;
+  const written = upserted?.length ?? 0;
+  if (upsertError || written !== productRows.length) {
+    errors.push(`product upsert wrote ${written}/${productRows.length}: ${upsertError?.message ?? ""}`);
+    if (!written) return { written: 0, errors };
   }
   const rowIdByGid = new Map((upserted ?? []).map((r) => [r.shopify_id as string, r.id as string]));
 
@@ -322,7 +361,7 @@ async function upsertCatalogProducts(shopId: string, products: SyncedProduct[]):
     const sweepIds = sweepable.map((p) => rowIdByGid.get(p.shopifyId)!);
     const { data: dbVariants, error: dbVariantsError } = await supabase
       .from("product_variants")
-      .select("id, product_id, shopify_variant_id, status")
+      .select("id, product_id, shopify_variant_id, status, synced_at")
       .in("product_id", sweepIds);
     if (dbVariantsError) {
       errors.push(`variant sweep lookup failed: ${dbVariantsError.message}`);
@@ -332,7 +371,14 @@ async function upsertCatalogProducts(shopId: string, products: SyncedProduct[]):
       );
       const vanished = (dbVariants ?? []).filter((row) => {
         const incoming = incomingByProduct.get(row.product_id as string);
-        return incoming && !incoming.has(row.shopify_variant_id as string) && row.status !== "deleted";
+        if (!incoming || incoming.has(row.shopify_variant_id as string) || row.status === "deleted") {
+          return false;
+        }
+        // Rows written at/after the fetch (e.g. a webhook that added a brand
+        // new variant mid-page) are fresher than our snapshot — skip them or
+        // the sweep soft-deletes a variant that really exists.
+        const syncedAtMs = row.synced_at ? Date.parse(row.synced_at as string) : NaN;
+        return !(Number.isFinite(syncedAtMs) && syncedAtMs >= fetchedAt);
       });
       if (vanished.length > 0) {
         const { data: swept, error: sweepError } = await supabase
@@ -347,7 +393,7 @@ async function upsertCatalogProducts(shopId: string, products: SyncedProduct[]):
     }
   }
 
-  return errors;
+  return { written, errors };
 }
 
 /**
@@ -369,6 +415,8 @@ export async function syncSingleProduct(
     variants?: Array<{ id: number; title?: string; sku?: string; price?: string }>;
   },
 ): Promise<{ ok: boolean; errors: string[] }> {
+  // Webhook payload freshness: treat it as fetched "now" for the sweep guard.
+  const fetchedAt = Date.now();
   const shop = await findShopByDomain(shopDomain);
   if (!shop) return { ok: false, errors: [`unknown shop ${shopDomain}`] };
 
@@ -395,7 +443,7 @@ export async function syncSingleProduct(
     })),
   };
 
-  const errors = await upsertCatalogProducts(shop.id, [product]);
+  const { errors } = await upsertCatalogProducts(shop.id, [product], fetchedAt);
   invalidateCatalogCache(shop.id);
   if (errors.length) console.error(`[CatalogSync] syncSingleProduct ${shopDomain}:`, errors);
   return { ok: errors.length === 0, errors };

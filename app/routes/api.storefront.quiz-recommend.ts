@@ -19,7 +19,7 @@ import {
   extractNumericId,
   type Candidate,
 } from "../lib/recommendation-engine.server";
-import { llmOrderCandidates, guardAndPrioritize } from "../lib/llm-recommender.server";
+import { llmOrderCandidates, guardAndPrioritize, applyPriorityOrdering } from "../lib/llm-recommender.server";
 import { checkRateLimit, getClientIP } from "../lib/rate-limiter.server";
 
 const CORS_HEADERS = {
@@ -224,6 +224,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       if (gateAxis && !(gateAxis.key in criteria)) {
         outcome = { ...outcome, partial: true };
       }
+    } else if (
+      mode === "matrix" &&
+      !outcome.matrixApplied &&
+      chatConfig.priority_product_ids.length > 0
+    ) {
+      // Matrix mode used to serve the no-rule fallback as a raw shuffle,
+      // silently ignoring priority_product_ids a merchant configured in
+      // ai/hybrid mode before switching back. Honor the priority ordering —
+      // an inherent no-op for shops with no priority products. The mismatch
+      // guard is deliberately NOT applied here: mismatchGuard defaults to
+      // true for every shop, so adding it would change live matrix-mode
+      // shops' fallback ordering rather than honor an explicit choice.
+      aiOrdered = applyPriorityOrdering(
+        aiOrdered,
+        chatConfig.priority_product_ids,
+        chatConfig.recommendation_tuning,
+      );
+      outcome = { ...outcome, ordered: aiOrdered };
     }
 
     // Stock-aware filtering (migration 047, opt-in per shop): drop matrix
@@ -234,12 +252,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (chatConfig.quiz_availability_filter && outcome.matrixApplied) {
       const filterByStock = async (o: typeof outcome) => {
         const segment = o.ordered.slice(0, o.matrixCount);
-        const gids = segment.map((c) => c.variant?.shopify_variant_id || c.product.shopify_id);
+        // Partial results collapse to product level with the variant
+        // explicitly arbitrary (the shade axis is unanswered; the response
+        // nulls the variant out below) — probing that arbitrary variant's
+        // stock would drop purchasable products over a shade nobody picked
+        // yet. Probe the PRODUCT instead: fetchAvailability answers
+        // "ACTIVE with ANY variant purchasable" for product GIDs, which is
+        // exactly what a pre-shade card promises. The definitive post-shade
+        // re-run is exact and keeps the variant-level probe.
+        const gidFor = (c: Candidate) =>
+          o.partial
+            ? c.product.shopify_id
+            : c.variant?.shopify_variant_id || c.product.shopify_id;
+        const gids = segment.map(gidFor);
         const avail = await fetchAvailability(verifiedDomain, gids, "quiz-recommend");
         if (avail === null) return null; // probe failed → fail open
-        const inStock = segment.filter(
-          (c) => avail.get(c.variant?.shopify_variant_id || c.product.shopify_id) !== false
-        );
+        const inStock = segment.filter((c) => avail.get(gidFor(c)) !== false);
         if (inStock.length < segment.length) {
           console.log(
             `[quiz-recommend] availability filter dropped ${segment.length - inStock.length}/${segment.length} matrix picks for ${verifiedDomain}`

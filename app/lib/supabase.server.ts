@@ -34,13 +34,21 @@ export async function findShopByDomain(shopDomain: string) {
   }
 
   // Method 2: Check alternate_domains whitelist (merchant-configured)
-  const { data: altDomainMatch } = await supabase
+  // Deterministic order + limit(2) instead of .single(): nothing enforces
+  // uniqueness across rows, and .single() errors on 2+ matches — turning a
+  // duplicate whitelist entry into "no shop found" for BOTH shops.
+  const { data: altDomainMatches } = await supabase
     .from('shops')
     .select('id, shop_domain')
     .contains('alternate_domains', [shopDomain])
-    .single();
-  
+    .order('id', { ascending: true })
+    .limit(2);
+
+  const altDomainMatch = altDomainMatches?.[0];
   if (altDomainMatch) {
+    if (altDomainMatches!.length > 1) {
+      console.warn(`⚠️ Multiple shops whitelist alternate domain "${shopDomain}" — using ${altDomainMatch.shop_domain}. Remove the duplicate from alternate_domains in Supabase.`);
+    }
     console.log('✅ Found shop via alternate_domains:', altDomainMatch.shop_domain);
     return altDomainMatch;
   }
@@ -238,7 +246,8 @@ export async function saveProductConfiguration(
 
 export async function updateProductConfiguration(
   configuredProductId: string,
-  transformationPrompt: string
+  transformationPrompt: string,
+  shopId: string
 ) {
   try {
     const { data, error } = await supabase
@@ -247,6 +256,9 @@ export async function updateProductConfiguration(
         transformation_prompt: transformationPrompt
       })
       .eq('id', configuredProductId)
+      // Ownership guard: the row ID is client-supplied — without the shop
+      // scope any installed merchant could overwrite another shop's config.
+      .eq('shop_id', shopId)
       .select()
       .single();
 
@@ -288,16 +300,25 @@ export async function updateProductAiModel(
   }
 }
 
-export async function deleteProductConfiguration(configuredProductId: string) {
+export async function deleteProductConfiguration(configuredProductId: string, shopId: string) {
   try {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('products')
       .delete()
-      .eq('id', configuredProductId);
+      .eq('id', configuredProductId)
+      // Ownership guard: the row ID is client-supplied — without the shop
+      // scope any installed merchant could delete another shop's config.
+      .eq('shop_id', shopId)
+      .select('id');
 
     if (error) {
       console.error("Product delete error:", error);
       throw new Error(`Failed to delete product configuration: ${error.message}`);
+    }
+
+    // A 0-row delete succeeds silently in PostgREST — surface it instead.
+    if (!data || data.length === 0) {
+      throw new Error('Product configuration not found for this shop');
     }
 
     console.log('Product deleted successfully');
@@ -306,6 +327,26 @@ export async function deleteProductConfiguration(configuredProductId: string) {
     console.error("Error in deleteProductConfiguration:", error);
     throw error;
   }
+}
+
+/**
+ * Verify a products row belongs to a shop before acting on a
+ * client-supplied product UUID (admin mutation ownership guard).
+ */
+export async function productBelongsToShop(productId: string, shopId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('products')
+    .select('id')
+    .eq('id', productId)
+    .eq('shop_id', shopId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error verifying product ownership:', error);
+    return false;
+  }
+
+  return !!data;
 }
 
 // Strip the `?key=…` suffix Shopify's Storefront Cart API attaches to cart
@@ -707,6 +748,10 @@ export async function getAnalytics(shopDomain: string, daysBack: number = 7) {
         .eq('shop_id', shop.id)
         .in('event_type', ['transformation', 'widget_view', 'add_to_cart'])
         .gte('created_at', dateThreshold.toISOString())
+        // Stable total order (id tiebreak for same-timestamp rows) — .range()
+        // paging without ORDER BY can overlap or skip rows between pages.
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
         .range(page * pageSize, (page + 1) * pageSize - 1);
 
       if (productError) {
@@ -1172,6 +1217,11 @@ export async function getProductOrVariantConfiguration(
  * @param shopifyVariantId - Shopify variant GID
  * @param variantTitle - Human-readable variant name (e.g., "Red Eyeliner")
  * @param transformationPrompt - Variant-specific AI prompt
+ * @param displayColor - Swatch hex (undefined = leave existing untouched)
+ * @param funnelResponses - Raw shade answers keyed by parameter NAME, so the
+ *   prompt can be rebuilt when the product-level funnel answers change
+ *   (migration 064). undefined = leave existing untouched; null = clear
+ *   (manual prompt overrides must not be rebuilt from stale responses).
  * @returns Saved variant configuration
  */
 export async function saveVariantConfiguration(
@@ -1179,7 +1229,8 @@ export async function saveVariantConfiguration(
   shopifyVariantId: string,
   variantTitle: string,
   transformationPrompt: string,
-  displayColor?: string | null
+  displayColor?: string | null,
+  funnelResponses?: Record<string, string | number> | null
 ) {
   console.log('Saving variant configuration:', { productId, shopifyVariantId, variantTitle });
 
@@ -1201,6 +1252,7 @@ export async function saveVariantConfiguration(
         updated_at: new Date().toISOString(),
       };
       if (displayColor !== undefined) updatePayload.display_color = displayColor || null;
+      if (funnelResponses !== undefined) updatePayload.funnel_responses = funnelResponses;
 
       // Update existing variant configuration
       const { data, error } = await supabase
@@ -1228,6 +1280,7 @@ export async function saveVariantConfiguration(
         variant_title: variantTitle,
         transformation_prompt: transformationPrompt,
         display_color: displayColor || null,
+        funnel_responses: funnelResponses ?? null,
       }])
       .select()
       .single();
@@ -1520,6 +1573,11 @@ export async function deleteShopData(shopDomain: string): Promise<{
       };
     } else {
       result.deleted.shop = true;
+      // Evict the ensureShopExists existence cache — without this, a merchant
+      // who reinstalls while this process is alive gets a permanent "row
+      // exists" answer for a deleted row, and every downstream lookup 404s
+      // (studio, catalog sync, storefront APIs) until the server restarts.
+      invalidateShopExistsCache(shopDomain);
       console.log(`[Uninstall Cleanup] Deleted shop record`);
     }
 
@@ -1722,15 +1780,17 @@ export async function getCategoryWithFullData(categoryId: string) {
  * @param categoryId - Category UUID
  * @param funnelResponses - Object mapping parameter_id to level number
  * @param generatedPrompt - The full concatenated prompt
+ * @param shopId - Owning shop's UUID (ownership guard)
  */
 export async function saveFunnelConfiguration(
   productId: string,
   categoryId: string,
   funnelResponses: Record<string, number>,
-  generatedPrompt: string
+  generatedPrompt: string,
+  shopId: string
 ) {
   console.log('💾 Saving funnel configuration for product:', productId);
-  
+
   try {
     const { data, error } = await supabase
       .from('products')
@@ -1741,6 +1801,8 @@ export async function saveFunnelConfiguration(
         is_funnel_generated: true
       })
       .eq('id', productId)
+      // Ownership guard: productId is client-supplied on the edit path.
+      .eq('shop_id', shopId)
       .select()
       .single();
     
@@ -1764,28 +1826,40 @@ export async function saveFunnelConfiguration(
  */
 export async function getConfiguredProductsWithCategory(shopDomain: string) {
   const shop = await findShopByDomain(shopDomain);
-  
+
   if (!shop) return [];
-  
+
   try {
-    const { data: products, error } = await supabase
-      .from('products')
-      .select(`
-        *,
-        categories (
-          id,
-          name,
-          slug
-        )
-      `)
-      .eq('shop_id', shop.id);
-    
-    if (error) {
-      console.error('Error fetching configured products with category:', error);
-      return [];
+    // Page past PostgREST's silent 1000-row response cap (same pattern as
+    // getConfiguredProducts) — catalog sync can fill products with the whole
+    // Shopify catalog, and an un-ranged select nondeterministically drops
+    // configured products from the admin products page.
+    const PAGE = 1000;
+    const products: any[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from('products')
+        .select(`
+          *,
+          categories (
+            id,
+            name,
+            slug
+          )
+        `)
+        .eq('shop_id', shop.id)
+        .order('id', { ascending: true })
+        .range(from, from + PAGE - 1);
+
+      if (error) {
+        console.error('Error fetching configured products with category:', error);
+        return products;
+      }
+      products.push(...(data ?? []));
+      if (!data || data.length < PAGE) break;
     }
-    
-    return products || [];
+
+    return products;
   } catch (error) {
     console.error('Error in getConfiguredProductsWithCategory:', error);
     return [];
@@ -1814,18 +1888,32 @@ export async function getAllShopsWithProducts() {
     // Get products with categories for each shop
     const shopsWithProducts = await Promise.all(
       (shops || []).map(async (shop) => {
-        const { data: products } = await supabase
-          .from('products')
-          .select(`
-            *,
-            categories (
-              id,
-              name,
-              slug
-            )
-          `)
-          .eq('shop_id', shop.id);
-        
+        // Page past PostgREST's silent 1000-row response cap (catalog-synced
+        // shops can hold the entire Shopify catalog in products).
+        const PAGE = 1000;
+        const products: any[] = [];
+        for (let from = 0; ; from += PAGE) {
+          const { data, error } = await supabase
+            .from('products')
+            .select(`
+              *,
+              categories (
+                id,
+                name,
+                slug
+              )
+            `)
+            .eq('shop_id', shop.id)
+            .order('id', { ascending: true })
+            .range(from, from + PAGE - 1);
+          if (error) {
+            console.error('Error fetching products for shop:', shop.id, error);
+            break;
+          }
+          products.push(...(data ?? []));
+          if (!data || data.length < PAGE) break;
+        }
+
         // Get transformation counts per product
         const productsWithStats = await Promise.all(
           (products || []).map(async (product) => {
@@ -2184,18 +2272,24 @@ export async function releaseUsageCycle(
 /**
  * Update monthly sessions count for a shop (called by cron job)
  */
-export async function updateShopMonthlySessions(shopDomain: string, sessionCount: number): Promise<void> {
-  const { error } = await supabase
+export async function updateShopMonthlySessions(shopDomain: string, sessionCount: number): Promise<boolean> {
+  // .select() so a 0-row match (Prisma session but no shops row) is
+  // detectable — otherwise the cron logs "Saved" while monthly_sessions
+  // stays null and the shop silently lands on the free tier.
+  const { data, error } = await supabase
     .from('shops')
-    .update({ 
+    .update({
       monthly_sessions: sessionCount,
       sessions_updated_at: new Date().toISOString()
     })
-    .eq('shop_domain', shopDomain);
-  
-  if (error) {
-    console.error(`Error updating sessions for ${shopDomain}:`, error);
+    .eq('shop_domain', shopDomain)
+    .select('id');
+
+  if (error || !data?.length) {
+    console.error(`Error updating sessions for ${shopDomain}:`, error ?? 'matched 0 rows (no shops row for this domain)');
+    return false;
   }
+  return true;
 }
 
 /**
@@ -2316,10 +2410,8 @@ export async function saveSkinAnalysisPhoto(
     .insert({
       shop_id: shopId,
       storage_path: storagePath,
-      // Conference name↔face pairing. Requires the visitor_name column
-      // (migration: ALTER TABLE skin_analysis_uploads ADD COLUMN visitor_name text).
-      // Best-effort like the rest of this insert — a missing column logs
-      // below but never breaks the customer-facing analysis.
+      // Conference name↔face pairing. Column added by migration 065
+      // (previously only a manual ALTER — see retry below for schema drift).
       visitor_name: visitorName?.trim() || null,
     });
 
@@ -2327,6 +2419,18 @@ export async function saveSkinAnalysisPhoto(
     // The image bytes are already in storage — log the index-row failure
     // but still return the path so the caller can log it.
     console.error('[saveSkinAnalysisPhoto] uploads row insert failed:', insertError);
+
+    // Schema-drift guard: on a DB without the visitor_name column (pre-065),
+    // PostgREST rejects the WHOLE insert, losing the index row — retry once
+    // without the name so only the name is lost, not the row.
+    if ((insertError.message || '').includes('visitor_name')) {
+      const { error: retryError } = await supabase
+        .from('skin_analysis_uploads')
+        .insert({ shop_id: shopId, storage_path: storagePath });
+      if (retryError) {
+        console.error('[saveSkinAnalysisPhoto] retry without visitor_name failed:', retryError);
+      }
+    }
   }
 
   return storagePath;
@@ -2507,9 +2611,20 @@ export async function getOnboardingState(shopDomain: string): Promise<Onboarding
  */
 const knownShopDomains = new Set<string>();
 
+/**
+ * Evict a domain from the existence cache. MUST be called whenever the shops
+ * row is deleted (uninstall cleanup) — "existence is permanent" only holds
+ * while the row actually exists; a stale entry makes every post-reinstall
+ * lookup 404 until the process restarts.
+ */
+export function invalidateShopExistsCache(shopDomain: string): void {
+  knownShopDomains.delete(shopDomain);
+}
+
 export async function ensureShopExists(shopDomain: string): Promise<void> {
-  // Existence is permanent — once seen, skip the round trip (this runs on
-  // every admin navigation via app.tsx).
+  // Existence is cached — once seen, skip the round trip (this runs on
+  // every admin navigation via app.tsx). Uninstall evicts via
+  // invalidateShopExistsCache.
   if (knownShopDomains.has(shopDomain)) return;
   const { data } = await supabase
     .from('shops')
@@ -2539,19 +2654,24 @@ export async function ensureShopExists(shopDomain: string): Promise<void> {
 /**
  * Update the current onboarding step for a shop
  */
-export async function updateOnboardingStep(shopDomain: string, step: number): Promise<void> {
+export async function updateOnboardingStep(shopDomain: string, step: number): Promise<boolean> {
   // Ensure the shop row exists — new merchants go through onboarding
   // before configuring any products, so the row may not exist yet.
   await ensureShopExists(shopDomain);
 
-  const { error } = await supabase
+  // .select() so a 0-row match is a detectable failure, not a silent no-op
+  // that snaps the wizard back to an earlier step on the next reload.
+  const { data, error } = await supabase
     .from('shops')
     .update({ onboarding_step: step })
-    .eq('shop_domain', shopDomain);
+    .eq('shop_domain', shopDomain)
+    .select('id');
 
-  if (error) {
-    console.error(`Error updating onboarding step for ${shopDomain}:`, error);
+  if (error || !data?.length) {
+    console.error(`Error updating onboarding step for ${shopDomain}:`, error ?? 'matched 0 rows');
+    return false;
   }
+  return true;
 }
 
 /**
@@ -2561,42 +2681,50 @@ export async function saveOnboardingSurvey(
   shopDomain: string,
   goals?: string[],
   attribution?: string[]
-): Promise<void> {
+): Promise<boolean> {
   const updates: Record<string, unknown> = {};
   if (goals !== undefined) updates.onboarding_goals = goals;
   if (attribution !== undefined) updates.onboarding_attribution = attribution;
 
-  if (Object.keys(updates).length === 0) return;
+  if (Object.keys(updates).length === 0) return true;
 
   await ensureShopExists(shopDomain);
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('shops')
     .update(updates)
-    .eq('shop_domain', shopDomain);
+    .eq('shop_domain', shopDomain)
+    .select('id');
 
-  if (error) {
-    console.error(`Error saving onboarding survey for ${shopDomain}:`, error);
+  if (error || !data?.length) {
+    console.error(`Error saving onboarding survey for ${shopDomain}:`, error ?? 'matched 0 rows');
+    return false;
   }
+  return true;
 }
 
 /**
  * Mark onboarding as completed
  */
-export async function completeOnboarding(shopDomain: string): Promise<void> {
+export async function completeOnboarding(shopDomain: string): Promise<boolean> {
   await ensureShopExists(shopDomain);
 
-  const { error } = await supabase
+  // .select() so "completed" can't be reported while onboarding_completed
+  // silently stayed false (0-row match dumps the merchant back in the wizard).
+  const { data, error } = await supabase
     .from('shops')
     .update({
       onboarding_completed: true,
       onboarding_completed_at: new Date().toISOString(),
     })
-    .eq('shop_domain', shopDomain);
+    .eq('shop_domain', shopDomain)
+    .select('id');
 
-  if (error) {
-    console.error(`Error completing onboarding for ${shopDomain}:`, error);
+  if (error || !data?.length) {
+    console.error(`Error completing onboarding for ${shopDomain}:`, error ?? 'matched 0 rows');
+    return false;
   }
+  return true;
 }
 
 // ============================================================

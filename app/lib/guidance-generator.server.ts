@@ -22,6 +22,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import {
   claudeClient,
   callClaudeWithRetry,
+  isPermanentClaudeError,
   logClaudeUsage,
   CLAUDE_MODEL_MAIN,
   type ClaudeUsage,
@@ -272,7 +273,13 @@ export async function generateGuidance(args: {
     output = first.output;
   } catch (e) {
     // One retry from scratch on a malformed response — structured output
-    // makes this rare, and a second clean call beats giving up.
+    // makes this rare, and a second clean call beats giving up. Permanent
+    // API errors (bad request, auth) already refused retries inside
+    // callClaudeWithRetry; a second full compile fails identically, so
+    // surface those immediately instead of doubling the wait.
+    if (isPermanentClaudeError(e)) {
+      return { ok: false, error: `Generation failed: ${(e as Error).message}`, warnings: [], usage };
+    }
     try {
       const retry = await callCompiler(system, messages, shopDomain, "guidance-generate-retry", tokenProgress);
       usage.push(retry.usage);

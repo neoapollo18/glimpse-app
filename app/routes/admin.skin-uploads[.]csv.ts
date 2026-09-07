@@ -1,6 +1,6 @@
 import { type LoaderFunctionArgs } from "@remix-run/node";
-import prisma from "../db.server";
 import { supabase } from "../lib/supabase.server";
+import { verifyAdminToken } from "../lib/admin-auth.server";
 
 /**
  * Founders-only CSV export of skin-analysis uploads — built for the
@@ -11,26 +11,21 @@ import { supabase } from "../lib/supabase.server";
  * time-limited signed URL (valid 7 days) — long enough to download after the
  * event, short enough not to leak faces forever.
  *
- * Auth mirrors the /admin action gate (admin.tsx): the caller must pass
- * ?shop=<allowlisted myshopify domain> AND that shop must have a real Prisma
- * session. Same posture as the rest of the founders admin.
+ * Auth: requires ?token=<adminToken> — the HMAC token minted by the /admin
+ * loader after real authenticate.admin + allowlist verification (see
+ * lib/admin-auth.server.ts). The /admin page renders the export link with the
+ * token attached. A shop-domain string alone no longer grants access.
  *
  * By default only rows WITH a visitor name are exported (the conference
  * pairings) — the older nameless uploads are skipped as noise. Pass
  * includeUnnamed=1 to get everything.
  *
- * Usage (open in a browser while signed into an allowlisted store):
- *   /admin/skin-uploads.csv?shop=hx5hqt-na.myshopify.com
+ * Usage (via the export link on /admin):
+ *   /admin/skin-uploads.csv?token=<adminToken>
  *   ...&dataShop=pursuitbeauty.myshopify.com   → only that store's rows
  *   ...&includeUnnamed=1                        → include nameless uploads too
  * `dataShop` is optional — omit it to export every shop's uploads.
  */
-
-// Keep in sync with ALLOWED_SHOPS in admin.tsx.
-const ALLOWED_SHOPS = [
-  "testingaaronandevansaas.myshopify.com",
-  "hx5hqt-na.myshopify.com",
-];
 
 const SIGNED_URL_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
@@ -45,16 +40,11 @@ function csvCell(value: unknown): string {
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
-  const shopParam = url.searchParams.get("shop");
 
-  // Same gate as the /admin action (admin.tsx:486): allowlisted shop that
-  // actually has a session. We avoid authenticate.admin here because it
-  // bounces on the Shopify session-token handshake for direct GETs.
-  if (!shopParam || !ALLOWED_SHOPS.includes(shopParam)) {
-    return new Response("Forbidden", { status: 403 });
-  }
-  const sessionRecord = await prisma.session.findFirst({ where: { shop: shopParam } });
-  if (!sessionRecord) {
+  // Real auth: the HMAC token can only be minted by the /admin loader after
+  // authenticate.admin + the allowlist check. We avoid authenticate.admin
+  // here because it bounces on the session-token handshake for direct GETs.
+  if (!verifyAdminToken(url.searchParams.get("token"))) {
     return new Response("Forbidden", { status: 403 });
   }
 

@@ -123,9 +123,17 @@ export async function getActiveSubscription(graphql: GraphqlFn): Promise<ActiveS
   const data = await graphql(ACTIVE_SUBSCRIPTIONS_QUERY);
   const subs = data?.currentAppInstallation?.activeSubscriptions ?? [];
   if (subs.length === 0) return null;
-  // At most one active subscription per app per shop in practice; take the
-  // first and normalize.
-  const sub = subs[0];
+  // At most one active subscription per app per shop in practice, but
+  // transition states can briefly hold two (e.g. Mantle flat + new flex).
+  // Prefer the one carrying a usage line — that's the sub the cron must
+  // bill against; a stray flat sub at [0] would shadow it and the tier fee
+  // would never post.
+  const sub =
+    subs.find((s: any) =>
+      (s.lineItems ?? []).some(
+        (li: any) => li?.plan?.pricingDetails?.__typename === "AppUsagePricing",
+      ),
+    ) ?? subs[0];
   const out: ActiveSubscription = {
     id: sub.id,
     name: sub.name ?? "",

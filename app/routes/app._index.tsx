@@ -17,12 +17,13 @@ import {
 import { Modal, TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import {
+  supabase,
   getRecommendationCounts,
   getChatAssistantConfig,
   findShopByDomain,
   shopHasTryOnConfig,
   getConfiguredProducts,
-  getAnalytics,
+  getQuizEngagement,
   getOnboardingState,
   updateOnboardingStep,
   saveOnboardingSurvey,
@@ -72,6 +73,9 @@ interface LoaderData {
     vtoEnabled: boolean;
   };
   totalTransformations: number;
+  quizMatches: number;
+  // Persisted catalog-sync resume point (null = no sync in progress).
+  catalogSyncCursor: string | null;
 }
 
 // ============================================================
@@ -97,12 +101,32 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("Error fetching shop owner name:", error);
   }
 
-  const [allProducts, analytics, onboarding, chatConfig, shopRow] = await Promise.all([
+  const shopRow = await findShopByDomain(shopDomain).catch(() => null);
+  // The dashboard renders exactly ONE analytics number (the transformation
+  // total); getAnalytics also ran a per-product pagination of up to 10x1000
+  // joined rows that was entirely discarded here. Inline the single exact
+  // head-count query instead.
+  const transformSince = new Date();
+  transformSince.setDate(transformSince.getDate() - 365);
+  const [allProducts, onboarding, chatConfig, quizEngagement, transformCountRes, syncCursorRes] = await Promise.all([
     getConfiguredProducts(shopDomain),
-    getAnalytics(shopDomain, 365),
     getOnboardingState(shopDomain),
     getChatAssistantConfig(shopDomain).catch(() => null),
-    findShopByDomain(shopDomain).catch(() => null),
+    getQuizEngagement(shopDomain, 365).catch(() => null),
+    shopRow
+      ? supabase
+          .from("analytics_events")
+          .select("id", { count: "exact", head: true })
+          .eq("shop_id", shopRow.id)
+          .eq("event_type", "transformation")
+          .gte("created_at", transformSince.toISOString())
+      : Promise.resolve(null),
+    // Persisted resume cursor so the onboarding sync retry continues from
+    // where it stopped instead of restarting from page 1 (findShopByDomain
+    // doesn't select this column).
+    shopRow
+      ? supabase.from("shops").select("catalog_sync_cursor").eq("id", shopRow.id).maybeSingle()
+      : Promise.resolve(null),
   ]);
   const [counts, draftExists, vtoEnabled] = shopRow
     ? await Promise.all([
@@ -142,7 +166,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     configuredProductsCount,
     onboarding,
     quiz,
-    totalTransformations: (analytics as any)?.totalTransformations ?? 0,
+    totalTransformations: transformCountRes?.count ?? 0,
+    quizMatches: quizEngagement?.resultsShown ?? 0,
+    catalogSyncCursor: (syncCursorRes?.data?.catalog_sync_cursor as string | null) ?? null,
   });
 };
 
@@ -507,7 +533,11 @@ function Step4ConnectCatalog({
   onBookCall: () => void;
 }) {
   // Shared chunked-sync driver (same code path as the Quiz Builder card).
-  const { start, progress, syncDone, syncError, syncedCount } = useCatalogSync();
+  const { start, progress, syncDone, syncError, syncedCount, syncWarnings } = useCatalogSync();
+  // Persisted resume point (revalidated after each successful page): retries
+  // continue where the last chain stopped instead of redoing the catalog
+  // from page 1 — same pattern as the studio's "Resume sync" affordance.
+  const { catalogSyncCursor } = useLoaderData<typeof loader>();
 
   return (
     <BlockStack gap="600">
@@ -542,6 +572,12 @@ function Step4ConnectCatalog({
               <Text as="p" variant="bodySm" tone="subdued">
                 We'll keep it up to date automatically from now on.
               </Text>
+              {syncWarnings.length > 0 && (
+                <Text as="p" variant="bodySm" tone="caution" alignment="center">
+                  Some products reported sync warnings: {syncWarnings[0]}
+                  {syncWarnings.length > 1 ? ` (+${syncWarnings.length - 1} more)` : ""}
+                </Text>
+              )}
             </>
           ) : progress ? (
             <div style={{ width: "100%", maxWidth: 360 }}>
@@ -568,8 +604,8 @@ function Step4ConnectCatalog({
                   sync later from the Quiz Builder.
                 </Text>
               )}
-              <Button variant="primary" onClick={() => start()}>
-                {syncError ? "Retry sync" : "Sync my catalog"}
+              <Button variant="primary" onClick={() => start(catalogSyncCursor ?? undefined)}>
+                {syncError ? "Retry sync" : catalogSyncCursor ? "Resume sync" : "Sync my catalog"}
               </Button>
             </>
           )}
@@ -1108,12 +1144,14 @@ function DashboardView({
   shopDomain,
   quiz,
   totalTransformations,
+  quizMatches,
   navigate,
 }: {
   ownerName: string;
   shopDomain: string;
   quiz: LoaderData["quiz"];
   totalTransformations: number;
+  quizMatches: number;
   navigate: ReturnType<typeof useNavigate>;
 }) {
   const ownerFirstName = ownerName ? ownerName.split(" ")[0] : "";
@@ -1192,6 +1230,9 @@ function DashboardView({
 
   const logicReady =
     quiz.questions > 0 && (quiz.rules > 0 || (quiz.mode !== "matrix" && quiz.hasGuidance));
+  // "Shoppers matched" = quiz matches for quiz-first shops; only legacy
+  // try-on shops (VTO configured, quiz not live) see the selfie try-on count.
+  const showTryOnStat = quiz.vtoEnabled && !quiz.quizLive;
   const storeHandle = shopDomain.replace(".myshopify.com", "");
   const themeEditorUrl = `https://admin.shopify.com/store/${storeHandle}/themes/current/editor?template=index&addAppBlockId=${THEME_EXT_UUID}/gleame-quiz&target=newAppsSection`;
 
@@ -1294,10 +1335,12 @@ function DashboardView({
                 Shoppers matched
               </Text>
               <Text as="p" variant="headingLg" fontWeight="bold">
-                {totalTransformations}
+                {showTryOnStat ? totalTransformations : quizMatches}
               </Text>
               <Text as="span" variant="bodySm" tone="subdued">
-                selfie try-ons in the last year
+                {showTryOnStat
+                  ? "selfie try-ons in the last year"
+                  : "quiz matches in the last year"}
               </Text>
             </BlockStack>
           </Card>
@@ -1380,6 +1423,7 @@ export default function Dashboard() {
     onboarding,
     quiz,
     totalTransformations,
+    quizMatches,
   } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
 
@@ -1430,6 +1474,7 @@ export default function Dashboard() {
       shopDomain={shopDomain}
       quiz={quiz}
       totalTransformations={totalTransformations}
+      quizMatches={quizMatches}
       navigate={navigate}
     />
   );

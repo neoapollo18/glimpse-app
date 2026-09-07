@@ -279,7 +279,13 @@ export async function generateQuizConfig(args: {
   const catalog = await loadCatalogForShop(shopId);
   const activeCount = catalog.filter((p) => p.status == null || p.status === "active").length;
   if (activeCount === 0) {
-    return { ok: false, error: "No products found. Sync your catalog first.", warnings: [], usage };
+    // Don't point back at sync: a 0-product (or all-draft) store syncs
+    // "successfully", so "sync your catalog first" is a circular dead-end.
+    const error =
+      catalog.length === 0
+        ? "Your store has no synced products. Add products to your Shopify store first — the quiz can only recommend products you actually sell."
+        : `Your catalog has ${catalog.length} synced product${catalog.length === 1 ? "" : "s"}, but none are active. Set products to Active in Shopify (not draft or archived), then try again.`;
+    return { ok: false, error, warnings: [], usage };
   }
 
   // NO per-call serializeCatalog options: the copilot reuses these exact

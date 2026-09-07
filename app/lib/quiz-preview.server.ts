@@ -203,7 +203,10 @@ export async function buildPreviewSampleRecommend(shopId: string, draft: QuizDra
 
   let productRows: any[] = [];
   if (productIds.size > 0) {
-    productRows = ((await supabase.from("products").select("*").in("id", [...productIds])).data ?? []).filter(
+    // shop_id scoping matters: draft rules are not validated at save time
+    // (copilot / restored versions / hand-crafted saves), so a foreign UUID
+    // must not resolve another shop's catalog data into the preview.
+    productRows = ((await supabase.from("products").select("*").in("id", [...productIds]).eq("shop_id", shopId)).data ?? []).filter(
       (p: any) => isLiveProduct(p),
     );
   }
@@ -219,6 +222,13 @@ export async function buildPreviewSampleRecommend(shopId: string, draft: QuizDra
     }
   }
   const productById = new Map(productRows.map((p: any) => [p.id as string, p]));
+
+  // product_variants has no shop_id column — scope variants via their parent
+  // product: anything whose product didn't survive the shop-scoped fetch
+  // above is another shop's variant and must not render.
+  for (const [id, v] of variantById) {
+    if (!productById.has((v as any).product_id as string)) variantById.delete(id);
+  }
 
   // Synced catalog prices are dollars; the widget's formatMoney takes cents.
   const cents = (price: unknown): number | null =>

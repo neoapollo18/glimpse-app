@@ -3,6 +3,8 @@
  * Blocks private/internal IPs and non-HTTP protocols.
  */
 
+import { lookup } from "node:dns/promises";
+
 const PRIVATE_IP_PATTERNS = [
   /^127\./,                    // Loopback
   /^10\./,                     // Class A private
@@ -61,26 +63,74 @@ export function validatePublicUrl(url: string): string | null {
   }
 }
 
+// The hostname-string check above can be bypassed by a public DNS name that
+// RESOLVES to a private address. Resolve every address for the hostname and
+// reject if any lands in a private/reserved range (IPv4-mapped IPv6 like
+// ::ffff:127.0.0.1 is normalized to its v4 form first).
+function isPrivateAddress(address: string): boolean {
+  const normalized = address.toLowerCase().replace(/^::ffff:/, "");
+  return PRIVATE_IP_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+async function resolvesToPublicAddresses(hostname: string): Promise<boolean> {
+  try {
+    const addresses = await lookup(hostname, { all: true });
+    if (addresses.length === 0) return false;
+    return addresses.every((a) => !isPrivateAddress(a.address));
+  } catch {
+    // NXDOMAIN etc. — nothing safe to fetch anyway.
+    return false;
+  }
+}
+
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+const MAX_REDIRECTS = 3;
+
 /**
  * Fetch a URL with SSRF protection and timeout.
+ * Redirects are followed manually (up to 3 hops) with the hostname-string
+ * AND DNS checks re-run on every hop, so neither a 302 to an internal
+ * address nor a public name resolving to a private IP gets fetched.
  * Returns the Response, or null if the URL is blocked or fetch fails.
  */
 export async function safeFetch(
   url: string,
   timeoutMs: number = 10000
 ): Promise<Response | null> {
-  const validatedUrl = validatePublicUrl(url);
-  if (!validatedUrl) {
-    console.warn("Blocked SSRF attempt or invalid URL:", url);
-    return null;
-  }
-
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(validatedUrl, { signal: controller.signal });
-    return response;
+    let currentUrl = url;
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+      const validatedUrl = validatePublicUrl(currentUrl);
+      if (!validatedUrl) {
+        console.warn("Blocked SSRF attempt or invalid URL:", currentUrl);
+        return null;
+      }
+      if (!(await resolvesToPublicAddresses(new URL(validatedUrl).hostname))) {
+        console.warn("Blocked URL resolving to private address:", currentUrl);
+        return null;
+      }
+
+      const response = await fetch(validatedUrl, {
+        signal: controller.signal,
+        redirect: "manual",
+      });
+
+      if (REDIRECT_STATUSES.has(response.status)) {
+        const location = response.headers.get("location");
+        if (!location || hop === MAX_REDIRECTS) {
+          console.warn("Blocked redirect (missing Location or too many hops):", currentUrl);
+          return null;
+        }
+        currentUrl = new URL(location, validatedUrl).toString();
+        continue;
+      }
+
+      return response;
+    }
+    return null;
   } catch (err) {
     if ((err as Error).name === "AbortError") {
       console.warn("Fetch timed out for URL:", url);

@@ -136,12 +136,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // STEP 4: RATE LIMITING
     // ============================================
     const clientIP = getClientIP(request);
-    
+
+    // A multi-variant request runs up to 12 paid generations (the fan-out
+    // is capped with slice(0, 12) below), so it must consume that many
+    // rate-limit hits — counting it as ONE hit let a single request cost
+    // 12x what the limits assume.
+    const rateLimitCost = isMultiVariant ? Math.min(variantIds.length, 12) : 1;
+
     // Check per-IP rate limit (20 requests per minute)
     const ipMinuteLimit = checkRateLimit(
       `transform:ip:${clientIP}:minute`,
       RATE_LIMITS.TRANSFORM_PER_IP_MINUTE.limit,
-      RATE_LIMITS.TRANSFORM_PER_IP_MINUTE.windowMs
+      RATE_LIMITS.TRANSFORM_PER_IP_MINUTE.windowMs,
+      rateLimitCost
     );
     
     if (!ipMinuteLimit.allowed) {
@@ -161,7 +168,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const ipHourLimit = checkRateLimit(
       `transform:ip:${clientIP}:hour`,
       RATE_LIMITS.TRANSFORM_PER_IP_HOUR.limit,
-      RATE_LIMITS.TRANSFORM_PER_IP_HOUR.windowMs
+      RATE_LIMITS.TRANSFORM_PER_IP_HOUR.windowMs,
+      rateLimitCost
     );
     
     if (!ipHourLimit.allowed) {
@@ -181,7 +189,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const shopLimit = checkRateLimit(
       `transform:shop:${verifiedShopDomain}:hour`,
       RATE_LIMITS.TRANSFORM_PER_SHOP_HOUR.limit,
-      RATE_LIMITS.TRANSFORM_PER_SHOP_HOUR.windowMs
+      RATE_LIMITS.TRANSFORM_PER_SHOP_HOUR.windowMs,
+      rateLimitCost
     );
     
     if (!shopLimit.allowed) {
@@ -346,9 +355,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (isMultiVariant) {
       console.log(`Multi-variant transform: ${variantIds.length} variants`);
 
-      // Cap the fan-out: each entry is a PAID generation but the whole
-      // request counted as ONE rate-limit hit, so an unbounded array was a
-      // cost amplifier. 12 covers every legitimate widget flow.
+      // Cap the fan-out: each entry is a PAID generation, so the request
+      // was charged one rate-limit hit per variant above (rateLimitCost).
+      // 12 covers every legitimate widget flow.
       const cappedVariantIds = variantIds.slice(0, 12);
 
       const results = await Promise.all(

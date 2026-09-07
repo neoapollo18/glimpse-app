@@ -11,16 +11,20 @@
 
 import type { LoaderFunctionArgs } from "@remix-run/node";
 
+// Derive the widget's API origin from the deployed app URL so a host move
+// (custom domain, Render rename) doesn't silently break legacy-theme embeds.
+const APP_URL = (process.env.SHOPIFY_APP_URL || "https://glimpse-app-charles.onrender.com").replace(/\/+$/, "");
+
 const WIDGET_JS = `
 (function() {
   'use strict';
 
   console.log('Gleame Embed: script starting');
-  // Prevent double-init (disabled for debug)
-  // if (window.__gleameEmbedLoaded) return;
+  // Prevent double-init when the script tag is included twice
+  if (window.__gleameEmbedLoaded) return;
   window.__gleameEmbedLoaded = true;
 
-  var SHOPIFY_APP_URL = 'https://glimpse-app-charles.onrender.com';
+  var SHOPIFY_APP_URL = '${APP_URL}';
   var WIDGET_TYPE = 'embed';
 
   // ========== CSS (inlined) ==========

@@ -1,10 +1,10 @@
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "@remix-run/node";
-import { json, redirect } from "@remix-run/node";
+import { json } from "@remix-run/node";
 import { useFetcher, useLoaderData, useRevalidator, useRouteError, useSearchParams } from "@remix-run/react";
 import { boundary } from "@shopify/shopify-app-remix/server";
 import { AppProvider } from "@shopify/shopify-app-remix/react";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
-import { Banner } from "@shopify/polaris";
+import { Banner, Button, Text } from "@shopify/polaris";
 import { useCallback, useEffect, useRef, useState } from "react";
 import jwt from "jsonwebtoken";
 
@@ -50,6 +50,7 @@ import { PublishStep } from "../components/studio/PublishStep";
 import { OnboardingWizard } from "../components/studio/OnboardingWizard";
 import { FlowMap } from "../components/studio/FlowMap";
 import { draftProblems } from "../components/studio/draft-problems";
+import { navigateParent } from "../components/studio/navigate-parent";
 
 // ---------------------------------------------------------------------
 // Quiz Studio — the full-screen takeover editor (opened from the quiz hub
@@ -90,8 +91,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
   const shopDomain = session.shop;
   // Standalone route = not under app.tsx's billing gate; enforce it here.
+  // NOT a redirect: the studio loads inside an App Bridge max-modal iframe,
+  // and a loader redirect would render the full /app/billing page (nested
+  // admin layout and all) INSIDE the modal. Return a marker instead; the
+  // client breaks out via navigateParent (same channel the publish screen
+  // uses).
   if (await shopNeedsBilling(shopDomain, session.accessToken ?? "")) {
-    throw redirect("/app/billing");
+    return json({ billingRequired: true as const, apiKey: process.env.SHOPIFY_API_KEY || "" });
   }
   const shop = await findShopByDomain(shopDomain);
   if (!shop) throw new Response("Shop not found", { status: 404 });
@@ -137,6 +143,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
   Object.assign(settings, (draft?.settings ?? {}) as Record<string, unknown>);
+
+  // Will the storefront quiz surface actually SHOW once this draft
+  // publishes? Draft settings win (publish writes them over live); a draft
+  // seeded from live carries the live enabled/assistant_mode via the
+  // settings allowlist. Storefront gate: enabled && mode in (quiz, both)
+  // (api.storefront.quiz-config). Unknown values fail open so a config
+  // load hiccup doesn't wrongly tell the merchant their quiz is hidden.
+  const draftSurface = (draft?.settings ?? {}) as Record<string, unknown>;
+  const liveSurface = liveConfig as unknown as Record<string, unknown> | null;
+  const surfaceEnabled = (draftSurface.enabled ?? liveSurface?.enabled) !== false;
+  const surfaceMode = draftSurface.assistant_mode ?? liveSurface?.assistant_mode;
+  const quizSurfaceEnabled =
+    surfaceEnabled && (surfaceMode == null || surfaceMode === "quiz" || surfaceMode === "both");
 
   // "Fit your store": prefill the onboarding wizard from what the store
   // already tells us — Shopify brand settings (accent color, slogan) and
@@ -193,8 +212,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     })(),
   ]);
 
+  // 2h: re-minted on every studio load, so only a tab left open past 2h
+  // needs a reload for the preview iframe. Keeping it short limits how long
+  // a leaked preview URL can read the shop's draft.
   const previewToken = process.env.SHOPIFY_API_SECRET
-    ? jwt.sign({ shopId: shop.id, shopDomain }, process.env.SHOPIFY_API_SECRET, { expiresIn: "12h" })
+    ? jwt.sign({ shopId: shop.id, shopDomain }, process.env.SHOPIFY_API_SECRET, { expiresIn: "2h" })
     : null;
 
   return json({
@@ -210,6 +232,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     previewToken,
     copilotSessionId,
     liveQuestionCount,
+    quizSurfaceEnabled,
     storeBrand,
     topProductType,
     genStatus: getGenStatus(shop.id),
@@ -526,10 +549,58 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 // ---------------------------------------------------------------------
 
 export type StudioStep = "build" | "logic" | "publish";
-export type StudioLoaderData = ReturnType<typeof useLoaderData<typeof loader>>;
+export type StudioLoaderData = Exclude<
+  ReturnType<typeof useLoaderData<typeof loader>>,
+  { billingRequired: true }
+>;
 
 export default function Studio() {
   const data = useLoaderData<typeof loader>();
+  // Separate component, not an early return: billing can start failing on
+  // any revalidation mid-session, and swapping hook counts inside one
+  // component would break React's hook order.
+  if ("billingRequired" in data) return <BillingRequired apiKey={data.apiKey} />;
+  return <StudioEditor data={data} />;
+}
+
+function BillingRequired({ apiKey }: { apiKey: string }) {
+  // Break OUT of the max-modal iframe: navigating this frame to
+  // /app/billing renders the whole admin layout inside the modal. The hub
+  // page listens on the nav channel, closes the modal, and routes the app
+  // frame properly.
+  useEffect(() => {
+    navigateParent("/app/billing");
+  }, []);
+  return (
+    <AppProvider isEmbeddedApp apiKey={apiKey}>
+      <div
+        style={{
+          maxWidth: 420,
+          margin: "80px auto",
+          padding: 24,
+          textAlign: "center",
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+        }}
+      >
+        <Text as="h2" variant="headingMd">
+          Your Gleame subscription isn't active
+        </Text>
+        <Text as="p" tone="subdued">
+          The quiz studio needs an active subscription. Taking you to Billing…
+        </Text>
+        <div>
+          <Button variant="primary" onClick={() => navigateParent("/app/billing")}>
+            Go to Billing
+          </Button>
+        </div>
+      </div>
+    </AppProvider>
+  );
+}
+
+function StudioEditor({ data }: { data: StudioLoaderData }) {
   const [params, setParams] = useSearchParams();
 
   const step = ((): StudioStep => {
@@ -774,7 +845,14 @@ export default function Studio() {
       }
     } else {
       pendingSelectRef.current = null;
-      setTreeError(treeFetcher.data.error ?? "Couldn't apply that change.");
+      const raw = treeFetcher.data.error ?? "Couldn't apply that change.";
+      // remove_question's applier error is written for the copilot
+      // (update_rules / removeAxis=false); translate it for merchants.
+      setTreeError(
+        raw.includes("is referenced by rules")
+          ? "This question can't be deleted while recommendation rules use its answers to pick products. Ask Gleame in the Chat tab to delete it; it will update those rules at the same time."
+          : raw,
+      );
     }
   }, [treeFetcher.state, treeFetcher.data, updatePreview, selectSlide]);
 
@@ -927,11 +1005,33 @@ export default function Studio() {
               editorFlushRef.current = fn;
             }}
             flushEditor={() => editorFlushRef.current?.()}
+            // Flushes fired around a slide/step switch outlive the editor
+            // that owned the local error banner; surface their rejections
+            // in the rail banner, which survives the switch.
+            onSaveError={setTreeError}
             onSelectSlide={selectSlide}
             onDeleteQuestion={(axisKey, fallbackSlide) => {
               // Hoisted here because the revalidation after a delete
               // unmounts the question editor: its own fetcher effect never
               // ran, leaving the preview on the deleted question.
+              // The server-side applier rejects a delete whose answers are
+              // still used by recommendation rules, phrased in copilot tool
+              // jargon (update_rules / removeAxis=false). Catch it up front
+              // and explain in merchant terms what unblocks it.
+              const ruleCount = (data.draft?.flow.rules ?? []).filter(
+                (r) => axisKey in r.criteria,
+              ).length;
+              if (ruleCount > 0) {
+                const qNum = questions.findIndex((q) => q.axisKey === axisKey) + 1;
+                setTreeError(
+                  `Question ${qNum} can't be deleted yet: ${
+                    ruleCount === 1
+                      ? "1 recommendation rule uses"
+                      : `${ruleCount} recommendation rules use`
+                  } its answers to pick products. Ask Gleame in the Chat tab to delete this question; it will update those rules at the same time.`,
+                );
+                return;
+              }
               pendingSelectRef.current = fallbackSlide;
               submitTreeTool("remove_question", { axisKey, removeAxis: true });
             }}

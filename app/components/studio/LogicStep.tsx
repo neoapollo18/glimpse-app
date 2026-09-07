@@ -410,7 +410,10 @@ export function LogicStep({ data, chatBusy }: { data: StudioLoaderData; chatBusy
     setSavedToDraft(false);
     const fd = new FormData();
     fd.append("source", "draft");
-    for (const [key, value] of Object.entries(notesRef.current)) fd.append(`notes:${key}`, value);
+    // Snapshot what this run sends: generation takes minutes, and only these
+    // exact values are persisted server-side (see the result handler).
+    const submitted = { ...notesRef.current };
+    for (const [key, value] of Object.entries(submitted)) fd.append(`notes:${key}`, value);
     let gotTerminal = false;
     try {
       const res = await fetch("/app/api/guidance-generate", { method: "POST", body: fd });
@@ -435,8 +438,15 @@ export function LogicStep({ data, chatBusy }: { data: StudioLoaderData; chatBusy
             perQuestionSummary: event.perQuestionSummary ?? [],
             warnings: event.warnings ?? [],
           });
-          dirtyKeysRef.current.clear();
-          setNotesDirty(false);
+          // Only mark clean what this run actually sent: notes edited while
+          // the generation streamed were NOT in the payload, so they must
+          // stay dirty for Save notes / the unmount flush to persist.
+          for (const key of [...dirtyKeysRef.current]) {
+            if ((notesRef.current[key] ?? "") === (submitted[key] ?? "")) {
+              dirtyKeysRef.current.delete(key);
+            }
+          }
+          setNotesDirty(dirtyKeysRef.current.size > 0);
           requestAnimationFrame(() => feedbackRef.current?.scrollIntoView({ behavior: "smooth" }));
         } else if (event.type === "error") {
           gotTerminal = true;

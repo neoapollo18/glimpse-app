@@ -11,6 +11,9 @@ const CATALOG_SYNC_ACTION = "/app/api/catalog-sync";
 export interface CatalogSyncResponse {
   ok: boolean;
   error?: string;
+  // Per-page non-terminal problems (e.g. one product's upsert failed); the
+  // chain keeps paging but consumers should surface these.
+  warning?: string;
   intent?: string;
   nextCursor?: string | null;
   synced?: number;
@@ -22,6 +25,7 @@ export function useCatalogSync(options: { onComplete?: () => void } = {}) {
   const [progress, setProgress] = useState<{ done: number; total: number | null } | null>(null);
   const [syncDone, setSyncDone] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncWarnings, setSyncWarnings] = useState<string[]>([]);
   const doneSoFar = useRef(0);
   const onCompleteRef = useRef(options.onComplete);
   onCompleteRef.current = options.onComplete;
@@ -36,6 +40,7 @@ export function useCatalogSync(options: { onComplete?: () => void } = {}) {
   const start = (resumeCursor?: string) => {
     doneSoFar.current = 0;
     setSyncError(null);
+    setSyncWarnings([]);
     setSyncDone(false);
     setProgress({ done: 0, total: null });
     submitPage(resumeCursor);
@@ -52,6 +57,10 @@ export function useCatalogSync(options: { onComplete?: () => void } = {}) {
       return;
     }
     if (data.intent !== "sync-catalog") return;
+    if (data.warning) {
+      const warning = data.warning;
+      setSyncWarnings((prev) => (prev.includes(warning) ? prev : [...prev, warning]));
+    }
     doneSoFar.current += data.synced ?? 0;
     setProgress({ done: doneSoFar.current, total: data.total ?? null });
     if (data.nextCursor) {
@@ -69,6 +78,7 @@ export function useCatalogSync(options: { onComplete?: () => void } = {}) {
     progress,
     syncDone,
     syncError,
+    syncWarnings,
     syncedCount: doneSoFar.current,
     busy: fetcher.state !== "idle" || progress !== null,
   };

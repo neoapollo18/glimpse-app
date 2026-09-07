@@ -13,7 +13,7 @@ import {
   getRecommendationFlow,
 } from "./supabase.server";
 import type { ChatAssistantConfig, MultiCriteria } from "./supabase.server";
-import { llmOrderCandidates, guardAndPrioritize, shuffle, diversify } from "./llm-recommender.server";
+import { llmOrderCandidates, guardAndPrioritize, applyPriorityOrdering, shuffle, diversify } from "./llm-recommender.server";
 
 const SHOPIFY_ADMIN_TIMEOUT_MS = 6_000;
 const HANDLE_CACHE_TTL_MS = 10 * 60_000;
@@ -306,6 +306,24 @@ export async function orderCandidates(
     } else {
       aiOrdered = guardAndPrioritize(aiOrdered, criteria, flow, opts.config, opts.logTag);
     }
+  } else if (
+    mode === "matrix" &&
+    opts.config &&
+    (!hits || hits.length === 0) &&
+    opts.config.priority_product_ids.length > 0
+  ) {
+    // Matrix mode used to serve the no-rule fallback as a raw shuffle,
+    // silently ignoring priority_product_ids a merchant configured in
+    // ai/hybrid mode before switching back. Honor the priority ordering —
+    // an inherent no-op for shops with no priority products. The mismatch
+    // guard is deliberately NOT applied here: mismatchGuard defaults to
+    // true for every shop, so adding it would change live matrix-mode
+    // shops' fallback ordering rather than honor an explicit choice.
+    aiOrdered = applyPriorityOrdering(
+      aiOrdered,
+      opts.config.priority_product_ids,
+      opts.config.recommendation_tuning,
+    );
   }
 
   return { ...orderByMatrix(hits, pool, aiOrdered, { ...opts, criteria }), llmReasons };

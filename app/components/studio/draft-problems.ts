@@ -23,6 +23,24 @@ export function draftProblems(flow: StudioFlow): DraftProblem[] {
     if (!q.prompt.trim()) push("Question text is empty");
     const labeled = q.options.filter((o) => o.label.trim() !== "");
     if (labeled.length < 2) push("Needs at least 2 answers");
+    // Leftover blank answers (e.g. "+ Add answer" never filled in) render as
+    // empty buttons on the storefront. Options showing an image or a color
+    // swatch are still visible without text, so only text-less AND
+    // visual-less options block. Skipped below the 2-labeled floor, which
+    // already blocks publish on its own.
+    const blank = q.options.filter(
+      (o) =>
+        o.label.trim() === "" &&
+        !o.imageUrl &&
+        !(o.displayMeta as Record<string, unknown> | null | undefined)?.swatch,
+    ).length;
+    if (labeled.length >= 2 && blank > 0) {
+      push(
+        blank === 1
+          ? "An answer is blank. Fill it in or delete it"
+          : `${blank} answers are blank. Fill them in or delete them`,
+      );
+    }
 
     if (q.showIf) {
       const source = q.showIf.axis_key;

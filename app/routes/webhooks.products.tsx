@@ -5,6 +5,30 @@ import {
   markProductDeleted,
   syncSingleProduct,
 } from "../lib/catalog-sync.server";
+import { findShopByDomain, supabase } from "../lib/supabase.server";
+
+/**
+ * Shopify does not guarantee webhook ordering: a retried products/update (or
+ * products/create) can land AFTER products/delete for the same product, and
+ * syncing it would re-upsert the soft-deleted mirror row as status 'active' —
+ * resurrecting a deleted product into the recommendation pool. Shopify never
+ * reuses product ids and product rows only become 'deleted' via
+ * products/delete, so any create/update for an already-soft-deleted row is
+ * by definition stale. On lookup errors we return false (proceed with the
+ * sync), preserving the old behavior for normal ordering.
+ */
+async function isProductSoftDeleted(shopDomain: string, shopifyProductId: number): Promise<boolean> {
+  const shop = await findShopByDomain(shopDomain);
+  if (!shop) return false;
+  const { data } = await supabase
+    .from("products")
+    .select("id")
+    .eq("shop_id", shop.id)
+    .eq("status", "deleted")
+    .in("shopify_id", [`gid://shopify/Product/${shopifyProductId}`, String(shopifyProductId)])
+    .limit(1);
+  return (data?.length ?? 0) > 0;
+}
 
 // Webhooks only accept POST - return 405 for GET requests
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -37,6 +61,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       case "products/create":
       case "PRODUCTS_UPDATE":
       case "products/update": {
+        const shopifyProductId = (payload as { id: number }).id;
+        if (await isProductSoftDeleted(shop, shopifyProductId)) {
+          console.log(
+            `[Products] Skipping stale ${topic} for soft-deleted product ${shopifyProductId} (${shop})`,
+          );
+          break;
+        }
         const result = await syncSingleProduct(shop, payload as any);
         if (!result.ok) console.error(`[Products] sync errors for ${shop}:`, result.errors);
         break;

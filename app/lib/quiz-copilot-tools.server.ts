@@ -201,12 +201,29 @@ export function applyUpdateQuestionOptions(draft: DraftShape, input: any, catalo
     axis.values = axis.values.filter((v) => referenced.has(v.value));
     axis.values.forEach((v, i) => { v.position = i; });
   }
+  // Preservation is by axis value, so an old value no new option re-used
+  // takes its uploaded image / authored bot response with it. Say so in the
+  // summary (echoed back as the tool result) instead of a clean success, so
+  // the model can warn the merchant or re-send with the old values.
+  const lostImages = [...imageByValue.keys()].filter((v) => !referenced.has(v));
+  const lostResponses = [...botResponseByValue.keys()].filter((v) => !referenced.has(v));
+  let dropNote = "";
+  if (lostImages.length > 0 || lostResponses.length > 0) {
+    const parts: string[] = [];
+    if (lostImages.length > 0) {
+      parts.push(`the uploaded image${lostImages.length === 1 ? "" : "s"} on ${lostImages.join(", ")}`);
+    }
+    if (lostResponses.length > 0) {
+      parts.push(`the bot response${lostResponses.length === 1 ? "" : "s"} on ${lostResponses.join(", ")}`);
+    }
+    dropNote = `. Warning: dropped ${parts.join(" and ")} — no new option re-uses those axis values; re-use the old axisValueValue to keep an image/response`;
+  }
   const error = revalidate(next, catalog);
   if (error) return { ok: false, error };
   return {
     ok: true,
     draft: next,
-    summary: { tool: "update_question_options", target: qLabel(idx), description: `Rewrote the answers for ${qLabel(idx)}` },
+    summary: { tool: "update_question_options", target: qLabel(idx), description: `Rewrote the answers for ${qLabel(idx)}${dropNote}` },
   };
 }
 
@@ -275,6 +292,7 @@ export function applyRemoveQuestion(draft: DraftShape, input: any, catalog: Cata
   if (idx === -1) return { ok: false, error: `No question for axis "${input.axisKey}"` };
   const next = clone(draft);
   next.flow.questions.splice(idx, 1);
+  let orphanNote = "";
   if (input.removeAxis) {
     const usedByRules = next.flow.rules.some((r) => input.axisKey in r.criteria);
     if (usedByRules) {
@@ -290,13 +308,34 @@ export function applyRemoveQuestion(draft: DraftShape, input: any, catalog: Cata
       return { ok: false, error: `Axis "${input.axisKey}" is referenced by showIf conditions; update those questions first` };
     }
     next.flow.axes = next.flow.axes.filter((a) => a.key !== input.axisKey);
+  } else {
+    // Axis kept but its question is gone, so the axis is never answered
+    // again: rules keyed on it stop matching and showIf conditions on it
+    // never trigger. Deleting is still allowed (it's the documented fallback
+    // when rules exist) but must not read as a clean success over
+    // silently-dead rules — say so in the change summary.
+    const orphanedRules = next.flow.rules.filter((r) => input.axisKey in r.criteria).length;
+    const orphanedShowIf =
+      next.flow.questions.filter((q) => q.showIf?.axis_key === input.axisKey).length +
+      next.flow.questions.reduce(
+        (n, q) => n + q.options.filter((o) => o.showIf?.axis_key === input.axisKey).length,
+        0,
+      );
+    const parts: string[] = [];
+    if (orphanedRules) {
+      parts.push(`${orphanedRules} rule${orphanedRules === 1 ? "" : "s"} keyed on "${input.axisKey}" will no longer match`);
+    }
+    if (orphanedShowIf) {
+      parts.push(`${orphanedShowIf} showIf condition${orphanedShowIf === 1 ? "" : "s"} on it will never trigger`);
+    }
+    if (parts.length) orphanNote = `. Warning: ${parts.join("; ")} — update or remove them`;
   }
   const error = revalidate(next, catalog);
   if (error) return { ok: false, error };
   return {
     ok: true,
     draft: next,
-    summary: { tool: "remove_question", target: qLabel(idx), description: `Removed the "${input.axisKey}" question` },
+    summary: { tool: "remove_question", target: qLabel(idx), description: `Removed the "${input.axisKey}" question${orphanNote}` },
   };
 }
 
@@ -613,7 +652,7 @@ export const COPILOT_TOOLS: Anthropic.Tool[] = [
   {
     name: "update_question_options",
     description:
-      "Replace the full option list of ONE question. Call this when rewording, adding, or removing answer choices. Existing option images are preserved by position.",
+      "Replace the full option list of ONE question. Call this when rewording, adding, or removing answer choices. Existing option images and bot responses are preserved by axisValueValue, NOT by position: an option that re-uses an existing axisValueValue keeps its uploaded image and bot response; renaming a value drops them. When only rewording labels, keep each option's existing axisValueValue.",
     input_schema: {
       type: "object",
       properties: {

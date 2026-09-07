@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
-import { useLoaderData, useFetcher, useSubmit } from "@remix-run/react";
+import { useLoaderData, useFetcher } from "@remix-run/react";
 import {
   Page,
   Layout,
@@ -26,7 +26,7 @@ import {
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { 
+import {
   getConfiguredProductsWithCategory,
   getCategories,
   saveProductConfiguration,
@@ -37,6 +37,8 @@ import {
   uploadReferenceImage,
   saveProductReferenceImage,
   deleteReferenceImage,
+  findShopByDomain,
+  productBelongsToShop,
 } from "../lib/supabase.server";
 import { generatePromptFromFunnel, validateFunnelResponses } from "../lib/prompt-generator.server";
 
@@ -77,6 +79,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                   }
                 }
                 variants(first: 100) {
+                  pageInfo {
+                    hasNextPage
+                    endCursor
+                  }
                   edges {
                     node {
                       id
@@ -125,6 +131,58 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     fetchError = true;
   }
 
+  // Variant tail pagination: variants(first: 100) silently dropped every
+  // variant past the first 100 (foundation lines routinely exceed that),
+  // making those shades impossible to configure. Fetch the remainder for
+  // the rare products that report more.
+  try {
+    for (const product of allProducts) {
+      let variantsHaveNextPage: boolean = product.variants?.pageInfo?.hasNextPage === true;
+      let variantCursor: string | null = product.variants?.pageInfo?.endCursor ?? null;
+      while (variantsHaveNextPage) {
+        const response: Response = await admin.graphql(`
+          query GetProductVariantsTail($id: ID!, $after: String) {
+            product(id: $id) {
+              variants(first: 250, after: $after) {
+                pageInfo {
+                  hasNextPage
+                  endCursor
+                }
+                edges {
+                  node {
+                    id
+                    title
+                    price
+                    availableForSale
+                    image {
+                      url
+                    }
+                  }
+                }
+              }
+            }
+          }
+        `, {
+          variables: { id: product.id, after: variantCursor }
+        });
+        const json: any = await response.json();
+        const connection = json.data?.product?.variants;
+        if (json.errors || !connection) {
+          console.error('Variant pagination error for', session.shop, product.id, ':', JSON.stringify(json.errors ?? json).slice(0, 500));
+          fetchError = true; // surfaces the "Product loading issue" banner
+          variantsHaveNextPage = false;
+          break;
+        }
+        product.variants.edges.push(...connection.edges);
+        variantsHaveNextPage = connection.pageInfo.hasNextPage === true;
+        variantCursor = connection.pageInfo.endCursor;
+      }
+    }
+  } catch (error) {
+    console.error('Error paginating product variants for', session.shop, ':', error);
+    fetchError = true;
+  }
+
   const shopifyProducts = allProducts;
   const shopifyProductsError = fetchError
     ? "Could not load products from Shopify. Try refreshing the page."
@@ -145,6 +203,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const formData = await request.formData();
   const action = formData.get("action");
+
+  // Resolve the caller's shop once: every mutation below receives row IDs
+  // from the client, so each must be scoped/verified against this shop.
+  // Null is tolerated here ("configure" creates the shop row via
+  // saveProductConfiguration); branches touching existing rows fail fast.
+  const shop = await findShopByDomain(session.shop);
 
   if (action === "configure") {
     try {
@@ -167,8 +231,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       const configuredProductId = formData.get("configuredProductId");
       const transformationPrompt = formData.get("transformationPrompt");
 
-      // Update in Supabase
-      await updateProductConfiguration(configuredProductId as string, transformationPrompt as string);
+      if (!shop) {
+        return { success: false, message: "Shop not found. Please reinstall the app." };
+      }
+
+      // Update in Supabase (scoped to the session shop)
+      await updateProductConfiguration(configuredProductId as string, transformationPrompt as string, shop.id);
 
       return { success: true, message: "Product configuration updated successfully!" };
     } catch (error) {
@@ -181,8 +249,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     try {
       const configuredProductId = formData.get("configuredProductId");
 
-      // Delete from Supabase
-      await deleteProductConfiguration(configuredProductId as string);
+      if (!shop) {
+        return { success: false, message: "Shop not found. Please reinstall the app." };
+      }
+
+      // Delete from Supabase (scoped to the session shop)
+      await deleteProductConfiguration(configuredProductId as string, shop.id);
 
       return { success: true, message: "Product configuration deleted successfully!" };
     } catch (error) {
@@ -199,8 +271,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       const transformationPrompt = formData.get("transformationPrompt") as string;
       const displayColor = (formData.get("displayColor") as string) || null;
 
-      // Save variant configuration
-      await saveVariantConfiguration(productId, shopifyVariantId, variantTitle, transformationPrompt, displayColor);
+      // Ownership guard: productId is a client-supplied internal UUID
+      if (!shop || !(await productBelongsToShop(productId, shop.id))) {
+        return { success: false, message: "Product not found for this shop." };
+      }
+
+      // Save variant configuration. funnel_responses is cleared (null): this
+      // is a hand-written prompt, so stale shade answers must not be used to
+      // rebuild over it when the product's funnel answers change.
+      await saveVariantConfiguration(productId, shopifyVariantId, variantTitle, transformationPrompt, displayColor, null);
 
       return { success: true, message: "Variant configured successfully!" };
     } catch (error) {
@@ -213,12 +292,46 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     try {
       const variantConfigId = formData.get("variantConfigId") as string;
 
-      // Delete variant configuration
       const { supabase } = await import("../lib/supabase.server");
-      await supabase
+
+      // Ownership guard: verify the variant's parent product belongs to the
+      // session shop before deleting (the row ID is client-supplied)
+      const { data: variantRow } = await supabase
+        .from('product_variants')
+        .select('id, product_id')
+        .eq('id', variantConfigId)
+        .maybeSingle();
+
+      if (!shop || !variantRow || !(await productBelongsToShop(variantRow.product_id, shop.id))) {
+        return { success: false, message: "Variant configuration not found for this shop." };
+      }
+
+      // recommendation_rules.variant_id is ON DELETE CASCADE (migration 032):
+      // deleting a shade also removes every quiz rule targeting it. Count
+      // first so the result says so instead of cascading silently.
+      const { count: ruleCount } = await supabase
+        .from('recommendation_rules')
+        .select('id', { count: 'exact', head: true })
+        .eq('variant_id', variantConfigId);
+
+      // Delete variant configuration
+      const { error: deleteError } = await supabase
         .from('product_variants')
         .delete()
         .eq('id', variantConfigId);
+
+      if (deleteError) {
+        console.error("Variant delete error:", deleteError);
+        return { success: false, message: "Failed to delete variant configuration. Please try again." };
+      }
+
+      if (ruleCount) {
+        console.warn(`Deleting variant ${variantConfigId} cascaded away ${ruleCount} recommendation rule(s)`);
+        return {
+          success: true,
+          message: `Variant configuration deleted. This also removed ${ruleCount} quiz recommendation rule${ruleCount === 1 ? "" : "s"} targeting this shade.`,
+        };
+      }
 
       return { success: true, message: "Variant configuration deleted successfully!" };
     } catch (error) {
@@ -238,6 +351,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
       if (imageFile.size > 10 * 1024 * 1024) {
         return { success: false, message: "File too large. Max 10MB." };
+      }
+
+      // Ownership guard: productId is a client-supplied internal UUID
+      if (!shop || !(await productBelongsToShop(productId, shop.id))) {
+        return { success: false, message: "Product not found for this shop." };
       }
 
       const arrayBuffer = await imageFile.arrayBuffer();
@@ -264,6 +382,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     try {
       const productId = formData.get("productId") as string;
       const currentUrl = formData.get("currentUrl") as string;
+
+      // Ownership guard: productId is a client-supplied internal UUID
+      if (!shop || !(await productBelongsToShop(productId, shop.id))) {
+        return { success: false, message: "Product not found for this shop." };
+      }
 
       if (currentUrl) {
         await deleteReferenceImage(currentUrl);
@@ -314,25 +437,32 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       if (isNewProduct) {
         // Create product first, then save funnel config
         const newProduct = await saveProductConfiguration(
-          session.shop, 
-          shopifyProductId, 
-          productTitle, 
+          session.shop,
+          shopifyProductId,
+          productTitle,
           generatedPrompt
         );
         await saveFunnelConfiguration(
-          newProduct.id, 
-          categoryId, 
-          funnelResponses, 
-          generatedPrompt
+          newProduct.id,
+          categoryId,
+          funnelResponses,
+          generatedPrompt,
+          newProduct.shop_id
         );
         productId = newProduct.id;
       } else if (configuredProductId) {
+        // Ownership guard: configuredProductId is a client-supplied UUID
+        if (!shop || !(await productBelongsToShop(configuredProductId, shop.id))) {
+          return { success: false, message: "Product not found for this shop." };
+        }
+
         // Update existing product with funnel config
         await saveFunnelConfiguration(
-          configuredProductId, 
-          categoryId, 
-          funnelResponses, 
-          generatedPrompt
+          configuredProductId,
+          categoryId,
+          funnelResponses,
+          generatedPrompt,
+          shop.id
         );
         productId = configuredProductId;
       } else {
@@ -340,58 +470,98 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
 
       // Save shade configurations (variant-specific prompts)
-      if (shadeConfigsJson && productId) {
-        let shadeConfigs: Record<string, { title: string; responses: Record<string, any>; displayColor?: string }>;
+      let shadeConfigs: Record<string, { title: string; responses: Record<string, any>; displayColor?: string }> = {};
+      if (shadeConfigsJson) {
         try {
           shadeConfigs = JSON.parse(shadeConfigsJson);
         } catch {
           return { success: false, message: "Invalid shade configuration format" };
         }
-        
-        // Get category data to resolve level labels
-        const { getCategoryWithFullData } = await import("../lib/supabase.server");
-        const categoryData = await getCategoryWithFullData(categoryId);
-        
-        for (const [variantId, config] of Object.entries(shadeConfigs)) {
-          // Build shade prompt snippet from responses
-          let shadeSnippet = "\n\n--- SHADE/VARIANT SPECIFIC ---\n";
-          
-          for (const [paramName, value] of Object.entries(config.responses)) {
-            // Find the parameter
-            const param = categoryData?.parameters?.find((p: any) => p.name === paramName);
-            if (!param) continue;
-            
-            if (param.input_type === 'text' || param.input_type === 'textarea') {
-              // Text input - use value directly
-              if (value && String(value).trim()) {
-                shadeSnippet += `${param.display_name}: ${value}\n`;
-              }
-            } else {
-              // Radio input - find the level label and prompt text
-              const level = param.levels?.find((l: any) => l.level === value);
-              if (level) {
-                shadeSnippet += `${param.display_name}: ${level.label}\n`;
-                if (level.prompt_text) {
-                  shadeSnippet += `${level.prompt_text}\n`;
-                }
+      }
+
+      // Existing variant rows fetched BEFORE saving: any that aren't
+      // re-posted in this save must have their prompts rebuilt too, because
+      // variant prompts bake in the base prompt — otherwise editing a
+      // product-level answer leaves every configured shade serving the OLD
+      // prompt (the storefront prefers variant prompts).
+      const { getCategoryWithFullData, getProductVariants } = await import("../lib/supabase.server");
+      const existingVariants = isNewProduct ? [] : await getProductVariants(productId);
+
+      const needsCategoryData =
+        Object.keys(shadeConfigs).length > 0 ||
+        existingVariants.some((v: any) => v.funnel_responses);
+
+      // Get category data to resolve level labels
+      const categoryData = needsCategoryData ? await getCategoryWithFullData(categoryId) : null;
+
+      // Build shade prompt snippet from responses (keyed by parameter name)
+      const buildShadeSnippet = (responses: Record<string, any>): string => {
+        let shadeSnippet = "\n\n--- SHADE/VARIANT SPECIFIC ---\n";
+
+        for (const [paramName, value] of Object.entries(responses || {})) {
+          // Find the parameter
+          const param = categoryData?.parameters?.find((p: any) => p.name === paramName);
+          if (!param) continue;
+
+          if (param.input_type === 'text' || param.input_type === 'textarea') {
+            // Text input - use value directly
+            if (value && String(value).trim()) {
+              shadeSnippet += `${param.display_name}: ${value}\n`;
+            }
+          } else {
+            // Radio input - find the level label and prompt text
+            const level = param.levels?.find((l: any) => l.level === value);
+            if (level) {
+              shadeSnippet += `${param.display_name}: ${level.label}\n`;
+              if (level.prompt_text) {
+                shadeSnippet += `${level.prompt_text}\n`;
               }
             }
           }
-          
-          // Combine base prompt + shade snippet
-          const variantPrompt = generatedPrompt + shadeSnippet;
-          
-          // Save variant configuration
-          await saveVariantConfiguration(
-            productId,
-            variantId,
-            config.title,
-            variantPrompt,
-            config.displayColor ?? null
-          );
-          
-          console.log(`✅ Saved shade config for variant: ${config.title}`);
         }
+
+        return shadeSnippet;
+      };
+
+      // 1) Save shades posted in this request (responses persisted so the
+      // prompt can be rebuilt on the next product-level edit)
+      for (const [variantId, config] of Object.entries(shadeConfigs)) {
+        // Combine base prompt + shade snippet
+        const variantPrompt = generatedPrompt + buildShadeSnippet(config.responses);
+
+        // Save variant configuration
+        await saveVariantConfiguration(
+          productId,
+          variantId,
+          config.title,
+          variantPrompt,
+          config.displayColor ?? null,
+          config.responses ?? {}
+        );
+
+        console.log(`✅ Saved shade config for variant: ${config.title}`);
+      }
+
+      // 2) Rebuild prompts for already-configured shades NOT in this save,
+      // regenerating their snippet from the stored funnel_responses
+      // (migration 064). Rows with null funnel_responses — pre-064 saves and
+      // manual variant prompts — are left untouched, exactly as before.
+      for (const existing of existingVariants) {
+        if (Object.prototype.hasOwnProperty.call(shadeConfigs, existing.shopify_variant_id)) continue;
+        if (!existing.funnel_responses || typeof existing.funnel_responses !== 'object') continue;
+
+        const variantPrompt = generatedPrompt + buildShadeSnippet(existing.funnel_responses);
+
+        await saveVariantConfiguration(
+          productId,
+          existing.shopify_variant_id,
+          existing.variant_title,
+          variantPrompt,
+          undefined, // preserve the stored display_color
+          existing.funnel_responses
+        );
+
+        console.log(`🔁 Rebuilt shade prompt for variant: ${existing.variant_title}`);
       }
 
       return { success: true, message: "Product configured successfully!" };
@@ -492,7 +662,12 @@ interface ClassificationSuggestion {
 export default function Products() {
   const { shopifyProducts, configuredProducts, categories, shopifyProductsError } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
-  const submit = useSubmit();
+  // Which submission (if any) awaits the fetcher's result — modals close only
+  // on success; failures keep them open and set modalError so the merchant
+  // sees why (the page-level banner is hidden behind an open modal).
+  const [pendingSubmit, setPendingSubmit] = useState<"config" | "variant" | "variant-delete" | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [deleteConfirmActive, setDeleteConfirmActive] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<ShopifyProduct | null>(null);
   const [selectedConfiguredProduct, setSelectedConfiguredProduct] = useState<ConfiguredProduct | null>(null);
   const [modalActive, setModalActive] = useState(false);
@@ -569,6 +744,24 @@ export default function Products() {
           if (response.ok) {
             const data = await response.json();
             setConfiguredVariants(data.variants || []);
+
+            // Rehydrate shade form state from the stored responses
+            // (migration 064) so editing a configured shade shows its
+            // current answers instead of a blank form whose partial save
+            // would overwrite the fuller config. Pre-064 rows have null
+            // funnel_responses and render blank, as before.
+            const profiles: Record<string, Record<string, string | number>> = {};
+            const colors: Record<string, string> = {};
+            for (const v of data.variants || []) {
+              if (v.funnel_responses && typeof v.funnel_responses === 'object' && Object.keys(v.funnel_responses).length > 0) {
+                profiles[v.shopify_variant_id] = v.funnel_responses;
+              }
+              if (v.display_color) {
+                colors[v.shopify_variant_id] = v.display_color;
+              }
+            }
+            if (Object.keys(profiles).length > 0) setVariantColorProfiles(profiles);
+            if (Object.keys(colors).length > 0) setVariantDisplayColors(colors);
           }
         } catch (error) {
           console.error('Error loading variants:', error);
@@ -713,8 +906,50 @@ export default function Products() {
     setVariantDisplayColors({});
     setExpandedShadeVariants(new Set());
     setReferenceImageUrl(null);
+    setModalError(null);
   };
-  
+
+  // Refresh the configured-variant list from the server. Runs when a variant
+  // mutation actually completes (fetcher back to idle) — the old
+  // setTimeout(500) refetch raced the mutation and showed stale configured
+  // state whenever the save took longer than the guess.
+  const reloadConfiguredVariants = useCallback(async () => {
+    if (!selectedConfiguredProduct) return;
+    try {
+      const response = await fetch(`/api/get-variants?productId=${selectedConfiguredProduct.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        setConfiguredVariants(data.variants || []);
+      }
+    } catch (error) {
+      console.error('Error reloading variants:', error);
+    }
+  }, [selectedConfiguredProduct]);
+
+  // Close the submitting modal only when the action reports success; on
+  // failure it stays open with modalError set so the merchant sees the
+  // critical banner instead of a silently discarded save.
+  useEffect(() => {
+    if (!pendingSubmit || fetcher.state !== "idle" || !fetcher.data) return;
+    setPendingSubmit(null);
+    if (fetcher.data.success === true) {
+      if (pendingSubmit === "config") {
+        handleCloseModal();
+      } else if (pendingSubmit === "variant") {
+        setVariantModalActive(false);
+        setSelectedVariantForConfig(null);
+        setVariantPrompt("");
+        setVariantDisplayColor("");
+        reloadConfiguredVariants();
+      } else if (pendingSubmit === "variant-delete") {
+        reloadConfiguredVariants();
+      }
+    } else {
+      setModalError(fetcher.data.message || "Something went wrong. Please try again.");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingSubmit, fetcher.state, fetcher.data]);
+
   // Reference image upload/remove via Remix fetcher (uses authenticated session)
   const refFetcher = useFetcher<typeof action>();
   const isUploadingRef = refFetcher.state !== "idle";
@@ -756,6 +991,15 @@ export default function Products() {
   // Check if category has variant-specific parameters
   const hasVariantParams = categoryData?.parameters?.some(p => p.is_variant_specific && !p.is_locked) || false;
   const variantParams = categoryData?.parameters?.filter(p => p.is_variant_specific && !p.is_locked) || [];
+
+  // Mirror server-side validateFunnelResponses: every non-locked,
+  // non-variant-specific parameter must be answered before Save enables,
+  // otherwise the action rejects with "Please answer all questions".
+  const requiredFunnelParams = categoryData?.parameters?.filter(p => !p.is_locked && !p.is_variant_specific) || [];
+  const allRequiredAnswered = requiredFunnelParams.every(p => {
+    const value = funnelResponses[p.id];
+    return value !== undefined && value !== null && value !== '';
+  });
 
   const handleSave = () => {
     if (!selectedProduct && !selectedConfiguredProduct) return;
@@ -809,23 +1053,33 @@ export default function Products() {
       return;
     }
 
-    submit(formData, { method: "POST" });
-    handleCloseModal();
+    // Submit through the fetcher so the banners/loading states reflect the
+    // outcome; the effect above closes the modal only on success.
+    fetcher.submit(formData, { method: "POST" });
+    setPendingSubmit("config");
+    setModalError(null);
   };
 
+  // Deleting a configuration is destructive (prompt, funnel answers, and
+  // variant configs all go, with no undo) — require explicit confirmation.
   const handleDelete = () => {
+    if (!selectedConfiguredProduct) return;
+    setDeleteConfirmActive(true);
+  };
+
+  const confirmDelete = () => {
     if (!selectedConfiguredProduct) return;
 
     const formData = new FormData();
     formData.append("action", "delete");
     formData.append("configuredProductId", selectedConfiguredProduct.id);
 
-    submit(formData, { method: "POST" });
-    setModalActive(false);
-    setSelectedProduct(null);
-    setSelectedConfiguredProduct(null);
-    setIsEditMode(false);
-    setTransformationPrompt("");
+    // Failures surface via the pendingSubmit effect: the edit modal stays
+    // open with modalError set.
+    fetcher.submit(formData, { method: "POST" });
+    setPendingSubmit("config");
+    setModalError(null);
+    setDeleteConfirmActive(false);
   };
 
   const handleTest = (configuredProduct: ConfiguredProduct) => {
@@ -929,24 +1183,11 @@ export default function Products() {
     formData.append("transformationPrompt", variantPrompt);
     if (variantDisplayColor.trim()) formData.append("displayColor", variantDisplayColor.trim());
 
-    submit(formData, { method: "POST" });
-    setVariantModalActive(false);
-    setSelectedVariantForConfig(null);
-    setVariantPrompt("");
-    setVariantDisplayColor("");
-    
-    // Reload configured variants to show updated status
-    setTimeout(async () => {
-      try {
-        const response = await fetch(`/api/get-variants?productId=${selectedConfiguredProduct.id}`);
-        if (response.ok) {
-          const data = await response.json();
-          setConfiguredVariants(data.variants || []);
-        }
-      } catch (error) {
-        console.error('Error reloading variants:', error);
-      }
-    }, 500); // Small delay to let the save complete
+    // The effect above closes the variant modal only on success and reloads
+    // the configured-variant list once the mutation has actually completed.
+    fetcher.submit(formData, { method: "POST" });
+    setPendingSubmit("variant");
+    setModalError(null);
   };
 
   const handleDeleteVariant = async (variantConfigId: string) => {
@@ -954,22 +1195,10 @@ export default function Products() {
     formData.append("action", "delete-variant");
     formData.append("variantConfigId", variantConfigId);
 
-    submit(formData, { method: "POST" });
-    
-    // Reload configured variants to show updated status
-    if (selectedConfiguredProduct) {
-      setTimeout(async () => {
-        try {
-          const response = await fetch(`/api/get-variants?productId=${selectedConfiguredProduct.id}`);
-          if (response.ok) {
-            const data = await response.json();
-            setConfiguredVariants(data.variants || []);
-          }
-        } catch (error) {
-          console.error('Error reloading variants:', error);
-        }
-      }, 500);
-    }
+    // The effect above reloads the configured-variant list on completion.
+    fetcher.submit(formData, { method: "POST" });
+    setPendingSubmit("variant-delete");
+    setModalError(null);
   };
 
   // Helper to format funnel responses as a readable summary (NO PROMPT VISIBLE!)
@@ -1352,6 +1581,12 @@ export default function Products() {
           {(selectedProduct || selectedConfiguredProduct) && (
             <FormLayout>
               <BlockStack gap="300">
+                {/* Surface save/delete failures inside the modal — the page-level
+                    banner is hidden behind the open modal */}
+                {modalError && (
+                  <Banner title={modalError} tone="critical" onDismiss={() => setModalError(null)} />
+                )}
+
                 {selectedProduct && (
                   <InlineStack gap="300">
                     <Thumbnail
@@ -1879,12 +2114,37 @@ export default function Products() {
                 variant="primary"
                 onClick={handleSave}
                 loading={fetcher.state === "submitting"}
-                disabled={!isLegacyMode && (!selectedCategory || Object.keys(funnelResponses).length === 0)}
+                disabled={!isLegacyMode && (!selectedCategory || !categoryData || Object.keys(funnelResponses).length === 0 || !allRequiredAnswered)}
               >
                 {isEditMode ? "Update Configuration" : "Save Configuration"}
               </Button>
             </InlineStack>
           </InlineStack>
+        </Modal.Section>
+      </Modal>
+
+      {/* Delete confirmation — removing a configuration also removes its
+          funnel answers and variant/shade prompts, with no undo. */}
+      <Modal
+        open={deleteConfirmActive}
+        onClose={() => setDeleteConfirmActive(false)}
+        title="Delete this configuration?"
+        primaryAction={{
+          content: "Delete configuration",
+          destructive: true,
+          onAction: confirmDelete,
+        }}
+        secondaryActions={[
+          { content: "Cancel", onAction: () => setDeleteConfirmActive(false) },
+        ]}
+      >
+        <Modal.Section>
+          <Text as="p" variant="bodyMd">
+            This permanently removes the AI transformation settings, funnel
+            answers, and any variant/shade configurations for{" "}
+            {selectedConfiguredProduct?.product_name ?? "this product"}. This
+            cannot be undone.
+          </Text>
         </Modal.Section>
       </Modal>
 
@@ -2043,7 +2303,7 @@ export default function Products() {
       {/* Variant Configuration Modal (Phase 3) */}
       <Modal
         open={variantModalActive}
-        onClose={() => setVariantModalActive(false)}
+        onClose={() => { setVariantModalActive(false); setModalError(null); }}
         title="Configure Variant Prompt"
         primaryAction={{
           content: "Save Variant",
@@ -2053,13 +2313,19 @@ export default function Products() {
         secondaryActions={[
           {
             content: "Cancel",
-            onAction: () => setVariantModalActive(false)
+            onAction: () => { setVariantModalActive(false); setModalError(null); }
           }
         ]}
       >
         <Modal.Section>
           {selectedVariantForConfig && (
             <BlockStack gap="300">
+              {/* Surface save failures inside the modal — the page-level
+                  banner is hidden behind the open modal */}
+              {modalError && (
+                <Banner title={modalError} tone="critical" onDismiss={() => setModalError(null)} />
+              )}
+
               <InlineStack gap="300" blockAlign="center">
                 {selectedVariantForConfig.image?.url && (
                   <Thumbnail

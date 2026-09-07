@@ -129,6 +129,32 @@ export async function getLatestSessionId(shopId: string): Promise<string | null>
   return (data?.id as string) ?? null;
 }
 
+/**
+ * Persisted history must never end with unanswered tool_use blocks: the API
+ * 400s on them, permanently bricking the session (BadRequestError is
+ * permanent, so every future turn fails). If the trailing message is an
+ * assistant turn containing tool_use blocks, inject is_error tool_results for
+ * all of them — the turn is over either way, and an honest "cancelled" beats
+ * an invalid history.
+ */
+function repairUnansweredToolUses(session: SessionRow, note: string): void {
+  const last = session.messages[session.messages.length - 1];
+  if (!last || last.role !== "assistant" || !Array.isArray(last.content)) return;
+  const toolUses = last.content.filter(
+    (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
+  );
+  if (toolUses.length === 0) return;
+  session.messages.push({
+    role: "user",
+    content: toolUses.map((t) => ({
+      type: "tool_result" as const,
+      tool_use_id: t.id,
+      content: note,
+      is_error: true,
+    })),
+  });
+}
+
 async function persistSession(session: SessionRow): Promise<void> {
   const { data, error } = await supabase
     .from("quiz_copilot_sessions")
@@ -167,13 +193,42 @@ function draftSummaryBlock(draft: QuizDraft): string {
   return lines.join("\n");
 }
 
-export async function runCopilotTurn(args: {
+interface CopilotTurnArgs {
   shopId: string;
   shopDomain: string;
   sessionId?: string | null;
   userMessage: string;
   onEvent: (event: CopilotEvent) => void;
-}): Promise<{ sessionId: string; usage: ClaudeUsage[] }> {
+}
+
+/**
+ * One in-flight turn per shop: two concurrent turns would each load the same
+ * session history, then last-writer-wins the persist in `finally` — silently
+ * dropping the other turn's messages AND its undo snapshots. The chat panel
+ * already serializes sends client-side, so this only fires for a second tab
+ * or a direct POST; reject it loudly instead of queueing (a queued turn would
+ * sit on a silent SSE stream for up to 90s). In-process only — same
+ * single-instance assumption as shop-save-lock.server.ts.
+ */
+const activeTurnShops = new Set<string>();
+
+export async function runCopilotTurn(args: CopilotTurnArgs): Promise<{ sessionId: string; usage: ClaudeUsage[] }> {
+  if (activeTurnShops.has(args.shopId)) {
+    args.onEvent({
+      type: "error",
+      error: "Another copilot request is still running for this shop (maybe in another tab). Wait for it to finish, then try again.",
+    });
+    return { sessionId: args.sessionId ?? "", usage: [] };
+  }
+  activeTurnShops.add(args.shopId);
+  try {
+    return await runCopilotTurnLocked(args);
+  } finally {
+    activeTurnShops.delete(args.shopId);
+  }
+}
+
+async function runCopilotTurnLocked(args: CopilotTurnArgs): Promise<{ sessionId: string; usage: ClaudeUsage[] }> {
   const { shopId, shopDomain, userMessage, onEvent } = args;
   const usage: ClaudeUsage[] = [];
   const startedAt = Date.now();
@@ -252,15 +307,10 @@ export async function runCopilotTurn(args: {
         // Truncated mid-tool-call (e.g. max_tokens): the assistant message
         // contains tool_use blocks that MUST be answered or the persisted
         // history is invalid and every future turn 400s.
-        session.messages.push({
-          role: "user",
-          content: toolUses.map((t) => ({
-            type: "tool_result" as const,
-            tool_use_id: t.id,
-            content: "Cancelled: the response was truncated before this tool call could be applied.",
-            is_error: true,
-          })),
-        });
+        repairUnansweredToolUses(
+          session,
+          "Cancelled: the response was truncated before this tool call could be applied.",
+        );
         onEvent({ type: "error", error: "That request was too large to finish in one go — try breaking it into smaller changes." });
         break;
       }
@@ -317,7 +367,10 @@ export async function runCopilotTurn(args: {
         });
         draft = applied.after;
         onEvent({ type: "change", ...(applied.summary as ChangeSummary), snapshotId });
-        results.push({ type: "tool_result", tool_use_id: toolUse.id, content: "Applied." });
+        // Echo the summary so the model sees any caveat the applier attached
+        // (e.g. remove_question warning about rules orphaned on a kept axis),
+        // not just a bare success.
+        results.push({ type: "tool_result", tool_use_id: toolUse.id, content: `Applied. ${applied.summary.description}` });
       }
       session.messages.push({ role: "user", content: results });
 
@@ -328,6 +381,14 @@ export async function runCopilotTurn(args: {
     }
   } catch (err) {
     console.error("[quiz-copilot] turn failed:", err);
+    // Same invariant as the truncation branch above: a throw between the
+    // assistant push and the tool_result push (e.g. getQuizDraft failing
+    // mid-loop) would otherwise persist history ending in unanswered
+    // tool_use blocks and brick every future turn.
+    repairUnansweredToolUses(
+      session,
+      "Cancelled: an error ended the turn before this tool call completed.",
+    );
     onEvent({ type: "error", error: err instanceof Error ? err.message : "Copilot turn failed" });
   } finally {
     // Always persist: applied patches are already in the draft, and losing

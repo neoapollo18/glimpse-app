@@ -67,7 +67,11 @@ export function StudioTopBar({
             <Badge tone="critical">Needs attention</Badge>
           </button>
         )}
-        {(!catalog.syncEnabled || !catalog.productCount) && (
+        {/* A persisted cursor means a sync was interrupted mid-catalog:
+            syncEnabled and productCount are already set, but only a slice
+            of products is in the DB — keep the chip (and its Resume-sync
+            button) visible until the cursor clears. */}
+        {(!catalog.syncEnabled || !catalog.productCount || catalog.cursor != null) && (
           <Popover
             active={syncOpen}
             onClose={() => setSyncOpen(false)}
@@ -76,7 +80,7 @@ export function StudioTopBar({
                 onClick={() => setSyncOpen((v) => !v)}
                 style={{ border: 0, background: "transparent", padding: 0, cursor: "pointer" }}
               >
-                <Badge tone="attention">Catalog not synced</Badge>
+                <Badge tone="attention">{catalog.cursor ? "Catalog sync incomplete" : "Catalog not synced"}</Badge>
               </button>
             }
           >

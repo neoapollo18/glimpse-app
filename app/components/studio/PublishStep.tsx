@@ -7,6 +7,7 @@ import {
   Button,
   Card,
   InlineStack,
+  Modal,
   Text,
 } from "@shopify/polaris";
 import type { StudioLoaderData, StudioActionData } from "../../routes/studio";
@@ -35,6 +36,7 @@ export function PublishStep({
 }) {
   const fetcher = useFetcher<StudioActionData>();
   const [published, setPublished] = useState(false);
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
   const processedRef = useRef<StudioActionData | null>(null);
 
   useEffect(() => {
@@ -42,6 +44,9 @@ export function PublishStep({
     if (processedRef.current === fetcher.data) return;
     processedRef.current = fetcher.data;
     if (fetcher.data.intent === "publish" && fetcher.data.ok) setPublished(true);
+    // Close the confirm on success AND failure: errors render in the card
+    // banner, which the open modal would cover.
+    if (fetcher.data.intent === "discard-draft") setConfirmingDiscard(false);
   }, [fetcher.state, fetcher.data]);
 
   const flow = data.draft?.flow;
@@ -55,6 +60,12 @@ export function PublishStep({
   const publishing = fetcher.state !== "idle" && fetcher.formData?.get("intent") === "publish";
   const blocked = problems.length > 0 || questionCount === 0 || !data.hasDraft;
 
+  // Publishing only replaces the quiz CONTENT; it doesn't flip the
+  // storefront surface on. A draft seeded from a live config where the
+  // merchant turned the quiz off publishes with the surface still off, so
+  // "shoppers see it right away" would be false.
+  const surfaceOn = data.quizSurfaceEnabled !== false;
+
   if (published) {
     return (
       <div style={{ flex: 1, overflowY: "auto" }}>
@@ -62,17 +73,23 @@ export function PublishStep({
           <BlockStack gap="400">
             <div style={{ fontSize: 44 }}>✓</div>
             <Text as="h2" variant="headingLg">
-              Your quiz is live
+              {surfaceOn ? "Your quiz is live" : "Your quiz is published"}
             </Text>
             <Text as="p" tone="subdued">
-              Shoppers see the new quiz right away. If you haven't yet, add the
-              Gleame Quiz section to your theme so it has a home on your
-              storefront.
+              {surfaceOn
+                ? "Shoppers see the new quiz right away. If you haven't yet, add the Gleame Quiz section to your theme so it has a home on your storefront."
+                : "Shoppers can't see it yet: the quiz is currently turned off for your store. Turn it on from the AI Assistant page and it will appear wherever you've added the Gleame Quiz section to your theme."}
             </Text>
             <InlineStack gap="300" align="center">
-              <Button variant="primary" onClick={() => navigateParent("/app")}>
-                Finish setup
-              </Button>
+              {surfaceOn ? (
+                <Button variant="primary" onClick={() => navigateParent("/app")}>
+                  Finish setup
+                </Button>
+              ) : (
+                <Button variant="primary" onClick={() => navigateParent("/app/assistant")}>
+                  Turn the quiz on
+                </Button>
+              )}
               <Button onClick={() => setPublished(false)}>Keep editing</Button>
             </InlineStack>
           </BlockStack>
@@ -168,17 +185,37 @@ export function PublishStep({
                 <Button
                   tone="critical"
                   variant="secondary"
-                  loading={fetcher.state !== "idle" && fetcher.formData?.get("intent") === "discard-draft"}
-                  onClick={() => {
-                    const fd = new FormData();
-                    fd.append("intent", "discard-draft");
-                    fetcher.submit(fd, { method: "POST", action: "/studio" });
-                  }}
+                  onClick={() => setConfirmingDiscard(true)}
                 >
                   Discard draft
                 </Button>
               )}
             </InlineStack>
+            <Modal
+              open={confirmingDiscard}
+              onClose={() => setConfirmingDiscard(false)}
+              title="Discard this draft?"
+              primaryAction={{
+                content: "Discard draft",
+                destructive: true,
+                loading: fetcher.state !== "idle" && fetcher.formData?.get("intent") === "discard-draft",
+                onAction: () => {
+                  const fd = new FormData();
+                  fd.append("intent", "discard-draft");
+                  fetcher.submit(fd, { method: "POST", action: "/studio" });
+                },
+              }}
+              secondaryActions={[{ content: "Keep editing", onAction: () => setConfirmingDiscard(false) }]}
+            >
+              <Modal.Section>
+                <Text as="p">
+                  Every edit in this draft will be permanently deleted. Drafts
+                  aren't saved to version history, so this can't be undone.
+                  Your live quiz isn't affected; a fresh draft will be created
+                  from it.
+                </Text>
+              </Modal.Section>
+            </Modal>
           </BlockStack>
         </Card>
 

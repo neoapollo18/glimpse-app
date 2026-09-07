@@ -21,6 +21,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // endpoint dumps per-shop revenue data):
   //   curl -H "Authorization: Bearer $ADMIN_AUDIT_SECRET" .../api/admin/billing-audit
   // ADMIN_AUDIT_SECRET, falling back to CRON_SECRET when unset.
+  // TODO: set a distinct ADMIN_AUDIT_SECRET in the environment and drop the
+  // CRON_SECRET fallback — the cron secret also travels as a ?secret= query
+  // param (deprecated, see api.cron.check-sessions), so a query-string leak
+  // of it would unlock this revenue dump too. The fallback is kept for now
+  // because ADMIN_AUDIT_SECRET is not yet configured and removing it would
+  // lock out the only working auth path.
   const auth = request.headers.get("Authorization") ?? "";
   const secret = auth.startsWith("Bearer ") ? auth.slice("Bearer ".length) : "";
   const expected = process.env.ADMIN_AUDIT_SECRET || process.env.CRON_SECRET;

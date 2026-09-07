@@ -1,7 +1,14 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
-import { uploadReferenceImage, saveProductReferenceImage, deleteReferenceImage } from "../lib/supabase.server";
+import {
+  uploadReferenceImage,
+  saveProductReferenceImage,
+  deleteReferenceImage,
+  findShopByDomain,
+  parseReferenceImageUrls,
+  supabase,
+} from "../lib/supabase.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -18,9 +25,29 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ error: "Missing productId" }, { status: 400 });
   }
 
+  // Ownership check: productId is a raw UUID from the client and the save
+  // helpers filter only by product id — without this, any installed merchant
+  // could replace or wipe another shop's reference images by UUID.
+  const shop = await findShopByDomain(session.shop);
+  if (!shop) {
+    return json({ error: "Shop not found" }, { status: 404 });
+  }
+  const { data: product } = await supabase
+    .from("products")
+    .select("id, reference_image_url, reference_image_urls")
+    .eq("id", productId)
+    .eq("shop_id", shop.id)
+    .single();
+  if (!product) {
+    return json({ error: "Product not found" }, { status: 404 });
+  }
+
   if (action === "remove") {
     const currentUrl = formData.get("currentUrl") as string;
-    if (currentUrl) {
+    // Only delete storage objects this product actually references — the
+    // bucket is shared across shops and currentUrl is attacker-controllable,
+    // so trusting the raw URL allowed deleting any shop's files.
+    if (currentUrl && parseReferenceImageUrls(product).includes(currentUrl)) {
       await deleteReferenceImage(currentUrl);
     }
     await saveProductReferenceImage(productId, null);

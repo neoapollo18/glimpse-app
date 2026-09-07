@@ -127,13 +127,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return new Response("OK", { status: 200 });
     
   } catch (error) {
+    // authenticate.webhook throws a Response (401) on HMAC verification
+    // failure; it MUST propagate. Returning 200 for forged/unverified
+    // payloads fails Shopify's webhook security checks (mandatory for the
+    // GDPR endpoints) and hides a misconfigured secret.
+    if (error instanceof Response) throw error;
     console.error("[GDPR] Webhook processing error:", error);
-    
-    // Return 401 for HMAC verification failures
-    if (error instanceof Error && error.message.includes("HMAC")) {
-      return new Response("Unauthorized", { status: 401 });
-    }
-    
+
     // For other errors, still return 200 to prevent infinite retries
     // Log the error for investigation
     return new Response("OK", { status: 200 });

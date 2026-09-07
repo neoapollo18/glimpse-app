@@ -47,7 +47,10 @@ export function OnboardingWizard({
 }) {
   const revalidator = useRevalidator();
   const blankFetcher = useFetcher<StudioActionData>();
-  const needsCatalog = !data.catalog.syncEnabled;
+  // A persisted resume cursor means an earlier sync was interrupted: the
+  // flag is enabled but only a slice of the catalog is in the DB. Treat
+  // that as sync-incomplete or the quiz gets generated from a partial pool.
+  const needsCatalog = !data.catalog.syncEnabled || data.catalog.cursor != null;
   const [stepIndex, setStepIndex] = useState(needsCatalog ? 0 : 1);
   const [skippedCatalog, setSkippedCatalog] = useState(false);
   const sync = useCatalogSync({
@@ -297,7 +300,7 @@ export function OnboardingWizard({
           ) : (
             <InlineStack gap="300">
               <Button variant="primary" loading={sync.busy} onClick={() => sync.start(data.catalog.cursor ?? undefined)}>
-                Sync catalog
+                {data.catalog.cursor ? "Resume sync" : "Sync catalog"}
               </Button>
               <Button
                 variant="plain"

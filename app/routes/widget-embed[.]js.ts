@@ -2,11 +2,19 @@ import { type LoaderFunctionArgs } from "@remix-run/node";
 import { readFileSync } from "fs";
 import { join } from "path";
 
+// Derive the widget's API origin from the deployed app URL so a host move
+// (custom domain, Render rename) doesn't silently break embeds.
+const APP_URL = (process.env.SHOPIFY_APP_URL || "https://glimpse-app-charles.onrender.com").replace(/\/+$/, "");
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   try {
-    // Read the widget file from the public directory
+    // Read the widget file from the public directory, rewriting its hardcoded
+    // SHOPIFY_APP_URL assignment to the env-derived origin.
     const widgetPath = join(process.cwd(), "public", "widget-embed.js");
-    const widgetContent = readFileSync(widgetPath, "utf-8");
+    const widgetContent = readFileSync(widgetPath, "utf-8").replace(
+      /const SHOPIFY_APP_URL = '[^']*';/,
+      `const SHOPIFY_APP_URL = '${APP_URL}';`,
+    );
 
     return new Response(widgetContent, {
       status: 200,

@@ -312,7 +312,12 @@ export async function transformImage(
         stack: error.stack
       });
       
-      if (error.message?.includes('RATE_LIMIT') || error.message?.includes('429')) {
+      if (error.message?.includes('UNSUPPORTED_IMAGE')) {
+        // compressImage's HEIC sentinel — retrying the same photo can never
+        // succeed, so tell the shopper to pick a different format instead of
+        // the generic "try again".
+        userMessage = "This photo format isn't supported. Please upload a JPG or PNG instead.";
+      } else if (error.message?.includes('RATE_LIMIT') || error.message?.includes('429')) {
         userMessage = 'Too many requests. Please wait a moment and try again.';
       } else if (error.message?.includes('INVALID_ARGUMENT') || error.message?.includes('400')) {
         if (error.message?.includes('image')) {
@@ -539,7 +544,10 @@ export async function transformImageWithOpenAI(
       });
 
       const msg = error.message.toLowerCase();
-      if (msg.includes('must be verified')) {
+      if (msg.includes('unsupported_image')) {
+        // compressImage's HEIC sentinel — same photo will never work.
+        userMessage = "This photo format isn't supported. Please upload a JPG or PNG instead.";
+      } else if (msg.includes('must be verified')) {
         userMessage = 'This AI model requires OpenAI organization verification.';
       } else if (msg.includes('rate_limit') || msg.includes('429')) {
         userMessage = 'Too many requests. Please wait a moment and try again.';

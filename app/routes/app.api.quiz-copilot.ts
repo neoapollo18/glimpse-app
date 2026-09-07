@@ -3,7 +3,7 @@ import { json } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import { shopNeedsBilling } from "../lib/billing-gate.server";
 import { findShopByDomain } from "../lib/supabase.server";
-import { checkRateLimit, RATE_LIMITS } from "../lib/rate-limiter.server";
+import { checkRateLimits, RATE_LIMITS } from "../lib/rate-limiter.server";
 import { isClaudeConfigured } from "../lib/claude.server";
 import { runCopilotTurn, undoToSnapshot, resetSession } from "../lib/quiz-copilot.server";
 
@@ -63,10 +63,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ ok: false, error: "AI copilot is not configured (missing ANTHROPIC_API_KEY)." }, { status: 503 });
   }
 
-  const perMinute = checkRateLimit(`quiz-copilot:shop:${shopDomain}:minute`, RATE_LIMITS.QUIZ_COPILOT_PER_SHOP_MINUTE.limit, RATE_LIMITS.QUIZ_COPILOT_PER_SHOP_MINUTE.windowMs);
-  const perDay = checkRateLimit(`quiz-copilot:shop:${shopDomain}:day`, RATE_LIMITS.QUIZ_COPILOT_PER_SHOP_DAY.limit, RATE_LIMITS.QUIZ_COPILOT_PER_SHOP_DAY.windowMs);
-  if (!perMinute.allowed || !perDay.allowed) {
-    const retryAfterSeconds = Math.max(perMinute.retryAfterSeconds, perDay.retryAfterSeconds);
+  // Atomic across both windows: a minute-blocked retry must not burn the
+  // daily allowance (see checkRateLimits).
+  const limit = checkRateLimits([
+    { key: `quiz-copilot:shop:${shopDomain}:minute`, limit: RATE_LIMITS.QUIZ_COPILOT_PER_SHOP_MINUTE.limit, windowMs: RATE_LIMITS.QUIZ_COPILOT_PER_SHOP_MINUTE.windowMs },
+    { key: `quiz-copilot:shop:${shopDomain}:day`, limit: RATE_LIMITS.QUIZ_COPILOT_PER_SHOP_DAY.limit, windowMs: RATE_LIMITS.QUIZ_COPILOT_PER_SHOP_DAY.windowMs },
+  ]);
+  if (!limit.allowed) {
+    const retryAfterSeconds = limit.retryAfterSeconds;
     return json({ ok: false, error: `Copilot limit reached. Try again in ${retryAfterSeconds}s.`, retryAfterSeconds }, { status: 429 });
   }
 

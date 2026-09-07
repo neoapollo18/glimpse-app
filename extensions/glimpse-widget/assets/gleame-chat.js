@@ -18,6 +18,46 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     else shopDomain = window.location.hostname;
   }
 
+  // Cart token for conversion attribution — mirrors widget.js/gleame-quiz.js.
+  // The token joins this widget's analytics_events to orders via the
+  // orders/create webhook. 32-hex tokens are Shopify's legacy cart format,
+  // which orders never echo, so reject them at every source rather than
+  // pollute attribution. Modern tokens can carry a '?key=...' suffix that
+  // must be stripped before use.
+  var cartToken = null;
+  function acceptToken(t) {
+    if (typeof t !== 'string') return null;
+    var stripped = t.split('?')[0];
+    if (!/^[a-zA-Z0-9-_]+$/.test(stripped) || stripped.length > 64) return null;
+    if (/^[0-9a-f]{32}$/.test(stripped)) return null; // legacy pre-SFAPI format
+    return stripped;
+  }
+  cartToken = acceptToken(root.getAttribute('data-cart-token') || '');
+  function captureCartToken() {
+    // Try /cart.js first; if no matchable token, force-mint via
+    // /cart/update.js with a hidden attribute (underscore prefix =
+    // invisible in checkout / order notifications). Sessions whose cart
+    // cookie is locked to legacy format end up with cartToken=null, which
+    // is correct — they can't be joined to orders anyway.
+    fetch('/cart.js', { credentials: 'same-origin' })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(cart) {
+        var t = acceptToken(cart && cart.token);
+        if (t) { cartToken = t; return null; }
+        return fetch('/cart/update.js', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ attributes: { _gleame: '1' } }),
+        }).then(function(r) { return r.ok ? r.json() : null; });
+      })
+      .then(function(cart) {
+        var t = acceptToken(cart && cart.token);
+        if (t) cartToken = t;
+      })
+      .catch(function() {});
+  }
+
   function isMobile() {
     return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
            (navigator.maxTouchPoints && navigator.maxTouchPoints > 2 && /Mobi/.test(navigator.userAgent));
@@ -212,6 +252,7 @@ console.log('Gleame Chat Assistant v1.0 loaded');
       if (data.assistantMode === 'quiz') return;
       config = data;
       recommendationFlow = (flow && flow.configured) ? flow : null;
+      captureCartToken();
       root.style.display = '';
       applyColors();
       renderBubble();
@@ -865,21 +906,33 @@ console.log('Gleame Chat Assistant v1.0 loaded');
     pushMessage({ type: 'bot-buttons', buttons: buttons, consumed: false });
   }
 
-  // Conditional option (showIf) check against answers so far. Mirrors the
+  // Conditional (showIf) check against answers so far. Mirrors the
   // quiz page's semantics for the fields chat can honor: chat is
   // single-tap, so multi-select questions degrade to one answer (which the
   // shared server matcher still matches), and a select-all option sends the
   // '_any' marker ("open to anything" — matches any rule value).
+  function chatShowIfMet(showIf) {
+    if (!showIf) return true;
+    var v = criteria[showIf.axisKey];
+    return typeof v === 'string' && (v === showIf.axisValue || v === '_any');
+  }
+
   function chatOptionVisible(opt) {
-    if (!opt.showIf) return true;
-    var v = criteria[opt.showIf.axisKey];
-    return typeof v === 'string' && (v === opt.showIf.axisValue || v === '_any');
+    return chatShowIfMet(opt.showIf);
   }
 
   function askNextQuestion() {
     var q = recommendationFlow.questions[questionIndex];
     if (!q) {
       askForPhoto();
+      return;
+    }
+    // Question-level showIf: an unmet condition skips the WHOLE question
+    // (branched configs), same as the quiz page's visibleOptions().
+    // Questions without showIf are always asked, exactly as before.
+    if (q.showIf && !chatShowIfMet(q.showIf)) {
+      questionIndex++;
+      askNextQuestion();
       return;
     }
     var buttons = (q.options || [])
@@ -1946,16 +1999,18 @@ console.log('Gleame Chat Assistant v1.0 loaded');
 
   function trackEvent(eventType) {
     try {
+      var payload = {
+        shopDomain: shopDomain,
+        eventType: eventType,
+        widgetType: 'chat',
+        productId: null,
+        deviceType: isMobile() ? 'mobile' : 'desktop',
+      };
+      if (cartToken) payload.cartToken = cartToken;
       fetch(SHOPIFY_APP_URL + '/api/storefront/track-event', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          shopDomain: shopDomain,
-          eventType: eventType,
-          widgetType: 'chat',
-          productId: null,
-          deviceType: isMobile() ? 'mobile' : 'desktop',
-        }),
+        body: JSON.stringify(payload),
       }).catch(function() {});
     } catch (e) {}
   }

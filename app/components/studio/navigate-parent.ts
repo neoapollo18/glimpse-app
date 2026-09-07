@@ -16,6 +16,18 @@ export function navigateParent(url: string) {
     channel.close();
   } catch {
     // BroadcastChannel unavailable: best effort full-frame navigation.
-    window.open(url, "_top");
+    // A relative URL opened with "_top" resolves against OUR origin, which
+    // would navigate the Shopify admin to the bare app host with no
+    // shop/host/embedded context. Rebuild the admin deep link from the App
+    // Bridge global instead so the merchant stays inside the admin.
+    const cfg = (window as unknown as { shopify?: { config?: { shop?: string; apiKey?: string } } })
+      .shopify?.config;
+    const storeHandle =
+      typeof cfg?.shop === "string" && cfg.shop ? cfg.shop.replace(".myshopify.com", "") : null;
+    const dest =
+      storeHandle && cfg?.apiKey
+        ? `https://admin.shopify.com/store/${storeHandle}/apps/${cfg.apiKey}${url}`
+        : url;
+    window.open(dest, "_top");
   }
 }

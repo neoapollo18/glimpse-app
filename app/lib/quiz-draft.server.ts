@@ -39,7 +39,7 @@ export interface VersionSummary {
   id: string;
   status: "draft" | "published" | "archived";
   label: string | null;
-  createdBy: "ai" | "manual" | "system";
+  createdBy: "ai" | "manual" | "system" | "seed";
   createdAt: string;
   publishedAt: string | null;
 }
@@ -273,8 +273,19 @@ export async function captureLiveConfig(shopId: string): Promise<QuizDraft> {
 
 /** Seed (or return the existing) draft from the live config. */
 export async function initDraftFromLive(shopId: string): Promise<QuizDraft> {
-  const existing = await getQuizDraft(shopId);
-  if (existing) return existing;
+  const { data, error } = await supabase
+    .from("quiz_config_versions")
+    .select("config, created_by")
+    .eq("shop_id", shopId)
+    .eq("status", "draft")
+    .maybeSingle();
+  if (error) throw new Error(`quiz-draft: load failed: ${error.message}`);
+  // An edited draft is the merchant's work in progress — return it untouched.
+  // A still-'seed' draft has NO edits (every real edit path overwrites
+  // created_by via saveQuizDraft), so re-seeding is lossless — and necessary:
+  // returning a stale seed meant live edits made elsewhere (rules editor,
+  // dashboard mode toggle) were silently reverted by the next publish.
+  if (data && data.created_by !== "seed") return data.config as QuizDraft;
   const draft = await captureLiveConfig(shopId);
   // "seed": an auto-seeded, never-edited draft — any real edit overwrites
   // created_by via saveQuizDraft, which is what flips "unpublished edits".
@@ -287,34 +298,80 @@ export async function initDraftFromLive(shopId: string): Promise<QuizDraft> {
  * Referential check: every rule target must exist in the shop's non-deleted
  * catalog. Drafts can go stale against catalog sync (or reference AI
  * hallucinations that slipped past generation-time validation).
+ *
+ * Vanished targets (product archived/deleted since the draft was seeded)
+ * don't hard-block: the studio has no draft rules editor, so one archived
+ * product made the ENTIRE draft unpublishable with no fix short of
+ * discarding it. Publish prunes those rules instead (the runtime candidate
+ * pool drops non-live products anyway, so they were already dead) and
+ * reports them by product name, not raw UUID. Only rules with no target at
+ * all still block.
  */
-async function checkRuleTargets(shopId: string, flow: SaveRecommendationConfigInput): Promise<string[]> {
+async function checkRuleTargets(
+  shopId: string,
+  flow: SaveRecommendationConfigInput,
+): Promise<{ blocking: string[]; pruneIndexes: Set<number>; prunedNames: string[] }> {
   const targets = await getShopVariantsFlat(shopId);
   const productIds = new Set(targets.filter((t) => t.kind === "product").map((t) => t.id));
   const variantIds = new Set(targets.filter((t) => t.kind === "variant").map((t) => t.id));
-  const problems: string[] = [];
+  const blocking: string[] = [];
+  const pruneIndexes = new Set<number>();
+  const missingProducts = new Set<string>();
+  const missingVariants = new Set<string>();
   (flow.rules || []).forEach((rule, i) => {
     if (rule.productId && !productIds.has(rule.productId)) {
-      problems.push(`rule ${i + 1} targets missing product ${rule.productId}`);
+      pruneIndexes.add(i);
+      missingProducts.add(rule.productId);
     }
     if (rule.variantId && !variantIds.has(rule.variantId)) {
-      problems.push(`rule ${i + 1} targets missing variant ${rule.variantId}`);
+      pruneIndexes.add(i);
+      missingVariants.add(rule.variantId);
     }
     if (!rule.productId && !rule.variantId) {
-      problems.push(`rule ${i + 1} has no target`);
+      blocking.push(`rule ${i + 1} has no target`);
     }
   });
-  return problems;
+
+  // Best-effort names for the publish warning: vanished targets usually
+  // still exist as archived/soft-deleted rows, so the merchant sees
+  // "Cherry Red" instead of a UUID they can't map to anything.
+  const prunedNames: string[] = [];
+  if (missingProducts.size > 0) {
+    const { data } = await supabase
+      .from("products")
+      .select("id, product_name")
+      .in("id", [...missingProducts]);
+    const nameById = new Map((data ?? []).map((p: any) => [p.id as string, p.product_name as string]));
+    for (const id of missingProducts) prunedNames.push(nameById.get(id) || `product ${id.slice(0, 8)}`);
+  }
+  if (missingVariants.size > 0) {
+    const { data } = await supabase
+      .from("product_variants")
+      .select("id, variant_title, products ( product_name )")
+      .in("id", [...missingVariants]);
+    const labelById = new Map(
+      (data ?? []).map((v: any) => [
+        v.id as string,
+        [(v.products?.product_name as string) || "", (v.variant_title as string) || ""].filter(Boolean).join(" — "),
+      ]),
+    );
+    for (const id of missingVariants) prunedNames.push(labelById.get(id) || `variant ${id.slice(0, 8)}`);
+  }
+  return { blocking, pruneIndexes, prunedNames };
 }
 
-export async function publishQuizDraft(shopId: string): Promise<{ ok: boolean; error?: string }> {
+export async function publishQuizDraft(
+  shopId: string,
+): Promise<{ ok: boolean; error?: string; warning?: string }> {
   // Same lock the questions-page patch saves take: publish is a
   // snapshot-then-rewrite, and racing a live editor save would let one
   // silently erase the other.
   return withShopSaveLock(shopId, () => publishQuizDraftLocked(shopId));
 }
 
-async function publishQuizDraftLocked(shopId: string): Promise<{ ok: boolean; error?: string }> {
+async function publishQuizDraftLocked(
+  shopId: string,
+): Promise<{ ok: boolean; error?: string; warning?: string }> {
   const shopDomain = await domainForShop(shopId);
   const draft = await getQuizDraft(shopId);
   if (!draft) return { ok: false, error: "No draft to publish" };
@@ -336,9 +393,23 @@ async function publishQuizDraftLocked(shopId: string): Promise<{ ok: boolean; er
     };
   }
 
-  const targetProblems = await checkRuleTargets(shopId, draft.flow);
-  if (targetProblems.length > 0) {
-    return { ok: false, error: `Draft references missing catalog items: ${targetProblems.slice(0, 5).join("; ")}` };
+  const ruleCheck = await checkRuleTargets(shopId, draft.flow);
+  if (ruleCheck.blocking.length > 0) {
+    return { ok: false, error: `Draft has invalid rules: ${ruleCheck.blocking.slice(0, 5).join("; ")}` };
+  }
+  // Pruning EVERY rule would publish a quiz that recommends nothing — worse
+  // than a stale draft. That extreme still blocks (by name), except in ai
+  // mode where rules aren't the recommendation source.
+  const ruleCount = (draft.flow.rules || []).length;
+  if (
+    ruleCheck.pruneIndexes.size > 0 &&
+    ruleCheck.pruneIndexes.size >= ruleCount &&
+    (draft.settings.recommendation_mode ?? "matrix") !== "ai"
+  ) {
+    return {
+      ok: false,
+      error: `Every rule points at products no longer in your catalog (${ruleCheck.prunedNames.slice(0, 5).join(", ")}${ruleCheck.prunedNames.length > 5 ? ", …" : ""}). Restore those products or rebuild the recommendations before publishing.`,
+    };
   }
 
   // Safety snapshot of the live config BEFORE any write. If capture fails we
@@ -367,6 +438,18 @@ async function publishQuizDraftLocked(shopId: string): Promise<{ ok: boolean; er
   // order. Renumber axis positions from the question array so what the
   // merchant previewed is exactly what publishes.
   const orderedFlow = normalizeFlowOrder(draft.flow as Parameters<typeof normalizeFlowOrder>[0]) as QuizDraft["flow"];
+
+  // Drop vanished-target rules from what goes live (the draft row keeps them,
+  // so version history can still restore the full set). Surfaced as a
+  // publish warning, not an error — the publish itself succeeds.
+  let warning: string | undefined;
+  if (ruleCheck.pruneIndexes.size > 0) {
+    orderedFlow.rules = (orderedFlow.rules || []).filter((_, i) => !ruleCheck.pruneIndexes.has(i));
+    const shown = ruleCheck.prunedNames.slice(0, 5).join(", ");
+    const more = ruleCheck.prunedNames.length > 5 ? ` (+${ruleCheck.prunedNames.length - 5} more)` : "";
+    warning = `Published, but ${ruleCheck.pruneIndexes.size} recommendation rule${ruleCheck.pruneIndexes.size === 1 ? "" : "s"} pointing at products no longer in your catalog ${ruleCheck.pruneIndexes.size === 1 ? "was" : "were"} skipped: ${shown}${more}. Restore those products and republish to bring them back.`;
+    console.warn(`quiz-draft: publish pruned ${ruleCheck.pruneIndexes.size} vanished-target rule(s) for ${shopDomain}: ${ruleCheck.prunedNames.join(", ")}`);
+  }
 
   // Atomic RPC: constraint failure rolls back the whole flow rewrite.
   const flowResult = await saveRecommendationConfig(shopId, orderedFlow);
@@ -436,7 +519,7 @@ async function publishQuizDraftLocked(shopId: string): Promise<{ ok: boolean; er
   } catch (e) {
     console.warn(`quiz-draft: version pruning failed for ${shopId}:`, e);
   }
-  return { ok: true };
+  return { ok: true, warning };
 }
 
 /** Copy an archived/published version into the draft slot (does NOT publish). */

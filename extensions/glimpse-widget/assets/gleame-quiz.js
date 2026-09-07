@@ -260,15 +260,33 @@
   var cartToken = null;
   function acceptToken(t) {
     if (typeof t !== 'string') return null;
-    if (!/^[a-zA-Z0-9-_]+$/.test(t) || t.length > 64) return null;
-    if (/^[0-9a-f]{32}$/.test(t)) return null; // legacy pre-SFAPI format
-    return t;
+    // Modern tokens carry a "?key=<hex>" suffix (Liquid cart.token and
+    // /cart.js both return it); orders/create echoes only the bare id, so
+    // strip before validating or every modern token is rejected.
+    var stripped = t.split('?')[0];
+    if (!/^[a-zA-Z0-9-_]+$/.test(stripped) || stripped.length > 64) return null;
+    if (/^[0-9a-f]{32}$/.test(stripped)) return null; // legacy pre-SFAPI format
+    return stripped;
   }
   cartToken = acceptToken(root.getAttribute('data-cart-token'));
   function refreshCartToken() {
     if (PREVIEW) return Promise.resolve(null);
     return fetch('/cart.js', { credentials: 'same-origin' })
       .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(cart) {
+        var t = acceptToken(cart && cart.token);
+        if (t) { cartToken = t; return null; }
+        // No matchable token yet: force-mint via /cart/update.js with a
+        // hidden attribute (underscore prefix = invisible in checkout),
+        // same as widget.js. Sessions locked to the legacy cookie format
+        // stay null — they can't be joined to orders anyway.
+        return fetch('/cart/update.js', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ attributes: { _gleame: '1' } })
+        }).then(function(r) { return r.ok ? r.json() : null; });
+      })
       .then(function(cart) {
         var t = acceptToken(cart && cart.token);
         if (t) cartToken = t;
@@ -288,10 +306,14 @@
         deviceType: isMobile() ? 'mobile' : 'desktop',
       };
       if (cartToken) payload.cartToken = cartToken;
+      // keepalive: navigation-adjacent events (quiz_view_product fires as
+      // the same-tab product link commits) must survive document unload or
+      // the funnel's click-through step is systematically undercounted.
       fetch(SHOPIFY_APP_URL + '/api/storefront/track-event', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
+        keepalive: true,
       }).catch(function() {});
     } catch (e) {}
   }
@@ -604,12 +626,17 @@
       method: 'POST',
       body: fd,
     }).then(function(res) {
-      if (res.status === 429) return { rateLimited: true };
+      if (res.status === 429) {
+        // Honor the server's Retry-After (seconds) so retry copy doesn't
+        // re-invite taps into a still-closed window. Clamped; 30s default.
+        var ra = parseInt(res.headers.get('Retry-After'), 10);
+        return { rateLimited: true, retryAfterMs: (ra > 0 ? Math.min(ra, 120) : 30) * 1000 };
+      }
       if (!res.ok) return null;
       return res.json();
     }).then(function(data) {
       delete tryonPending[key];
-      if (data && data.rateLimited) { tryonCount--; return { rateLimited: true }; }
+      if (data && data.rateLimited) { tryonCount--; return data; }
       if (data && data.tryOnPreview) {
         tryonCache[key] = data.tryOnPreview;
         return data.tryOnPreview;
@@ -821,7 +848,7 @@
       var frames = el('div', 'gq-ba-frames');
       if (landing.beforeImageUrl) {
         var b = el('figure', 'gq-ba-frame');
-        b.appendChild(el('span', 'gq-ba-tag', escapeHtml(landing.beforeTag || 'Before')));
+        b.appendChild(el('span', 'gq-ba-tag', 'Before'));
         var bImg = el('img', 'gq-ba-img');
         bImg.src = landing.beforeImageUrl; bImg.alt = 'Before'; bImg.loading = 'lazy';
         b.appendChild(bImg);
@@ -829,7 +856,7 @@
       }
       if (landing.afterImageUrl) {
         var a = el('figure', 'gq-ba-frame gq-ba-frame-after');
-        a.appendChild(el('span', 'gq-ba-tag gq-ba-tag-after', escapeHtml(landing.afterTag || 'After')));
+        a.appendChild(el('span', 'gq-ba-tag gq-ba-tag-after', 'After'));
         var aImg = el('img', 'gq-ba-img');
         aImg.src = landing.afterImageUrl; aImg.alt = 'After'; aImg.loading = 'lazy';
         a.appendChild(aImg);
@@ -1693,15 +1720,42 @@
     showWorking(stageEl ? stageEl.firstElementChild : null, 'Updating your matches\u2026');
     quizRecommend()
       .then(function(data) {
-        state.matches = (data && data.matches) || [];
-        state.matrixApplied = Boolean(data && data.matrixApplied);
-        state.partial = Boolean(data && data.partial);
+        // Same guard as goToResults: a payload without a usable matches
+        // array (or an empty set the server flagged as an error) is a
+        // failure. Never overwrite the shopper's real matches with it.
+        if (!data || !Array.isArray(data.matches) ||
+            (data.matches.length === 0 && data.error)) {
+          throw new Error('quiz-recommend empty');
+        }
+        state.matches = data.matches;
+        state.matrixApplied = Boolean(data.matrixApplied);
+        state.partial = Boolean(data.partial);
         saveState();
-      })
-      .catch(function() {})
-      .then(function() {
         rerunPending = false;
         render('forward');
+      })
+      .catch(function() {
+        // Keep the prior matches on screen and surface the same retry UI
+        // as goToResults, instead of silently re-rendering stale results
+        // (network error) or saving an empty set over the real ones.
+        rerunPending = false;
+        var screenEl = stageEl ? stageEl.firstElementChild : null;
+        if (!screenEl) { render('forward'); return; }
+        var w = screenEl.querySelector('.gq-working');
+        if (w && w.parentNode) w.parentNode.removeChild(w);
+        var err = screenEl.querySelector('.gq-error');
+        if (!err) {
+          err = el('div', 'gq-error',
+            '<p>Something went wrong updating your matches.</p>');
+          var retry = el('button', 'gq-retry', 'Try again');
+          retry.type = 'button';
+          retry.onclick = function() {
+            if (err.parentNode) err.parentNode.removeChild(err);
+            rerunWithShade();
+          };
+          err.appendChild(retry);
+          screenEl.appendChild(err);
+        }
       });
   }
 
@@ -1792,7 +1846,15 @@
     var results = config.results || {};
     var matches = Array.isArray(state.matches) ? state.matches : [];
     var hasPhotoNow = state.hasPhoto && Boolean(photoFile);
-    var definitive = !state.partial;
+    // Server-side 'partial' means "some rule axis unanswered" — not
+    // necessarily the shade. The shade gate can only clear a partial when
+    // a photo axis exists AND is still unanswered; a partial the shopper
+    // cannot act on (no photo axis, or shade already picked — e.g. a rule
+    // keyed on a showIf-hidden question's axis) must not gate purchase,
+    // or results become a dead-end / an unescapable gate loop.
+    var sAxis = shadeAxis();
+    var shadeActionable = Boolean(sAxis && !state.criteria[sAxis.key]);
+    var definitive = !state.partial || !shadeActionable;
     var screen = el('div', 'gq-results');
 
     var headline = (hasPhotoNow && definitive)
@@ -1838,7 +1900,7 @@
     });
     main.appendChild(grid);
 
-    if (state.partial && shadeAxis()) {
+    if (state.partial && shadeActionable) {
       main.appendChild(buildShadeGate());
     }
     if (definitive && !hasPhotoNow && config.upsell && config.upsell.cta) {
@@ -1941,7 +2003,8 @@
       if (!result || result.rateLimited || result.capReached) {
         if (onDone) {
           onDone(false, Boolean(result && result.rateLimited),
-            Boolean(result && result.capReached));
+            Boolean(result && result.capReached),
+            (result && result.retryAfterMs) || 0);
         }
         return;
       }
@@ -1970,12 +2033,10 @@
     });
   }
 
-  // "On you" badge lives in JS (not CSS content) so it's configurable and
-  // translatable like its sibling pills.
+  // "On you" badge lives in JS (not CSS content) like its sibling pills.
   function setMediaBadge(media) {
     if (media.querySelector('.gq-media-badge')) return;
-    var results = config.results || {};
-    media.appendChild(el('span', 'gq-media-badge', escapeHtml(results.onYouBadge || 'On you')));
+    media.appendChild(el('span', 'gq-media-badge', 'On you'));
   }
 
   function buildMatchCard(m, idx, definitive, hasPhotoNow, results) {
@@ -2096,7 +2157,7 @@
             e.stopPropagation();
             seeBtn.disabled = true;
             seeBtn.textContent = 'Working\u2026';
-            applyTryonToMedia(media, img, m, false, function(ok, limited, capped) {
+            applyTryonToMedia(media, img, m, false, function(ok, limited, capped, retryAfterMs) {
               if (ok) { if (seeBtn.parentNode) seeBtn.parentNode.removeChild(seeBtn); }
               else if (capped) {
                 // Session try-on cap hit: a persistent disabled label, not
@@ -2104,12 +2165,14 @@
                 seeBtn.disabled = true;
                 seeBtn.textContent = 'Try-on limit reached';
               } else if (limited) {
-                // Rate-limited: soft copy for a beat, then invite a retry.
-                seeBtn.textContent = 'One moment\u2026';
+                // Rate-limited: stay disabled until the server's Retry-After
+                // window opens \u2014 a quick retry into it would just 429 again.
+                var waitMs = retryAfterMs || 30000;
+                seeBtn.textContent = 'Ready in ' + Math.ceil(waitMs / 1000) + 's\u2026';
                 setTimeout(function() {
                   seeBtn.disabled = false;
                   seeBtn.textContent = 'See on me \u2728';
-                }, 4000);
+                }, waitMs);
               } else {
                 seeBtn.disabled = false;
                 seeBtn.textContent = 'See on me \u2728';
@@ -2397,6 +2460,11 @@
       }
 
       activateQuiz();
+
+      // Resolve a joinable cart token up front (strips the "?key=" suffix,
+      // force-mints a cart when none exists) so every funnel event carries
+      // it — not just post-add-to-bag ones.
+      refreshCartToken();
 
       // Restore an in-flight session (per-tab). Photos don't survive a
       // refresh by design; results re-render in product-image mode.

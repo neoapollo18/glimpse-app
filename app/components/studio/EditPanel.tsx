@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useFetcher } from "@remix-run/react";
+import { useFetcher, useRevalidator } from "@remix-run/react";
 import {
   BlockStack,
   InlineStack,
@@ -65,6 +65,7 @@ export function EditPanel({
   onPreviewReload,
   registerFlush,
   flushEditor,
+  onSaveError,
   chat,
 }: {
   data: StudioLoaderData;
@@ -78,6 +79,7 @@ export function EditPanel({
   onPreviewReload: () => void;
   registerFlush?: (fn: (() => void) | null) => void;
   flushEditor?: () => void;
+  onSaveError?: (message: string) => void;
   chat: React.ReactNode;
 }) {
   const editHidden = step !== "build";
@@ -96,10 +98,9 @@ export function EditPanel({
           className="studio-panel-tab"
           data-active={activeTab === "chat"}
           onClick={() => {
-            // Deliver pending debounced edits through the editor's own
-            // fetcher BEFORE unmounting it: the raw-fetch unmount backstop
-            // never revalidates, so its save was later reverted by the next
-            // stale autosave.
+            // Deliver pending debounced edits BEFORE unmounting the editor;
+            // the flush revalidates on success so the save is never reverted
+            // by a later stale autosave.
             if (activeTab === "edit") flushEditor?.();
             setTab("chat");
           }}
@@ -123,6 +124,7 @@ export function EditPanel({
             onPreviewUpdate={onPreviewUpdate}
             onPreviewReload={onPreviewReload}
             registerFlush={registerFlush}
+            onSaveError={onSaveError}
           />
         </div>
       )}
@@ -140,6 +142,7 @@ function EditBody({
   onPreviewUpdate,
   onPreviewReload,
   registerFlush,
+  onSaveError,
 }: {
   data: StudioLoaderData;
   selectedSlide: string;
@@ -150,6 +153,7 @@ function EditBody({
   onPreviewUpdate: (payload: { flow?: unknown; config?: unknown }) => void;
   onPreviewReload: () => void;
   registerFlush?: (fn: (() => void) | null) => void;
+  onSaveError?: (message: string) => void;
 }) {
   const flow = data.draft?.flow as StudioFlow | undefined;
   if (!flow) {
@@ -199,6 +203,7 @@ function EditBody({
       onPreviewUpdate={onPreviewUpdate}
       onPreviewReload={onPreviewReload}
       registerFlush={registerFlush}
+      onSaveError={onSaveError}
     />
   );
 }
@@ -218,6 +223,7 @@ function QuestionEditor({
   onPreviewUpdate,
   onPreviewReload,
   registerFlush,
+  onSaveError,
 }: {
   flow: StudioFlow;
   question: StudioQuestion;
@@ -227,9 +233,11 @@ function QuestionEditor({
   onPreviewUpdate: (payload: { flow?: unknown; config?: unknown }) => void;
   onPreviewReload: () => void;
   registerFlush?: (fn: (() => void) | null) => void;
+  onSaveError?: (message: string) => void;
 }) {
   const fetcher = useFetcher<StudioActionData>();
   const branchFetcher = useFetcher<StudioActionData>();
+  const revalidator = useRevalidator();
 
   const [prompt, setPrompt] = useState(question.prompt);
   const [helper, setHelper] = useState(question.helperText ?? "");
@@ -295,6 +303,11 @@ function QuestionEditor({
   };
 
   const flush = () => {
+    // Never resubmit a busy fetcher: the resubmit aborts the in-flight
+    // request and its payload (already cleared from dirtyRef) is silently
+    // dropped while the UI shows "Saved". Leave the dirty flags set; the
+    // idle effect below drains them once the fetcher settles.
+    if (fetcher.state !== "idle") return; // drained on idle effect below
     const calls = buildCalls();
     if (calls.length === 0) return;
     dirtyRef.current = { question: false, options: false };
@@ -306,13 +319,48 @@ function QuestionEditor({
     fetcher.submit(fd, { method: "POST", action: "/studio" });
   };
 
+  // Delivery path for flushes that may outlive this component: slide/step
+  // switches unmount the editor before its fetcher could report back, and
+  // the router swallows unmounted fetchers' errors, so a rejected save was
+  // silently reverted with no feedback. Raw fetch instead: the response is
+  // parsed regardless of mount state, rejections surface through the
+  // studio-owned onSaveError banner, and a successful save revalidates so
+  // the next mount reads the saved draft (not a stale loader snapshot that
+  // a later autosave would flush back over it).
+  const deliverCalls = (calls: Array<{ tool: string; input: unknown }>) => {
+    const fd = new FormData();
+    fd.append("intent", "apply-tools");
+    fd.append("calls", JSON.stringify(calls));
+    fetch("/studio", { method: "POST", body: fd })
+      .then(async (res) => {
+        const body = (await res.json().catch(() => null)) as StudioActionData | null;
+        if (body?.ok) {
+          if (body.previewFlow || body.previewConfig) {
+            onPreviewUpdate({ flow: body.previewFlow, config: body.previewConfig });
+          }
+          setSaveState("saved");
+          revalidator.revalidate();
+        } else {
+          setSaveState("idle");
+          onSaveError?.(body?.error ?? "Couldn't save your last change. Please try again.");
+        }
+      })
+      .catch(() => {
+        setSaveState("idle");
+        onSaveError?.("Couldn't save your last change. Check your connection and try again.");
+      });
+  };
+
   // Slide/step switches call this through the studio registry so pending
-  // debounced edits are delivered via the fetcher BEFORE unmount (the
-  // unmount raw-fetch below stays as a backstop for modal close).
+  // debounced edits are delivered BEFORE unmount (the unmount effect below
+  // stays as a backstop for modal close).
   useEffect(() => {
     registerFlush?.(() => {
       if (timerRef.current !== null) clearTimeout(timerRef.current);
-      flush();
+      const calls = buildCalls();
+      if (calls.length === 0) return;
+      dirtyRef.current = { question: false, options: false };
+      deliverCalls(calls);
     });
     return () => registerFlush?.(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -325,23 +373,20 @@ function QuestionEditor({
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(flush, 500);
   };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(
     () => () => {
       if (timerRef.current !== null) clearTimeout(timerRef.current);
-      // Deliver anything still pending: switching slides/steps inside the
-      // debounce window must not silently drop edits. Fire-and-forget fetch
-      // (the fetcher is gone with the component); the next mount reloads
-      // fresh data anyway.
+      // Deliver anything still pending: unmounting inside the debounce
+      // window (or with edits queued behind an in-flight submit) must not
+      // silently drop edits. The fetcher is gone with the component, so
+      // this rides the raw-fetch path, which also reports rejections.
       const calls = buildCalls();
       if (calls.length > 0) {
         dirtyRef.current = { question: false, options: false };
-        const fd = new FormData();
-        fd.append("intent", "apply-tools");
-        fd.append("calls", JSON.stringify(calls));
-        fetch("/studio", { method: "POST", body: fd }).catch(() => {});
+        deliverCalls(calls);
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
@@ -354,15 +399,24 @@ function QuestionEditor({
       if (fetcher.data.previewFlow || fetcher.data.previewConfig) {
         onPreviewUpdate({ flow: fetcher.data.previewFlow, config: fetcher.data.previewConfig });
       }
-      setSaveState("saved");
-      const t = setTimeout(() => setSaveState("idle"), 2000);
-      return () => clearTimeout(t);
-    }
-    if (fetcher.data.error) {
-      setSaveState("idle");
+    } else if (fetcher.data.error) {
       setError(fetcher.data.error);
     }
+    // Drain edits that went dirty while this submit was in flight (flush
+    // refuses to resubmit a busy fetcher).
+    if (dirtyRef.current.question || dirtyRef.current.options) {
+      flush();
+    } else {
+      setSaveState(fetcher.data.ok ? "saved" : "idle");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetcher.state, fetcher.data, onPreviewUpdate]);
+
+  useEffect(() => {
+    if (saveState !== "saved") return;
+    const t = setTimeout(() => setSaveState("idle"), 2000);
+    return () => clearTimeout(t);
+  }, [saveState]);
 
   // Delete is handled by the studio route (onDeleteQuestion): the
   // revalidation after a successful delete unmounts this editor, so a

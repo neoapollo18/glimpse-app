@@ -13,12 +13,13 @@ import { authenticate } from "../shopify.server";
 import { shopNeedsBilling } from "../lib/billing-gate.server";
 import { ensureShopExists, shopHasTryOnConfig } from "../lib/supabase.server";
 import { isSkinAnalysisEnabledForShop } from "../lib/skin-analysis.server";
+import { syncShopDomains } from "../lib/domain-sync.server";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   // First, authenticate - this MUST complete before anything else
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shopDomain = session.shop;
   const accessToken = session.accessToken || "";
 
@@ -26,6 +27,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // flow — but the quiz-first admin only ever reads. Create it here so
   // quiz/studio/analytics lookups work from the first load.
   await ensureShopExists(shopDomain);
+
+  // Fire-and-forget: sync the shop's Shopify primary domain into
+  // alternate_domains so storefront origin checks recognize custom
+  // domains. Throttled internally (6h/shop) and swallows its own errors;
+  // must never block or break the admin load.
+  void syncShopDomains(admin, shopDomain).catch((err) => {
+    console.error("[app loader] domain sync failed:", err);
+  });
 
   // MANTLE SHUTDOWN (late Aug 2026): the subscription check lived on
   // Mantle's API and failed closed, which locked every non-grandfathered

@@ -36,6 +36,20 @@ import {
 // once and the monthly cron posts their session-tier fee. See
 // shopify-billing.server.ts for the model.
 
+// One trial per shop: anyone who ever held an APPROVED subscription
+// (incl. via Mantle) starts billing immediately. The webhook only
+// records ids for subscriptions that went ACTIVE, so a declined or
+// abandoned first attempt does NOT forfeit the trial. Shared by the
+// action (sets trialDays) and the loader (drives the trial copy).
+function hadApprovedSubscription(
+  state: { shopify_subscription_id: string | null; subscription_status: string | null } | null,
+): boolean {
+  return Boolean(
+    state?.shopify_subscription_id ||
+      (state?.subscription_status && !["none", "pending"].includes(state.subscription_status)),
+  );
+}
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   const shopDomain = session.shop;
@@ -78,6 +92,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     tierFee: match.fee,
     subscription,
     subError,
+    trialEligible: !hadApprovedSubscription(state),
     terms: billingTermsText(),
   });
 };
@@ -109,14 +124,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       { status: 502 },
     );
   }
-  // One trial per shop: anyone who ever held an APPROVED subscription
-  // (incl. via Mantle) starts billing immediately. The webhook only
-  // records ids for subscriptions that went ACTIVE, so a declined or
-  // abandoned first attempt does NOT forfeit the trial.
-  const hadSubscription = Boolean(
-    state?.shopify_subscription_id ||
-      (state?.subscription_status && !["none", "pending"].includes(state.subscription_status)),
-  );
+  const hadSubscription = hadApprovedSubscription(state);
   const shopHandle = shopDomain.replace(".myshopify.com", "");
   const appHandle = process.env.SHOPIFY_APP_HANDLE || "gleame";
   const returnUrl = `https://admin.shopify.com/store/${shopHandle}/apps/${appHandle}/app/billing`;
@@ -285,8 +293,10 @@ export default function BillingPage() {
               <Text as="p" variant="bodySm" tone="subdued">
                 Your store's last 90 days average {data.sessions.toLocaleString()} monthly
                 sessions, so you'd start on <b>{data.tierName}</b>
-                {data.tierFee > 0 ? ` at $${data.tierFee}/mo` : " for free"}. New
-                subscriptions start with a 14-day free trial.
+                {data.tierFee > 0 ? ` at $${data.tierFee}/mo` : " for free"}.
+                {data.trialEligible
+                  ? " New subscriptions start with a 14-day free trial."
+                  : " Your free trial has already been used, so billing starts right away."}
               </Text>
 
               <InlineStack gap="300" blockAlign="center">

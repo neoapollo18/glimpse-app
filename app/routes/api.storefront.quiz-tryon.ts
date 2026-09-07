@@ -76,11 +76,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return json({ error: "Subscription inactive" }, { status: 403, headers: CORS_HEADERS });
     }
 
-    // Tighter than chat-recommend's 10/min: each call is one transform, and
-    // the client queues hero-first with a per-session cap, so 6/min only
-    // bites on abuse.
+    // 12/min covers a real shopper working a full results grid inside one
+    // minute (hero auto-fire + up to 8 "See on me" cards + shade reruns,
+    // session-capped at 10 client-side); the per-shop hourly cap below is
+    // the real abuse guard.
     const clientIP = getClientIP(request);
-    const ipLimit = checkRateLimit(`quiz-tryon:ip:${clientIP}:minute`, 6, 60_000);
+    const ipLimit = checkRateLimit(`quiz-tryon:ip:${clientIP}:minute`, 12, 60_000);
     if (!ipLimit.allowed) {
       return json(
         { error: "Too many requests. Please wait a moment." },

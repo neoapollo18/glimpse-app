@@ -1,5 +1,5 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
-import { json, redirect } from "@remix-run/node";
+import { json } from "@remix-run/node";
 import { useLoaderData, useFetcher } from "@remix-run/react";
 import {
   Page,
@@ -32,13 +32,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, redirect: appRedirect } = await authenticate.admin(request);
   const formData = await request.formData();
   const actionType = formData.get("action");
 
   if (actionType === "reconnect") {
-    // Force re-authentication by redirecting to auth
-    return redirect(`/auth?shop=${session.shop}`);
+    // Reload the app top-level from the admin apps deep link. A plain
+    // redirect to /auth dead-ended: fetcher redirects stay inside the
+    // embedded iframe, and /auth is a no-op under the token-exchange auth
+    // strategy (blank pane, no re-auth). App Bridge's redirect helper
+    // breaks out of the iframe (same pattern as the billing confirmation),
+    // and re-entering the app mints a fresh session via token exchange.
+    const appHandle = process.env.SHOPIFY_APP_HANDLE || "gleame";
+    return appRedirect(`shopify://admin/apps/${appHandle}`, { target: "_top" });
   }
 
   if (actionType === "open-theme-editor") {

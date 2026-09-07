@@ -40,12 +40,16 @@ function addJitter(value: number, jitterPercent: number = 0.25): number {
  * @param key - Unique identifier for the rate limit (e.g., "ip:192.168.1.1" or "shop:mystore.myshopify.com")
  * @param limit - Maximum number of requests allowed in the window
  * @param windowMs - Time window in milliseconds
+ * @param cost - Hits this request consumes (default 1). Multi-variant
+ *   transforms pass the variant count so one request can't hide N paid
+ *   generations behind a single hit.
  * @returns Object with allowed status, remaining requests, and reset time
  */
 export function checkRateLimit(
   key: string,
   limit: number,
-  windowMs: number
+  windowMs: number,
+  cost: number = 1
 ): RateLimitResult {
   const now = Date.now();
   const entry = store.get(key);
@@ -53,17 +57,17 @@ export function checkRateLimit(
   // Window expired or no entry - start fresh
   if (!entry || now > entry.resetAt) {
     const resetAt = now + windowMs;
-    store.set(key, { count: 1, resetAt });
+    store.set(key, { count: cost, resetAt });
     return {
-      allowed: true,
-      remaining: limit - 1,
+      allowed: cost <= limit,
+      remaining: Math.max(0, limit - cost),
       resetAt,
       retryAfterSeconds: 0,
     };
   }
 
   // Within window - check if limit exceeded
-  if (entry.count >= limit) {
+  if (entry.count + cost > limit) {
     const baseRetrySeconds = Math.ceil((entry.resetAt - now) / 1000);
     // Add jitter to prevent all rate-limited clients from retrying at the exact same time
     const retryAfterSeconds = addJitter(baseRetrySeconds);
@@ -76,7 +80,7 @@ export function checkRateLimit(
   }
 
   // Within limit - increment and allow
-  entry.count++;
+  entry.count += cost;
   return {
     allowed: true,
     remaining: limit - entry.count,
@@ -85,17 +89,70 @@ export function checkRateLimit(
   };
 }
 
+export interface RateLimitCheck {
+  key: string;
+  limit: number;
+  windowMs: number;
+  cost?: number;
+}
+
+/**
+ * Check multiple windows together, consuming quota ONLY when every window
+ * allows the request. Calling checkRateLimit per window unconditionally
+ * burns the sibling window's quota even when one window blocks (e.g. a
+ * merchant retrying while hourly-blocked drains their daily allowance with
+ * zero work done). Returns the first blocking window's result when denied,
+ * otherwise the tightest (lowest-remaining) allowed result.
+ */
+export function checkRateLimits(checks: RateLimitCheck[]): RateLimitResult {
+  const now = Date.now();
+
+  // Pass 1: peek every window without consuming.
+  for (const { key, limit, windowMs, cost = 1 } of checks) {
+    const entry = store.get(key);
+    const active = entry !== undefined && now <= entry.resetAt;
+    const count = active ? entry.count : 0;
+    if (count + cost > limit) {
+      const resetAt = active ? entry.resetAt : now + windowMs;
+      return {
+        allowed: false,
+        remaining: 0,
+        resetAt,
+        retryAfterSeconds: addJitter(Math.max(1, Math.ceil((resetAt - now) / 1000))),
+      };
+    }
+  }
+
+  // Pass 2: all windows allow — consume each, report the tightest.
+  let tightest: RateLimitResult = {
+    allowed: true,
+    remaining: Number.MAX_SAFE_INTEGER,
+    resetAt: now,
+    retryAfterSeconds: 0,
+  };
+  for (const { key, limit, windowMs, cost = 1 } of checks) {
+    const result = checkRateLimit(key, limit, windowMs, cost);
+    if (result.remaining < tightest.remaining) tightest = result;
+  }
+  return tightest;
+}
+
 /**
  * Get client IP address from request headers
  * Handles proxied requests (x-forwarded-for) common in cloud deployments
  */
 export function getClientIP(request: Request): string {
-  // x-forwarded-for can contain multiple IPs: "client, proxy1, proxy2"
-  // The first one is the original client
+  // x-forwarded-for can contain multiple IPs: "client, proxy1, proxy2".
+  // Take the RIGHTMOST entry: the app runs behind Render's proxy, which
+  // APPENDS the connecting client's real IP to whatever the client sent.
+  // Any earlier entries are attacker-controlled — keying on the first one
+  // let callers mint a fresh rate-limit bucket per request by rotating a
+  // fake X-Forwarded-For value.
   const forwardedFor = request.headers.get('x-forwarded-for');
   if (forwardedFor) {
-    const firstIP = forwardedFor.split(',')[0].trim();
-    if (firstIP) return firstIP;
+    const parts = forwardedFor.split(',');
+    const lastIP = parts[parts.length - 1].trim();
+    if (lastIP) return lastIP;
   }
 
   // Fallback headers used by various proxies

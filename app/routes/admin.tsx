@@ -39,17 +39,19 @@ import {
 } from "../lib/supabase.server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import {
+  ADMIN_ALLOWED_SHOPS,
+  mintAdminToken,
+  verifyAdminToken,
+} from "../lib/admin-auth.server";
 
 // ============================================
 // GLEAME FOUNDERS ADMIN PAGE
 // ============================================
 // Only accessible from specific Shopify stores
-// Add your store domains to ALLOWED_SHOPS
+// Add your store domains to ADMIN_ALLOWED_SHOPS (lib/admin-auth.server.ts)
 
-const ALLOWED_SHOPS = [
-  "testingaaronandevansaas.myshopify.com", // Add your store domains here
-  "hx5hqt-na.myshopify.com",
-];
+const ALLOWED_SHOPS = ADMIN_ALLOWED_SHOPS;
 
 // Scopes whose absence makes `shopifyqlQuery` return `undefinedField` even
 // after Level 2 protected-customer-data approval. Used to flag shops whose
@@ -234,6 +236,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       return json({
         shops: [],
         stats: { totalShops: 0, totalProducts: 0, totalTransformations: 0 },
+        adminToken: mintAdminToken(session.shop),
         error: shopsError.message
       });
     }
@@ -401,14 +404,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         totalProducts,
         totalTransformations: totalTransformations || 0,
       },
+      adminToken: mintAdminToken(session.shop),
       error: null,
     });
   } catch (error) {
     console.error("Admin loader error:", error);
-    return json({ 
-      shops: [], 
+    return json({
+      shops: [],
       stats: { totalShops: 0, totalProducts: 0, totalTransformations: 0 },
-      error: String(error) 
+      adminToken: mintAdminToken(session.shop),
+      error: String(error)
     });
   }
 };
@@ -418,7 +423,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 // AppProvider (not @shopify/shopify-app-remix/react), so fetcher requests don't
 // carry a Shopify session token. Revalidation after a save can hit the 204
 // session-token bounce and render a blank/static page over the UI.
-// The action handlers skip authenticate.admin for the same reason; we handle
+// The action handlers verify a loader-minted adminToken instead; we handle
 // UI updates optimistically via local state (prompt overrides, ref image maps,
 // AI model overrides). Full page reload re-seeds the loader via the iframe.
 export const shouldRevalidate: ShouldRevalidateFunction = ({ formMethod }) => {
@@ -482,29 +487,19 @@ const VALID_AI_MODELS = [
 ] as const;
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  // Skip authenticate.admin for the action — it triggers Shopify's session
-  // token bounce (204 → /auth/session-token → page reload) which destroys
-  // the page when called from a useFetcher POST.
-  // Instead, read the shop from the most recent Prisma session. The loader
-  // already verified Shopify auth, and this page is allowlist-gated.
-  const url = new URL(request.url);
-  const shopParam = url.searchParams.get("shop");
-  let shopDomain: string | null = null;
+  // authenticate.admin on a useFetcher POST triggers Shopify's session token
+  // bounce (204 → /auth/session-token → page reload) which destroys the page,
+  // so instead every POST must carry an adminToken minted by the loader
+  // (which DID run authenticate.admin + the allowlist check). Verifying the
+  // HMAC proves the caller loaded this page through real Shopify auth —
+  // knowing a shop domain string is not enough.
+  const formData = await request.formData();
+  const shopDomain = verifyAdminToken(formData.get("adminToken") as string | null);
 
-  if (shopParam) {
-    // Verify this shop has a valid session in Prisma
-    const sessionRecord = await prisma.session.findFirst({
-      where: { shop: shopParam },
-      orderBy: { id: "desc" },
-    });
-    if (sessionRecord) shopDomain = sessionRecord.shop;
-  }
-
-  if (!shopDomain || !ALLOWED_SHOPS.includes(shopDomain)) {
+  if (!shopDomain) {
     return json({ success: false, error: "Forbidden" }, { status: 403 });
   }
 
-  const formData = await request.formData();
   const actionType = formData.get("action");
 
   if (actionType === "update-prompt") {
@@ -807,7 +802,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function FoundersAdmin() {
-  const { shops, stats, error } = useLoaderData<typeof loader>();
+  const { shops, stats, error, adminToken } = useLoaderData<typeof loader>();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedShop, setExpandedShop] = useState<string | null>(null);
@@ -967,6 +962,7 @@ export default function FoundersAdmin() {
     formData.append("action", "update-variant-prompt");
     formData.append("variantId", variantId);
     formData.append("prompt", submittedPrompt);
+    formData.set("adminToken", adminToken);
     variantPromptFetcher.submit(formData, { method: "POST" });
     setVariantPromptOverrides((prev) => ({ ...prev, [variantId]: submittedPrompt }));
     setEditingVariant(null);
@@ -979,6 +975,7 @@ export default function FoundersAdmin() {
     formData.append("action", "update-prompt");
     formData.append("productId", productId);
     formData.append("prompt", submittedPrompt);
+    formData.set("adminToken", adminToken);
     promptFetcher.submit(formData, { method: "POST" });
     setPromptOverrides((prev) => ({ ...prev, [productId]: submittedPrompt }));
     setEditingProduct(null);
@@ -1005,6 +1002,7 @@ export default function FoundersAdmin() {
     const formData = new FormData();
     formData.append("action", "refresh-sessions");
     formData.append("targetShopDomain", shopDomain);
+    formData.set("adminToken", adminToken);
     sessionsFetcher.submit(formData, { method: "POST" });
   };
 
@@ -1023,6 +1021,7 @@ export default function FoundersAdmin() {
     formData.append("action", "update-vto-enabled");
     formData.append("targetShopDomain", shop.shop_domain);
     formData.append("value", value);
+    formData.set("adminToken", adminToken);
     vtoFetcher.submit(formData, { method: "POST" });
   };
 
@@ -1036,6 +1035,7 @@ export default function FoundersAdmin() {
     formData.append("action", "update-skin-analysis-enabled");
     formData.append("targetShopDomain", shop.shop_domain);
     formData.append("enabled", String(next));
+    formData.set("adminToken", adminToken);
     skinAnalysisFetcher.submit(formData, { method: "POST" });
   };
 
@@ -1050,6 +1050,7 @@ export default function FoundersAdmin() {
     formData.append("action", "update-ai-model");
     formData.append("productId", productId);
     formData.append("aiModel", model);
+    formData.set("adminToken", adminToken);
     modelFetcher.submit(formData, { method: "POST" });
   };
 
@@ -1070,6 +1071,7 @@ export default function FoundersAdmin() {
     formData.append("productId", productId);
     formData.append("shopDomain", shopDomain);
     formData.append("image", file);
+    formData.set("adminToken", adminToken);
     refFetcher.submit(formData, { method: "POST", encType: "multipart/form-data" });
   };
 
@@ -1079,6 +1081,7 @@ export default function FoundersAdmin() {
     formData.append("action", "remove-reference-image");
     formData.append("productId", productId);
     formData.append("currentUrl", currentUrl);
+    formData.set("adminToken", adminToken);
     refFetcher.submit(formData, { method: "POST" });
   };
 
@@ -1095,6 +1098,7 @@ export default function FoundersAdmin() {
     formData.append("variantId", variantId);
     formData.append("shopDomain", shopDomain);
     formData.append("image", file);
+    formData.set("adminToken", adminToken);
     refFetcher.submit(formData, { method: "POST", encType: "multipart/form-data" });
   };
 
@@ -1104,6 +1108,7 @@ export default function FoundersAdmin() {
     formData.append("action", "remove-variant-reference-image");
     formData.append("variantId", variantId);
     formData.append("currentUrl", currentUrl);
+    formData.set("adminToken", adminToken);
     refFetcher.submit(formData, { method: "POST" });
   };
 
@@ -1159,7 +1164,16 @@ export default function FoundersAdmin() {
 
   return (
     <AppProvider i18n={enTranslations}>
-      <Page title="Gleame Founders Admin">
+      <Page
+        title="Gleame Founders Admin"
+        secondaryActions={[
+          {
+            content: "Export skin uploads CSV",
+            url: `/admin/skin-uploads.csv?token=${encodeURIComponent(adminToken)}`,
+            external: true,
+          },
+        ]}
+      >
         <BlockStack gap="500">
           {error && (
             <Banner tone="critical">
