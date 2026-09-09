@@ -401,6 +401,17 @@ async function publishQuizDraftLocked(
   // than a stale draft. That extreme still blocks (by name), except in ai
   // mode where rules aren't the recommendation source.
   const ruleCount = (draft.flow.rules || []).length;
+  // Editing tolerates a ruleless matrix draft (every start-from-scratch
+  // draft begins that way — see revalidate's rulelessMatrixOk); publish is
+  // where it stops, since a live matrix quiz with zero rules recommends
+  // from the generic fallback pool.
+  if (ruleCount === 0 && (draft.settings.recommendation_mode ?? "matrix") === "matrix") {
+    return {
+      ok: false,
+      error:
+        "Your quiz has no recommendation logic yet. Open the Logic step and generate it before publishing.",
+    };
+  }
   if (
     ruleCheck.pruneIndexes.size > 0 &&
     ruleCheck.pruneIndexes.size >= ruleCount &&

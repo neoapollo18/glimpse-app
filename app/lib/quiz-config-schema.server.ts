@@ -264,6 +264,7 @@ const trimOrNull = (s: string | null | undefined): string | null => {
 export function validateGeneratedConfig(
   config: GeneratedQuizConfig,
   catalog: CatalogProduct[],
+  opts?: { rulelessMatrixOk?: boolean },
 ): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -414,11 +415,16 @@ export function validateGeneratedConfig(
     });
   }
   if (keptRules.length === 0 && config.recommendationMode === "matrix") {
-    errors.push(
+    const message =
       config.rules.length > 0
         ? "All rules were dropped (hallucinated targets?) but recommendationMode is matrix"
-        : "recommendationMode is matrix but there are no rules — add rules or switch to ai/hybrid",
-    );
+        : "recommendationMode is matrix but there are no rules — add rules or switch to ai/hybrid";
+    // For GENERATION this is a hard failure (the model must produce rules).
+    // For EDITING it can't be: every start-from-scratch draft is matrix with
+    // zero rules, and erroring here rejects the merchant's very first edit.
+    // The editing gate downgrades to a warning; publish blocks separately.
+    if (opts?.rulelessMatrixOk) warnings.push(message);
+    else errors.push(message);
   }
 
   // ---- settings (copy + design + mode + guidance) ----

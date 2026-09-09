@@ -83,8 +83,20 @@ function draftToGenerated(draft: DraftShape): GeneratedQuizConfig {
  * want, including fields like imageUrl that the generated schema drops) —
  * we only use the validator as a gate.
  */
-function revalidate(draft: DraftShape, catalog: CatalogProduct[]): string | null {
-  const result = validateGeneratedConfig(draftToGenerated(draft), catalog);
+function revalidate(
+  draft: DraftShape,
+  catalog: CatalogProduct[],
+  opts?: { strictRules?: boolean },
+): string | null {
+  // Default: tolerate a ruleless matrix draft — every start-from-scratch
+  // draft is matrix-mode with zero rules until the Logic step runs, and
+  // erroring here would reject unrelated edits (question text, copy). The
+  // RULE-mutating appliers pass strictRules so the copilot still can't add
+  // hallucinated targets or empty the matrix; publish blocks the ruleless
+  // state separately (publishQuizDraftLocked).
+  const result = validateGeneratedConfig(draftToGenerated(draft), catalog, {
+    rulelessMatrixOk: !opts?.strictRules,
+  });
   if (!result.ok) return result.errors.slice(0, 5).join("; ");
   return null;
 }
@@ -484,7 +496,7 @@ export function applyUpdateRules(draft: DraftShape, input: any, catalog: Catalog
   } else {
     return { ok: false, error: `mode must be replace_all | add | remove` };
   }
-  const error = revalidate(next, catalog);
+  const error = revalidate(next, catalog, { strictRules: true });
   if (error) return { ok: false, error };
   return {
     ok: true,
@@ -505,7 +517,7 @@ export function applyUpdateRecommendationMode(draft: DraftShape, input: any, cat
       ...input.tuning,
     };
   }
-  const error = revalidate(next, catalog);
+  const error = revalidate(next, catalog, { strictRules: true });
   if (error) return { ok: false, error };
   return {
     ok: true,
