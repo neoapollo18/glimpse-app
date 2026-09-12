@@ -18,7 +18,7 @@ import {
 } from "@shopify/polaris";
 import { XSmallIcon } from "@shopify/polaris-icons";
 import type { StudioLoaderData, StudioStep, StudioActionData } from "../../routes/studio";
-import { IntroEditor, PhotoEditor, ResultsEditor, ThemeEditor } from "./SettingsEditors";
+import { IntroEditor, LeadEditor, PhotoEditor, ResultsEditor, ThemeEditor } from "./SettingsEditors";
 import type { StudioFlow, StudioQuestion, StudioOption } from "./types";
 import { answerLabel } from "./types";
 import { slideIdForQuestion } from "./SlideTree";
@@ -168,6 +168,11 @@ function EditBody({
   if (selectedSlide === "intro") {
     return (
       <IntroEditor key={`intro:${chatEpoch}`} settings={settings} chatBusy={chatBusy} onPreviewUpdate={onPreviewUpdate} />
+    );
+  }
+  if (selectedSlide === "lead") {
+    return (
+      <LeadEditor key={`lead:${chatEpoch}`} settings={settings} chatBusy={chatBusy} onPreviewUpdate={onPreviewUpdate} />
     );
   }
   if (selectedSlide === "photo") {

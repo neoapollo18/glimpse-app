@@ -1,17 +1,25 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
-import { deleteShopData } from "../lib/supabase.server";
+import {
+  deleteShopData,
+  findQuizLeadsForCustomer,
+  redactQuizLeadsForCustomer,
+} from "../lib/supabase.server";
 
 /**
  * GDPR Compliance Webhooks
- * 
+ *
  * These webhooks are REQUIRED by Shopify for all apps.
  * Failure to implement them can result in app rejection/removal.
- * 
+ *
  * Data stored by Glimpse:
  * - Shop configurations (shop domain, product prompts)
  * - Aggregate analytics (transformation counts per product)
- * - NO customer-identifiable data (no emails, IDs, or photos stored)
+ * - Quiz leads (migration 067): shopper email/phone + quiz answers,
+ *   captured only when the shopper opts in via the quiz's lead step.
+ *   Covered below for customer data_request/redact; shop-level deletion
+ *   cascades from the shops row (deleteShopData).
+ * - NO customer photos (processed in memory only, never persisted)
  */
 
 // Type definitions for webhook payloads
@@ -49,12 +57,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     switch (topic) {
       case "CUSTOMERS_DATA_REQUEST":
       case "customers/data_request": {
-        // Customer requested their data
-        // Glimpse does NOT store any customer-identifiable data:
-        // - No customer emails or IDs
-        // - No customer photos (processed in memory only, never persisted)
-        // - Analytics are aggregate only (counts per product, not per customer)
-        
+        // Customer requested their data. The only customer-identifiable data
+        // Glimpse stores is quiz leads (email/phone + quiz answers, opt-in).
+        // Photos are processed in memory only; analytics are aggregate.
         const data = payload as CustomerDataRequestPayload;
         console.log(`[GDPR] Customer data request:`, {
           shop,
@@ -62,35 +67,52 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           customerEmail: data?.customer?.email ? '***@***' : 'none', // Don't log actual email
           ordersRequested: data?.orders_requested?.length || 0,
         });
-        
-        // Log for compliance audit trail
-        console.log(`[GDPR] Response: No customer-identifiable data stored for customer ${data?.customer?.id}`);
-        
-        // In a real scenario where you DO store customer data, you would:
-        // 1. Query your database for data matching the customer email/ID
-        // 2. Send that data to the merchant (via email or API)
-        // For Glimpse, we have nothing to send.
+
+        const leads = await findQuizLeadsForCustomer(
+          shop,
+          data?.customer?.email ?? null,
+          data?.customer?.phone ?? null
+        );
+        // Compliance audit trail. The merchant fulfills the request to the
+        // customer; this records exactly what Glimpse holds for them.
+        // (Contact values themselves stay out of the logs.)
+        console.log(
+          `[GDPR] Response: ${leads.length} quiz lead record(s) stored for customer ${data?.customer?.id}` +
+            (leads.length > 0
+              ? ` — fields: email/phone, quiz answer snapshot, device type, captured-at (row ids: ${leads.map((l) => l.id).join(', ')})`
+              : '')
+        );
         break;
       }
 
       case "CUSTOMERS_REDACT":
       case "customers/redact": {
-        // Customer requested deletion of their data
-        // Since we don't store customer-identifiable data, there's nothing to delete
-        
+        // Customer requested deletion of their data — remove any quiz leads
+        // matching their email/phone for this shop.
         const data = payload as CustomerRedactPayload;
         console.log(`[GDPR] Customer redact request:`, {
           shop,
           customerId: data?.customer?.id,
           ordersToRedact: data?.orders_to_redact?.length || 0,
         });
-        
-        // Log for compliance audit trail
-        console.log(`[GDPR] Response: No customer-identifiable data to redact for customer ${data?.customer?.id}`);
-        
-        // In a real scenario where you DO store customer data, you would:
-        // 1. DELETE FROM your_table WHERE customer_id = X OR customer_email = Y
-        // For Glimpse, we have nothing to delete.
+
+        const result = await redactQuizLeadsForCustomer(
+          shop,
+          data?.customer?.email ?? null,
+          data?.customer?.phone ?? null
+        );
+        if (result.ok) {
+          console.log(
+            `[GDPR] Response: deleted ${result.deleted} quiz lead record(s) for customer ${data?.customer?.id}`
+          );
+        } else {
+          // 500 so Shopify retries — acknowledging a redact we failed to
+          // perform would silently retain data the customer asked us to
+          // delete. (Returned directly: the catch below maps thrown Errors
+          // to 200.)
+          console.error(`[GDPR] Quiz lead redact failed:`, result.error);
+          return new Response("Redact failed", { status: 500 });
+        }
         break;
       }
 

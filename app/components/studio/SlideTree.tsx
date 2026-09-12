@@ -3,6 +3,7 @@ import { Banner, Icon, Tooltip } from "@shopify/polaris";
 import {
   HomeIcon,
   CameraIcon,
+  EmailIcon,
   FlagIcon,
   ArrowUpIcon,
   ArrowDownIcon,
@@ -314,6 +315,7 @@ export function SlideTree({
           </Fragment>
         ))}
 
+        {row("lead", "Email capture", { icon: EmailIcon })}
         {hasPhotoAxis && row("photo", "Photo", { icon: CameraIcon })}
         {row("results", "Results", { icon: FlagIcon })}
 

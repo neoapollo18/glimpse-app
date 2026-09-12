@@ -683,6 +683,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
   const stepForSlide = useCallback(
     (slideId: string) => {
       if (slideId === "intro" || slideId === "theme") return "intro";
+      if (slideId === "lead") return "lead";
       if (slideId === "photo") return "gate";
       if (slideId === "results") return "results";
       const qi = questions.findIndex((q) => slideIdForQuestion(q.axisKey) === slideId);
@@ -784,6 +785,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
 
       let slideId: string | null = null;
       if (step === "intro") slideId = "intro";
+      else if (step === "lead") slideId = "lead";
       else if (step === "gate") slideId = "photo";
       else if (step === "results") slideId = "results";
       else if (/^q\d+$/.test(step)) {

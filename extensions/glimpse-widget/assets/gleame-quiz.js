@@ -52,7 +52,7 @@
 
   // Persisted (sessionStorage) — everything EXCEPT images.
   var state = {
-    screen: 'intro',        // 'intro' | 'question' | 'gate' | 'results'
+    screen: 'intro',        // 'intro' | 'question' | 'lead' | 'gate' | 'results'
     screenIndex: 0,         // current screen when screen === 'question'
     criteria: {},           // axisKey -> axisValue | [axisValue, ...] (arrays = multi-select)
     answers: [],            // parallel to flow.questions: {axisKey, values[], labels[]} | undefined
@@ -62,6 +62,7 @@
     matrixApplied: false,
     partial: false,
     quizStarted: false,     // quiz_start fired; persisted so a mid-quiz refresh doesn't re-fire it
+    leadDone: false,        // lead step submitted OR skipped — never shown twice per session
   };
 
   // Memory only — the "never stored" promise.
@@ -523,7 +524,12 @@
         !(answered >= total && Array.isArray(state.matches) && state.matches.length > 0)) {
       target = { screen: 'gate', screenIndex: 0 };
     }
-    if (target.screen === 'gate' && answered < total) {
+    // A lead entry that's no longer showable (merchant turned it off, or
+    // this session already submitted/skipped) resolves to the gate.
+    if (target.screen === 'lead' && (!leadActive() || state.leadDone)) {
+      target = { screen: 'gate', screenIndex: 0 };
+    }
+    if ((target.screen === 'gate' || target.screen === 'lead') && answered < total) {
       target = { screen: 'question', screenIndex: answered };
     }
     if (target.screen === 'question') {
@@ -700,6 +706,7 @@
     var next;
     switch (state.screen) {
       case 'question': next = renderScreen(); break;
+      case 'lead':     next = renderLead(); break;
       case 'gate':     next = renderGate(); break;
       case 'results':  next = renderResults(); break;
       case 'intro':
@@ -982,7 +989,7 @@
         if (next < screens.length) {
           state.screenIndex = next;
         } else {
-          state.screen = 'gate';
+          routeAfterQuestions();
         }
         saveState();
         replaceStep();
@@ -1295,8 +1302,7 @@
       state.screen = 'question';
       state.screenIndex = next;
     } else {
-      state.screen = 'gate';
-      trackEvent('quiz_gate_view');
+      routeAfterQuestions();
     }
     saveState();
     pushStep();
@@ -1430,6 +1436,226 @@
     return header;
   }
 
+
+  // -- Lead capture (optional bonus step before the gate) --
+
+  function leadActive() {
+    return Boolean(config && config.lead && config.lead.enabled);
+  }
+
+  // Where the flow goes once the questions are exhausted: the lead step
+  // when it's enabled and unseen, else the photo gate. Every "questions
+  // complete" path (advanceFrom, the dead-screen skip) routes through here
+  // so the lead step can't be bypassed by one of them.
+  function routeAfterQuestions() {
+    if (leadActive() && !state.leadDone) {
+      state.screen = 'lead';
+      trackEvent('quiz_lead_view');
+    } else {
+      state.screen = 'gate';
+      trackEvent('quiz_gate_view');
+    }
+  }
+
+  // Mirror the server's practical shapes so the shopper gets instant
+  // feedback; the endpoint re-validates authoritatively.
+  var LEAD_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  var LEAD_PHONE_RE = /^\+?\d{7,15}$/;
+
+  // Human-readable labels for a committed answer. Shared by the results
+  // answers rail and the lead snapshot so the stored answers can never
+  // diverge from what the shopper saw on screen.
+  function answerLabels(q, a) {
+    var labels = [];
+    if (a.selectAll || a.values.indexOf(ANY_VALUE) !== -1) {
+      var anyOpt = q.options.filter(function(o) { return o.selectAll; })[0];
+      labels.push(anyOpt ? anyOpt.label : 'Open to anything');
+    } else {
+      a.values.forEach(function(v) {
+        var opt = q.options.filter(function(o) { return o.axisValue === v; })[0];
+        labels.push(opt ? opt.label : v);
+      });
+    }
+    return labels;
+  }
+
+  // [{question, answer}] snapshot in label text (readable without the flow
+  // tables, stable across later quiz edits).
+  function leadAnswersPayload() {
+    var out = [];
+    if (!flow || !Array.isArray(flow.questions)) return out;
+    for (var qi = 0; qi < flow.questions.length; qi++) {
+      var a = state.answers[qi];
+      if (!a || !a.values || a.values.length === 0) continue;
+      var q = flow.questions[qi];
+      out.push({ question: q.prompt, answer: answerLabels(q, a).join(', ') });
+    }
+    var shade = shadeReasonLine();
+    var axis = shadeAxis();
+    if (shade && axis) out.push({ question: axis.label, answer: shade.label });
+    return out;
+  }
+
+  function submitLead(email, phone) {
+    if (PREVIEW) return Promise.resolve({ preview: true });
+    var payload = {
+      shopDomain: shopDomain,
+      email: email || null,
+      phone: phone || null,
+      answers: leadAnswersPayload(),
+      deviceType: isMobile() ? 'mobile' : 'desktop',
+    };
+    if (cartToken) payload.cartToken = cartToken;
+    return fetch(SHOPIFY_APP_URL + '/api/storefront/quiz-lead', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).then(function(res) {
+      return res.json().catch(function() { return {}; }).then(function(data) {
+        if (!res.ok) {
+          throw new Error((data && data.error) || ('quiz-lead ' + res.status));
+        }
+        return data;
+      });
+    });
+  }
+
+  // Submit AND skip both land here: the step is once per session, then the
+  // flow continues exactly where advanceFrom would have gone (the gate).
+  function leaveLead() {
+    state.leadDone = true;
+    // A slow submit can resolve after the shopper navigated away (Back to a
+    // question): record the lead as done but don't yank them to the gate.
+    if (state.screen !== 'lead') {
+      saveState();
+      return;
+    }
+    state.screen = 'gate';
+    saveState();
+    // replaceStep, not pushStep: the lead entry is spent (clampStep resolves
+    // it to the gate once leadDone), so leaving it in history would make the
+    // first Back press from the gate a visible no-op.
+    replaceStep();
+    trackEvent('quiz_gate_view');
+    render('forward');
+  }
+
+  function renderLead() {
+    var lead = config.lead || {};
+    var screen = el('div', 'gq-step gq-step--lead');
+
+    // Stale direct render (history entry / config change while disabled on
+    // a real storefront): step past it in place, same pattern as dead
+    // question screens. Previews render regardless so the editor can show
+    // copy edits before the merchant flips the toggle on.
+    if (!PREVIEW && (!leadActive() || state.leadDone)) {
+      setTimeout(function() {
+        if (state.screen !== 'lead') return;
+        state.screen = 'gate';
+        saveState();
+        replaceStep();
+        render('forward');
+      }, 0);
+      return screen;
+    }
+
+    screen.appendChild(buildStepHeader(0, true));
+    var body = el('div', 'gq-step-body');
+    body.appendChild(el('h2', 'gq-question-title', renderAccent(lead.headline || 'Want us to send your matches?')));
+    if (lead.body) body.appendChild(el('p', 'gq-question-helper', escapeHtml(lead.body)));
+
+    var form = el('form', 'gq-lead-form');
+    var emailInput = document.createElement('input');
+    emailInput.className = 'gq-lead-input';
+    emailInput.type = 'email';
+    emailInput.name = 'email';
+    emailInput.placeholder = 'you@email.com';
+    emailInput.autocomplete = 'email';
+    emailInput.setAttribute('inputmode', 'email');
+    emailInput.setAttribute('aria-label', 'Email address');
+    form.appendChild(emailInput);
+
+    var phoneInput = null;
+    if (lead.collectPhone) {
+      phoneInput = document.createElement('input');
+      phoneInput.className = 'gq-lead-input';
+      phoneInput.type = 'tel';
+      phoneInput.name = 'phone';
+      phoneInput.placeholder = 'Phone number (optional)';
+      phoneInput.autocomplete = 'tel';
+      phoneInput.setAttribute('inputmode', 'tel');
+      phoneInput.setAttribute('aria-label', 'Phone number');
+      form.appendChild(phoneInput);
+    }
+
+    var err = el('p', 'gq-lead-error');
+    err.setAttribute('role', 'alert');
+    err.style.display = 'none';
+    form.appendChild(err);
+    function showLeadError(msg) {
+      err.textContent = msg;
+      err.style.display = 'block';
+    }
+
+    var submitLabel = lead.buttonLabel || 'Save my results';
+    var submitBtn = el('button', 'gq-add-btn gq-lead-submit', escapeHtml(submitLabel));
+    submitBtn.type = 'submit';
+    form.appendChild(submitBtn);
+
+    if (lead.consentText) {
+      form.appendChild(el('p', 'gq-lead-consent', escapeHtml(lead.consentText)));
+    }
+
+    form.onsubmit = function(e) {
+      e.preventDefault();
+      if (submitBtn.disabled) return; // in-flight submit — the button carries the state
+      err.style.display = 'none';
+      var email = emailInput.value.trim().toLowerCase();
+      var phone = phoneInput ? phoneInput.value.replace(/[\s().-]/g, '') : '';
+      if (!email && !phone) {
+        showLeadError(phoneInput ? 'Enter your email or phone number.' : 'Enter your email.');
+        return;
+      }
+      if (email && (email.length > 254 || !LEAD_EMAIL_RE.test(email))) {
+        showLeadError('That email doesn’t look right.');
+        return;
+      }
+      if (phone && !LEAD_PHONE_RE.test(phone)) {
+        showLeadError('That phone number doesn’t look right.');
+        return;
+      }
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Saving…';
+      submitLead(email, phone)
+        .then(function() {
+          trackEvent('quiz_lead_submitted');
+          leaveLead();
+        })
+        .catch(function(error) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = submitLabel;
+          // Server validation messages are shopper-safe; anything else
+          // (network, 5xx) gets the generic retry line. Skip stays available
+          // either way — a failing endpoint must never trap the quiz.
+          var msg = error && error.message && /email|phone/i.test(error.message)
+            ? error.message
+            : 'Something went wrong — try again, or skip for now.';
+          showLeadError(msg);
+        });
+    };
+    body.appendChild(form);
+
+    var skip = el('button', 'gq-skip-link', escapeHtml(lead.skipLabel || 'Skip for now') + ' →');
+    skip.type = 'button';
+    skip.onclick = function() {
+      trackEvent('quiz_lead_skipped');
+      leaveLead();
+    };
+    body.appendChild(skip);
+
+    screen.appendChild(body);
+    return screen;
+  }
 
   // -- Try-on gate (last numbered step) --
 
@@ -1935,16 +2161,7 @@
         var a = state.answers[qi];
         if (!a || !a.values || a.values.length === 0) return;
         var q = flow.questions[qi];
-        var labels = [];
-        if (a.selectAll || a.values.indexOf(ANY_VALUE) !== -1) {
-          var anyOpt = q.options.filter(function(o) { return o.selectAll; })[0];
-          labels.push(anyOpt ? anyOpt.label : 'Open to anything');
-        } else {
-          a.values.forEach(function(v) {
-            var opt = q.options.filter(function(o) { return o.axisValue === v; })[0];
-            labels.push(opt ? opt.label : v);
-          });
-        }
+        var labels = answerLabels(q, a);
         var chip = el('div', 'gq-rail-chip');
         chip.appendChild(el('span', 'gq-rail-axis', escapeHtml(q.axisLabel)));
         chip.appendChild(el('span', 'gq-rail-value', escapeHtml(labels.join(', '))));
@@ -2308,13 +2525,19 @@
       hasPhoto: false, detectedShade: null, matches: null,
       matrixApplied: false, partial: false,
       quizStarted: false, // the restarted run gets its own quiz_start event
+      // A captured/declined lead survives restarts — never re-ask the same
+      // session for the email it already gave (or refused).
+      leadDone: state.leadDone,
     };
     draft = {}; // ghost selections must not leak into intro option visibility
     editReturn = false;
     photoFile = null;
     tryonCache = {};
     tryonCount = 0;
-    clearState();
+    // leadDone must survive a mid-restart reload too — persist the reset
+    // state instead of clearing when there's a lead flag to keep.
+    if (state.leadDone) saveState();
+    else clearState();
     replaceStep();
     render('back');
   }
@@ -2330,6 +2553,8 @@
     if (step === 'intro') {
       state.screen = 'intro';
       state.screenIndex = 0;
+    } else if (step === 'lead') {
+      state.screen = 'lead';
     } else if (step === 'gate') {
       state.screen = 'gate';
     } else if (step === 'results') {

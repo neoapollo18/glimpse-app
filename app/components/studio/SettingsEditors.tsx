@@ -516,6 +516,84 @@ export function PhotoEditor({
 }
 
 // ---------------------------------------------------------------------
+// Lead capture (optional email/SMS step before the photo gate)
+// ---------------------------------------------------------------------
+
+export function LeadEditor({
+  settings,
+  chatBusy,
+  onPreviewUpdate,
+}: {
+  settings: Record<string, unknown>;
+  chatBusy: boolean;
+  onPreviewUpdate: (p: { flow?: unknown; config?: unknown }) => void;
+}) {
+  const { schedule, saveState, error, clearError } = useSettingsAutosave(onPreviewUpdate);
+  const [values, setValues] = useState<Record<string, string>>(() => ({
+    quiz_lead_headline: str(settings, "quiz_lead_headline"),
+    quiz_lead_body: str(settings, "quiz_lead_body"),
+    quiz_lead_button_label: str(settings, "quiz_lead_button_label"),
+    quiz_lead_skip_label: str(settings, "quiz_lead_skip_label"),
+    quiz_lead_consent_text: str(settings, "quiz_lead_consent_text"),
+  }));
+  const [enabled, setEnabled] = useState<boolean>(settings.quiz_lead_enabled === true);
+  const [collectPhone, setCollectPhone] = useState<boolean>(settings.quiz_lead_collect_phone === true);
+  const setValue = (key: string, value: string) => {
+    setValues((prev) => ({ ...prev, [key]: value }));
+    schedule("copy", key, value);
+  };
+  const disabled = chatBusy;
+  return (
+    <BlockStack gap="400">
+      <EditorHeader title="Email capture" saveState={saveState} />
+      {error && (
+        <Banner tone="critical" onDismiss={clearError}>
+          {error}
+        </Banner>
+      )}
+      <Checkbox
+        label="Ask shoppers for their email"
+        checked={enabled}
+        disabled={disabled}
+        onChange={(v) => {
+          setEnabled(v);
+          schedule("copy", "quiz_lead_enabled", v);
+        }}
+        helpText="Adds an optional step between the last question and the photo step. Shoppers can always skip it. Captured leads appear on the Analytics page."
+      />
+      <Checkbox
+        label="Also collect a phone number (SMS)"
+        checked={collectPhone}
+        disabled={disabled || !enabled}
+        onChange={(v) => {
+          setCollectPhone(v);
+          schedule("copy", "quiz_lead_collect_phone", v);
+        }}
+      />
+      <CopyField label="Headline" fieldKey="quiz_lead_headline" values={values} setValue={setValue} disabled={disabled} helpText="Wrap a phrase in **stars** to color it in the accent" />
+      <CopyField label="Body" fieldKey="quiz_lead_body" values={values} setValue={setValue} disabled={disabled} multiline={2} />
+      <InlineStack gap="200">
+        <div style={{ flex: 1, minWidth: 130 }}>
+          <CopyField label="Submit button" fieldKey="quiz_lead_button_label" values={values} setValue={setValue} disabled={disabled} />
+        </div>
+        <div style={{ flex: 1, minWidth: 130 }}>
+          <CopyField label="Skip link" fieldKey="quiz_lead_skip_label" values={values} setValue={setValue} disabled={disabled} />
+        </div>
+      </InlineStack>
+      <CopyField
+        label="Consent note"
+        fieldKey="quiz_lead_consent_text"
+        values={values}
+        setValue={setValue}
+        disabled={disabled}
+        multiline={2}
+        helpText="Small print under the button. Make sure it matches your marketing consent obligations."
+      />
+    </BlockStack>
+  );
+}
+
+// ---------------------------------------------------------------------
 // Results
 // ---------------------------------------------------------------------
 

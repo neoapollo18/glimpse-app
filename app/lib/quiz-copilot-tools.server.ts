@@ -381,11 +381,19 @@ const COPY_KEYS = new Set([
   "quiz_before_image_url", "quiz_after_image_url",
   "quiz_alt_audience_label", "quiz_alt_audience_url",
   "quiz_manual_shade_enabled",
+  // Lead capture step (migration 067)
+  "quiz_lead_enabled", "quiz_lead_collect_phone",
+  "quiz_lead_headline", "quiz_lead_body", "quiz_lead_button_label",
+  "quiz_lead_skip_label", "quiz_lead_consent_text",
 ]);
 
 // Copy keys that are booleans on the live config row — String() coercion
 // would store "true"/"false" and break the typed column at publish.
-const BOOL_COPY_KEYS = new Set(["quiz_manual_shade_enabled"]);
+const BOOL_COPY_KEYS = new Set([
+  "quiz_manual_shade_enabled",
+  "quiz_lead_enabled",
+  "quiz_lead_collect_phone",
+]);
 
 export function applyUpdateCopy(draft: DraftShape, input: any, _catalog: CatalogProduct[]): ApplyResult {
   const fields = input.fields ?? {};
@@ -397,6 +405,15 @@ export function applyUpdateCopy(draft: DraftShape, input: any, _catalog: Catalog
   // storefront); null clears the field instead of storing the string "null".
   for (const [k, v] of Object.entries(fields)) {
     if (v == null) continue;
+    if (BOOL_COPY_KEYS.has(k)) {
+      // Reject loudly instead of coercing: "True" / "yes" / 1 silently
+      // becoming false would report success while storing the opposite of
+      // what the caller (studio checkbox or AI copilot) asked for.
+      if (typeof v !== "boolean" && v !== "true" && v !== "false") {
+        return { ok: false, error: `${k} must be true or false (got ${JSON.stringify(v)})` };
+      }
+      continue;
+    }
     if (Array.isArray(v)) {
       if (v.some((s) => typeof s !== "string" && typeof s !== "number")) {
         return { ok: false, error: `${k}: array entries must be strings` };

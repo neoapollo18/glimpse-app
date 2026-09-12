@@ -127,6 +127,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         // path). Older cached configs omit it — widget treats absent as true.
         manualEnabled: config.quiz_manual_shade_enabled,
       },
+      // Lead capture step (migration 067). enabled=false (the default)
+      // means the widget never renders the step.
+      lead: {
+        enabled: config.quiz_lead_enabled,
+        collectPhone: config.quiz_lead_collect_phone,
+        headline: renderTokens(config.quiz_lead_headline),
+        body: renderTokens(config.quiz_lead_body),
+        buttonLabel: config.quiz_lead_button_label,
+        skipLabel: config.quiz_lead_skip_label,
+        consentText: renderTokens(config.quiz_lead_consent_text),
+      },
     },
     {
       headers: {

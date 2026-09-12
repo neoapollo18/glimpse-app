@@ -77,6 +77,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       'quiz_add_to_cart',
       'quiz_retake_photo',
       'quiz_restart',
+      // Lead capture step (migration 067): step seen → submitted / skipped.
+      'quiz_lead_view',
+      'quiz_lead_submitted',
+      'quiz_lead_skipped',
     ];
     const isAssistantEvent = allowedAssistantEvents.includes(eventType);
 

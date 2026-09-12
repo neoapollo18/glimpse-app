@@ -1103,6 +1103,258 @@ export async function getQuizEngagement(
 }
 
 // ============================================
+// QUIZ LEAD CAPTURE (migration 067)
+// ============================================
+
+export interface QuizLeadAnswer {
+  question: string;
+  answer: string;
+}
+
+export interface QuizLeadInput {
+  email: string | null;
+  phone: string | null;
+  answers: QuizLeadAnswer[];
+  cartToken?: string | null;
+  deviceType?: string | null;
+}
+
+/**
+ * Upsert a captured lead. Dedupe key is the email (case-normalized by the
+ * caller) when present, else the phone — a resubmit refreshes the answers
+ * snapshot and fills in a phone the first submit didn't have, instead of
+ * stacking duplicate rows for the same shopper.
+ */
+export async function saveQuizLead(
+  shopId: string,
+  lead: QuizLeadInput
+): Promise<{ ok: boolean; error?: string }> {
+  const now = new Date().toISOString();
+  const updateFields: Record<string, unknown> = {
+    quiz_answers: lead.answers,
+    updated_at: now,
+  };
+  // Only overwrite contact/attribution fields the new submit actually has —
+  // a later email-only resubmit must not blank a stored phone.
+  if (lead.phone) updateFields.phone = lead.phone;
+  if (lead.cartToken) updateFields.cart_token = lead.cartToken;
+  if (lead.deviceType) updateFields.device_type = lead.deviceType;
+
+  const matchExisting = (q: any) =>
+    lead.email
+      ? q.eq('email', lead.email)
+      : q.eq('phone', lead.phone).is('email', null);
+
+  const { data: updated, error: updateError } = await matchExisting(
+    supabase.from('quiz_leads').update(updateFields).eq('shop_id', shopId)
+  ).select('id');
+  if (updateError) return { ok: false, error: updateError.message };
+  if (updated && updated.length > 0) return { ok: true };
+
+  // No email match, but the shopper's phone may already exist on a
+  // phone-only row from an earlier session — upgrade that row with the
+  // email instead of inserting a duplicate contact.
+  if (lead.email && lead.phone) {
+    const { data: merged, error: mergeError } = await supabase
+      .from('quiz_leads')
+      .update({ ...updateFields, email: lead.email })
+      .eq('shop_id', shopId)
+      .eq('phone', lead.phone)
+      .is('email', null)
+      .select('id');
+    if (mergeError) return { ok: false, error: mergeError.message };
+    if (merged && merged.length > 0) return { ok: true };
+  }
+
+  const { data: inserted, error: insertError } = await supabase
+    .from('quiz_leads')
+    .insert({
+      shop_id: shopId,
+      email: lead.email,
+      phone: lead.phone,
+      quiz_answers: lead.answers,
+      cart_token: lead.cartToken ?? null,
+      device_type: lead.deviceType ?? null,
+    })
+    .select('id');
+  if (insertError) {
+    // Lost the update-then-insert race against the partial unique index
+    // (23505): another submit created the row between our two statements.
+    if (insertError.code === '23505') {
+      const { data: retried, error: retryError } = await matchExisting(
+        supabase.from('quiz_leads').update(updateFields).eq('shop_id', shopId)
+      ).select('id');
+      if (retryError || !retried?.length) {
+        return { ok: false, error: retryError?.message ?? 'lead upsert race retry wrote 0 rows' };
+      }
+      return { ok: true };
+    }
+    return { ok: false, error: insertError.message };
+  }
+  if (!inserted?.length) return { ok: false, error: 'lead insert wrote 0 rows' };
+  return { ok: true };
+}
+
+export interface QuizLeadRow {
+  id: string;
+  email: string | null;
+  phone: string | null;
+  quizAnswers: QuizLeadAnswer[];
+  deviceType: string | null;
+  createdAt: string;
+}
+
+export interface QuizLeadStats {
+  count: number;
+  leads: QuizLeadRow[];
+}
+
+function mapQuizLeadRow(r: any): QuizLeadRow {
+  return {
+    id: r.id,
+    email: r.email ?? null,
+    phone: r.phone ?? null,
+    quizAnswers: Array.isArray(r.quiz_answers)
+      ? r.quiz_answers.filter(
+          (a: any): a is QuizLeadAnswer =>
+            a && typeof a.question === 'string' && typeof a.answer === 'string'
+        )
+      : [],
+    deviceType: r.device_type ?? null,
+    createdAt: r.created_at,
+  };
+}
+
+/**
+ * Leads captured in the last `daysBack` days: the newest `limit` rows for
+ * the analytics table/CSV export, plus the accurate window total (`count`
+ * covers rows beyond the limit — same query, exact count).
+ */
+export async function getQuizLeadStats(
+  shopDomain: string,
+  daysBack: number,
+  limit = 500
+): Promise<QuizLeadStats> {
+  const empty: QuizLeadStats = { count: 0, leads: [] };
+  try {
+    const shop = await findShopByDomain(shopDomain);
+    if (!shop) return empty;
+    const since = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString();
+
+    const { data, count, error } = await supabase
+      .from('quiz_leads')
+      .select('id, email, phone, quiz_answers, device_type, created_at', { count: 'exact' })
+      .eq('shop_id', shop.id)
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) {
+      console.error('getQuizLeadStats error:', error);
+      return empty;
+    }
+
+    const leads = (data ?? []).map(mapQuizLeadRow);
+    return { count: count ?? leads.length, leads };
+  } catch (error) {
+    console.error('Error in getQuizLeadStats:', error);
+    return empty;
+  }
+}
+
+/**
+ * GDPR customers/data_request: every stored lead matching the customer's
+ * email or phone for this shop.
+ */
+export async function findQuizLeadsForCustomer(
+  shopDomain: string,
+  email: string | null,
+  phone: string | null
+): Promise<QuizLeadRow[]> {
+  try {
+    const shop = await findShopByDomain(shopDomain);
+    if (!shop || (!email && !phone)) return [];
+    // Two exact-match queries instead of a PostgREST .or() — email values
+    // may legally contain the .or() grammar's delimiter characters.
+    const queries = [];
+    if (email) {
+      queries.push(
+        supabase
+          .from('quiz_leads')
+          .select('id, email, phone, quiz_answers, device_type, created_at')
+          .eq('shop_id', shop.id)
+          .eq('email', email.toLowerCase())
+      );
+    }
+    if (phone) {
+      queries.push(
+        supabase
+          .from('quiz_leads')
+          .select('id, email, phone, quiz_answers, device_type, created_at')
+          .eq('shop_id', shop.id)
+          .eq('phone', phone.replace(/[\s().-]/g, ''))
+      );
+    }
+    const results = await Promise.all(queries);
+    const seen = new Set<string>();
+    const rows: QuizLeadRow[] = [];
+    for (const { data, error } of results) {
+      if (error) {
+        console.error('findQuizLeadsForCustomer error:', error);
+        continue;
+      }
+      for (const r of data ?? []) {
+        if (seen.has(r.id)) continue;
+        seen.add(r.id);
+        rows.push(mapQuizLeadRow(r));
+      }
+    }
+    return rows;
+  } catch (error) {
+    console.error('Error in findQuizLeadsForCustomer:', error);
+    return [];
+  }
+}
+
+/**
+ * GDPR customers/redact: delete every stored lead matching the customer's
+ * email or phone for this shop. Returns the number of rows removed.
+ */
+export async function redactQuizLeadsForCustomer(
+  shopDomain: string,
+  email: string | null,
+  phone: string | null
+): Promise<{ ok: boolean; deleted: number; error?: string }> {
+  try {
+    const shop = await findShopByDomain(shopDomain);
+    if (!shop || (!email && !phone)) return { ok: true, deleted: 0 };
+    let deleted = 0;
+    // Two exact-match deletes instead of a PostgREST .or() — email values
+    // may legally contain the .or() grammar's delimiter characters.
+    if (email) {
+      const { error, count } = await supabase
+        .from('quiz_leads')
+        .delete({ count: 'exact' })
+        .eq('shop_id', shop.id)
+        .eq('email', email.toLowerCase());
+      if (error) return { ok: false, deleted, error: error.message };
+      deleted += count ?? 0;
+    }
+    if (phone) {
+      const { error, count } = await supabase
+        .from('quiz_leads')
+        .delete({ count: 'exact' })
+        .eq('shop_id', shop.id)
+        .eq('phone', phone.replace(/[\s().-]/g, ''));
+      if (error) return { ok: false, deleted, error: error.message };
+      deleted += count ?? 0;
+    }
+    return { ok: true, deleted };
+  } catch (error) {
+    return { ok: false, deleted: 0, error: (error as Error).message };
+  }
+}
+
+// ============================================
 // VARIANT SUPPORT FUNCTIONS (Phase 2)
 // ============================================
 
@@ -2869,6 +3121,16 @@ export interface ChatAssistantConfig {
   // handy?" / "I know my shade") — shoppers upload a photo or skip
   // (migration 054). The results-page shade gate keeps its manual picker.
   quiz_manual_shade_enabled: boolean;
+  // ---- Lead capture step (migration 067) ----
+  // Optional email/SMS capture screen between the last question and the
+  // photo gate. Off by default; the step is always skippable for shoppers.
+  quiz_lead_enabled: boolean;
+  quiz_lead_collect_phone: boolean;
+  quiz_lead_headline: string;
+  quiz_lead_body: string;
+  quiz_lead_button_label: string;
+  quiz_lead_skip_label: string;
+  quiz_lead_consent_text: string;
   // Shop-wide FALLBACK transformation prompt for quantity >= 2 try-ons
   // (migration 052, repurposed by migration 053): used INSTEAD of the base
   // prompt only when neither the variant nor the product defines its own
@@ -3057,6 +3319,13 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   quiz_shade_fallbacks: null,
   quiz_manual_shade_enabled: true,
   quiz_multi_set_prompt: null,
+  quiz_lead_enabled: false,
+  quiz_lead_collect_phone: false,
+  quiz_lead_headline: 'Want us to send your matches?',
+  quiz_lead_body: "Pop in your email and we'll save your results — plus tips picked for your answers.",
+  quiz_lead_button_label: 'Save my results',
+  quiz_lead_skip_label: 'Skip for now',
+  quiz_lead_consent_text: 'By continuing you agree to receive marketing messages. Unsubscribe anytime.',
 };
 
 // Defensive parse of the quiz_shade_fallbacks jsonb: keep only
@@ -3218,6 +3487,13 @@ function mapChatAssistantRow(data: any): ChatAssistantConfig {
       typeof data.quiz_multi_set_prompt === 'string' && data.quiz_multi_set_prompt.trim()
         ? data.quiz_multi_set_prompt
         : CHAT_ASSISTANT_DEFAULTS.quiz_multi_set_prompt,
+    quiz_lead_enabled: data.quiz_lead_enabled ?? CHAT_ASSISTANT_DEFAULTS.quiz_lead_enabled,
+    quiz_lead_collect_phone: data.quiz_lead_collect_phone ?? CHAT_ASSISTANT_DEFAULTS.quiz_lead_collect_phone,
+    quiz_lead_headline: data.quiz_lead_headline ?? CHAT_ASSISTANT_DEFAULTS.quiz_lead_headline,
+    quiz_lead_body: data.quiz_lead_body ?? CHAT_ASSISTANT_DEFAULTS.quiz_lead_body,
+    quiz_lead_button_label: data.quiz_lead_button_label ?? CHAT_ASSISTANT_DEFAULTS.quiz_lead_button_label,
+    quiz_lead_skip_label: data.quiz_lead_skip_label ?? CHAT_ASSISTANT_DEFAULTS.quiz_lead_skip_label,
+    quiz_lead_consent_text: data.quiz_lead_consent_text ?? CHAT_ASSISTANT_DEFAULTS.quiz_lead_consent_text,
     // A stray mode value degrades to the legacy matrix engine rather than
     // accidentally turning LLM calls on for a shop.
     recommendation_mode: (['matrix', 'ai', 'hybrid'] as const).includes(data.recommendation_mode)

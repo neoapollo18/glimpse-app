@@ -23,7 +23,7 @@ import {
 } from "@shopify/polaris-icons";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { getAnalytics, getConversionStats, getTopTrafficSources, getAssistantEngagement, getQuizEngagement, shopHasTryOnConfig, type TrafficSourceStat, type AssistantEngagement, type AssistantFunnelCounts, type QuizEngagement, type QuizFunnelCounts } from "../lib/supabase.server";
+import { getAnalytics, getConversionStats, getTopTrafficSources, getAssistantEngagement, getQuizEngagement, getQuizLeadStats, shopHasTryOnConfig, type TrafficSourceStat, type AssistantEngagement, type AssistantFunnelCounts, type QuizEngagement, type QuizFunnelCounts, type QuizLeadStats } from "../lib/supabase.server";
 import { useState, useCallback } from "react";
 
 interface WidgetBreakdown {
@@ -111,10 +111,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // (backend vto_enabled override, else auto-detected from configured
   // products). Everyone else gets a quiz-only page — and we skip the
   // legacy queries entirely.
-  const [showLegacy, quiz7Days, quiz30Days] = await Promise.all([
+  const [showLegacy, quiz7Days, quiz30Days, leads7Days, leads30Days] = await Promise.all([
     shopHasTryOnConfig(session.shop),
     getQuizEngagement(session.shop, 7),
     getQuizEngagement(session.shop, 30),
+    getQuizLeadStats(session.shop, 7),
+    getQuizLeadStats(session.shop, 30),
   ]);
 
   let analytics7Days: Awaited<ReturnType<typeof getAnalytics>> = null;
@@ -218,6 +220,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     showLegacy,
     quiz7: quiz7Days ?? EMPTY_QUIZ,
     quiz30: quiz30Days ?? EMPTY_QUIZ,
+    leads7: leads7Days,
+    leads30: leads30Days,
     analytics7: safeAnalytics7,
     analytics30: safeAnalytics30,
     attribution7,
@@ -229,7 +233,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export default function Analytics() {
-  const { showLegacy, quiz7, quiz30, analytics7, analytics30, attribution7, attribution30, assistant7, assistant30, productImages } = useLoaderData<typeof loader>();
+  const { showLegacy, quiz7, quiz30, leads7, leads30, analytics7, analytics30, attribution7, attribution30, assistant7, assistant30, productImages } = useLoaderData<typeof loader>();
   const [timeRange, setTimeRange] = useState("30");
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
 
@@ -303,6 +307,40 @@ export default function Analytics() {
   const quizFunnel = buildQuizFunnel(quiz);
   const quizMobileFunnel = buildQuizFunnel(quiz.byDevice.mobile);
   const quizDesktopFunnel = buildQuizFunnel(quiz.byDevice.desktop);
+
+  // Quiz leads (email capture step). Rows are capped server-side at 500
+  // newest per window; `count` is the accurate head-count total.
+  const leadStats: QuizLeadStats = timeRange === "7" ? leads7 : leads30;
+  const leadAnswerSummary = (lead: QuizLeadStats["leads"][number]) =>
+    lead.quizAnswers.map((a) => `${a.question}: ${a.answer}`).join(" · ");
+  const exportLeadsCsv = () => {
+    // Emails and answers are shopper-typed via a public endpoint: a leading
+    // = + - @ or tab would execute as a formula when the merchant opens the
+    // export in Excel/Sheets (CSV injection) — neutralize with a leading
+    // apostrophe. BOM so Excel decodes the UTF-8 separators/labels.
+    const esc = (v: string) => {
+      const guarded = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
+      return `"${guarded.replace(/"/g, '""')}"`;
+    };
+    const rows = [
+      ["Email", "Phone", "Device", "Captured at", "Quiz answers"],
+      ...leadStats.leads.map((lead) => [
+        lead.email ?? "",
+        lead.phone ?? "",
+        lead.deviceType ?? "",
+        new Date(lead.createdAt).toISOString(),
+        leadAnswerSummary(lead),
+      ]),
+    ];
+    const csv = "\uFEFF" + rows.map((r) => r.map(esc).join(",")).join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `quiz-leads-last-${timeRange}-days.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
   const quizMobileViews = quiz.byDevice.mobile.views;
   const quizDesktopViews = quiz.byDevice.desktop.views;
   const quizClassifiedViews = quizMobileViews + quizDesktopViews;
@@ -574,6 +612,98 @@ export default function Analytics() {
             </BlockStack>
           )}
         </BlockStack>
+
+        {/* Quiz leads — email/SMS captured by the quiz's lead step. Hidden
+            for legacy try-on shops with no quiz activity: the empty-state
+            nudge would advertise a flow they don't run. */}
+        {(leadStats.count > 0 || hasQuizData || !showLegacy) && (
+        <BlockStack gap="300">
+          <InlineStack gap="200" blockAlign="center">
+            <Text as="h2" variant="headingMd">Quiz leads</Text>
+            <Badge tone="attention">Email capture</Badge>
+          </InlineStack>
+
+          {leadStats.count === 0 ? (
+            <Card padding="400">
+              <BlockStack gap="200">
+                <Text as="p" variant="bodyMd" fontWeight="semibold">
+                  No leads captured yet
+                </Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Turn on the Email capture step in the Quiz Studio and shoppers' emails (with their quiz answers) will appear here.
+                </Text>
+              </BlockStack>
+            </Card>
+          ) : (
+            <Card padding="0">
+              <Box padding="400" paddingBlockEnd="300">
+                <InlineStack align="space-between" blockAlign="center">
+                  <BlockStack gap="100">
+                    <Text as="h3" variant="headingSm">
+                      {leadStats.count.toLocaleString()} {leadStats.count === 1 ? "lead" : "leads"} in the last {timeRange} days
+                    </Text>
+                    <Text as="span" variant="bodySm" tone="subdued">
+                      Each lead includes the shopper's quiz answers at submit time.
+                    </Text>
+                  </BlockStack>
+                  <Button onClick={exportLeadsCsv} disabled={leadStats.leads.length === 0}>
+                    Export CSV
+                  </Button>
+                </InlineStack>
+              </Box>
+              <Divider />
+              <Box padding="400" paddingBlockStart="300" paddingBlockEnd="300" background="bg-surface-secondary">
+                <InlineGrid columns={{ xs: "1fr 1fr", md: "1.4fr 0.6fr 0.8fr 2fr" }} gap="400" alignItems="center">
+                  <Text as="span" variant="bodySm" fontWeight="semibold">Contact</Text>
+                  <Text as="span" variant="bodySm" fontWeight="semibold">Device</Text>
+                  <Text as="span" variant="bodySm" fontWeight="semibold">Captured</Text>
+                  <Text as="span" variant="bodySm" fontWeight="semibold">Quiz answers</Text>
+                </InlineGrid>
+              </Box>
+              {leadStats.leads.slice(0, 50).map((lead, index) => (
+                <div key={lead.id}>
+                  {index > 0 && <Divider />}
+                  <Box padding="400" paddingBlockStart="300" paddingBlockEnd="300">
+                    <InlineGrid columns={{ xs: "1fr 1fr", md: "1.4fr 0.6fr 0.8fr 2fr" }} gap="400" alignItems="start">
+                      <BlockStack gap="050">
+                        {lead.email && (
+                          <Text as="span" variant="bodyMd" fontWeight="semibold" breakWord>
+                            {lead.email}
+                          </Text>
+                        )}
+                        {lead.phone && (
+                          <Text as="span" variant={lead.email ? "bodySm" : "bodyMd"} tone={lead.email ? "subdued" : undefined} fontWeight={lead.email ? undefined : "semibold"}>
+                            {lead.phone}
+                          </Text>
+                        )}
+                      </BlockStack>
+                      <Text as="span" variant="bodySm" tone="subdued">
+                        {lead.deviceType ?? "—"}
+                      </Text>
+                      <Text as="span" variant="bodySm" tone="subdued">
+                        {new Date(lead.createdAt).toLocaleDateString()}
+                      </Text>
+                      <Text as="span" variant="bodySm" tone="subdued">
+                        {leadAnswerSummary(lead) || "—"}
+                      </Text>
+                    </InlineGrid>
+                  </Box>
+                </div>
+              ))}
+              {leadStats.count > 50 && (
+                <>
+                  <Divider />
+                  <Box padding="300">
+                    <Text as="span" variant="bodySm" tone="subdued">
+                      Showing the 50 most recent. Export CSV includes up to the {leadStats.leads.length.toLocaleString()} newest leads in this window.
+                    </Text>
+                  </Box>
+                </>
+              )}
+            </Card>
+          )}
+        </BlockStack>
+        )}
 
         {showLegacy && (<>
         <Divider />

@@ -1418,3 +1418,59 @@
 #gleame-quiz-root.gq-anim-off .gq-leave-back,
 #gleame-quiz-root.gq-anim-off .gq-enter.gq-enter-active,
 #gleame-quiz-root.gq-anim-off .gq-enter-back.gq-enter-active { transition: none; }
+
+/* Lead capture step (optional bonus step before the gate) */
+#gleame-quiz-root .gq-step--lead .gq-question-title,
+#gleame-quiz-root .gq-step--lead .gq-question-helper {
+  text-align: center;
+}
+#gleame-quiz-root .gq-step--lead .gq-question-helper {
+  margin-left: auto;
+  margin-right: auto;
+}
+#gleame-quiz-root .gq-lead-form {
+  max-width: 440px;
+  margin: var(--gq-space-6) auto 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+#gleame-quiz-root .gq-lead-input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  margin: 0;
+  padding: 14px 16px;
+  background: var(--gq-card-bg, #ffffff);
+  border: 1px solid var(--gq-line);
+  border-radius: var(--gq-radius-btn);
+  font-family: var(--gq-font-body);
+  font-size: 15px;
+  color: var(--gq-ink);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+#gleame-quiz-root .gq-lead-input::placeholder { color: var(--gq-ink-faint); }
+#gleame-quiz-root .gq-lead-input:focus {
+  outline: none;
+  border-color: var(--gq-accent);
+  box-shadow: 0 0 0 3px var(--gq-tint-strong);
+}
+#gleame-quiz-root .gq-lead-error {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #b54708;
+}
+#gleame-quiz-root .gq-lead-submit { margin-top: 4px; }
+#gleame-quiz-root .gq-lead-consent {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--gq-ink-faint);
+  text-align: center;
+}
+#gleame-quiz-root .gq-step--lead .gq-skip-link {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
