@@ -219,8 +219,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ? jwt.sign({ shopId: shop.id, shopDomain }, process.env.SHOPIFY_API_SECRET, { expiresIn: "2h" })
     : null;
 
+  // Intercom renders per-document, and the studio is its own document
+  // (max-modal iframe) — the /app layout's launcher sits obscured UNDER the
+  // modal for the whole editing session. Boot a second messenger instance
+  // in here, with the same identity-verification JWT app.tsx mints.
+  const intercomSecretKey = process.env.INTERCOM_SECRET_KEY || "";
+  const intercomUserJwt = intercomSecretKey
+    ? jwt.sign({ user_id: shopDomain }, intercomSecretKey, { expiresIn: "1h" })
+    : "";
+
   return json({
     apiKey: process.env.SHOPIFY_API_KEY || "",
+    intercomAppId: process.env.INTERCOM_APP_ID || "",
+    intercomUserJwt,
     shopDomain,
     draft,
     hasDraft: draft !== null,
@@ -602,6 +613,23 @@ function BillingRequired({ apiKey }: { apiKey: string }) {
 
 function StudioEditor({ data }: { data: StudioLoaderData }) {
   const [params, setParams] = useSearchParams();
+
+  // Intercom for THIS document — the /app frame's launcher is under the
+  // max-modal while the studio is open. The SDK is idempotent per window,
+  // so revalidations don't stack instances.
+  useEffect(() => {
+    if (!data.intercomAppId || typeof window === "undefined") return;
+    import("@intercom/messenger-js-sdk").then(({ default: Intercom }) => {
+      Intercom({
+        app_id: data.intercomAppId,
+        intercom_user_jwt: data.intercomUserJwt || undefined,
+        name: data.shopDomain,
+        // The default bottom-right spot is the right rail's chat input —
+        // shift the launcher left of the 380px rail, onto the canvas.
+        horizontal_padding: 400,
+      });
+    });
+  }, [data.intercomAppId, data.intercomUserJwt, data.shopDomain]);
 
   const step = ((): StudioStep => {
     const s = params.get("step");
