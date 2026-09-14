@@ -185,11 +185,14 @@
     var formData = new FormData();
     formData.append('id', String(variantId));
     formData.append('quantity', String(quantity || 1));
-    // Section Rendering API: ask Shopify to return the re-rendered header
-    // cart badge with the add response. Dawn-family themes name it
-    // 'cart-icon-bubble'; themes without that section just omit it from the
-    // response and we fall back to the generic count update below.
-    formData.append('sections', 'cart-icon-bubble');
+    // Section Rendering API: ask Shopify to return re-rendered cart sections
+    // with the add response. 'cart-icon-bubble'/'cart-drawer' are the
+    // Dawn-family names; Prestige-family themes announce their own dynamic
+    // section ids via the 'cart:prepare-bundled-sections' event. Unknown
+    // names are simply omitted from the response, so over-asking is safe
+    // (Shopify caps the list at 5).
+    var bundled = prestigeBundledSections();
+    formData.append('sections', ['cart-icon-bubble', 'cart-drawer'].concat(bundled).slice(0, 5).join(','));
     formData.append('sections_url', window.location.pathname);
     return fetch('/cart/add.js', {
       method: 'POST',
@@ -208,10 +211,65 @@
           document.dispatchEvent(new CustomEvent('cart:updated', { detail: { source: 'gleame-quiz' } }));
           document.dispatchEvent(new CustomEvent('cart:refresh', { detail: { source: 'gleame-quiz' } }));
         } catch (e) { /* old browsers — ignore */ }
-        if (!fluorescentCartSync()) refreshCartUi(body);
+        var handled = false;
+        try {
+          handled = Boolean(dawnDrawerSync(body) || prestigeCartSync(body, bundled) || fluorescentCartSync());
+        } catch (e) { handled = false; }
+        if (!handled) refreshCartUi(body);
         return body;
       });
     });
+  }
+
+  // Prestige-family themes (Glamnetic) bundle their cart sections into cart
+  // mutations: components listening for this event push their section ids
+  // into detail.sections, and the theme expects those sections' HTML back in
+  // the add response. Collected per add — sections can mount/unmount.
+  function prestigeBundledSections() {
+    if (!document.querySelector('cart-drawer')) return [];
+    var sections = [];
+    try {
+      document.documentElement.dispatchEvent(new CustomEvent('cart:prepare-bundled-sections', {
+        bubbles: true,
+        detail: { sections: sections },
+      }));
+    } catch (e) { return []; }
+    return sections;
+  }
+
+  // Dawn-family drawer (Sense, Craft, etc. with cart type "drawer"): the
+  // <cart-drawer> custom element exposes renderContents(), which swaps in the
+  // 'cart-drawer'/'cart-icon-bubble' sections we requested and opens itself —
+  // the same call the theme's own product form makes.
+  function dawnDrawerSync(addBody) {
+    var drawerEl = document.querySelector('cart-drawer');
+    if (!drawerEl || typeof drawerEl.renderContents !== 'function') return false;
+    if (!(addBody && addBody.sections && addBody.sections['cart-drawer'])) return false;
+    try { drawerEl.renderContents(addBody); return true; } catch (e) { return false; }
+  }
+
+  // Prestige-family drawer: no renderContents; the theme listens for a
+  // 'cart:change' CustomEvent on documentElement carrying the full cart plus
+  // the bundled section HTML, re-renders the drawer from it, and auto-opens
+  // when cart type is "drawer". Only fire when the response actually carries
+  // the sections the theme asked for — the drawer render reads them blindly.
+  function prestigeCartSync(addBody, bundled) {
+    var drawerEl = document.querySelector('cart-drawer');
+    if (!drawerEl || typeof drawerEl.renderContents === 'function') return false;
+    if (!bundled || !bundled.length || !addBody || !addBody.sections) return false;
+    var haveAll = bundled.every(function(id) { return addBody.sections[id]; });
+    if (!haveAll) return false;
+    return fetch('/cart.js', { credentials: 'same-origin' })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(cart) {
+        if (!cart) { refreshCartUi(addBody); return; }
+        cart.sections = addBody.sections;
+        document.documentElement.dispatchEvent(new CustomEvent('cart:change', {
+          bubbles: true,
+          detail: { baseEvent: 'variant:add', cart: cart },
+        }));
+      })
+      .catch(function() {});
   }
 
   // Fluorescent themes (ORLY runs Cornerstone) don't hear DOM cart events:
@@ -235,6 +293,10 @@
           emit('quick-cart:updated');
           emit('quick-cart:open');
         } catch (e) {}
+        // The drawer refresh refetches its section server-side; on a
+        // brand-new cart that render can race the cart cookie and come back
+        // empty. One delayed re-emit self-heals that without a visible cost.
+        setTimeout(function() { try { emit('quick-cart:updated'); } catch (e) {} }, 1200);
       })
       .catch(function() {});
   }
