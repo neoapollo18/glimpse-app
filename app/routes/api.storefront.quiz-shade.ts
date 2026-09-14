@@ -6,7 +6,7 @@ import {
   getChatAssistantConfig,
   getPhotoAxes,
 } from "../lib/supabase.server";
-import { classifyPhotoAxes } from "../lib/photo-axis-classifier.server";
+import { classifyPhotoAxesForShopDetailed } from "../lib/photo-axis-classifier.server";
 import { checkRateLimit, getClientIP } from "../lib/rate-limiter.server";
 
 const CORS_HEADERS = {
@@ -101,7 +101,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const arrayBuffer = await imageFile.arrayBuffer();
     const base64Image = Buffer.from(arrayBuffer).toString("base64");
 
-    const values = await classifyPhotoAxes(base64Image, imageFile.type, photoAxes);
+    const { values, shadeNoMatch, noMatchMessage } = await classifyPhotoAxesForShopDetailed(
+      verifiedDomain,
+      base64Image,
+      imageFile.type,
+      photoAxes,
+    );
 
     // Resolve display labels so the quiz can say "Butterscotch" instead of
     // "butterscotch" without re-deriving from its own config fetch.
@@ -113,7 +118,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       if (match) labels[axis.key] = match.label;
     }
 
-    return json({ values, labels }, { headers: CORS_HEADERS });
+    // Explicit NO_MATCH (shade outside the board — grey, fashion colors) with
+    // merchant copy: the quiz shows this instead of the generic retry notice.
+    return json(
+      shadeNoMatch && noMatchMessage ? { values, labels, noMatchMessage } : { values, labels },
+      { headers: CORS_HEADERS },
+    );
   } catch (err) {
     console.error("Quiz shade error:", err);
     return json({ error: "Internal server error" }, { status: 500, headers: CORS_HEADERS });

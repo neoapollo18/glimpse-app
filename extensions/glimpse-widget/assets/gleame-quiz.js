@@ -1903,9 +1903,11 @@
       : 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:9999;background:#1a1a1a;color:#fff;' +
         'padding:10px 16px;border-radius:10px;font-size:13px;max-width:90vw;text-align:center;';
     host.appendChild(n);
+    // Longer copy (e.g. the stylist-referral message with an email address)
+    // needs to stay up long enough to actually read.
     setTimeout(function() {
       if (n.parentNode) n.parentNode.removeChild(n);
-    }, 6000);
+    }, Math.max(6000, msg.length * 60));
   }
 
   function onPhotoChosen(file, screenEl, onDone) {
@@ -1953,10 +1955,14 @@
             // indistinguishable — the shopper retried photos in a loop with
             // zero feedback. Say it, and point at the manual rail.
             trackEvent('quiz_shade_detect_failed');
+            // Server-provided copy means an explicit "shade is outside the
+            // board" verdict (merchant's stylist referral); the generic line
+            // covers transient failures where a retry can work.
             showPhotoNotice(
               screenEl,
-              'We couldn’t read your shade from that photo — natural light helps. ' +
-                'You can also pick the closest shade manually.'
+              (res && res.noMatchMessage) ||
+                'We couldn’t read your shade from that photo — natural light helps. ' +
+                  'You can also pick the closest shade manually.'
             );
           }
         })

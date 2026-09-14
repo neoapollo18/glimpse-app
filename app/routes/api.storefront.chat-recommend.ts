@@ -16,7 +16,7 @@ import {
   type Candidate,
 } from "../lib/recommendation-engine.server";
 import { transformCandidateImage } from "../lib/tryon-transform.server";
-import { classifyPhotoAxes } from "../lib/photo-axis-classifier.server";
+import { classifyPhotoAxesForShop } from "../lib/photo-axis-classifier.server";
 import { checkRateLimit, getClientIP } from "../lib/rate-limiter.server";
 import { isValidImageFile } from "../lib/storefront-api.server";
 
@@ -198,7 +198,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const photoAxes = await getPhotoAxes(verifiedShop.id);
     const missingPhotoAxes = photoAxes.filter((a) => !(a.key in criteria));
     if (missingPhotoAxes.length > 0) {
-      const photoCriteria = await classifyPhotoAxes(
+      const photoCriteria = await classifyPhotoAxesForShop(
+        verifiedDomain,
         base64Image,
         imageFile.type,
         missingPhotoAxes,

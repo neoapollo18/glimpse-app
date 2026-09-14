@@ -12,6 +12,7 @@
 
 import { compressImage } from './ai.server';
 import { geminiClient, extractGeminiText, stripJsonFences } from './gemini.server';
+import { shadeBoardConfigForShop, type ShadeBoardConfig } from './shade-board-config.server';
 
 export interface PhotoAxisSpec {
   key: string;
@@ -30,6 +31,177 @@ const PHOTO_AXIS_TIMEOUT_MS = 15_000;
 // Enough detail to separate adjacent hair/skin shades; still small enough
 // to keep the call fast.
 const PHOTO_AXIS_MAX_PX = 1024;
+
+export interface ShopPhotoClassification {
+  values: Record<string, string>;
+  /** True only when the shade-board model explicitly answered NO_MATCH. */
+  shadeNoMatch: boolean;
+  /** Merchant copy to surface to the shopper on NO_MATCH. */
+  noMatchMessage?: string;
+}
+
+/**
+ * Shop-aware entry point: shops with a shade-board config (see
+ * shade-board-config.server.ts) get the colorist board-comparison prompt for
+ * their shade axis; everything else — other axes, other shops — runs the
+ * generic classifier. Same failure contract as classifyPhotoAxes: partial
+ * values on partial success, empty values on total failure.
+ */
+export async function classifyPhotoAxesForShopDetailed(
+  shopDomain: string,
+  inputImage: string,
+  mimeType: string,
+  axes: PhotoAxisSpec[],
+): Promise<ShopPhotoClassification> {
+  const board = shadeBoardConfigForShop(shopDomain);
+  if (!board) {
+    return {
+      values: await classifyPhotoAxes(inputImage, mimeType, axes),
+      shadeNoMatch: false,
+    };
+  }
+
+  const shadeAxis = axes.find((a) => a.key === board.axisKey);
+  const rest = axes.filter((a) => a.key !== board.axisKey);
+  const [shadeResult, restValues] = await Promise.all([
+    shadeAxis
+      ? classifyShadeBoard(inputImage, mimeType, board, shadeAxis)
+      : Promise.resolve({ values: {} as Record<string, string>, noMatch: false }),
+    rest.length > 0
+      ? classifyPhotoAxes(inputImage, mimeType, rest)
+      : Promise.resolve({} as Record<string, string>),
+  ]);
+  return {
+    values: { ...restValues, ...shadeResult.values },
+    shadeNoMatch: shadeResult.noMatch,
+    noMatchMessage: shadeResult.noMatch ? board.noMatchMessage : undefined,
+  };
+}
+
+/** Values-only variant for callers that don't surface NO_MATCH copy. */
+export async function classifyPhotoAxesForShop(
+  shopDomain: string,
+  inputImage: string,
+  mimeType: string,
+  axes: PhotoAxisSpec[],
+): Promise<Record<string, string>> {
+  return (await classifyPhotoAxesForShopDetailed(shopDomain, inputImage, mimeType, axes)).values;
+}
+
+// The board image rarely changes and every classify call needs it — fetch
+// once per process, keyed by URL so a config change busts the cache.
+const boardImageCache = new Map<string, Promise<{ data: string; mimeType: string }>>();
+
+function fetchBoardImage(url: string): Promise<{ data: string; mimeType: string }> {
+  let cached = boardImageCache.get(url);
+  if (!cached) {
+    cached = (async () => {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`shade board fetch failed: ${res.status}`);
+      const buf = Buffer.from(await res.arrayBuffer());
+      return {
+        data: buf.toString('base64'),
+        mimeType: res.headers.get('content-type') || 'image/png',
+      };
+    })();
+    // A failed fetch must not poison the cache for the process lifetime.
+    cached.catch(() => boardImageCache.delete(url));
+    boardImageCache.set(url, cached);
+  }
+  return cached;
+}
+
+// Swatch names arrive as display labels ("Butter Pecan"); axis values are
+// their squashed forms ("butterpecan"). Normalize both sides to compare.
+function normalizeSwatchName(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+// The pro model works through the prompt's six steps before answering —
+// meaningfully slower than the flash classifier, so it gets a longer leash.
+const SHADE_BOARD_TIMEOUT_MS = 30_000;
+
+/**
+ * Colorist-style shade match: sends the shopper selfie (IMAGE 1) and the
+ * shop's official swatch board (IMAGE 2) through the merchant's colorist
+ * prompt, then maps the returned swatch name onto the axis value. Empty
+ * values on NO_MATCH or any failure (same manual-picker fallback as the
+ * generic classifier); noMatch is true only for an explicit NO_MATCH verdict.
+ */
+export async function classifyShadeBoard(
+  inputImage: string,
+  mimeType: string,
+  board: ShadeBoardConfig,
+  axis: PhotoAxisSpec,
+): Promise<{ values: Record<string, string>; noMatch: boolean }> {
+  try {
+    const [selfie, boardImage] = await Promise.all([
+      compressImage(inputImage, mimeType, PHOTO_AXIS_MAX_PX),
+      fetchBoardImage(board.boardImageUrl),
+    ]);
+
+    const responsePromise = geminiClient().models.generateContent({
+      model: board.model,
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: "IMAGE 1 — the customer's selfie:" },
+            { inlineData: { mimeType: selfie.compressedMimeType, data: selfie.compressedBase64 } },
+            { text: 'IMAGE 2 — the official shade board:' },
+            { inlineData: { mimeType: boardImage.mimeType, data: boardImage.data } },
+          ],
+        },
+      ],
+      config: {
+        systemInstruction: board.prompt,
+        responseMimeType: 'application/json',
+        temperature: 0,
+      },
+    });
+
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`shade-board classification timed out after ${SHADE_BOARD_TIMEOUT_MS}ms`)),
+        SHADE_BOARD_TIMEOUT_MS,
+      ),
+    );
+
+    const raw = extractGeminiText(await Promise.race([responsePromise, timeoutPromise]));
+    const parsed = JSON.parse(stripJsonFences(raw)) as {
+      match?: unknown;
+      second_match?: unknown;
+      confidence?: unknown;
+      darkness_level?: unknown;
+      tone_family?: unknown;
+      reason?: unknown;
+    };
+
+    // Full verdict in the logs: when a merchant disputes a match, this is
+    // the only record of what the model saw (the photo is never stored).
+    console.log('[shade-board] verdict:', JSON.stringify(parsed));
+
+    const match = typeof parsed.match === 'string' ? parsed.match.trim() : '';
+    if (match.toUpperCase() === 'NO_MATCH') return { values: {}, noMatch: true };
+    if (!match) return { values: {}, noMatch: false };
+
+    const normalized = normalizeSwatchName(match);
+    const value = axis.values.find(
+      (v) => v.value === normalized || normalizeSwatchName(v.label) === normalized,
+    );
+    if (!value) {
+      console.warn(`[shade-board] unmapped swatch name "${match}" for axis ${axis.key}`);
+      return { values: {}, noMatch: false };
+    }
+    return { values: { [axis.key]: value.value }, noMatch: false };
+  } catch (err) {
+    console.error(
+      '[shade-board] classification failed:',
+      err instanceof Error ? err.message : err,
+    );
+    return { values: {}, noMatch: false };
+  }
+}
 
 /**
  * Classify each photo axis into one of its defined values by looking at the
