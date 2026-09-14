@@ -208,10 +208,35 @@
           document.dispatchEvent(new CustomEvent('cart:updated', { detail: { source: 'gleame-quiz' } }));
           document.dispatchEvent(new CustomEvent('cart:refresh', { detail: { source: 'gleame-quiz' } }));
         } catch (e) { /* old browsers — ignore */ }
-        refreshCartUi(body);
+        if (!fluorescentCartSync()) refreshCartUi(body);
         return body;
       });
     });
+  }
+
+  // Fluorescent themes (ORLY runs Cornerstone) don't hear DOM cart events:
+  // their sections subscribe on an internal pubsub, so an AJAX add leaves the
+  // badge stale and the drawer shut. The theme exposes the pubsub emitter as
+  // window.Bt (minified, so feature-detect it alongside the quick-cart
+  // section before trusting it). Emitting the theme's own event sequence
+  // refreshes the drawer contents, re-renders the header badge, and opens the
+  // drawer — the same behavior as the theme's native product form.
+  function fluorescentCartSync() {
+    var emit = window.Bt;
+    if (typeof emit !== 'function') return false;
+    if (!document.querySelector('[data-section-type="quick-cart"]')) return false;
+    return fetch('/cart.js', { credentials: 'same-origin' })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(cart) {
+        // cart:updated handlers read detail.cart (free-shipping bar etc.) —
+        // only emit it when we actually have the cart to hand them.
+        if (cart) { try { emit('cart:updated', { cart: cart }); } catch (e) {} }
+        try {
+          emit('quick-cart:updated');
+          emit('quick-cart:open');
+        } catch (e) {}
+      })
+      .catch(function() {});
   }
 
   // Best-effort header cart refresh after an AJAX add. /cart/add.js changes
@@ -249,7 +274,10 @@
           var nodes = document.querySelectorAll(selectors[i]);
           for (var j = 0; j < nodes.length; j++) {
             if (nodes[j].hasAttribute('data-cart-count')) nodes[j].setAttribute('data-cart-count', count);
-            nodes[j].textContent = count;
+            // Some themes (ORLY's header) put the icon <img> inside the
+            // counted element and paint the number via attr() — writing
+            // textContent there would eat the icon.
+            if (nodes[j].children.length === 0) nodes[j].textContent = count;
           }
         }
       })
@@ -2433,8 +2461,10 @@
   }
 
   function wireAddButton(btn, variantId, quantity, compact) {
-    var original = btn.textContent;
     btn.onclick = function() {
+      // Captured at click time: the priced label may have replaced the
+      // placeholder after this button was wired.
+      var original = btn.textContent;
       btn.disabled = true;
       btn.classList.add('is-working');
       addToBag(variantId, quantity)
@@ -2498,12 +2528,25 @@
   // cart behavior can never disagree (fetchProductJson is promise-cached —
   // no extra request).
   function wirePricedAddButton(btn, match, results) {
-    btn.disabled = true;
+    var qty = Math.max(1, match.quantity || 1);
+    // Arm immediately when the matched variant is already known — the product
+    // JSON is only needed to put a price in the label. Gating the click on
+    // that fetch left a dead button while it resolved (and forever if it
+    // failed), which reads as add-to-cart lagging or ignoring taps.
+    if (match.variantNumericId) {
+      wireAddButton(btn, match.variantNumericId, qty);
+    } else {
+      btn.disabled = true;
+    }
     fetchProductJson(match.productHandle).then(function(pj) {
       var unit = priceCentsForRec(pj, match);
-      var qty = Math.max(1, match.quantity || 1);
+      // Don't stomp the transient Adding…/Added ✓ states if the shopper
+      // clicked before the price arrived.
+      if (!btn.classList.contains('is-working') && !btn.classList.contains('is-added')) {
+        btn.textContent = buildAddLabel(results.addButtonTemplate, qty, unit != null ? unit * qty : null);
+      }
+      if (match.variantNumericId) return;
       var cartVariant = variantIdForCart(pj, match);
-      btn.textContent = buildAddLabel(results.addButtonTemplate, qty, unit != null ? unit * qty : null);
       if (!cartVariant) return;
       btn.disabled = false;
       wireAddButton(btn, cartVariant, qty);
