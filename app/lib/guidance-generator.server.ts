@@ -29,7 +29,7 @@ import {
 } from "./claude.server";
 import { serializeCatalog } from "./quiz-config-schema.server";
 import { loadCatalogForShop } from "./quiz-generator.server";
-import { captureLiveConfig, getQuizDraft } from "./quiz-draft.server";
+import { captureLiveConfig } from "./quiz-draft.server";
 import { getQuestionGuidance, getChatAssistantConfig } from "./supabase.server";
 import { GENERAL_GUIDANCE_KEY } from "./quiz-guidance-shared";
 
@@ -197,10 +197,10 @@ export async function generateGuidance(args: {
   }
 
   onProgress?.("Reading your answers…");
+  // Save = live: there is one config now; `source` no longer changes what
+  // gets read (kept in the signature for call-site compatibility).
   const [config, notes, chatConfig] = await Promise.all([
-    source === "draft"
-      ? getQuizDraft(shopId).then((d) => d ?? captureLiveConfig(shopId))
-      : captureLiveConfig(shopId),
+    captureLiveConfig(shopId),
     getQuestionGuidance(shopId),
     getChatAssistantConfig(shopDomain),
   ]);
@@ -374,9 +374,8 @@ export async function draftQuestionNotes(args: {
     return { ok: false, error: "No products found. Sync your catalog first.", usage };
   }
 
-  // Studio-only feature: always draft against the DRAFT flow.
   const [config, notes] = await Promise.all([
-    getQuizDraft(shopId).then((d) => d ?? captureLiveConfig(shopId)),
+    captureLiveConfig(shopId),
     getQuestionGuidance(shopId),
   ]);
   let questions = config.flow.questions;

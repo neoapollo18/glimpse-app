@@ -522,9 +522,9 @@ export function LogicStep({ data, chatBusy }: { data: StudioLoaderData; chatBusy
         )}
 
         {currentGuidance !== "" && !review && (
-          <Banner tone="success" title="Your draft already has recommendation logic">
+          <Banner tone="success" title="Your quiz already has recommendation logic">
             Refine your notes and regenerate any time. Generating replaces the
-            draft's logic after you review it.
+            quiz's logic after you review it.
           </Banner>
         )}
 
@@ -725,12 +725,13 @@ export function LogicStep({ data, chatBusy }: { data: StudioLoaderData; chatBusy
                   <Text as="h3" variant="headingMd">
                     Review your generated logic
                   </Text>
-                  {savedToDraft && <Badge tone="attention">In draft</Badge>}
+                  {savedToDraft && <Badge tone="success">Saved</Badge>}
                 </InlineStack>
 
                 {savedToDraft && (
-                  <Banner tone="success" title="Logic saved to your draft">
-                    It goes live when you publish. Refine your notes and
+                  <Banner tone="success" title="Logic saved to your quiz">
+                    It's on your store now (shoppers see it while the quiz is
+                    turned on in the Live step). Refine your notes and
                     regenerate any time.
                   </Banner>
                 )}

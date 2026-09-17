@@ -464,6 +464,7 @@ export function PhotoEditor({
     quiz_shade_cta_manual: str(settings, "quiz_shade_cta_manual"),
   }));
   const [manualShade, setManualShade] = useState<boolean>(settings.quiz_manual_shade_enabled !== false);
+  const [gateEnabled, setGateEnabled] = useState<boolean>(settings.quiz_gate_enabled !== false);
   const setValue = (key: string, value: string) => {
     setValues((prev) => ({ ...prev, [key]: value }));
     schedule("copy", key, value);
@@ -475,6 +476,21 @@ export function PhotoEditor({
       {error && (
         <Banner tone="critical" onDismiss={clearError}>
           {error}
+        </Banner>
+      )}
+      <Checkbox
+        label="Show the photo step"
+        checked={gateEnabled}
+        disabled={disabled}
+        onChange={(v) => {
+          setGateEnabled(v);
+          schedule("copy", "quiz_gate_enabled", v);
+        }}
+        helpText="When off, shoppers go straight from the questions to their results. This preview keeps showing the step so you can style it; the results page's shade picker and try-on offer are unaffected."
+      />
+      {!gateEnabled && (
+        <Banner tone="info">
+          The photo step is turned off: shoppers skip straight to results.
         </Banner>
       )}
       <CopyField label="Headline" fieldKey="quiz_gate_headline" values={values} setValue={setValue} disabled={disabled} />

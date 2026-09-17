@@ -619,6 +619,12 @@
     if (target.screen === 'lead' && (!leadActive() || state.leadDone)) {
       target = { screen: 'gate', screenIndex: 0 };
     }
+    // A gate entry while the photo step is off resolves to the last
+    // question — Back from results must never land on the hidden step
+    // (renderGate would auto-forward and trap the Back button).
+    if (target.screen === 'gate' && !gateActive() && answered >= total && total > 0) {
+      target = { screen: 'question', screenIndex: total - 1 };
+    }
     if ((target.screen === 'gate' || target.screen === 'lead') && answered < total) {
       target = { screen: 'question', screenIndex: answered };
     }
@@ -1533,6 +1539,15 @@
     return Boolean(config && config.lead && config.lead.enabled);
   }
 
+  // Merchant toggle (migration 068): gate.enabled=false skips the photo
+  // step entirely — questions route straight to results. Absent (older
+  // cached config) means enabled. The studio preview always shows the gate
+  // so merchants can style it while it's off.
+  function gateActive() {
+    if (PREVIEW) return true;
+    return !(config && config.gate && config.gate.enabled === false);
+  }
+
   // Where the flow goes once the questions are exhausted: the lead step
   // when it's enabled and unseen, else the photo gate. Every "questions
   // complete" path (advanceFrom, the dead-screen skip) routes through here
@@ -1751,6 +1766,19 @@
 
   function renderGate() {
     var gate = config.gate || {};
+    // Gate turned off (migration 068): this screen state can still be
+    // reached (forward routing keeps the state machine's shape, stale
+    // saved sessions restore into it) — render a bare working shell and
+    // move straight on to results. Back from results never returns here:
+    // clampStep resolves a disabled gate to the last question.
+    if (!gateActive()) {
+      var shell = el('div', 'gq-step gq-step--gate-solo');
+      shell.appendChild(buildStepHeader(0, true));
+      var shellBody = el('div', 'gq-step-body');
+      shell.appendChild(shellBody);
+      goToResults(shell);
+      return shell;
+    }
     // Without a photo axis there's no tone rail: the two-column wireframe
     // layout would leave a dead right column and a lopsided page — the solo
     // variant centers the whole gate instead.

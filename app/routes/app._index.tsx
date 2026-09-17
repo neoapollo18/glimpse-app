@@ -31,7 +31,6 @@ import {
 } from "../lib/supabase.server";
 import { sendOnboardingCompleteEmail } from "../lib/email.server";
 import { useCatalogSync } from "../lib/use-catalog-sync";
-import { hasQuizDraft } from "../lib/quiz-draft.server";
 
 // ============================================================
 // Types
@@ -69,7 +68,6 @@ interface LoaderData {
     hasGuidance: boolean;
     assistantMode: string;
     quizLive: boolean;
-    hasDraft: boolean;
     vtoEnabled: boolean;
   };
   totalTransformations: number;
@@ -128,13 +126,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       ? supabase.from("shops").select("catalog_sync_cursor").eq("id", shopRow.id).maybeSingle()
       : Promise.resolve(null),
   ]);
-  const [counts, draftExists, vtoEnabled] = shopRow
+  const [counts, vtoEnabled] = shopRow
     ? await Promise.all([
         getRecommendationCounts(shopRow.id).catch(() => null),
-        hasQuizDraft(shopRow.id, { excludeSeeded: true }).catch(() => false),
         shopHasTryOnConfig(shopDomain).catch(() => true),
       ])
-    : [null, false, true];
+    : [null, true];
   const quiz = {
     questions: counts?.questions ?? 0,
     rules: counts?.rules ?? 0,
@@ -145,7 +142,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       chatConfig?.enabled &&
         (chatConfig?.assistant_mode === "quiz" || chatConfig?.assistant_mode === "both"),
     ),
-    hasDraft: draftExists,
     vtoEnabled,
   };
 
@@ -1254,9 +1250,7 @@ function DashboardView({
               {quiz.questions === 0
                 ? "Let's build your quiz. Gleame drafts the whole thing from your catalog in about a minute."
                 : quiz.quizLive
-                  ? quiz.hasDraft
-                    ? "Your quiz is live. You have unpublished edits waiting in the Studio."
-                    : "Your quiz is live and matching shoppers to products."
+                  ? "Your quiz is live and matching shoppers to products."
                   : "Your quiz isn't live yet. Build it in the Studio, then turn it on below."}
             </p>
             <div className="gleame-hero-actions">
@@ -1325,7 +1319,6 @@ function DashboardView({
               <Text as="span" variant="bodySm" tone="subdued">
                 {quiz.rules > 0 ? `${quiz.rules} rules · ` : ""}
                 {HOME_MODE_LABELS[quiz.mode] ?? quiz.mode} matching
-                {quiz.hasDraft ? " · draft in progress" : ""}
               </Text>
             </BlockStack>
           </Card>

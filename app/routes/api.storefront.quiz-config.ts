@@ -89,6 +89,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         altAudienceUrl: config.quiz_alt_audience_url,
       },
       gate: {
+        // Migration 068: false skips the photo step entirely (questions
+        // route straight to results). Older cached configs omit it —
+        // widget treats absent as enabled.
+        enabled: config.quiz_gate_enabled,
         headline: renderTokens(config.quiz_gate_headline),
         helper: renderTokens(config.quiz_gate_helper),
         photoLabel: renderTokens(config.quiz_gate_photo_label),

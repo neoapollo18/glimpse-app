@@ -1,9 +1,10 @@
-// AI quiz generation (Phase 5): brand brief + synced catalog -> draft quiz.
+// AI quiz generation (Phase 5): brand brief + synced catalog -> quiz.
 //
-// Writes DRAFTS ONLY (quiz-draft.server.ts); the merchant reviews and
-// publishes. On validation failure there is exactly one repair round-trip
-// (validator errors are sent back to the model) before giving up with a
-// friendly error.
+// Save = live: generation writes the LIVE config (only for shops with no
+// real quiz content yet; the guard below refuses to stomp an existing one).
+// It never enables the storefront surface — the Live step toggle does.
+// On validation failure there is exactly one repair round-trip (validator
+// errors are sent back to the model) before giving up with a friendly error.
 //
 // Prompt-cache structure (shared byte-identical with the copilot so both
 // surfaces hit the same cache entry):
@@ -27,9 +28,9 @@ import {
   type CatalogProduct,
   type GeneratedQuizConfig,
 } from "./quiz-config-schema.server";
-import { getQuizDraft, saveQuizDraft, type QuizDraft } from "./quiz-draft.server";
+import { captureLiveConfig, saveLiveQuizConfig, type QuizDraft } from "./quiz-draft.server";
 import { withShopSaveLock } from "./shop-save-lock.server";
-import { supabase, getVariantsForProducts, getChatAssistantConfig } from "./supabase.server";
+import { supabase, getVariantsForProducts } from "./supabase.server";
 
 export interface BrandBrief {
   category: string; // "nail polish", "hair extensions", ...
@@ -374,39 +375,35 @@ export async function generateQuizConfig(args: {
   const warnings = [...result.warnings];
   if (truncated > 0) warnings.push(`Catalog truncated: ${truncated} products were not shown to the AI`);
 
-  onProgress?.("Saving your draft…");
+  onProgress?.("Saving your quiz…");
   const draft = result.draft! as unknown as QuizDraft;
 
-  // Activation: a published quiz that stays invisible reads as broken. Turn
-  // the quiz surface on in the draft settings, preserving chat for shops
-  // that run it ('chat' becomes 'both', never silently killing the bubble).
-  try {
-    const current = await getChatAssistantConfig(shopDomain);
-    (draft.settings as Record<string, unknown>).enabled = true;
-    (draft.settings as Record<string, unknown>).assistant_mode =
-      current.assistant_mode === "chat" || current.assistant_mode === "both" ? "both" : "quiz";
-  } catch {
-    (draft.settings as Record<string, unknown>).enabled = true;
-    (draft.settings as Record<string, unknown>).assistant_mode = "quiz";
-  }
+  // NOT enabled here: save-to-live means this write IS the site config, and
+  // generation must never flip the storefront surface on as a side effect.
+  // The studio's Live step owns the on/off toggle; assistant_mode is set
+  // there too when the merchant turns it on.
   if (accentColor && /^#[0-9a-fA-F]{6}$/.test(accentColor)) {
     (draft.settings as Record<string, unknown>).quiz_accent_color = accentColor;
   }
   // Locked save with an overwrite guard: generation runs for a minute or
-  // more, and the unconditional save could stomp a draft the merchant
+  // more, and the unconditional save could stomp a quiz the merchant
   // created or meaningfully edited in that window (or in another tab).
   const saved = await withShopSaveLock(shopId, async () => {
-    const existing = await getQuizDraft(shopId);
-    const hasRealContent = existing?.flow.questions.some((q) => q.prompt.trim() !== "") ?? false;
+    const existing = await captureLiveConfig(shopId);
+    const hasRealContent = existing.flow.questions.some((q) => q.prompt.trim() !== "");
     if (hasRealContent) {
       return {
         ok: false as const,
-        error: "A quiz draft with content already exists — edit it in the studio, or discard it before generating a new one.",
+        error: "This store already has a quiz with content — edit it in the studio instead of generating over it.",
       };
     }
-    return saveQuizDraft(shopId, draft, "ai");
+    return saveLiveQuizConfig(shopId, draft, {
+      snapshotLabel: "before generated quiz",
+      forceSnapshot: true,
+      preWriteConfig: existing,
+    });
   });
-  if (!saved.ok) return { ok: false, error: `Draft save failed: ${saved.error}`, warnings, usage };
+  if (!saved.ok) return { ok: false, error: `Save failed: ${saved.error}`, warnings, usage };
 
   return {
     ok: true,

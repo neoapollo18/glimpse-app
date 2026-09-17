@@ -1,18 +1,27 @@
-// Quiz config draft/publish layer (quiz-first overhaul, Phase 2).
+// Quiz config live-editing layer (save = live, 2026-09-16 rework).
 //
-// Drafts live in quiz_config_versions (migration 058) as
-// { flow, settings } JSON, completely separate from the live tables. The AI
-// builder and the self-serve builder ONLY write drafts; the sole path to the
-// live config is publishQuizDraft, which:
-//   1. validates + referentially checks the draft,
-//   2. snapshots the CURRENT live config as an archived version (rollback
-//      insurance — the wipe-and-rewrite save destroyed admin styling once
-//      before; never again),
-//   3. writes through the existing saveRecommendationConfig RPC +
-//      saveChatAssistantConfig (whitelisted keys only).
+// The draft model is gone: the studio, the AI copilot, and the generator all
+// edit the LIVE config directly. quiz_config_versions still exists but only
+// as version history: automatic time-bucketed snapshots taken before writes,
+// restorable from the studio's Live step. What used to be "publish" is now
+// just the surface toggle (setQuizSurfaceEnabled); config edits are on the
+// site the moment they save.
 //
-// The storefront read path never touches this table. Manual editors
-// (app.assistant_.*) keep writing live exactly as before.
+// Safety model replacing the draft gate:
+//   1. Every write is preceded by an archived snapshot of the current live
+//      config (at most one per SNAPSHOT_BUCKET_MS, so an editing burst does
+//      not flood history). Restore is one click.
+//   2. Mid-edit invalid states (blank prompts, blank option labels) DO land
+//      in the live tables, but the storefront read path
+//      (getRecommendationFlow) filters them out, so shoppers only ever see
+//      the valid subset. The studio problems checklist reports these as
+//      "hidden from shoppers".
+//   3. `enabled` never flows through config saves: turning the quiz surface
+//      on/off is an explicit action, never an editing side effect.
+//
+// Concurrency: saveLiveQuizConfig does NOT take the shop save lock; every
+// caller already runs inside withShopSaveLock (studio actions, copilot tool
+// application, generator save). Taking it here too would deadlock.
 
 import {
   supabase,
@@ -24,12 +33,10 @@ import {
   type ChatAssistantConfig,
 } from "./supabase.server";
 import { normalizeFlowOrder } from "./quiz-config-schema.server";
-import { withShopSaveLock } from "./shop-save-lock.server";
-import { draftProblems } from "../components/studio/draft-problems";
-import type { StudioFlow } from "../components/studio/types";
 
 export type SaveRecommendationConfigInput = Parameters<typeof saveRecommendationConfig>[1];
 
+/** Shape kept from the draft era: every editor and applier speaks it. */
 export interface QuizDraft {
   flow: SaveRecommendationConfigInput;
   settings: Partial<ChatAssistantConfig>;
@@ -44,10 +51,18 @@ export interface VersionSummary {
   publishedAt: string | null;
 }
 
+/** One auto-snapshot per bucket while editing; restore granularity is the
+ * burst, not the keystroke. Explicit snapshots (restore, legacy-archive)
+ * bypass the bucket. */
+const SNAPSHOT_BUCKET_MS = 10 * 60 * 1000;
+const KEEP_VERSIONS = 30;
+
 /**
- * Only these chat_assistant_config fields may flow from a draft to live.
- * Everything else on that row (chat/hero/bundle settings, analytics copy)
- * is out of the builder's blast radius by construction.
+ * Only these chat_assistant_config fields may flow from a config save to
+ * live. Everything else on that row (chat/hero/bundle settings, analytics
+ * copy) is out of the builder's blast radius by construction. `enabled` is
+ * in the allowlist for capture/restore fidelity but is stripped from every
+ * write by saveLiveQuizConfig; only setQuizSurfaceEnabled writes it.
  */
 const SETTINGS_KEY_ALLOWLIST = new Set([
   "enabled",
@@ -78,94 +93,8 @@ async function domainForShop(shopId: string): Promise<string> {
     .select("shop_domain")
     .eq("id", shopId)
     .single();
-  if (error || !data) throw new Error(`quiz-draft: unknown shop id ${shopId}: ${error?.message ?? ""}`);
+  if (error || !data) throw new Error(`quiz-live: unknown shop id ${shopId}: ${error?.message ?? ""}`);
   return data.shop_domain as string;
-}
-
-/** Cheap draft-existence check (no config jsonb fetch) for pages that only
- * need to warn "an unpublished draft exists". excludeSeeded ignores drafts
- * auto-seeded from live and never edited (created_by='seed') — the studio
- * loader re-seeds seconds after every publish, and counting those made the
- * dashboard claim "unpublished edits" forever after a clean publish. */
-export async function hasQuizDraft(
-  shopId: string,
-  opts?: { excludeSeeded?: boolean },
-): Promise<boolean> {
-  let query = supabase
-    .from("quiz_config_versions")
-    .select("id", { count: "exact", head: true })
-    .eq("shop_id", shopId)
-    .eq("status", "draft");
-  if (opts?.excludeSeeded) query = query.neq("created_by", "seed");
-  const { count, error } = await query;
-  if (error) {
-    console.error("hasQuizDraft error", error);
-    return false;
-  }
-  return (count ?? 0) > 0;
-}
-
-export async function getQuizDraft(shopId: string): Promise<QuizDraft | null> {
-  const { data, error } = await supabase
-    .from("quiz_config_versions")
-    .select("config")
-    .eq("shop_id", shopId)
-    .eq("status", "draft")
-    .maybeSingle();
-  if (error) throw new Error(`quiz-draft: load failed: ${error.message}`);
-  return (data?.config as QuizDraft) ?? null;
-}
-
-export async function saveQuizDraft(
-  shopId: string,
-  draft: QuizDraft,
-  createdBy: "ai" | "manual" | "seed" = "manual",
-): Promise<{ ok: boolean; error?: string }> {
-  const now = new Date().toISOString();
-  // Update-then-insert against the one-draft-per-shop partial unique index,
-  // with write verification (an UPDATE matching 0 rows succeeds silently).
-  const { data: updated, error: updateError } = await supabase
-    .from("quiz_config_versions")
-    .update({ config: draft, created_by: createdBy, updated_at: now })
-    .eq("shop_id", shopId)
-    .eq("status", "draft")
-    .select("id");
-  if (updateError) return { ok: false, error: updateError.message };
-  if (updated && updated.length > 0) return { ok: true };
-
-  const { data: inserted, error: insertError } = await supabase
-    .from("quiz_config_versions")
-    .insert({ shop_id: shopId, status: "draft", config: draft, created_by: createdBy })
-    .select("id");
-  if (insertError) {
-    // Lost the update-then-insert race against the one-draft partial unique
-    // index (23505): another writer created the draft row between our two
-    // statements — the retry UPDATE now matches it.
-    if (insertError.code === "23505") {
-      const { data: retried, error: retryError } = await supabase
-        .from("quiz_config_versions")
-        .update({ config: draft, created_by: createdBy, updated_at: new Date().toISOString() })
-        .eq("shop_id", shopId)
-        .eq("status", "draft")
-        .select("id");
-      if (retryError || !retried?.length) {
-        return { ok: false, error: retryError?.message ?? "draft save race retry wrote 0 rows" };
-      }
-      return { ok: true };
-    }
-    return { ok: false, error: insertError.message };
-  }
-  if (!inserted?.length) return { ok: false, error: "draft insert wrote 0 rows" };
-  return { ok: true };
-}
-
-export async function discardQuizDraft(shopId: string): Promise<{ ok: boolean; error?: string }> {
-  const { error } = await supabase
-    .from("quiz_config_versions")
-    .delete()
-    .eq("shop_id", shopId)
-    .eq("status", "draft");
-  return error ? { ok: false, error: error.message } : { ok: true };
 }
 
 export async function listVersions(shopId: string): Promise<VersionSummary[]> {
@@ -175,7 +104,7 @@ export async function listVersions(shopId: string): Promise<VersionSummary[]> {
     .eq("shop_id", shopId)
     .order("created_at", { ascending: false })
     .limit(50);
-  if (error) throw new Error(`quiz-draft: listVersions failed: ${error.message}`);
+  if (error) throw new Error(`quiz-live: listVersions failed: ${error.message}`);
   return (data ?? []).map((r: any) => ({
     id: r.id,
     status: r.status,
@@ -187,8 +116,9 @@ export async function listVersions(shopId: string): Promise<VersionSummary[]> {
 }
 
 /**
- * Capture the CURRENT live config in draft shape. Used both to seed a fresh
- * draft ("Edit as draft") and as the pre-publish safety snapshot.
+ * Capture the CURRENT live config in editor shape. THE read path for every
+ * editing surface (studio loader, copilot turn start, preview, guidance).
+ * A shop with no quiz yet returns an empty flow, not null.
  */
 export async function captureLiveConfig(shopId: string): Promise<QuizDraft> {
   const shopDomain = await domainForShop(shopId);
@@ -207,7 +137,7 @@ export async function captureLiveConfig(shopId: string): Promise<QuizDraft> {
 
   // The admin questions query is unordered (PostgREST heap order) while the
   // storefront orders questions by AXIS position — sort so the captured
-  // draft's array order matches what shoppers actually see (Q1/Q2 numbering,
+  // config's array order matches what shoppers actually see (Q1/Q2 numbering,
   // showIf earlier-axis validation, and preview all depend on array order).
   const axisPositionOf = (q: (typeof admin.questions)[number]) => {
     const axis = axisById.get(q.axisId);
@@ -230,7 +160,7 @@ export async function captureLiveConfig(shopId: string): Promise<QuizDraft> {
     })),
     questions: orderedQuestions.map((q) => {
       const axis = axisById.get(q.axisId);
-      if (!axis) throw new Error(`quiz-draft: question ${q.id} references unknown axis ${q.axisId}`);
+      if (!axis) throw new Error(`quiz-live: question ${q.id} references unknown axis ${q.axisId}`);
       return {
         axisKey: axis.key,
         prompt: q.prompt,
@@ -243,7 +173,7 @@ export async function captureLiveConfig(shopId: string): Promise<QuizDraft> {
         options: q.options.map((opt, j) => {
           const axisValue = valueById.get(opt.axisValueId);
           if (!axisValue) {
-            throw new Error(`quiz-draft: option ${opt.id} references unknown axis value ${opt.axisValueId}`);
+            throw new Error(`quiz-live: option ${opt.id} references unknown axis value ${opt.axisValueId}`);
           }
           return {
             label: opt.label,
@@ -271,46 +201,23 @@ export async function captureLiveConfig(shopId: string): Promise<QuizDraft> {
   return { flow, settings: filterSettings(chatConfig) };
 }
 
-/** Seed (or return the existing) draft from the live config. */
-export async function initDraftFromLive(shopId: string): Promise<QuizDraft> {
-  const { data, error } = await supabase
-    .from("quiz_config_versions")
-    .select("config, created_by")
-    .eq("shop_id", shopId)
-    .eq("status", "draft")
-    .maybeSingle();
-  if (error) throw new Error(`quiz-draft: load failed: ${error.message}`);
-  // An edited draft is the merchant's work in progress — return it untouched.
-  // A still-'seed' draft has NO edits (every real edit path overwrites
-  // created_by via saveQuizDraft), so re-seeding is lossless — and necessary:
-  // returning a stale seed meant live edits made elsewhere (rules editor,
-  // dashboard mode toggle) were silently reverted by the next publish.
-  if (data && data.created_by !== "seed") return data.config as QuizDraft;
-  const draft = await captureLiveConfig(shopId);
-  // "seed": an auto-seeded, never-edited draft — any real edit overwrites
-  // created_by via saveQuizDraft, which is what flips "unpublished edits".
-  const saved = await saveQuizDraft(shopId, draft, "seed");
-  if (!saved.ok) throw new Error(`quiz-draft: init failed: ${saved.error}`);
-  return draft;
-}
-
 /**
  * Referential check: every rule target must exist in the shop's non-deleted
- * catalog. Drafts can go stale against catalog sync (or reference AI
- * hallucinations that slipped past generation-time validation).
- *
- * Vanished targets (product archived/deleted since the draft was seeded)
- * don't hard-block: the studio has no draft rules editor, so one archived
- * product made the ENTIRE draft unpublishable with no fix short of
- * discarding it. Publish prunes those rules instead (the runtime candidate
- * pool drops non-live products anyway, so they were already dead) and
- * reports them by product name, not raw UUID. Only rules with no target at
- * all still block.
+ * catalog. Vanished targets (product archived/deleted since the rule was
+ * written) are pruned from what goes live, not blocked: the runtime
+ * candidate pool drops non-live products anyway, and the pre-write snapshot
+ * keeps the full rule set restorable. Only rules with no target at all
+ * block the save.
  */
 async function checkRuleTargets(
   shopId: string,
   flow: SaveRecommendationConfigInput,
 ): Promise<{ blocking: string[]; pruneIndexes: Set<number>; prunedNames: string[] }> {
+  // Nothing to validate without rules — skip the catalog-wide variant
+  // fetch on the (hot) editing path of ai-mode and rule-less shops.
+  if (!flow.rules || flow.rules.length === 0) {
+    return { blocking: [], pruneIndexes: new Set(), prunedNames: [] };
+  }
   const targets = await getShopVariantsFlat(shopId);
   const productIds = new Set(targets.filter((t) => t.kind === "product").map((t) => t.id));
   const variantIds = new Set(targets.filter((t) => t.kind === "variant").map((t) => t.id));
@@ -332,9 +239,9 @@ async function checkRuleTargets(
     }
   });
 
-  // Best-effort names for the publish warning: vanished targets usually
-  // still exist as archived/soft-deleted rows, so the merchant sees
-  // "Cherry Red" instead of a UUID they can't map to anything.
+  // Best-effort names for the save warning: vanished targets usually still
+  // exist as archived/soft-deleted rows, so the merchant sees "Cherry Red"
+  // instead of a UUID they can't map to anything.
   const prunedNames: string[] = [];
   if (missingProducts.size > 0) {
     const { data } = await supabase
@@ -352,7 +259,7 @@ async function checkRuleTargets(
     const labelById = new Map(
       (data ?? []).map((v: any) => [
         v.id as string,
-        [(v.products?.product_name as string) || "", (v.variant_title as string) || ""].filter(Boolean).join(" — "),
+        [(v.products?.product_name as string) || "", (v.variant_title as string) || ""].filter(Boolean).join(" / "),
       ]),
     );
     for (const id of missingVariants) prunedNames.push(labelById.get(id) || `variant ${id.slice(0, 8)}`);
@@ -360,162 +267,55 @@ async function checkRuleTargets(
   return { blocking, pruneIndexes, prunedNames };
 }
 
-export async function publishQuizDraft(
+/**
+ * Snapshot the current live config into version history. Auto snapshots
+ * (label null) are time-bucketed; explicit ones (restore insurance, legacy
+ * draft archive) always write. Failure to snapshot ABORTS the caller's
+ * write: editing live without rollback insurance is how configs get lost.
+ */
+async function snapshotLive(
   shopId: string,
-): Promise<{ ok: boolean; error?: string; warning?: string }> {
-  // Same lock the questions-page patch saves take: publish is a
-  // snapshot-then-rewrite, and racing a live editor save would let one
-  // silently erase the other.
-  return withShopSaveLock(shopId, () => publishQuizDraftLocked(shopId));
-}
-
-async function publishQuizDraftLocked(
-  shopId: string,
-): Promise<{ ok: boolean; error?: string; warning?: string }> {
-  const shopDomain = await domainForShop(shopId);
-  const draft = await getQuizDraft(shopId);
-  if (!draft) return { ok: false, error: "No draft to publish" };
-  if (!draft.flow || !Array.isArray(draft.flow.axes)) {
-    return { ok: false, error: "Draft is malformed (missing flow.axes)" };
+  opts: { label?: string; force?: boolean; preCaptured?: QuizDraft } = {},
+): Promise<{ ok: boolean; error?: string }> {
+  if (!opts.force) {
+    const { data: newest } = await supabase
+      .from("quiz_config_versions")
+      .select("created_at")
+      .eq("shop_id", shopId)
+      .neq("status", "draft")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (newest && Date.now() - new Date(newest.created_at as string).getTime() < SNAPSHOT_BUCKET_MS) {
+      return { ok: true }; // bucket already has a snapshot; skip
+    }
   }
-
-  // The Publish checklist runs these client-side, but the server is the
-  // authority: a stale tab or a direct POST must not publish blank
-  // questions over a live config.
-  if (!Array.isArray(draft.flow.questions) || draft.flow.questions.length === 0) {
-    return { ok: false, error: "Draft has no questions — nothing to publish." };
-  }
-  const structural = draftProblems(draft.flow as unknown as StudioFlow);
-  if (structural.length > 0) {
-    return {
-      ok: false,
-      error: `Draft isn't publishable: ${structural.slice(0, 3).map((p) => p.message).join("; ")}${structural.length > 3 ? ` (+${structural.length - 3} more)` : ""}`,
-    };
-  }
-
-  const ruleCheck = await checkRuleTargets(shopId, draft.flow);
-  if (ruleCheck.blocking.length > 0) {
-    return { ok: false, error: `Draft has invalid rules: ${ruleCheck.blocking.slice(0, 5).join("; ")}` };
-  }
-  // Pruning EVERY rule would publish a quiz that recommends nothing — worse
-  // than a stale draft. That extreme still blocks (by name), except in ai
-  // mode where rules aren't the recommendation source.
-  const ruleCount = (draft.flow.rules || []).length;
-  // Editing tolerates a ruleless matrix draft (every start-from-scratch
-  // draft begins that way — see revalidate's rulelessMatrixOk); publish is
-  // where it stops, since a live matrix quiz with zero rules recommends
-  // from the generic fallback pool.
-  if (ruleCount === 0 && (draft.settings.recommendation_mode ?? "matrix") === "matrix") {
-    return {
-      ok: false,
-      error:
-        "Your quiz has no recommendation logic yet. Open the Logic step and generate it before publishing.",
-    };
-  }
-  if (
-    ruleCheck.pruneIndexes.size > 0 &&
-    ruleCheck.pruneIndexes.size >= ruleCount &&
-    (draft.settings.recommendation_mode ?? "matrix") !== "ai"
-  ) {
-    return {
-      ok: false,
-      error: `Every rule points at products no longer in your catalog (${ruleCheck.prunedNames.slice(0, 5).join(", ")}${ruleCheck.prunedNames.length > 5 ? ", …" : ""}). Restore those products or rebuild the recommendations before publishing.`,
-    };
-  }
-
-  // Safety snapshot of the live config BEFORE any write. If capture fails we
-  // abort: publishing without rollback insurance is how configs get lost.
+  // Editing callers just read the live config under the same lock — reuse
+  // it instead of re-running the multi-query capture on every save.
   let snapshot: QuizDraft;
   try {
-    snapshot = await captureLiveConfig(shopId);
+    snapshot = opts.preCaptured ?? (await captureLiveConfig(shopId));
   } catch (e) {
-    return { ok: false, error: `Could not snapshot live config, publish aborted: ${(e as Error).message}` };
+    return { ok: false, error: `could not snapshot live config: ${(e as Error).message}` };
   }
-  const { data: snapRow, error: snapError } = await supabase
+  // A shop with no quiz yet has nothing worth archiving.
+  if (snapshot.flow.questions.length === 0 && snapshot.flow.axes.length === 0) return { ok: true };
+  const { data, error } = await supabase
     .from("quiz_config_versions")
     .insert({
       shop_id: shopId,
       status: "archived",
       config: snapshot,
       created_by: "system",
-      label: "pre-publish snapshot",
+      label: opts.label ?? "auto-snapshot",
     })
     .select("id");
-  if (snapError || !snapRow?.length) {
-    return { ok: false, error: `Snapshot write failed, publish aborted: ${snapError?.message ?? "0 rows"}` };
-  }
+  if (error || !data?.length) return { ok: false, error: error?.message ?? "snapshot wrote 0 rows" };
+  return { ok: true };
+}
 
-  // Storefront question order = axis position; drafts/preview use array
-  // order. Renumber axis positions from the question array so what the
-  // merchant previewed is exactly what publishes.
-  const orderedFlow = normalizeFlowOrder(draft.flow as Parameters<typeof normalizeFlowOrder>[0]) as QuizDraft["flow"];
-
-  // Drop vanished-target rules from what goes live (the draft row keeps them,
-  // so version history can still restore the full set). Surfaced as a
-  // publish warning, not an error — the publish itself succeeds.
-  let warning: string | undefined;
-  if (ruleCheck.pruneIndexes.size > 0) {
-    orderedFlow.rules = (orderedFlow.rules || []).filter((_, i) => !ruleCheck.pruneIndexes.has(i));
-    const shown = ruleCheck.prunedNames.slice(0, 5).join(", ");
-    const more = ruleCheck.prunedNames.length > 5 ? ` (+${ruleCheck.prunedNames.length - 5} more)` : "";
-    warning = `Published, but ${ruleCheck.pruneIndexes.size} recommendation rule${ruleCheck.pruneIndexes.size === 1 ? "" : "s"} pointing at products no longer in your catalog ${ruleCheck.pruneIndexes.size === 1 ? "was" : "were"} skipped: ${shown}${more}. Restore those products and republish to bring them back.`;
-    console.warn(`quiz-draft: publish pruned ${ruleCheck.pruneIndexes.size} vanished-target rule(s) for ${shopDomain}: ${ruleCheck.prunedNames.join(", ")}`);
-  }
-
-  // Atomic RPC: constraint failure rolls back the whole flow rewrite.
-  const flowResult = await saveRecommendationConfig(shopId, orderedFlow);
-  if (!flowResult.ok) return { ok: false, error: flowResult.error };
-
-  // Only write settings keys that exist on the live config row: a stale or
-  // AI-invented quiz_* key would fail the whole upsert AFTER the flow went
-  // live (half-published state). Unknown keys are dropped loudly instead.
-  const liveSettings = (await getChatAssistantConfig(shopDomain)) as unknown as Record<string, unknown>;
-  const liveKeys = new Set(Object.keys(snapshot.settings).concat(Object.keys(liveSettings)));
-  const settingsToWrite: Record<string, unknown> = {};
-  const droppedKeys: string[] = [];
-  const snapshotSettings = snapshot.settings as Record<string, unknown>;
-  for (const [key, value] of Object.entries(filterSettings(draft.settings))) {
-    if (!liveKeys.has(key)) {
-      droppedKeys.push(key);
-      continue;
-    }
-    // Write only keys that actually CHANGED vs the pre-publish snapshot.
-    // Both sides are default-coalesced, so writing everything would pin
-    // NULL columns to literal default values on every publish.
-    if (JSON.stringify(value) !== JSON.stringify(snapshotSettings[key])) {
-      settingsToWrite[key] = value;
-    }
-  }
-  if (droppedKeys.length) {
-    console.warn(`quiz-draft: publish dropped unknown settings keys for ${shopDomain}: ${droppedKeys.join(", ")}`);
-  }
-  try {
-    await saveChatAssistantConfig(shopDomain, settingsToWrite as Partial<ChatAssistantConfig>);
-  } catch (e) {
-    // The flow IS live at this point — say so plainly instead of a generic
-    // failure (and the pre-publish snapshot above still holds the true
-    // rollback state).
-    return {
-      ok: false,
-      error: `Questions and rules published, but copy/design settings failed to save: ${(e as Error).message}. Retry publish; your previous config is archived in version history.`,
-    };
-  }
-
-  const now = new Date().toISOString();
-  const { data: published, error: publishError } = await supabase
-    .from("quiz_config_versions")
-    .update({ status: "published", published_at: now, updated_at: now })
-    .eq("shop_id", shopId)
-    .eq("status", "draft")
-    .select("id");
-  if (publishError || !published?.length) {
-    // Live write succeeded; only the bookkeeping failed. Surface but don't
-    // pretend the publish failed.
-    console.error(`quiz-draft: publish bookkeeping failed for ${shopId}:`, publishError?.message ?? "0 rows");
-  }
-
-  // Bound version history: full-config jsonb rows grow unboundedly otherwise
-  // (2 rows per publish). Keep the newest 30 non-draft versions per shop.
+async function pruneVersions(shopId: string): Promise<void> {
+  // Bound version history: full-config jsonb rows grow unboundedly otherwise.
   try {
     const { data: old } = await supabase
       .from("quiz_config_versions")
@@ -523,17 +323,146 @@ async function publishQuizDraftLocked(
       .eq("shop_id", shopId)
       .neq("status", "draft")
       .order("created_at", { ascending: false })
-      .range(30, 1029);
+      .range(KEEP_VERSIONS, KEEP_VERSIONS + 999);
     if (old?.length) {
       await supabase.from("quiz_config_versions").delete().in("id", old.map((r) => r.id));
     }
   } catch (e) {
-    console.warn(`quiz-draft: version pruning failed for ${shopId}:`, e);
+    console.warn(`quiz-live: version pruning failed for ${shopId}:`, e);
   }
+}
+
+/**
+ * Write a config to the LIVE tables. This is the single write path for the
+ * studio appliers, the copilot, the generator, and restore.
+ *
+ * MUST be called while holding withShopSaveLock(shopId) — it does not take
+ * the lock itself (its callers already do, and the lock is not reentrant).
+ */
+export async function saveLiveQuizConfig(
+  shopId: string,
+  config: QuizDraft,
+  opts: {
+    snapshotLabel?: string;
+    forceSnapshot?: boolean;
+    /** The live config as read (under the SAME lock) just before the
+     * caller applied its patches. Passing it saves a full re-capture for
+     * the pre-write snapshot AND provides the settings baseline for the
+     * changed-keys diff. Editing paths should always pass it. */
+    preWriteConfig?: QuizDraft;
+  } = {},
+): Promise<{ ok: boolean; error?: string; warning?: string }> {
+  if (!config?.flow || !Array.isArray(config.flow.axes) || !Array.isArray(config.flow.questions)) {
+    return { ok: false, error: "Malformed config (missing flow)" };
+  }
+
+  const ruleCheck = await checkRuleTargets(shopId, config.flow);
+  if (ruleCheck.blocking.length > 0) {
+    return { ok: false, error: `Invalid rules: ${ruleCheck.blocking.slice(0, 5).join("; ")}` };
+  }
+
+  const snap = await snapshotLive(shopId, {
+    label: opts.snapshotLabel,
+    force: opts.forceSnapshot,
+    preCaptured: opts.preWriteConfig,
+  });
+  if (!snap.ok) return { ok: false, error: `Save aborted: ${snap.error}` };
+
+  // Storefront question order = axis position; editors use array order.
+  // Renumber axis positions from the question array so what the merchant
+  // sees in the studio is exactly what serves.
+  const orderedFlow = normalizeFlowOrder(config.flow as Parameters<typeof normalizeFlowOrder>[0]) as QuizDraft["flow"];
+
+  let warning: string | undefined;
+  if (ruleCheck.pruneIndexes.size > 0) {
+    orderedFlow.rules = (orderedFlow.rules || []).filter((_, i) => !ruleCheck.pruneIndexes.has(i));
+    const shown = ruleCheck.prunedNames.slice(0, 5).join(", ");
+    const more = ruleCheck.prunedNames.length > 5 ? ` (+${ruleCheck.prunedNames.length - 5} more)` : "";
+    warning = `${ruleCheck.pruneIndexes.size} recommendation rule${ruleCheck.pruneIndexes.size === 1 ? "" : "s"} pointing at products no longer in your catalog ${ruleCheck.pruneIndexes.size === 1 ? "was" : "were"} skipped: ${shown}${more}.`;
+    console.warn(`quiz-live: save pruned ${ruleCheck.pruneIndexes.size} vanished-target rule(s) for shop ${shopId}: ${ruleCheck.prunedNames.join(", ")}`);
+  }
+
+  // Atomic RPC: constraint failure rolls back the whole flow rewrite.
+  const flowResult = await saveRecommendationConfig(shopId, orderedFlow);
+  if (!flowResult.ok) return { ok: false, error: flowResult.error };
+
+  // Settings: allowlisted keys, minus `enabled` (surface on/off is an
+  // explicit action, never an editing side effect), and only keys that
+  // actually CHANGED vs live. Both sides are default-coalesced, so writing
+  // everything would pin NULL columns to literal default values on every
+  // editor flush.
+  const shopDomain = await domainForShop(shopId);
+  const liveSettings = filterSettings(
+    opts.preWriteConfig?.settings ?? (await getChatAssistantConfig(shopDomain)),
+  ) as Record<string, unknown>;
+  const settingsToWrite: Record<string, unknown> = {};
+  const droppedKeys: string[] = [];
+  for (const [key, value] of Object.entries(filterSettings(config.settings))) {
+    if (key === "enabled") continue;
+    // Only write keys that exist on the live row: a stale quiz_* key (an
+    // old restored version predating a column rename, or an AI-invented
+    // key) would fail the whole settings upsert AFTER the flow already
+    // went live. Drop them loudly instead — the old publish had this
+    // guard and losing it reintroduced the half-write hazard.
+    if (!(key in liveSettings)) {
+      droppedKeys.push(key);
+      continue;
+    }
+    if (JSON.stringify(value) !== JSON.stringify(liveSettings[key])) {
+      settingsToWrite[key] = value;
+    }
+  }
+  if (droppedKeys.length) {
+    console.warn(`quiz-live: save dropped unknown settings keys for ${shopDomain}: ${droppedKeys.join(", ")}`);
+  }
+  if (Object.keys(settingsToWrite).length > 0) {
+    try {
+      await saveChatAssistantConfig(shopDomain, settingsToWrite as Partial<ChatAssistantConfig>);
+    } catch (e) {
+      return {
+        ok: false,
+        error: `Questions saved, but copy/design settings failed: ${(e as Error).message}. Your previous config is in version history.`,
+        warning,
+      };
+    }
+  }
+
+  await pruneVersions(shopId);
   return { ok: true, warning };
 }
 
-/** Copy an archived/published version into the draft slot (does NOT publish). */
+/**
+ * The one write path for the quiz surface flag: what "publish" used to
+ * gate. Turning ON also ensures assistant_mode includes the quiz surface
+ * ('chat' becomes 'both', never silently killing the bubble).
+ */
+export async function setQuizSurfaceEnabled(
+  shopId: string,
+  enabled: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  const shopDomain = await domainForShop(shopId);
+  try {
+    const patch: Partial<ChatAssistantConfig> = { enabled } as Partial<ChatAssistantConfig>;
+    if (enabled) {
+      const current = await getChatAssistantConfig(shopDomain);
+      (patch as Record<string, unknown>).assistant_mode =
+        current.assistant_mode === "chat" || current.assistant_mode === "both" ? "both" : "quiz";
+    }
+    await saveChatAssistantConfig(shopDomain, patch);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+/**
+ * Restore a version straight to LIVE (the draft slot is gone). The current
+ * live config is snapshotted first (forced, labeled), so a restore is
+ * itself always undoable. `enabled` never flows through (saveLiveQuizConfig
+ * strips it), so restoring an old version can't flip the surface.
+ *
+ * MUST be called while holding withShopSaveLock(shopId).
+ */
 export async function restoreVersion(shopId: string, versionId: string): Promise<{ ok: boolean; error?: string }> {
   const { data, error } = await supabase
     .from("quiz_config_versions")
@@ -542,5 +471,38 @@ export async function restoreVersion(shopId: string, versionId: string): Promise
     .maybeSingle();
   if (error || !data) return { ok: false, error: error?.message ?? "version not found" };
   if (data.shop_id !== shopId) return { ok: false, error: "version belongs to a different shop" };
-  return saveQuizDraft(shopId, data.config as QuizDraft, "manual");
+  return saveLiveQuizConfig(shopId, data.config as QuizDraft, {
+    snapshotLabel: "before restore",
+    forceSnapshot: true,
+  });
+}
+
+/**
+ * One-time lazy migration from the draft era: archive any leftover
+ * status='draft' row so its work stays restorable from version history.
+ * Never-edited seed drafts are just deleted (they were snapshots of live).
+ * Returns whether a real (edited) draft was archived, so the studio can
+ * tell the merchant where their old work went.
+ */
+export async function archiveLegacyDraft(shopId: string): Promise<{ archived: boolean }> {
+  const { data, error } = await supabase
+    .from("quiz_config_versions")
+    .select("id, created_by")
+    .eq("shop_id", shopId)
+    .eq("status", "draft")
+    .maybeSingle();
+  if (error || !data) return { archived: false };
+  if (data.created_by === "seed") {
+    await supabase.from("quiz_config_versions").delete().eq("id", data.id);
+    return { archived: false };
+  }
+  const { error: updErr } = await supabase
+    .from("quiz_config_versions")
+    .update({ status: "archived", label: "your old draft (from before live editing)", updated_at: new Date().toISOString() })
+    .eq("id", data.id);
+  if (updErr) {
+    console.error(`quiz-live: legacy draft archive failed for ${shopId}:`, updErr.message);
+    return { archived: false };
+  }
+  return { archived: true };
 }

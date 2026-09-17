@@ -3,17 +3,19 @@ import { Badge, Button, Popover, Box, BlockStack, Text, ProgressBar } from "@sho
 import { useCatalogSync } from "../../lib/use-catalog-sync";
 import type { StudioStep } from "../../routes/studio";
 
+// The third step keeps the internal id "publish" (URL param, step routing)
+// but is the LIVE step now: surface toggle + version history. Editing
+// saves to the store directly; there is no publish action anymore.
 const STEPS: Array<{ id: StudioStep; label: string }> = [
   { id: "build", label: "Build" },
   { id: "logic", label: "Logic" },
-  { id: "publish", label: "Publish" },
+  { id: "publish", label: "Live" },
 ];
 
 export function StudioTopBar({
   step,
   onStepChange,
   hasDraft,
-  publishing,
   problemCount,
   catalog,
   onPublishClick,
@@ -21,7 +23,6 @@ export function StudioTopBar({
   step: StudioStep;
   onStepChange: (s: StudioStep) => void;
   hasDraft: boolean;
-  publishing?: boolean;
   problemCount: number;
   catalog: { syncEnabled: boolean; cursor: string | null; productCount: number | null };
   onPublishClick: () => void;
@@ -53,18 +54,14 @@ export function StudioTopBar({
             style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
           />
         </span>
-        {publishing ? (
-          <Badge tone="attention">Publishing…</Badge>
-        ) : (
-          <Badge tone={hasDraft ? "attention" : "info"}>{hasDraft ? "Draft in progress" : "No draft"}</Badge>
-        )}
+        <Badge tone="info">{hasDraft ? "Edits save to your store" : "No quiz yet"}</Badge>
         {problemCount > 0 && (
           <button
             onClick={onPublishClick}
             style={{ border: 0, background: "transparent", padding: 0, cursor: "pointer" }}
-            title="See what needs fixing on the Publish step"
+            title="These questions are hidden from shoppers until fixed — see the Live step"
           >
-            <Badge tone="critical">Needs attention</Badge>
+            <Badge tone="critical">Hidden from shoppers</Badge>
           </button>
         )}
         {/* A persisted cursor means a sync was interrupted mid-catalog:
@@ -154,7 +151,7 @@ export function StudioTopBar({
 
       <div className="studio-topbar-right">
         <Button variant="primary" onClick={onPublishClick}>
-          Publish
+          Live
         </Button>
       </div>
     </>

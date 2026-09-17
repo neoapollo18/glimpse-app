@@ -137,6 +137,9 @@ export async function buildPreviewQuizConfig(shopDomain: string, draft: QuizDraf
       altAudienceUrl: config.quiz_alt_audience_url,
     },
     gate: {
+      // Migration 068. The widget ignores this in PREVIEW mode so the
+      // studio's Photo slide stays styleable while the step is off.
+      enabled: config.quiz_gate_enabled,
       headline: renderTokens(config.quiz_gate_headline),
       helper: renderTokens(config.quiz_gate_helper),
       photoLabel: renderTokens(config.quiz_gate_photo_label),

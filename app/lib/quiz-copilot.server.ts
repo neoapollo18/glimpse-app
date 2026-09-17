@@ -22,7 +22,7 @@ import {
 } from "./claude.server";
 import { serializeCatalog } from "./quiz-config-schema.server";
 import { buildSystemBlocks, loadCatalogForShop } from "./quiz-generator.server";
-import { getQuizDraft, saveQuizDraft, type QuizDraft } from "./quiz-draft.server";
+import { captureLiveConfig, saveLiveQuizConfig, type QuizDraft } from "./quiz-draft.server";
 import { APPLIERS, COPILOT_TOOLS, type ChangeSummary, type DraftShape } from "./quiz-copilot-tools.server";
 import { withShopSaveLock } from "./shop-save-lock.server";
 import { supabase } from "./supabase.server";
@@ -34,10 +34,10 @@ const MAX_TOOL_ITERATIONS = 6;
  * mode is the opposite — a vague prompt turning into a sweeping rewrite.
  * These rules trade thoroughness for precision and consent.
  */
-const COPILOT_BEHAVIOR_BLOCK = `YOU ARE NOW IN COPILOT MODE, editing an existing draft conversationally. These rules OVERRIDE the generation rules above where they conflict:
+const COPILOT_BEHAVIOR_BLOCK = `YOU ARE NOW IN COPILOT MODE, editing the merchant's LIVE quiz conversationally. Every applied change saves to their store immediately (the quiz shows to shoppers only while the surface is turned on); there is no separate draft or publish step, and each change is undoable. Never tell the merchant to "publish" — if they ask how to go live, point them to the Live step's on/off toggle. These rules OVERRIDE the generation rules above where they conflict:
 
 GROUND TRUTH
-- The CURRENT DRAFT SUMMARY below is the ONLY source of truth for the quiz's current state. The conversation history describes PAST states — question numbers, prompts, and option labels in it may be stale. Never quote quiz content from memory: re-read the summary, or call get_draft_details, EVERY time you describe the quiz.
+- The CURRENT QUIZ SUMMARY below is the ONLY source of truth for the quiz's current state. The conversation history describes PAST states — question numbers, prompts, and option labels in it may be stale. Never quote quiz content from memory: re-read the summary, or call get_draft_details, EVERY time you describe the quiz.
 - If the merchant says your description doesn't match what they see, call get_draft_details and reconcile from the data. Never tell them to refresh, never insist you're right.
 
 BIAS TO ACTION
@@ -173,7 +173,7 @@ async function persistSession(session: SessionRow): Promise<void> {
 /** Compact draft outline (volatile — sits AFTER the cache breakpoint). */
 function draftSummaryBlock(draft: QuizDraft): string {
   const flow = draft.flow;
-  const lines: string[] = ["CURRENT DRAFT SUMMARY:"];
+  const lines: string[] = ["CURRENT QUIZ SUMMARY (the live config):"];
   lines.push(
     `mode=${draft.settings.recommendation_mode ?? "matrix"} axes=${flow.axes.length} questions=${flow.questions.length} rules=${flow.rules.length}`,
   );
@@ -235,11 +235,11 @@ async function runCopilotTurnLocked(args: CopilotTurnArgs): Promise<{ sessionId:
 
   const [session, draftLoaded, catalog] = await Promise.all([
     loadOrCreateSession(shopId, args.sessionId),
-    getQuizDraft(shopId),
+    captureLiveConfig(shopId),
     loadCatalogForShop(shopId),
   ]);
-  if (!draftLoaded) {
-    onEvent({ type: "error", error: "No draft to edit. Generate or create a draft first." });
+  if (draftLoaded.flow.questions.length === 0) {
+    onEvent({ type: "error", error: "No quiz to edit yet. Generate or create one first." });
     return { sessionId: session.id, usage };
   }
   let draft: QuizDraft = draftLoaded;
@@ -324,9 +324,9 @@ async function runCopilotTurnLocked(args: CopilotTurnArgs): Promise<{ sessionId:
           continue;
         }
         if (toolUse.name === "get_draft_details") {
-          // Read-only: answer from the freshest draft so the model never
-          // quotes a copy the merchant has since edited.
-          const fresh = (await getQuizDraft(shopId)) ?? draft;
+          // Read-only: answer from the freshest live config so the model
+          // never quotes a copy the merchant has since edited.
+          const fresh = await captureLiveConfig(shopId).catch(() => draft);
           draft = fresh;
           const outcome = applier(fresh as DraftShape, toolUse.input, catalog);
           if (!outcome.ok) {
@@ -337,14 +337,14 @@ async function runCopilotTurnLocked(args: CopilotTurnArgs): Promise<{ sessionId:
           continue;
         }
         // Mutations join the same per-shop lock chain as manual studio
-        // saves, and re-read the draft INSIDE the lock: a turn can run for
-        // up to 90s, and applying tools to the turn-start copy silently
-        // reverted any manual edit saved in between.
+        // saves, and re-read the live config INSIDE the lock: a turn can
+        // run for up to 90s, and applying tools to the turn-start copy
+        // silently reverted any manual edit saved in between.
         const applied = await withShopSaveLock(shopId, async () => {
-          const fresh = (await getQuizDraft(shopId)) ?? draft;
+          const fresh = await captureLiveConfig(shopId).catch(() => draft);
           const outcome = applier(fresh as DraftShape, toolUse.input, catalog);
           if (!outcome.ok) return { ok: false as const, error: outcome.error };
-          const saved = await saveQuizDraft(shopId, outcome.draft as QuizDraft, "ai");
+          const saved = await saveLiveQuizConfig(shopId, outcome.draft as QuizDraft, { preWriteConfig: fresh });
           if (!saved.ok) return { ok: false as const, error: saved.error ?? "save failed" };
           return {
             ok: true as const,
@@ -382,8 +382,8 @@ async function runCopilotTurnLocked(args: CopilotTurnArgs): Promise<{ sessionId:
   } catch (err) {
     console.error("[quiz-copilot] turn failed:", err);
     // Same invariant as the truncation branch above: a throw between the
-    // assistant push and the tool_result push (e.g. getQuizDraft failing
-    // mid-loop) would otherwise persist history ending in unanswered
+    // assistant push and the tool_result push (e.g. captureLiveConfig
+    // failing mid-loop) would otherwise persist history ending in unanswered
     // tool_use blocks and brick every future turn.
     repairUnansweredToolUses(
       session,
@@ -423,15 +423,19 @@ export async function undoToSnapshot(args: {
   if (idx === -1) return { ok: false, error: "Snapshot not found (it may have been pruned)" };
 
   const snapshot = snapshots[idx];
-  // Same lock chain as every other draft writer: an unlocked restore could
+  // Same lock chain as every other config writer: an unlocked restore could
   // land inside a manual save's read-modify-write and be silently undone.
-  const saved = await withShopSaveLock(shopId, () => saveQuizDraft(shopId, snapshot.draft, "ai"));
+  // Forced snapshot first: undo writes live now, so undo itself must be
+  // undoable from version history.
+  const saved = await withShopSaveLock(shopId, () =>
+    saveLiveQuizConfig(shopId, snapshot.draft, { snapshotLabel: "before undo", forceSnapshot: true }),
+  );
   if (!saved.ok) return { ok: false, error: saved.error };
 
   const messages = [...((data.messages ?? []) as Anthropic.MessageParam[])];
   messages.push({
     role: "user",
-    content: `[The merchant clicked Undo on "${snapshot.label}". The draft has been restored to the state before that change (later changes were reverted too). Acknowledge briefly if asked; do not re-apply the undone changes unprompted.]`,
+    content: `[The merchant clicked Undo on "${snapshot.label}". The quiz has been restored to the state before that change (later changes were reverted too). Acknowledge briefly if asked; do not re-apply the undone changes unprompted.]`,
   });
 
   const { data: updated, error: updateError } = await supabase

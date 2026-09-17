@@ -92,9 +92,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ success: false, error: "Malformed payload" }, { status: 400 });
   }
 
-  // Serialized with the questions-page patch saves and draft publishes —
-  // this editor's client-built payload is a full rewrite, and racing another
-  // writer would silently erase one side's changes.
+  // Serialized with the questions-page patch saves and the studio's
+  // save-to-live writes — this editor's client-built payload is a full
+  // rewrite, and racing another writer would silently erase one side's
+  // changes.
   const result = await withShopSaveLock(shop.id, () =>
     saveRecommendationConfig(shop.id, payload),
   );

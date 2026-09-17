@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { MAX_REFERENCE_IMAGES, parseReferenceImageUrls } from './reference-images';
+import { isOptionVisible } from './option-visibility';
 
 if (!process.env.SUPABASE_URL) {
   throw new Error('SUPABASE_URL environment variable is required');
@@ -3121,6 +3122,10 @@ export interface ChatAssistantConfig {
   // handy?" / "I know my shade") — shoppers upload a photo or skip
   // (migration 054). The results-page shade gate keeps its manual picker.
   quiz_manual_shade_enabled: boolean;
+  // When false, the photo/try-on gate step is skipped entirely: questions
+  // (and the lead step, if on) route straight to results (migration 068).
+  // The results-page shade gate and try-on upsell are unaffected.
+  quiz_gate_enabled: boolean;
   // ---- Lead capture step (migration 067) ----
   // Optional email/SMS capture screen between the last question and the
   // photo gate. Off by default; the step is always skippable for shoppers.
@@ -3318,6 +3323,7 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   recommendation_tuning: { ...RECOMMENDATION_TUNING_DEFAULTS },
   quiz_shade_fallbacks: null,
   quiz_manual_shade_enabled: true,
+  quiz_gate_enabled: true,
   quiz_multi_set_prompt: null,
   quiz_lead_enabled: false,
   quiz_lead_collect_phone: false,
@@ -3483,6 +3489,7 @@ function mapChatAssistantRow(data: any): ChatAssistantConfig {
     quiz_shade_fallbacks: mapShadeFallbacks(data.quiz_shade_fallbacks),
     quiz_manual_shade_enabled:
       data.quiz_manual_shade_enabled ?? CHAT_ASSISTANT_DEFAULTS.quiz_manual_shade_enabled,
+    quiz_gate_enabled: data.quiz_gate_enabled ?? CHAT_ASSISTANT_DEFAULTS.quiz_gate_enabled,
     quiz_multi_set_prompt:
       typeof data.quiz_multi_set_prompt === 'string' && data.quiz_multi_set_prompt.trim()
         ? data.quiz_multi_set_prompt
@@ -3818,11 +3825,18 @@ export async function getRecommendationFlow(shopId: string): Promise<Recommendat
             displayMeta,
           };
         })
-        .filter((opt: any) => opt.axisValue);
-      // Drop questions whose options were all invalidated by deleted axis
-      // values — the widget would otherwise render the prompt with no
-      // buttons and the shopper would be stranded.
+        // Drop options invalidated by deleted axis values, and invisible
+        // mid-edit options: with save-to-live editing (no draft layer) an
+        // unfinished option row can exist with an empty label — shoppers
+        // never see it; the studio checklist reports it as hidden. The
+        // visibility rule is shared with the studio (option-visibility.ts).
+        .filter((opt: any) => opt.axisValue && isOptionVisible(opt));
+      // Drop questions whose options were all invalidated or invisible —
+      // the widget would otherwise render the prompt with no buttons and
+      // the shopper would be stranded. Same for blank prompts: that's a
+      // question mid-creation in the studio, not a servable one.
       if (options.length === 0) return [];
+      if (String(q.prompt ?? '').trim() === '') return [];
       // Question-level show_if shares the option-level snake_case shape;
       // malformed blobs degrade to "always asked".
       const rawQShowIf = q.show_if as { axis_key?: string; axis_value?: string } | null;

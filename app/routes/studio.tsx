@@ -4,7 +4,7 @@ import { useFetcher, useLoaderData, useRevalidator, useRouteError, useSearchPara
 import { boundary } from "@shopify/shopify-app-remix/server";
 import { AppProvider } from "@shopify/shopify-app-remix/react";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
-import { Banner, Button, Text } from "@shopify/polaris";
+import { Banner, Button, Modal, Text } from "@shopify/polaris";
 import { useCallback, useEffect, useRef, useState } from "react";
 import jwt from "jsonwebtoken";
 
@@ -19,11 +19,10 @@ import {
   getChatAssistantConfig,
 } from "../lib/supabase.server";
 import {
-  getQuizDraft,
-  saveQuizDraft,
-  initDraftFromLive,
-  discardQuizDraft,
-  publishQuizDraft,
+  captureLiveConfig,
+  saveLiveQuizConfig,
+  setQuizSurfaceEnabled,
+  archiveLegacyDraft,
   restoreVersion,
   listVersions,
   type QuizDraft,
@@ -59,10 +58,16 @@ import { navigateParent } from "../components/studio/navigate-parent";
 // billing check on every one of the many revalidations an editing session
 // produces. Same standalone-route precedent as quiz-preview[.]html.ts.
 //
-// The studio edits the DRAFT only. Manual edits go through the SAME
-// appliers the AI copilot uses (apply-tool intent), so both paths share
-// validation (including the earlier-axis showIf rule) and can never
-// produce a draft the publish path rejects for shape reasons.
+// The studio edits the LIVE config directly (save = live; the draft layer
+// is gone). Manual edits go through the SAME appliers the AI copilot uses
+// (apply-tool intent), so both paths share validation (including the
+// earlier-axis showIf rule). Every save auto-snapshots the previous state
+// into version history; mid-edit invalid questions are filtered out at
+// storefront serve time, never shown to shoppers.
+//
+// NAMING NOTE: the loader key and component props are still called `draft`
+// (QuizDraft type, data.draft) to keep this rework reviewable — they now
+// always hold the live config.
 // ---------------------------------------------------------------------
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
@@ -102,9 +107,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shop = await findShopByDomain(shopDomain);
   if (!shop) throw new Response("Shop not found", { status: 404 });
 
-  const [draftInitial, versions, shopRowRes, copilotSessionId, notes, counts, liveConfig] = await Promise.all([
-    getQuizDraft(shop.id).catch((e) => {
-      console.error("[studio] draft load failed:", e.message);
+  // Lazy migration from the draft era: park any leftover draft row in
+  // version history (restorable from the Live step) BEFORE reading live.
+  const legacy = await archiveLegacyDraft(shop.id).catch(() => ({ archived: false }));
+
+  const [liveLoaded, versions, shopRowRes, copilotSessionId, notes, counts, liveConfig] = await Promise.all([
+    captureLiveConfig(shop.id).catch((e) => {
+      console.error("[studio] live config load failed:", e.message);
       return null;
     }),
     listVersions(shop.id).catch(() => []),
@@ -117,25 +126,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shopRow = shopRowRes.data;
   const liveQuestionCount = counts?.questions ?? 0;
 
-  // Auto-seed: a shop with a live quiz but no draft gets one from live so
-  // the studio always has something to edit. Idempotent; zero-question
-  // shops are NOT seeded (the onboarding wizard's generation creates the
-  // draft itself).
-  let draft = draftInitial;
-  let seeded = false;
-  if (draft === null && liveQuestionCount > 0) {
-    try {
-      draft = await initDraftFromLive(shop.id);
-      seeded = true;
-    } catch (e) {
-      console.error("[studio] draft seed failed:", e);
-    }
-  }
+  // `draft` now IS the live config (see naming note above). A shop with no
+  // quiz yet gets null so the onboarding wizard shows.
+  const draft = liveLoaded && liveLoaded.flow.questions.length > 0 ? liveLoaded : null;
 
   // Settings the slide editors show: live quiz_* values as the base (the
-  // preview merges the same way), with draft settings overriding. A
-  // generated draft only carries the keys the AI set; everything else
-  // falls back to what's live.
+  // preview merges the same way). With save-to-live editing the captured
+  // config's settings ARE the live values; the merge stays because the
+  // capture only carries allowlisted keys while liveConfig has them all.
   const settings: Record<string, unknown> = {};
   if (liveConfig) {
     for (const [k, v] of Object.entries(liveConfig as unknown as Record<string, unknown>)) {
@@ -144,16 +142,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
   Object.assign(settings, (draft?.settings ?? {}) as Record<string, unknown>);
 
-  // Will the storefront quiz surface actually SHOW once this draft
-  // publishes? Draft settings win (publish writes them over live); a draft
-  // seeded from live carries the live enabled/assistant_mode via the
-  // settings allowlist. Storefront gate: enabled && mode in (quiz, both)
-  // (api.storefront.quiz-config). Unknown values fail open so a config
-  // load hiccup doesn't wrongly tell the merchant their quiz is hidden.
-  const draftSurface = (draft?.settings ?? {}) as Record<string, unknown>;
+  // Is the storefront quiz surface on right now? Storefront gate:
+  // enabled && mode in (quiz, both) (api.storefront.quiz-config). Unknown
+  // values fail open so a config load hiccup doesn't wrongly tell the
+  // merchant their quiz is hidden.
   const liveSurface = liveConfig as unknown as Record<string, unknown> | null;
-  const surfaceEnabled = (draftSurface.enabled ?? liveSurface?.enabled) !== false;
-  const surfaceMode = draftSurface.assistant_mode ?? liveSurface?.assistant_mode;
+  const surfaceEnabled = liveSurface?.enabled !== false;
+  const surfaceMode = liveSurface?.assistant_mode;
   const quizSurfaceEnabled =
     surfaceEnabled && (surfaceMode == null || surfaceMode === "quiz" || surfaceMode === "both");
 
@@ -235,7 +230,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     shopDomain,
     draft,
     hasDraft: draft !== null,
-    seeded,
+    legacyDraftArchived: legacy.archived,
     versions,
     notes,
     settings,
@@ -314,15 +309,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           }
         }
         const batchResult = await withShopSaveLock(shop.id, async () => {
-          let draft = await getQuizDraft(shop.id);
-          if (!draft) return { ok: false as const, error: "No draft to edit. Reload the studio." };
+          const before = await captureLiveConfig(shop.id);
           const catalog = await loadCatalogForShop(shop.id);
+          let draft = before;
           for (const c of calls) {
             const applied = APPLIERS[c.tool](draft as DraftShape, c.input, catalog);
             if (!applied.ok) return { ok: false as const, error: applied.error };
             draft = applied.draft as QuizDraft;
           }
-          const saved = await saveQuizDraft(shop.id, draft, "manual");
+          const saved = await saveLiveQuizConfig(shop.id, draft, { preWriteConfig: before });
           if (!saved.ok) return { ok: false as const, error: saved.error ?? "Save failed" };
           return { ok: true as const, draft };
         });
@@ -346,15 +341,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         } catch {
           return json({ ok: false, error: "Malformed edit", intent }, { status: 400 });
         }
-        // Serialized per shop: a copilot turn or a second tab saving the
-        // draft concurrently would otherwise interleave read-modify-write.
+        // Serialized per shop: a copilot turn or a second tab saving
+        // concurrently would otherwise interleave read-modify-write.
         const result = await withShopSaveLock(shop.id, async () => {
-          const draft = await getQuizDraft(shop.id);
-          if (!draft) return { ok: false as const, error: "No draft to edit. Reload the studio." };
+          const draft = await captureLiveConfig(shop.id);
           const catalog = await loadCatalogForShop(shop.id);
           const applied = APPLIERS[tool](draft as DraftShape, input, catalog);
           if (!applied.ok) return { ok: false as const, error: applied.error };
-          const saved = await saveQuizDraft(shop.id, applied.draft as QuizDraft, "manual");
+          // Question deletes force a labeled snapshot (the confirm dialog
+          // promises one); ordinary edits use the time-bucketed auto ones.
+          const saved = await saveLiveQuizConfig(shop.id, applied.draft as QuizDraft, {
+            preWriteConfig: draft,
+            ...(tool === "remove_question"
+              ? { snapshotLabel: "before question delete", forceSnapshot: true }
+              : {}),
+          });
           if (!saved.ok) return { ok: false as const, error: saved.error ?? "Save failed" };
           return { ok: true as const, draft: applied.draft as QuizDraft };
         });
@@ -369,10 +370,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           previewConfig,
         });
       }
-      case "init-draft": {
-        await initDraftFromLive(shop.id);
-        return json({ ok: true, intent });
-      }
       case "start-blank-draft": {
         // "Start from scratch" in the wizard: one untitled question with two
         // blank answers, ready to edit. Built directly (drafts are lazily
@@ -384,8 +381,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         const rawAccent = String(formData.get("accentColor") ?? "");
         const accentColor = /^#[0-9a-fA-F]{6}$/.test(rawAccent) ? rawAccent : null;
         const result = await withShopSaveLock(shop.id, async () => {
-          const existing = await getQuizDraft(shop.id);
-          if (existing && existing.flow.questions.length > 0) {
+          const existing = await captureLiveConfig(shop.id);
+          if (existing.flow.questions.length > 0) {
             return { ok: true as const }; // already have content; nothing to do
           }
           const blank: QuizDraft = {
@@ -421,35 +418,78 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               rules: [],
             },
             settings: {
-              ...(existing?.settings ?? {}),
+              ...(existing.settings ?? {}),
               ...(accentColor ? { quiz_accent_color: accentColor } : {}),
-              // Same activation the generator sets: without it a hand-built
-              // quiz publishes into a storefront surface that renders
-              // nothing (defaults: enabled=false, mode=chat) while the
-              // Publish screen says "shoppers see it right away".
-              enabled: true,
-              assistant_mode:
-                (existing?.settings as Record<string, unknown> | undefined)?.assistant_mode === "chat" ||
-                (existing?.settings as Record<string, unknown> | undefined)?.assistant_mode === "both"
-                  ? "both"
-                  : "quiz",
+              // NOT enabled here: with save-to-live editing the surface
+              // toggle is an explicit action on the Live step, never a
+              // side effect of starting to build.
             },
           };
-          const saved = await saveQuizDraft(shop.id, blank, "manual");
+          const saved = await saveLiveQuizConfig(shop.id, blank, { preWriteConfig: existing });
           if (!saved.ok) return { ok: false as const, error: saved.error ?? "Save failed" };
           return { ok: true as const };
         });
         return json({ ...result, intent });
       }
-      case "discard-draft": {
-        // Locked: an unlocked discard racing an in-flight apply-tool's
-        // read-modify-write let the applier's save re-insert the draft the
-        // merchant just discarded.
-        const result = await withShopSaveLock(shop.id, () => discardQuizDraft(shop.id));
+      case "set-live": {
+        // The Live step's surface toggle: the one deliberate action left
+        // from the publish era. Config edits are already on the site.
+        const enabled = String(formData.get("enabled")) === "true";
+        if (enabled) {
+          // The old publish gate, relocated: a matrix-mode quiz with zero
+          // rules recommends from the generic fallback pool — don't let it
+          // in front of shoppers. (ai/hybrid rank without rules by design.)
+          const [counts, cfg] = await Promise.all([
+            getRecommendationCounts(shop.id).catch(() => null),
+            getChatAssistantConfig(shopDomain).catch(() => null),
+          ]);
+          if ((counts?.questions ?? 0) === 0) {
+            return json({ ok: false, error: "Your quiz has no questions yet.", intent });
+          }
+          if ((counts?.rules ?? 0) === 0 && (cfg?.recommendation_mode ?? "matrix") === "matrix") {
+            return json({
+              ok: false,
+              error:
+                "Your quiz has no recommendation logic yet. Open the Logic step and generate it before turning the quiz on.",
+              intent,
+            });
+          }
+        }
+        const result = await setQuizSurfaceEnabled(shop.id, enabled);
         return json({ ...result, intent });
       }
-      case "publish": {
-        const result = await publishQuizDraft(shop.id);
+      case "start-over": {
+        // Wipe the quiz back to nothing so the onboarding wizard shows and
+        // the merchant can generate or build fresh. The current quiz is
+        // snapshotted (forced, labeled) so this is one restore away from
+        // undone. Refused while the surface is on: shoppers would hit an
+        // empty quiz between the wipe and the rebuild.
+        const result = await withShopSaveLock(shop.id, async () => {
+          const current = await captureLiveConfig(shop.id);
+          if (current.flow.questions.length === 0 && current.flow.axes.length === 0) {
+            return { ok: true as const }; // already blank
+          }
+          const cfg = await getChatAssistantConfig(shopDomain).catch(() => null);
+          const surfaceOn = Boolean(
+            cfg?.enabled && (cfg?.assistant_mode === "quiz" || cfg?.assistant_mode === "both"),
+          );
+          if (surfaceOn) {
+            return {
+              ok: false as const,
+              error: "Turn the quiz off for shoppers first (the switch above), then start over.",
+            };
+          }
+          // Settings (styling, pool, guidance) are kept — starting over
+          // rebuilds the questions, not the brand look. The snapshot holds
+          // the full old config either way.
+          const saved = await saveLiveQuizConfig(
+            shop.id,
+            { flow: { axes: [], questions: [], rules: [] }, settings: current.settings },
+            { snapshotLabel: "before start over", forceSnapshot: true, preWriteConfig: current },
+          );
+          if (!saved.ok) return { ok: false as const, error: saved.error ?? "Start over failed" };
+          return { ok: true as const };
+        });
         return json({ ...result, intent });
       }
       case "restore": {
@@ -497,8 +537,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return json({ ok: true, intent, notesDraft: drafted.draft });
       }
       case "activate-guidance": {
-        // Studio semantics: guidance + mode land in the DRAFT settings and
-        // go live at publish, atomically with the questions they reference.
+        // Guidance + mode save straight to live, same as every other edit.
         const guidanceText = String(formData.get("guidanceText") ?? "").trim();
         const mode = formData.get("mode");
         if (!guidanceText) return json({ ok: false, error: "Guidance is empty", intent });
@@ -506,14 +545,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           return json({ ok: false, error: "Invalid ranking mode", intent });
         }
         const result = await withShopSaveLock(shop.id, async () => {
-          const draft = await getQuizDraft(shop.id);
-          if (!draft) return { ok: false as const, error: "No draft to edit. Reload the studio." };
+          const draft = await captureLiveConfig(shop.id);
           const catalog = await loadCatalogForShop(shop.id);
           const g = APPLIERS.update_guidance(draft as DraftShape, { aiGuidance: guidanceText }, catalog);
           if (!g.ok) return { ok: false as const, error: g.error };
           const m = APPLIERS.update_recommendation_mode(g.draft as DraftShape, { mode }, catalog);
           if (!m.ok) return { ok: false as const, error: m.error };
-          const saved = await saveQuizDraft(shop.id, m.draft as QuizDraft, "manual");
+          const saved = await saveLiveQuizConfig(shop.id, m.draft as QuizDraft, { preWriteConfig: draft });
           if (!saved.ok) return { ok: false as const, error: saved.error ?? "Save failed" };
           return { ok: true as const };
         });
@@ -528,11 +566,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return json({ ok: deleted.ok, error: deleted.error, intent });
       }
       case "delete-all-orphan-notes": {
-        const draft = await getQuizDraft(shop.id);
-        if (!draft) {
-          // Without a draft "orphaned" is undefined — bailing beats deleting
-          // every note a shop has.
-          return json({ ok: false, error: "No draft loaded. Reload the studio.", intent });
+        const draft = await captureLiveConfig(shop.id);
+        if (draft.flow.axes.length === 0) {
+          // With no axes at all "orphaned" is undefined — bailing beats
+          // deleting every note a shop has.
+          return json({ ok: false, error: "No quiz loaded. Reload the studio.", intent });
         }
         const notes = await getQuestionGuidance(shop.id);
         const knownKeys = new Set(draft.flow.axes.map((a) => a.key));
@@ -674,6 +712,17 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
   // Post-generation warnings worth reading (e.g. brief/catalog mismatch);
   // shown once above the canvas, dismissible.
   const [genNotice, setGenNotice] = useState<string | null>(null);
+  // One-time notice after the draft-era migration: the merchant's old
+  // draft was parked in version history, not deleted.
+  const [legacyNotice, setLegacyNotice] = useState<boolean>(data.legacyDraftArchived === true);
+  // Question delete that would touch rules/branching: confirm first, then
+  // remove_question with pruneRules cleans everything in one call.
+  const [pendingDelete, setPendingDelete] = useState<{
+    axisKey: string;
+    fallbackSlide: string;
+    ruleCount: number;
+    showIfCount: number;
+  } | null>(null);
   // Bumped whenever a chat change/undo lands so the Edit tab's local form
   // state remounts with the fresh draft (manual edits are chat-gated, so
   // no in-progress typing is ever lost by the remount).
@@ -996,6 +1045,16 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
               </Banner>
             </div>
           )}
+          {legacyNotice && step === "build" && (
+            <div style={{ padding: "12px 16px 0" }}>
+              <Banner tone="info" title="The studio now edits your live quiz directly" onDismiss={() => setLegacyNotice(false)}>
+                Changes save to your store as you make them (the quiz still only
+                shows to shoppers while it's turned on in the Live step). Your
+                old draft wasn't lost: it's in version history on the Live step,
+                one click to restore.
+              </Banner>
+            </div>
+          )}
           {step === "logic" ? (
             <LogicStep data={data} chatBusy={chatBusy} />
           ) : step === "publish" ? (
@@ -1044,26 +1103,23 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
               // Hoisted here because the revalidation after a delete
               // unmounts the question editor: its own fetcher effect never
               // ran, leaving the preview on the deleted question.
-              // The server-side applier rejects a delete whose answers are
-              // still used by recommendation rules, phrased in copilot tool
-              // jargon (update_rules / removeAxis=false). Catch it up front
-              // and explain in merchant terms what unblocks it.
-              const ruleCount = (data.draft?.flow.rules ?? []).filter(
-                (r) => axisKey in r.criteria,
-              ).length;
-              if (ruleCount > 0) {
-                const qNum = questions.findIndex((q) => q.axisKey === axisKey) + 1;
-                setTreeError(
-                  `Question ${qNum} can't be deleted yet: ${
-                    ruleCount === 1
-                      ? "1 recommendation rule uses"
-                      : `${ruleCount} recommendation rules use`
-                  } its answers to pick products. Ask Gleame in the Chat tab to delete this question; it will update those rules at the same time.`,
+              // A delete that would touch rules or branching isn't blocked
+              // anymore — it confirms, then remove_question with pruneRules
+              // updates the rules and clears the branching in one call.
+              const flow = data.draft?.flow;
+              const ruleCount = (flow?.rules ?? []).filter((r) => axisKey in r.criteria).length;
+              const showIfCount =
+                (flow?.questions ?? []).filter((q) => q.showIf?.axis_key === axisKey).length +
+                (flow?.questions ?? []).reduce(
+                  (n, q) => n + q.options.filter((o) => o.showIf?.axis_key === axisKey).length,
+                  0,
                 );
+              if (ruleCount > 0 || showIfCount > 0) {
+                setPendingDelete({ axisKey, fallbackSlide, ruleCount, showIfCount });
                 return;
               }
               pendingSelectRef.current = fallbackSlide;
-              submitTreeTool("remove_question", { axisKey, removeAxis: true });
+              submitTreeTool("remove_question", { axisKey, removeAxis: true, pruneRules: true });
             }}
             onPreviewUpdate={updatePreview}
             onPreviewReload={reloadPreview}
@@ -1111,6 +1167,42 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
           ) : null
         }
       />
+      <Modal
+        open={pendingDelete !== null}
+        onClose={() => setPendingDelete(null)}
+        title="Delete this question?"
+        primaryAction={{
+          content: "Delete and clean up",
+          destructive: true,
+          onAction: () => {
+            if (!pendingDelete) return;
+            pendingSelectRef.current = pendingDelete.fallbackSlide;
+            submitTreeTool("remove_question", {
+              axisKey: pendingDelete.axisKey,
+              removeAxis: true,
+              pruneRules: true,
+            });
+            setPendingDelete(null);
+          },
+        }}
+        secondaryActions={[{ content: "Keep it", onAction: () => setPendingDelete(null) }]}
+      >
+        <Modal.Section>
+          <Text as="p">
+            {[
+              pendingDelete && pendingDelete.ruleCount > 0
+                ? `${pendingDelete.ruleCount} recommendation ${pendingDelete.ruleCount === 1 ? "rule uses" : "rules use"} this question's answers — deleting it removes that condition from ${pendingDelete.ruleCount === 1 ? "the rule" : "those rules"} (rules with no other conditions are deleted).`
+                : null,
+              pendingDelete && pendingDelete.showIfCount > 0
+                ? `${pendingDelete.showIfCount} "only show when" ${pendingDelete.showIfCount === 1 ? "condition points" : "conditions point"} at its answers — ${pendingDelete.showIfCount === 1 ? "it" : "they"} will be cleared, so the affected ${pendingDelete.showIfCount === 1 ? "question or answer" : "questions or answers"} will always show.`
+                : null,
+              "A snapshot of your current quiz is saved to version history first.",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          </Text>
+        </Modal.Section>
+      </Modal>
     </AppProvider>
   );
 }

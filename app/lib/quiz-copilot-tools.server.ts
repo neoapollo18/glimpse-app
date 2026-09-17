@@ -92,8 +92,8 @@ function revalidate(
   // draft is matrix-mode with zero rules until the Logic step runs, and
   // erroring here would reject unrelated edits (question text, copy). The
   // RULE-mutating appliers pass strictRules so the copilot still can't add
-  // hallucinated targets or empty the matrix; publish blocks the ruleless
-  // state separately (publishQuizDraftLocked).
+  // hallucinated targets or empty the matrix; a ruleless matrix quiz just
+  // serves the generic fallback pool (flagged on the Live step checklist).
   const result = validateGeneratedConfig(draftToGenerated(draft), catalog, {
     rulelessMatrixOk: !opts?.strictRules,
   });
@@ -311,18 +311,56 @@ export function applyRemoveQuestion(draft: DraftShape, input: any, catalog: Cata
   next.flow.questions.splice(idx, 1);
   let orphanNote = "";
   if (input.removeAxis) {
-    const usedByRules = next.flow.rules.some((r) => input.axisKey in r.criteria);
-    if (usedByRules) {
-      return {
-        ok: false,
-        error: `Axis "${input.axisKey}" is referenced by rules. Update the rules first (update_rules), or call again with removeAxis=false`,
-      };
-    }
-    const usedByShowIf =
-      next.flow.questions.some((q) => q.showIf?.axis_key === input.axisKey) ||
-      next.flow.questions.some((q) => q.options.some((o) => o.showIf?.axis_key === input.axisKey));
-    if (usedByShowIf) {
-      return { ok: false, error: `Axis "${input.axisKey}" is referenced by showIf conditions; update those questions first` };
+    if (input.pruneRules) {
+      // Deterministic cleanup so a question delete never dead-ends the
+      // merchant: drop this axis's condition from every rule (the rule
+      // just gets broader), delete rules left with no conditions at all,
+      // and clear show-only-when conditions that pointed at this axis
+      // (those questions become always-asked).
+      const beforeCount = next.flow.rules.length;
+      let strippedRules = 0;
+      next.flow.rules = next.flow.rules
+        .map((r) => {
+          if (!(input.axisKey in r.criteria)) return r;
+          strippedRules++;
+          const criteria = { ...r.criteria };
+          delete criteria[input.axisKey];
+          return { ...r, criteria };
+        })
+        .filter((r) => Object.keys(r.criteria).length > 0);
+      const deletedRules = beforeCount - next.flow.rules.length;
+      let clearedShowIf = 0;
+      for (const q of next.flow.questions) {
+        if (q.showIf?.axis_key === input.axisKey) {
+          q.showIf = null;
+          clearedShowIf++;
+        }
+        for (const o of q.options) {
+          if (o.showIf?.axis_key === input.axisKey) {
+            o.showIf = null;
+            clearedShowIf++;
+          }
+        }
+      }
+      const parts: string[] = [];
+      if (strippedRules - deletedRules > 0) parts.push(`updated ${strippedRules - deletedRules} rule${strippedRules - deletedRules === 1 ? "" : "s"} (removed its answer condition)`);
+      if (deletedRules > 0) parts.push(`deleted ${deletedRules} rule${deletedRules === 1 ? "" : "s"} that had no other conditions`);
+      if (clearedShowIf > 0) parts.push(`cleared ${clearedShowIf} show-only-when condition${clearedShowIf === 1 ? "" : "s"} pointing at it`);
+      if (parts.length) orphanNote = `. Also ${parts.join("; ")}`;
+    } else {
+      const usedByRules = next.flow.rules.some((r) => input.axisKey in r.criteria);
+      if (usedByRules) {
+        return {
+          ok: false,
+          error: `Axis "${input.axisKey}" is referenced by rules. Update the rules first (update_rules), call again with pruneRules=true to strip its conditions, or with removeAxis=false`,
+        };
+      }
+      const usedByShowIf =
+        next.flow.questions.some((q) => q.showIf?.axis_key === input.axisKey) ||
+        next.flow.questions.some((q) => q.options.some((o) => o.showIf?.axis_key === input.axisKey));
+      if (usedByShowIf) {
+        return { ok: false, error: `Axis "${input.axisKey}" is referenced by showIf conditions; update those questions first, or call again with pruneRules=true` };
+      }
     }
     next.flow.axes = next.flow.axes.filter((a) => a.key !== input.axisKey);
   } else {
@@ -386,6 +424,8 @@ const COPY_KEYS = new Set([
   "quiz_before_image_url", "quiz_after_image_url",
   "quiz_alt_audience_label", "quiz_alt_audience_url",
   "quiz_manual_shade_enabled",
+  // Photo step on/off (migration 068)
+  "quiz_gate_enabled",
   // Lead capture step (migration 067)
   "quiz_lead_enabled", "quiz_lead_collect_phone",
   "quiz_lead_headline", "quiz_lead_body", "quiz_lead_button_label",
@@ -396,6 +436,7 @@ const COPY_KEYS = new Set([
 // would store "true"/"false" and break the typed column at publish.
 const BOOL_COPY_KEYS = new Set([
   "quiz_manual_shade_enabled",
+  "quiz_gate_enabled",
   "quiz_lead_enabled",
   "quiz_lead_collect_phone",
 ]);
@@ -746,12 +787,13 @@ export const COPILOT_TOOLS: Anthropic.Tool[] = [
   {
     name: "remove_question",
     description:
-      "Remove a question (and optionally its axis when nothing else references it). Call when shortening the quiz. If rules reference the axis, update_rules first in the same turn.",
+      "Remove a question (and optionally its axis). If rules or showIf conditions reference the axis, either update_rules first in the same turn, or pass pruneRules=true to clean them automatically: the axis's condition is dropped from every rule (rules left with no conditions are deleted) and showIf conditions pointing at it are cleared.",
     input_schema: {
       type: "object",
       properties: {
         axisKey: { type: "string" },
         removeAxis: { type: "boolean" },
+        pruneRules: { type: "boolean" },
       },
       required: ["axisKey"],
     },

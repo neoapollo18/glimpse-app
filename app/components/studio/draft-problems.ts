@@ -1,9 +1,12 @@
-// Client-side draft validity: powers the tree warning dots, the top-bar
-// "Needs attention" badge, and the Publish checklist. Mirrors the blocking
-// subset of validateGeneratedConfig (the server stays the authority at
-// publish; this exists so problems surface while editing, with a slide to
-// jump to).
+// Client-side config validity: powers the tree warning dots, the top-bar
+// "Hidden from shoppers" badge, and the Live step checklist. With
+// save-to-live editing these never block a save — the storefront read path
+// (getRecommendationFlow) filters incomplete questions/options out of what
+// shoppers see, and this list tells the merchant what's hidden and why,
+// with a slide to jump to. Keep the blank-option visibility rule here in
+// sync with that serve-time filter.
 
+import { isOptionVisible } from "../../lib/option-visibility";
 import type { StudioFlow } from "./types";
 
 export interface DraftProblem {
@@ -23,16 +26,12 @@ export function draftProblems(flow: StudioFlow): DraftProblem[] {
     if (!q.prompt.trim()) push("Question text is empty");
     const labeled = q.options.filter((o) => o.label.trim() !== "");
     if (labeled.length < 2) push("Needs at least 2 answers");
-    // Leftover blank answers (e.g. "+ Add answer" never filled in) render as
-    // empty buttons on the storefront. Options showing an image or a color
-    // swatch are still visible without text, so only text-less AND
-    // visual-less options block. Skipped below the 2-labeled floor, which
-    // already blocks publish on its own.
+    // Leftover blank answers (e.g. "+ Add answer" never filled in) would
+    // render as empty buttons; the storefront filter hides them (shared
+    // rule: option-visibility.ts). Skipped below the 2-labeled floor,
+    // which is already flagged on its own.
     const blank = q.options.filter(
-      (o) =>
-        o.label.trim() === "" &&
-        !o.imageUrl &&
-        !(o.displayMeta as Record<string, unknown> | null | undefined)?.swatch,
+      (o) => !isOptionVisible(o as Parameters<typeof isOptionVisible>[0]),
     ).length;
     if (labeled.length >= 2 && blank > 0) {
       push(

@@ -2,7 +2,7 @@ import type { LoaderFunctionArgs } from "@remix-run/node";
 import fs from "node:fs";
 import path from "node:path";
 import jwt from "jsonwebtoken";
-import { getQuizDraft, captureLiveConfig } from "../lib/quiz-draft.server";
+import { captureLiveConfig } from "../lib/quiz-draft.server";
 import {
   buildPreviewFlow,
   buildPreviewQuizConfig,
@@ -59,7 +59,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return new Response("Invalid or expired preview token", { status: 401 });
   }
 
-  const draft = (await getQuizDraft(payload.shopId).catch(() => null)) ?? (await captureLiveConfig(payload.shopId));
+  // Save = live: the studio edits the live config, so the preview reads it
+  // too (unlike the storefront, it does NOT filter mid-edit blank
+  // questions — the merchant needs to see what they're building).
+  const draft = await captureLiveConfig(payload.shopId);
 
   const [config, sample] = await Promise.all([
     buildPreviewQuizConfig(payload.shopDomain, draft),
