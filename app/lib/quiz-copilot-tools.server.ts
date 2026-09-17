@@ -151,7 +151,9 @@ export function applyUpdateQuestionOptions(draft: DraftShape, input: any, catalo
   // VALUE identity (not array position — reorders/inserts/removals would
   // reattach them to the wrong answers otherwise). botResponse drives the
   // chat widget's reply after an answer pick; nulling it here published
-  // silent data loss for chat/both-mode shops.
+  // silent data loss for chat/both-mode shops. Images are preserved only
+  // when the caller omits the field (the copilot schema drops imageUrl);
+  // the studio editor sends it explicitly so uploads/removals stick.
   const imageByValue = new Map(
     q.options.filter((o) => o.imageUrl).map((o) => [o.axisValueValue, o.imageUrl!]),
   );
@@ -173,7 +175,10 @@ export function applyUpdateQuestionOptions(draft: DraftShape, input: any, catalo
       axisValueValue: String(opt.axisValueValue ?? ""),
       botResponse: botResponseByValue.get(String(opt.axisValueValue ?? "")) ?? null,
       reasonText: opt.reasonText ?? null,
-      imageUrl: imageByValue.get(String(opt.axisValueValue ?? "")) ?? null,
+      imageUrl:
+        "imageUrl" in opt
+          ? (typeof opt.imageUrl === "string" && opt.imageUrl ? opt.imageUrl : null)
+          : (imageByValue.get(String(opt.axisValueValue ?? "")) ?? null),
       showIf: opt.showIf ?? null,
       selectAll: Boolean(opt.selectAll),
       displayMeta: opt.displayMeta ?? null,

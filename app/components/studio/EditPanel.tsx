@@ -298,6 +298,7 @@ function QuestionEditor({
             // Keeps auto-declared axis values labeled like their answer.
             valueLabel: o.label,
             reasonText: o.reasonText ?? null,
+            imageUrl: o.imageUrl ?? null,
             showIf: o.showIf ?? null,
             selectAll: o.selectAll ?? false,
             displayMeta: o.displayMeta ?? null,
@@ -576,6 +577,7 @@ function QuestionEditor({
             flow={flow}
             question={question}
             option={opt}
+            optionStyle={optionStyle}
             index={i}
             later={later}
             disabled={disabled}
@@ -725,6 +727,7 @@ function AnswerRow({
   flow,
   question,
   option,
+  optionStyle,
   index,
   later,
   disabled,
@@ -737,6 +740,7 @@ function AnswerRow({
   flow: StudioFlow;
   question: StudioQuestion;
   option: StudioOption;
+  optionStyle: string;
   index: number;
   later: StudioQuestion[];
   disabled?: boolean;
@@ -746,7 +750,11 @@ function AnswerRow({
   onSelectSlide: (slideId: string) => void;
   onBranchToggle: (targetAxisKey: string, on: boolean) => void;
 }) {
-  const [detailsOpen, setDetailsOpen] = useState(Boolean(option.reasonText));
+  const sublabel =
+    typeof option.displayMeta?.sublabel === "string" ? option.displayMeta.sublabel : "";
+  const [detailsOpen, setDetailsOpen] = useState(
+    Boolean(option.reasonText || sublabel || (option.imageUrl && optionStyle !== "visual")),
+  );
   const [branchesOpen, setBranchesOpen] = useState(false);
 
   const reveals = later
@@ -755,7 +763,27 @@ function AnswerRow({
       ({ q }) =>
         q.showIf?.axis_key === question.axisKey && q.showIf.axis_value === option.axisValueValue,
     );
-  const hasAdvanced = Boolean(option.showIf || option.displayMeta || option.selectAll || option.imageUrl);
+  // Subtitle and image now have their own visible fields, so the badge only
+  // flags settings this editor still can't show (branch condition, select-all,
+  // tag/meter/swatch metadata).
+  const metaBeyondSublabel = Boolean(
+    option.displayMeta &&
+      Object.entries(option.displayMeta).some(
+        ([k, v]) => k !== "sublabel" && v != null && v !== "",
+      ),
+  );
+  const hasAdvanced = Boolean(option.showIf || metaBeyondSublabel || option.selectAll);
+  // "Image cards" style shows the uploader inline on every row; other styles
+  // keep it inside Details (any style can carry an image, and auto style
+  // switches to image cards once one is set).
+  const showImageInline = optionStyle === "visual";
+
+  const setSublabel = (v: string) => {
+    const meta: Record<string, unknown> = { ...(option.displayMeta ?? {}) };
+    if (v.trim() === "") delete meta.sublabel;
+    else meta.sublabel = v;
+    onChange({ displayMeta: Object.keys(meta).length > 0 ? meta : null });
+  };
 
   return (
     <Box background="bg-surface-secondary" borderRadius="200" padding="200">
@@ -791,16 +819,34 @@ function AnswerRow({
           />
         </InlineStack>
 
+        {showImageInline && (
+          <OptionImageUpload option={option} disabled={disabled} onChange={onChange} />
+        )}
+
         {detailsOpen && (
-          <TextField
-            label={`Reason for answer ${index + 1}, shown on result cards`}
-            labelHidden
-            value={option.reasonText ?? ""}
-            onChange={(v) => onChange({ reasonText: v || null })}
-            placeholder='"Why we picked this" on results (optional)'
-            disabled={disabled}
-            autoComplete="off"
-          />
+          <BlockStack gap="200">
+            <TextField
+              label="Subtitle"
+              value={sublabel}
+              onChange={setSublabel}
+              placeholder="Optional second line under this answer"
+              helpText="Shown beneath the answer on the quiz."
+              disabled={disabled}
+              autoComplete="off"
+            />
+            <TextField
+              label="Reason"
+              value={option.reasonText ?? ""}
+              onChange={(v) => onChange({ reasonText: v || null })}
+              placeholder='"Why we picked this" (optional)'
+              helpText="Shown on result cards, not on the question."
+              disabled={disabled}
+              autoComplete="off"
+            />
+            {!showImageInline && (
+              <OptionImageUpload option={option} disabled={disabled} onChange={onChange} />
+            )}
+          </BlockStack>
         )}
 
         <InlineStack gap="150" blockAlign="center" wrap>
@@ -876,6 +922,96 @@ function AnswerRow({
         </InlineStack>
       </BlockStack>
     </Box>
+  );
+}
+
+// Per-answer image for the "Image cards" style. Rides the same upload
+// endpoint as the before/after images; the URL lands on option.imageUrl,
+// which the options autosave now carries explicitly.
+function OptionImageUpload({
+  option,
+  disabled,
+  onChange,
+}: {
+  option: StudioOption;
+  disabled?: boolean;
+  onChange: (patch: Partial<StudioOption>) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const upload = async (file: File) => {
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const fd = new FormData();
+      fd.append("image", file);
+      const res = await fetch("/api/upload-avatar", { method: "POST", body: fd });
+      const data = (await res.json().catch(() => null)) as
+        | { avatarUrl?: string; error?: string }
+        | null;
+      if (data?.avatarUrl) onChange({ imageUrl: data.avatarUrl });
+      else setUploadError(data?.error ?? "Upload failed. Try a smaller JPG or PNG.");
+    } catch {
+      setUploadError("Upload failed. Check your connection and try again.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <BlockStack gap="100">
+      <InlineStack gap="200" blockAlign="center">
+        {option.imageUrl ? (
+          <img
+            src={option.imageUrl}
+            alt=""
+            style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 8, border: "1px solid #E1E3E5" }}
+          />
+        ) : (
+          <div
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 8,
+              border: "1px dashed #C9CCCF",
+              background: "#fff",
+            }}
+          />
+        )}
+        <Button size="slim" loading={uploading} disabled={disabled} onClick={() => inputRef.current?.click()}>
+          {option.imageUrl ? "Replace image" : "Upload image"}
+        </Button>
+        {option.imageUrl && (
+          <Button
+            size="slim"
+            variant="plain"
+            tone="critical"
+            disabled={disabled}
+            onClick={() => onChange({ imageUrl: null })}
+          >
+            Remove
+          </Button>
+        )}
+      </InlineStack>
+      {uploadError && (
+        <Text as="span" variant="bodySm" tone="critical">
+          {uploadError}
+        </Text>
+      )}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: "none" }}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) upload(file);
+          e.target.value = "";
+        }}
+      />
+    </BlockStack>
   );
 }
 
