@@ -1129,6 +1129,13 @@
   font-size: 12.5px;
 }
 #gleame-quiz-root .gq-match-body .gq-view-link { margin-top: var(--gq-space-2); }
+
+/* "Add all" bundle bar under the match grid (migration 070). The base
+   .gq-add-btn is already block/100% — the row just spaces it below the
+   cards at the main column's full width. */
+#gleame-quiz-root .gq-bundle-row { margin-top: var(--gq-space-5); }
+#gleame-quiz-root .gq-add-btn--bundle { padding: 18px var(--gq-space-5); font-size: 15px; }
+#gleame-quiz-root .gq-bundle-row .gq-viewbag-link { margin-top: var(--gq-space-2); }
 #gleame-quiz-root .gq-view-link {
   display: block;
   text-align: center;

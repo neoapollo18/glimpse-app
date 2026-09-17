@@ -198,27 +198,50 @@
       method: 'POST',
       headers: { 'Accept': 'application/json' },
       body: formData,
-    }).then(function(res) {
-      return res.json().then(function(body) {
-        if (!res.ok) {
-          var msg = (body && (body.description || body.message)) || ('cart add failed: ' + res.status);
-          throw new Error(msg);
-        }
-        if (body && typeof body.status === 'number' && body.status >= 400) {
-          throw new Error(body.description || body.message || ('cart add soft-failure: ' + body.status));
-        }
-        try {
-          document.dispatchEvent(new CustomEvent('cart:updated', { detail: { source: 'gleame-quiz' } }));
-          document.dispatchEvent(new CustomEvent('cart:refresh', { detail: { source: 'gleame-quiz' } }));
-        } catch (e) { /* old browsers — ignore */ }
-        var handled = false;
-        try {
-          handled = Boolean(dawnDrawerSync(body) || prestigeCartSync(body, bundled) || fluorescentCartSync());
-        } catch (e) { handled = false; }
-        if (!handled) refreshCartUi(body);
-        return body;
-      });
+    }).then(function(res) { return finishCartAdd(res, bundled); });
+  }
+
+  // Shared /cart/add.js response handling: error surfacing, cart events,
+  // per-theme drawer sync. Single- and multi-item adds must behave
+  // identically after the request or the bundle button would open a
+  // different drawer than the card buttons.
+  function finishCartAdd(res, bundled) {
+    return res.json().then(function(body) {
+      if (!res.ok) {
+        var msg = (body && (body.description || body.message)) || ('cart add failed: ' + res.status);
+        throw new Error(msg);
+      }
+      if (body && typeof body.status === 'number' && body.status >= 400) {
+        throw new Error(body.description || body.message || ('cart add soft-failure: ' + body.status));
+      }
+      try {
+        document.dispatchEvent(new CustomEvent('cart:updated', { detail: { source: 'gleame-quiz' } }));
+        document.dispatchEvent(new CustomEvent('cart:refresh', { detail: { source: 'gleame-quiz' } }));
+      } catch (e) { /* old browsers — ignore */ }
+      var handled = false;
+      try {
+        handled = Boolean(dawnDrawerSync(body) || prestigeCartSync(body, bundled) || fluorescentCartSync());
+      } catch (e) { handled = false; }
+      if (!handled) refreshCartUi(body);
+      return body;
     });
+  }
+
+  // Add several variants in one call (the results bundle button). JSON
+  // body because FormData can't carry an items array; same section
+  // rendering + theme sync as addToBag.
+  function addAllToBag(items) {
+    if (PREVIEW) return Promise.resolve({ preview: true });
+    var bundled = prestigeBundledSections();
+    return fetch('/cart/add.js', {
+      method: 'POST',
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        items: items,
+        sections: ['cart-icon-bubble', 'cart-drawer'].concat(bundled).slice(0, 5).join(','),
+        sections_url: window.location.pathname,
+      }),
+    }).then(function(res) { return finishCartAdd(res, bundled); });
   }
 
   // Prestige-family themes (Glamnetic) bundle their cart sections into cart
@@ -707,6 +730,9 @@
 
   function requestTryon(match) {
     if (PREVIEW) return Promise.resolve(null);
+    // Shop opted out of try-on generation (shade detection only) — the
+    // server rejects these anyway; don't burn the session cap on them.
+    if (config && config.tryonEnabled === false) return Promise.resolve(null);
     var key = matchKey(match);
     if (!photoFile) return Promise.resolve(null);
     if (tryonCache[key]) return Promise.resolve(tryonCache[key]);
@@ -2195,7 +2221,11 @@
   function renderResults() {
     var results = config.results || {};
     var matches = Array.isArray(state.matches) ? state.matches : [];
-    var hasPhotoNow = state.hasPhoto && Boolean(photoFile);
+    // Try-on generation off (migration 069): cards keep product images, no
+    // hero transform / "See on me" / upsell, and the headline must not
+    // claim "on you". The photo itself (shade detection) is unaffected.
+    var tryonOn = config.tryonEnabled !== false;
+    var hasPhotoNow = state.hasPhoto && Boolean(photoFile) && tryonOn;
     // Server-side 'partial' means "some rule axis unanswered" — not
     // necessarily the shade. The shade gate can only clear a partial when
     // a photo axis exists AND is still unanswered; a partial the shopper
@@ -2250,10 +2280,14 @@
     });
     main.appendChild(grid);
 
+    if (definitive && results.bundleEnabled && matches.length >= 2) {
+      main.appendChild(buildBundleRow(matches, results));
+    }
+
     if (state.partial && shadeActionable) {
       main.appendChild(buildShadeGate());
     }
-    if (definitive && !hasPhotoNow && config.upsell && config.upsell.cta) {
+    if (definitive && tryonOn && !hasPhotoNow && config.upsell && config.upsell.cta) {
       main.appendChild(buildUpsellBanner());
     }
     layout.appendChild(main);
@@ -2647,6 +2681,71 @@
       btn.disabled = false;
       wireAddButton(btn, cartVariant, qty);
     });
+  }
+
+  // "Add all" bundle row under the match grid (migration 070): one tap
+  // adds every match in a single cart call. Armed once all product JSONs
+  // resolve (promise-cached — the cards already fetch the same handles);
+  // matches without a resolvable variant are left out of the bundle, and
+  // the label's count/total reflect what will actually be added.
+  function buildBundleRow(matches, results) {
+    var template = results.bundleLabel || 'Add all {count} to bag \u00b7 {total}';
+    var row = el('div', 'gq-bundle-row');
+    var btn = el('button', 'gq-add-btn gq-add-btn--bundle', escapeHtml(buildAddLabel(template, matches.length, null)));
+    btn.type = 'button';
+    btn.disabled = true;
+    row.appendChild(btn);
+
+    Promise.all(matches.map(function(m) {
+      return m.productHandle ? fetchProductJson(m.productHandle) : Promise.resolve(null);
+    })).then(function(pjs) {
+      var items = [];
+      var total = 0;
+      var totalKnown = true;
+      matches.forEach(function(m, i) {
+        var vid = variantIdForCart(pjs[i], m);
+        if (!vid) return;
+        var qty = Math.max(1, m.quantity || 1);
+        items.push({ id: vid, quantity: qty });
+        var unit = priceCentsForRec(pjs[i], m);
+        if (unit != null) total += unit * qty;
+        else totalKnown = false;
+      });
+      if (items.length < 2) return; // nothing to bundle — row stays inert
+      btn.textContent = buildAddLabel(template, items.length, totalKnown ? total : null);
+      btn.disabled = false;
+      btn.onclick = function() {
+        var original = btn.textContent;
+        btn.disabled = true;
+        btn.classList.add('is-working');
+        addAllToBag(items)
+          .then(function() {
+            btn.classList.remove('is-working');
+            btn.classList.add('is-added');
+            btn.textContent = 'Added to bag \u2713';
+            if (btn.parentNode && !btn.parentNode.querySelector('.gq-viewbag-link')) {
+              var bagLink = el('a', 'gq-view-link gq-viewbag-link', 'View bag \u2192');
+              bagLink.href = '/cart';
+              btn.parentNode.insertBefore(bagLink, btn.nextSibling);
+            }
+            refreshCartToken().then(function() { trackEvent('quiz_add_bundle_to_bag'); });
+            setTimeout(function() {
+              btn.classList.remove('is-added');
+              btn.textContent = original;
+              btn.disabled = false;
+            }, 3200);
+          })
+          .catch(function() {
+            btn.classList.remove('is-working');
+            btn.textContent = 'Couldn\u2019t add \u2014 try again';
+            setTimeout(function() {
+              btn.textContent = original;
+              btn.disabled = false;
+            }, 2600);
+          });
+      };
+    });
+    return row;
   }
 
   function buildStickyBar(hero, results) {

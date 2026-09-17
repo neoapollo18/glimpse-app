@@ -102,6 +102,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (!chatConfig.enabled) {
       return json({ error: "Assistant not enabled" }, { status: 403, headers: CORS_HEADERS });
     }
+    // Migration 069: shop opted out of try-on generation (shade detection
+    // only). Server-side backstop so already-deployed widgets (which don't
+    // read tryonEnabled) can't keep burning paid generations.
+    if (!chatConfig.quiz_tryon_enabled) {
+      return json({ error: "Try-on disabled" }, { status: 403, headers: CORS_HEADERS });
+    }
 
     // Resolve the requested product/variant through the same scoped pool the
     // recommendation endpoints use — a GID outside the shop's configured

@@ -465,6 +465,7 @@ export function PhotoEditor({
   }));
   const [manualShade, setManualShade] = useState<boolean>(settings.quiz_manual_shade_enabled !== false);
   const [gateEnabled, setGateEnabled] = useState<boolean>(settings.quiz_gate_enabled !== false);
+  const [tryonEnabled, setTryonEnabled] = useState<boolean>(settings.quiz_tryon_enabled !== false);
   const setValue = (key: string, value: string) => {
     setValues((prev) => ({ ...prev, [key]: value }));
     schedule("copy", key, value);
@@ -493,6 +494,16 @@ export function PhotoEditor({
           The photo step is turned off: shoppers skip straight to results.
         </Banner>
       )}
+      <Checkbox
+        label="Generate try-on photos"
+        checked={tryonEnabled}
+        disabled={disabled}
+        onChange={(v) => {
+          setTryonEnabled(v);
+          schedule("copy", "quiz_tryon_enabled", v);
+        }}
+        helpText="When off, result cards keep the product photos — no AI try-on images anywhere in the quiz. The photo is still used for shade detection."
+      />
       <CopyField label="Headline" fieldKey="quiz_gate_headline" values={values} setValue={setValue} disabled={disabled} />
       <CopyField label="Helper text" fieldKey="quiz_gate_helper" values={values} setValue={setValue} disabled={disabled} multiline={2} />
       <InlineStack gap="200">
@@ -633,10 +644,12 @@ export function ResultsEditor({
     quiz_retake_label: str(settings, "quiz_retake_label"),
     quiz_show_matches_label: str(settings, "quiz_show_matches_label"),
     quiz_add_button_template: str(settings, "quiz_add_button_template"),
+    quiz_bundle_label: str(settings, "quiz_bundle_label"),
     quiz_upsell_title: str(settings, "quiz_upsell_title"),
     quiz_upsell_body: str(settings, "quiz_upsell_body"),
     quiz_upsell_cta: str(settings, "quiz_upsell_cta"),
   }));
+  const [bundleEnabled, setBundleEnabled] = useState<boolean>(settings.quiz_bundle_enabled === true);
   const setValue = (key: string, value: string) => {
     setValues((prev) => ({ ...prev, [key]: value }));
     schedule("copy", key, value);
@@ -677,6 +690,26 @@ export function ResultsEditor({
           <CopyField label="Add to cart template" fieldKey="quiz_add_button_template" values={values} setValue={setValue} disabled={disabled} helpText="{price} inserts the price" />
         </div>
       </InlineStack>
+      <Checkbox
+        label={'Show an "add all" bundle button'}
+        checked={bundleEnabled}
+        disabled={disabled}
+        onChange={(v) => {
+          setBundleEnabled(v);
+          schedule("copy", "quiz_bundle_enabled", v);
+        }}
+        helpText="Full-width button under the match cards that adds every recommended product to the cart in one tap. Only shows when there are 2+ matches."
+      />
+      {bundleEnabled && (
+        <CopyField
+          label="Bundle button label"
+          fieldKey="quiz_bundle_label"
+          values={values}
+          setValue={setValue}
+          disabled={disabled}
+          helpText="{count} inserts how many products, {total} their combined price"
+        />
+      )}
       <Text as="h4" variant="headingSm">
         Try-on upsell
       </Text>

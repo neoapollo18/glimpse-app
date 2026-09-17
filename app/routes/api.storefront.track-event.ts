@@ -75,6 +75,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       'quiz_tryon_secondary',
       'quiz_view_product',
       'quiz_add_to_cart',
+      // Results "add all" bundle button (migration 070).
+      'quiz_add_bundle_to_bag',
       'quiz_retake_photo',
       'quiz_restart',
       // Lead capture step (migration 067): step seen → submitted / skipped.

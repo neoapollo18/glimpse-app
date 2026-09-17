@@ -75,6 +75,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       introLayout: config.quiz_intro_layout,
       animationStyle: config.quiz_animation_style,
       numRecommendations: config.num_recommendations,
+      // Migration 069: false = never generate try-on images (hero
+      // transform, "See on me", post-results upsell); the photo step and
+      // shade detection are unaffected. Older cached configs omit it —
+      // widget treats absent as enabled.
+      tryonEnabled: config.quiz_tryon_enabled,
       // Framing hint reused by the camera modal on the try-on gate.
       photoFrameHint: config.photo_frame_hint,
       landing: {
@@ -115,6 +120,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         // {first_name}/{count} — resolved client-side.
         subtext: renderTokens(config.quiz_results_subtext),
         showMatchesLabel: config.quiz_show_matches_label,
+        // "Add all" bundle button (migration 070). Older cached configs
+        // omit it — widget treats absent as disabled.
+        bundleEnabled: config.quiz_bundle_enabled,
+        bundleLabel: config.quiz_bundle_label,
       },
       upsell: {
         title: renderTokens(config.quiz_upsell_title),

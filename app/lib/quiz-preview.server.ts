@@ -124,6 +124,9 @@ export async function buildPreviewQuizConfig(shopDomain: string, draft: QuizDraf
     introLayout: config.quiz_intro_layout,
     animationStyle: config.quiz_animation_style,
     numRecommendations: config.num_recommendations,
+    // Migration 069. Previews never generate try-ons anyway (requestTryon
+    // short-circuits in PREVIEW mode); carried for payload-shape parity.
+    tryonEnabled: config.quiz_tryon_enabled,
     photoFrameHint: config.photo_frame_hint,
     landing: {
       eyebrow: renderTokens(config.quiz_eyebrow),
@@ -157,6 +160,8 @@ export async function buildPreviewQuizConfig(shopDomain: string, draft: QuizDraf
       restartLabel: renderTokens(config.end_restart_label),
       subtext: renderTokens(config.quiz_results_subtext),
       showMatchesLabel: config.quiz_show_matches_label,
+      bundleEnabled: config.quiz_bundle_enabled,
+      bundleLabel: config.quiz_bundle_label,
     },
     upsell: {
       title: renderTokens(config.quiz_upsell_title),

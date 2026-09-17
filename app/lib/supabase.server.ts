@@ -3126,6 +3126,17 @@ export interface ChatAssistantConfig {
   // (and the lead step, if on) route straight to results (migration 068).
   // The results-page shade gate and try-on upsell are unaffected.
   quiz_gate_enabled: boolean;
+  // When false, the quiz never GENERATES try-on images (hero transform,
+  // "See on me" buttons, post-results upsell) and quiz-tryon rejects the
+  // shop server-side (migration 069). The photo step, shade detection, and
+  // manual shade picking are unaffected — built for Locks & Mane, whose
+  // generated photos misrepresented hair color next to the detected shade.
+  quiz_tryon_enabled: boolean;
+  // "Add all to bag" bundle button under the results match grid (migration
+  // 070): one cart call for every match. Label template shares the
+  // {count}/{set_word}/{total} vocabulary of quiz_add_button_template.
+  quiz_bundle_enabled: boolean;
+  quiz_bundle_label: string;
   // ---- Lead capture step (migration 067) ----
   // Optional email/SMS capture screen between the last question and the
   // photo gate. Off by default; the step is always skippable for shoppers.
@@ -3324,6 +3335,9 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   quiz_shade_fallbacks: null,
   quiz_manual_shade_enabled: true,
   quiz_gate_enabled: true,
+  quiz_tryon_enabled: true,
+  quiz_bundle_enabled: false,
+  quiz_bundle_label: 'Add all {count} to bag · {total}',
   quiz_multi_set_prompt: null,
   quiz_lead_enabled: false,
   quiz_lead_collect_phone: false,
@@ -3490,6 +3504,9 @@ function mapChatAssistantRow(data: any): ChatAssistantConfig {
     quiz_manual_shade_enabled:
       data.quiz_manual_shade_enabled ?? CHAT_ASSISTANT_DEFAULTS.quiz_manual_shade_enabled,
     quiz_gate_enabled: data.quiz_gate_enabled ?? CHAT_ASSISTANT_DEFAULTS.quiz_gate_enabled,
+    quiz_tryon_enabled: data.quiz_tryon_enabled ?? CHAT_ASSISTANT_DEFAULTS.quiz_tryon_enabled,
+    quiz_bundle_enabled: data.quiz_bundle_enabled ?? CHAT_ASSISTANT_DEFAULTS.quiz_bundle_enabled,
+    quiz_bundle_label: data.quiz_bundle_label ?? CHAT_ASSISTANT_DEFAULTS.quiz_bundle_label,
     quiz_multi_set_prompt:
       typeof data.quiz_multi_set_prompt === 'string' && data.quiz_multi_set_prompt.trim()
         ? data.quiz_multi_set_prompt
