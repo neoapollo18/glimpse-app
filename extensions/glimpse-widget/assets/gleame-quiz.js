@@ -800,6 +800,7 @@
       dot.onclick = function() {
         state.criteria[axis.key] = v.value;
         state.detectedShade = { axisKey: axis.key, value: v.value, label: v.label, source: 'manual' };
+        state.shadeNoMatch = null; // explicit pick supersedes the referral
         trackEvent('quiz_shade_manual');
         saveState();
         onPicked();
@@ -2007,12 +2008,18 @@
               label: (res.labels && res.labels[axis.key]) || shadeLabelFor(v),
               source: 'photo',
             };
+            state.shadeNoMatch = null;
             trackEvent('quiz_shade_detected');
           } else {
             // Failure and "couldn't classify" used to be silent and
             // indistinguishable — the shopper retried photos in a loop with
             // zero feedback. Say it, and point at the manual rail.
             trackEvent('quiz_shade_detect_failed');
+            // An explicit outside-the-board verdict persists onto the
+            // results page (the transient notice below dies with the
+            // screen swap); cleared by a successful detection or an
+            // explicit manual pick.
+            if (res && res.noMatchMessage) state.shadeNoMatch = res.noMatchMessage;
             // Server-provided copy means an explicit "shade is outside the
             // board" verdict (merchant's stylist referral); the generic line
             // covers transient failures where a retry can work.
@@ -2270,6 +2277,16 @@
           .replace(/\{match_word\}/g, matches.length === 1 ? 'match' : 'matches'))));
     }
     screen.appendChild(head);
+
+    // Outside-the-shade-board verdict (merchant's stylist referral): stays
+    // on the results page instead of flashing on the photo step. The
+    // matches below it are shade-less/nearest picks, still worth showing.
+    if (state.shadeNoMatch) {
+      var referral = el('div', 'gq-shade-referral');
+      referral.setAttribute('role', 'alert');
+      referral.appendChild(el('p', 'gq-shade-referral-text', escapeHtml(state.shadeNoMatch)));
+      screen.appendChild(referral);
+    }
 
     var layout = el('div', 'gq-results-layout');
     layout.appendChild(buildAnswersRail());

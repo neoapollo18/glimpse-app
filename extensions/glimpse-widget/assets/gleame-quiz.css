@@ -1326,6 +1326,21 @@
   letter-spacing: 0;
 }
 
+/* Stylist-referral banner when the detected shade is outside the board */
+#gleame-quiz-root .gq-shade-referral {
+  margin: 0 0 var(--gq-space-5);
+  padding: 14px var(--gq-space-5);
+  border: 1px solid #f0c9a2;
+  border-radius: var(--gq-radius-btn);
+  background: #fdf4ea;
+}
+#gleame-quiz-root .gq-shade-referral-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #7a4a12;
+}
+
 /* Restart link under the results */
 #gleame-quiz-root .gq-restart-row {
   display: flex;
