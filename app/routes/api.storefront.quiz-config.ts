@@ -124,6 +124,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         // omit it — widget treats absent as disabled.
         bundleEnabled: config.quiz_bundle_enabled,
         bundleLabel: config.quiz_bundle_label,
+        // 0 = all matches; N>0 = shopper picks N (migration 071).
+        bundleSize: config.quiz_bundle_size,
       },
       upsell: {
         title: renderTokens(config.quiz_upsell_title),

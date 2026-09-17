@@ -1136,6 +1136,28 @@
 #gleame-quiz-root .gq-bundle-row { margin-top: var(--gq-space-5); }
 #gleame-quiz-root .gq-add-btn--bundle { padding: 18px var(--gq-space-5); font-size: 15px; }
 #gleame-quiz-root .gq-bundle-row .gq-viewbag-link { margin-top: var(--gq-space-2); }
+
+/* Pick toggle on cards when bundle size < match count (migration 071) */
+#gleame-quiz-root .gq-bundle-pick {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.55);
+  color: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  transition: background 160ms ease, color 160ms ease;
+}
+#gleame-quiz-root .gq-bundle-pick.is-picked { background: var(--gq-dark); color: #ffffff; }
 #gleame-quiz-root .gq-view-link {
   display: block;
   text-align: center;

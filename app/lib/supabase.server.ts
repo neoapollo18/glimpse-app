@@ -3137,6 +3137,9 @@ export interface ChatAssistantConfig {
   // {count}/{set_word}/{total} vocabulary of quiz_add_button_template.
   quiz_bundle_enabled: boolean;
   quiz_bundle_label: string;
+  // 0 = bundle every match; N>0 = shopper picks exactly N matches (top N
+  // pre-selected) before the button arms (migration 071).
+  quiz_bundle_size: number;
   // ---- Lead capture step (migration 067) ----
   // Optional email/SMS capture screen between the last question and the
   // photo gate. Off by default; the step is always skippable for shoppers.
@@ -3338,6 +3341,7 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   quiz_tryon_enabled: true,
   quiz_bundle_enabled: false,
   quiz_bundle_label: 'Add all {count} to bag · {total}',
+  quiz_bundle_size: 0,
   quiz_multi_set_prompt: null,
   quiz_lead_enabled: false,
   quiz_lead_collect_phone: false,
@@ -3507,6 +3511,9 @@ function mapChatAssistantRow(data: any): ChatAssistantConfig {
     quiz_tryon_enabled: data.quiz_tryon_enabled ?? CHAT_ASSISTANT_DEFAULTS.quiz_tryon_enabled,
     quiz_bundle_enabled: data.quiz_bundle_enabled ?? CHAT_ASSISTANT_DEFAULTS.quiz_bundle_enabled,
     quiz_bundle_label: data.quiz_bundle_label ?? CHAT_ASSISTANT_DEFAULTS.quiz_bundle_label,
+    quiz_bundle_size: Number.isFinite(Number(data.quiz_bundle_size))
+      ? Math.max(0, Math.floor(Number(data.quiz_bundle_size)))
+      : CHAT_ASSISTANT_DEFAULTS.quiz_bundle_size,
     quiz_multi_set_prompt:
       typeof data.quiz_multi_set_prompt === 'string' && data.quiz_multi_set_prompt.trim()
         ? data.quiz_multi_set_prompt

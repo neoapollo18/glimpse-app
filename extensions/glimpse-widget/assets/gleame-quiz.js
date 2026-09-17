@@ -70,6 +70,10 @@
   var tryonCache = {};     // matchKey -> base64
   var tryonPending = {};
   var tryonCount = 0;
+  // Results bundle picker (migrations 070/071). Rebuilt on every results
+  // render; null when the bundle button is off. sel = match indexes in
+  // pick order (oldest first, so over-picking drops the oldest).
+  var bundlePicker = null;
 
   // ---- Small utilities (mirrored from gleame-chat.js) ----
 
@@ -2274,13 +2278,29 @@
     // Column count follows the match count (capped at 3) so one or two
     // curated picks render centered at card width instead of rattling
     // around the left of a fixed 3-column grid.
+    // Bundle picker state must exist before the cards render — they draw
+    // the pick toggles. Size 0 (or >= match count) bundles every match
+    // with no picking UI; N < match count arms the button only once the
+    // shopper has exactly N picked (top N pre-picked).
+    var bundleActive = definitive && results.bundleEnabled && matches.length >= 2;
+    var bundleSize = Number(results.bundleSize) > 0
+      ? Math.min(Math.floor(Number(results.bundleSize)), matches.length)
+      : matches.length;
+    bundlePicker = bundleActive ? {
+      size: bundleSize,
+      sel: matches.map(function(_, i) { return i; }).slice(0, bundleSize),
+      pickable: bundleSize < matches.length,
+      refreshers: [],
+      onChange: null,
+    } : null;
+
     var grid = el('div', 'gq-match-grid gq-match-grid--' + Math.min(matches.length, 3));
     matches.forEach(function(m, i) {
       grid.appendChild(buildMatchCard(m, i, definitive, hasPhotoNow, results));
     });
     main.appendChild(grid);
 
-    if (definitive && results.bundleEnabled && matches.length >= 2) {
+    if (bundleActive) {
       main.appendChild(buildBundleRow(matches, results));
     }
 
@@ -2430,6 +2450,7 @@
     img.alt = m.title || m.productName;
     img.loading = 'lazy';
     media.appendChild(img);
+    if (bundlePicker && bundlePicker.pickable) media.appendChild(buildBundlePick(idx));
     card.appendChild(media);
 
     var body = el('div', 'gq-match-body');
@@ -2683,68 +2704,117 @@
     });
   }
 
-  // "Add all" bundle row under the match grid (migration 070): one tap
-  // adds every match in a single cart call. Armed once all product JSONs
-  // resolve (promise-cached — the cards already fetch the same handles);
-  // matches without a resolvable variant are left out of the bundle, and
-  // the label's count/total reflect what will actually be added.
+  // Pick toggle on a match card (shown only when bundle size < match
+  // count): tap to swap which matches make up the bundle. Picking past
+  // the limit drops the OLDEST pick instead of dead-ending the shopper.
+  function buildBundlePick(idx) {
+    var bp = bundlePicker;
+    var pick = el('button', 'gq-bundle-pick');
+    pick.type = 'button';
+    pick.setAttribute('aria-label', 'Include in bundle');
+    pick.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+    function refresh() {
+      pick.classList.toggle('is-picked', bp.sel.indexOf(idx) !== -1);
+    }
+    refresh();
+    bp.refreshers.push(refresh);
+    pick.onclick = function(e) {
+      e.stopPropagation();
+      var at = bp.sel.indexOf(idx);
+      if (at !== -1) bp.sel.splice(at, 1);
+      else {
+        if (bp.sel.length >= bp.size) bp.sel.shift();
+        bp.sel.push(idx);
+      }
+      bp.refreshers.forEach(function(f) { f(); });
+      if (bp.onChange) bp.onChange();
+    };
+    return pick;
+  }
+
+  // Bundle bar under the match grid (migrations 070/071): adds the PICKED
+  // matches (all of them when no picking UI) in one cart call. Armed once
+  // the pick count hits the bundle size and the product JSONs resolve
+  // (promise-cached \u2014 the cards already fetch the same handles).
   function buildBundleRow(matches, results) {
+    var bp = bundlePicker;
     var template = results.bundleLabel || 'Add all {count} to bag \u00b7 {total}';
     var row = el('div', 'gq-bundle-row');
-    var btn = el('button', 'gq-add-btn gq-add-btn--bundle', escapeHtml(buildAddLabel(template, matches.length, null)));
+    var btn = el('button', 'gq-add-btn gq-add-btn--bundle', escapeHtml(buildAddLabel(template, bp.size, null)));
     btn.type = 'button';
     btn.disabled = true;
     row.appendChild(btn);
 
-    Promise.all(matches.map(function(m) {
-      return m.productHandle ? fetchProductJson(m.productHandle) : Promise.resolve(null);
-    })).then(function(pjs) {
+    var lines = null; // per-match {id, quantity, unit} once JSONs resolve
+    function selectedItems() {
       var items = [];
       var total = 0;
       var totalKnown = true;
-      matches.forEach(function(m, i) {
-        var vid = variantIdForCart(pjs[i], m);
-        if (!vid) return;
-        var qty = Math.max(1, m.quantity || 1);
-        items.push({ id: vid, quantity: qty });
-        var unit = priceCentsForRec(pjs[i], m);
-        if (unit != null) total += unit * qty;
+      bp.sel.forEach(function(idx) {
+        var line = lines && lines[idx];
+        if (!line || !line.id) { totalKnown = false; return; }
+        items.push({ id: line.id, quantity: line.quantity });
+        if (line.unit != null) total += line.unit * line.quantity;
         else totalKnown = false;
       });
-      if (items.length < 2) return; // nothing to bundle — row stays inert
-      btn.textContent = buildAddLabel(template, items.length, totalKnown ? total : null);
-      btn.disabled = false;
-      btn.onclick = function() {
-        var original = btn.textContent;
+      return { items: items, total: totalKnown ? total : null };
+    }
+    function refreshButton() {
+      // Don't stomp the transient Adding\u2026/Added \u2713 states.
+      if (btn.classList.contains('is-working') || btn.classList.contains('is-added')) return;
+      var missing = bp.size - bp.sel.length;
+      if (missing > 0) {
         btn.disabled = true;
-        btn.classList.add('is-working');
-        addAllToBag(items)
-          .then(function() {
-            btn.classList.remove('is-working');
-            btn.classList.add('is-added');
-            btn.textContent = 'Added to bag \u2713';
-            if (btn.parentNode && !btn.parentNode.querySelector('.gq-viewbag-link')) {
-              var bagLink = el('a', 'gq-view-link gq-viewbag-link', 'View bag \u2192');
-              bagLink.href = '/cart';
-              btn.parentNode.insertBefore(bagLink, btn.nextSibling);
-            }
-            refreshCartToken().then(function() { trackEvent('quiz_add_bundle_to_bag'); });
-            setTimeout(function() {
-              btn.classList.remove('is-added');
-              btn.textContent = original;
-              btn.disabled = false;
-            }, 3200);
-          })
-          .catch(function() {
-            btn.classList.remove('is-working');
-            btn.textContent = 'Couldn\u2019t add \u2014 try again';
-            setTimeout(function() {
-              btn.textContent = original;
-              btn.disabled = false;
-            }, 2600);
-          });
-      };
+        btn.textContent = 'Select ' + missing + ' more';
+        return;
+      }
+      var s = selectedItems();
+      btn.disabled = lines === null || s.items.length === 0;
+      btn.textContent = buildAddLabel(template, bp.size, s.total);
+    }
+    bp.onChange = refreshButton;
+
+    Promise.all(matches.map(function(m) {
+      return m.productHandle ? fetchProductJson(m.productHandle) : Promise.resolve(null);
+    })).then(function(pjs) {
+      lines = matches.map(function(m, i) {
+        return {
+          id: variantIdForCart(pjs[i], m),
+          quantity: Math.max(1, m.quantity || 1),
+          unit: priceCentsForRec(pjs[i], m),
+        };
+      });
+      refreshButton();
     });
+
+    btn.onclick = function() {
+      var s = selectedItems();
+      if (s.items.length === 0) return;
+      btn.disabled = true;
+      btn.classList.add('is-working');
+      addAllToBag(s.items)
+        .then(function() {
+          btn.classList.remove('is-working');
+          btn.classList.add('is-added');
+          btn.textContent = 'Added to bag \u2713';
+          if (btn.parentNode && !btn.parentNode.querySelector('.gq-viewbag-link')) {
+            var bagLink = el('a', 'gq-view-link gq-viewbag-link', 'View bag \u2192');
+            bagLink.href = '/cart';
+            btn.parentNode.insertBefore(bagLink, btn.nextSibling);
+          }
+          refreshCartToken().then(function() { trackEvent('quiz_add_bundle_to_bag'); });
+          setTimeout(function() {
+            btn.classList.remove('is-added');
+            refreshButton();
+          }, 3200);
+        })
+        .catch(function() {
+          btn.classList.remove('is-working');
+          btn.textContent = 'Couldn\u2019t add \u2014 try again';
+          setTimeout(refreshButton, 2600);
+        });
+    };
+    refreshButton();
     return row;
   }
 

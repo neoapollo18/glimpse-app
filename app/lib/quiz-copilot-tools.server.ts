@@ -432,8 +432,8 @@ const COPY_KEYS = new Set([
   "quiz_lead_enabled", "quiz_lead_collect_phone",
   "quiz_lead_headline", "quiz_lead_body", "quiz_lead_button_label",
   "quiz_lead_skip_label", "quiz_lead_consent_text",
-  // Results "add all" bundle button (migration 070)
-  "quiz_bundle_enabled", "quiz_bundle_label",
+  // Results "add all" bundle button (migrations 070/071)
+  "quiz_bundle_enabled", "quiz_bundle_label", "quiz_bundle_size",
 ]);
 
 // Copy keys that are booleans on the live config row — String() coercion
@@ -446,6 +446,10 @@ const BOOL_COPY_KEYS = new Set([
   "quiz_lead_collect_phone",
   "quiz_bundle_enabled",
 ]);
+
+// Copy keys that are integers on the live config row — same typed-column
+// hazard as the booleans above.
+const INT_COPY_KEYS = new Set(["quiz_bundle_size"]);
 
 export function applyUpdateCopy(draft: DraftShape, input: any, _catalog: CatalogProduct[]): ApplyResult {
   const fields = input.fields ?? {};
@@ -466,6 +470,13 @@ export function applyUpdateCopy(draft: DraftShape, input: any, _catalog: Catalog
       }
       continue;
     }
+    if (INT_COPY_KEYS.has(k)) {
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 0) {
+        return { ok: false, error: `${k} must be a whole number >= 0 (got ${JSON.stringify(v)})` };
+      }
+      continue;
+    }
     if (Array.isArray(v)) {
       if (v.some((s) => typeof s !== "string" && typeof s !== "number")) {
         return { ok: false, error: `${k}: array entries must be strings` };
@@ -478,11 +489,13 @@ export function applyUpdateCopy(draft: DraftShape, input: any, _catalog: Catalog
   for (const [k, v] of Object.entries(fields)) {
     next.settings[k] = BOOL_COPY_KEYS.has(k)
       ? v === true || v === "true"
-      : v == null
-        ? null
-        : Array.isArray(v)
-          ? v.map((s) => String(s).slice(0, 400))
-          : String(v).slice(0, 400);
+      : INT_COPY_KEYS.has(k)
+        ? Number(v)
+        : v == null
+          ? null
+          : Array.isArray(v)
+            ? v.map((s) => String(s).slice(0, 400))
+            : String(v).slice(0, 400);
   }
   return {
     ok: true,

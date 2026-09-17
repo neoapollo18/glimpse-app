@@ -162,6 +162,7 @@ export async function buildPreviewQuizConfig(shopDomain: string, draft: QuizDraf
       showMatchesLabel: config.quiz_show_matches_label,
       bundleEnabled: config.quiz_bundle_enabled,
       bundleLabel: config.quiz_bundle_label,
+      bundleSize: config.quiz_bundle_size,
     },
     upsell: {
       title: renderTokens(config.quiz_upsell_title),

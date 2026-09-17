@@ -650,6 +650,10 @@ export function ResultsEditor({
     quiz_upsell_cta: str(settings, "quiz_upsell_cta"),
   }));
   const [bundleEnabled, setBundleEnabled] = useState<boolean>(settings.quiz_bundle_enabled === true);
+  const [bundleSize, setBundleSize] = useState<string>(() => {
+    const n = Number(settings.quiz_bundle_size);
+    return Number.isInteger(n) && n > 0 ? String(n) : "";
+  });
   const setValue = (key: string, value: string) => {
     setValues((prev) => ({ ...prev, [key]: value }));
     schedule("copy", key, value);
@@ -701,14 +705,34 @@ export function ResultsEditor({
         helpText="Full-width button under the match cards that adds every recommended product to the cart in one tap. Only shows when there are 2+ matches."
       />
       {bundleEnabled && (
-        <CopyField
-          label="Bundle button label"
-          fieldKey="quiz_bundle_label"
-          values={values}
-          setValue={setValue}
-          disabled={disabled}
-          helpText="{count} inserts how many products, {total} their combined price"
-        />
+        <InlineStack gap="200" blockAlign="start">
+          <div style={{ flex: 2, minWidth: 180 }}>
+            <CopyField
+              label="Bundle button label"
+              fieldKey="quiz_bundle_label"
+              values={values}
+              setValue={setValue}
+              disabled={disabled}
+              helpText="{count} inserts how many products, {total} their combined price"
+            />
+          </div>
+          <div style={{ flex: 1, minWidth: 110 }}>
+            <TextField
+              label="Bundle size"
+              type="number"
+              min={0}
+              autoComplete="off"
+              value={bundleSize}
+              disabled={disabled}
+              onChange={(v) => {
+                setBundleSize(v);
+                const n = Math.max(0, Math.floor(Number(v) || 0));
+                schedule("copy", "quiz_bundle_size", n);
+              }}
+              helpText="Shoppers pick this many matches; blank or 0 bundles all of them"
+            />
+          </div>
+        </InlineStack>
       )}
       <Text as="h4" variant="headingSm">
         Try-on upsell
