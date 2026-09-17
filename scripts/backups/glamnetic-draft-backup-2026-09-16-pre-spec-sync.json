@@ -1,0 +1,997 @@
+[
+ {
+  "id": "7a6e7d02-4581-42dd-b986-e357eeebcea8",
+  "config": {
+   "flow": {
+    "axes": [
+     {
+      "key": "vibe",
+      "label": "Vibe",
+      "source": "user_question",
+      "values": [
+       {
+        "label": "Model off-duty",
+        "value": "model_off_duty",
+        "position": 0,
+        "swatchColor": null
+       },
+       {
+        "label": "Soft & sweet",
+        "value": "soft_sweet",
+        "position": 1,
+        "swatchColor": null
+       },
+       {
+        "label": "French girl forever",
+        "value": "french_girl",
+        "position": 2,
+        "swatchColor": null
+       },
+       {
+        "label": "Girls night out",
+        "value": "girls_night_out",
+        "position": 3,
+        "swatchColor": null
+       },
+       {
+        "label": "Main character energy",
+        "value": "main_character",
+        "position": 4,
+        "swatchColor": null
+       },
+       {
+        "label": "Vacation",
+        "value": "vacation",
+        "position": 5,
+        "swatchColor": null
+       },
+       {
+        "label": "After hours",
+        "value": "after_hours",
+        "position": 6,
+        "swatchColor": null
+       },
+       {
+        "label": "Spooky season",
+        "value": "spooky_season",
+        "position": 7,
+        "swatchColor": null
+       }
+      ],
+      "position": 0
+     },
+     {
+      "key": "length",
+      "label": "Length",
+      "source": "user_question",
+      "values": [
+       {
+        "label": "Super Short",
+        "value": "super_short",
+        "position": 0,
+        "swatchColor": null
+       },
+       {
+        "label": "Short",
+        "value": "short",
+        "position": 1,
+        "swatchColor": null
+       },
+       {
+        "label": "Medium",
+        "value": "medium",
+        "position": 2,
+        "swatchColor": null
+       },
+       {
+        "label": "Long",
+        "value": "long",
+        "position": 3,
+        "swatchColor": null
+       }
+      ],
+      "position": 1
+     },
+     {
+      "key": "application",
+      "label": "Application",
+      "source": "user_question",
+      "values": [
+       {
+        "label": "Press & go",
+        "value": "press_and_go",
+        "position": 0,
+        "swatchColor": null
+       },
+       {
+        "label": "Glue-on",
+        "value": "glue_on",
+        "position": 1,
+        "swatchColor": null
+       }
+      ],
+      "position": 2
+     },
+     {
+      "key": "shape",
+      "label": "Shape",
+      "source": "user_question",
+      "values": [
+       {
+        "label": "Almond",
+        "value": "almond",
+        "position": 0,
+        "swatchColor": null
+       },
+       {
+        "label": "Coffin",
+        "value": "coffin",
+        "position": 1,
+        "swatchColor": null
+       },
+       {
+        "label": "Oval",
+        "value": "oval",
+        "position": 2,
+        "swatchColor": null
+       },
+       {
+        "label": "Round",
+        "value": "round",
+        "position": 3,
+        "swatchColor": null
+       },
+       {
+        "label": "Squoval",
+        "value": "squoval",
+        "position": 4,
+        "swatchColor": null
+       },
+       {
+        "label": "Square",
+        "value": "square",
+        "position": 5,
+        "swatchColor": null
+       }
+      ],
+      "position": 3
+     },
+     {
+      "key": "color_family",
+      "label": "Color",
+      "source": "user_question",
+      "values": [
+       {
+        "label": "Nudes & neutrals",
+        "value": "nudes_neutrals",
+        "position": 0,
+        "swatchColor": "#d7b49e"
+       },
+       {
+        "label": "Pinks & pastels",
+        "value": "pinks_pastels",
+        "position": 1,
+        "swatchColor": "#f6c6d7"
+       },
+       {
+        "label": "Reds & berries",
+        "value": "reds_berries",
+        "position": 2,
+        "swatchColor": "#8e2135"
+       },
+       {
+        "label": "Bold & bright",
+        "value": "bold_bright",
+        "position": 3,
+        "swatchColor": "#ff6f3c"
+       },
+       {
+        "label": "Dark & moody",
+        "value": "dark_moody",
+        "position": 4,
+        "swatchColor": "#2b2b35"
+       },
+       {
+        "label": "Metallics & shimmer",
+        "value": "metallics_shimmer",
+        "position": 5,
+        "swatchColor": "#c9ccd6"
+       },
+       {
+        "label": "Classic french & white",
+        "value": "french_white",
+        "position": 6,
+        "swatchColor": "#f7f3ee"
+       }
+      ],
+      "position": 4
+     },
+     {
+      "key": "style_tier",
+      "label": "Style",
+      "source": "user_question",
+      "values": [
+       {
+        "label": "Clean & Classic",
+        "value": "clean",
+        "position": 0,
+        "swatchColor": null
+       },
+       {
+        "label": "A little extra",
+        "value": "extra",
+        "position": 1,
+        "swatchColor": null
+       },
+       {
+        "label": "Statement",
+        "value": "statement",
+        "position": 2,
+        "swatchColor": null
+       },
+       {
+        "label": "Full-on nail art",
+        "value": "art",
+        "position": 3,
+        "swatchColor": null
+       }
+      ],
+      "position": 5
+     }
+    ],
+    "rules": [],
+    "questions": [
+     {
+      "prompt": "What's the vibe?",
+      "showIf": null,
+      "axisKey": "vibe",
+      "options": [
+       {
+        "label": "Model Off-Duty",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 0,
+        "selectAll": false,
+        "reasonText": "barely-there, quiet luxury",
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "model_off_duty"
+       },
+       {
+        "label": "Soft & sweet",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 1,
+        "selectAll": false,
+        "reasonText": "blush pinks, sweet nothings",
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "soft_sweet"
+       },
+       {
+        "label": "French Girl Forever",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 2,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "french_girl"
+       },
+       {
+        "label": "Girls Night Out",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 3,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "girls_night_out"
+       },
+       {
+        "label": "Main Character Energy",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 4,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "main_character"
+       },
+       {
+        "label": "Vacation",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 5,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "vacation"
+       },
+       {
+        "label": "After Hours",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 6,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "after_hours"
+       },
+       {
+        "label": "Spooky Season",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 7,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "spooky_season"
+       },
+       {
+        "label": "Surprise me",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 8,
+        "selectAll": true,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "model_off_duty"
+       }
+      ],
+      "helperText": null,
+      "multiSelect": false,
+      "optionStyle": "boxed",
+      "screenGroup": null,
+      "maxSelections": null
+     },
+     {
+      "prompt": "How long do you like your nails?",
+      "showIf": null,
+      "axisKey": "length",
+      "options": [
+       {
+        "label": "Super Short",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 0,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "super_short"
+       },
+       {
+        "label": "Short",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 1,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "short"
+       },
+       {
+        "label": "Medium",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 2,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "medium"
+       },
+       {
+        "label": "Long",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 3,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "long"
+       }
+      ],
+      "helperText": null,
+      "multiSelect": true,
+      "optionStyle": null,
+      "screenGroup": null,
+      "maxSelections": null
+     },
+     {
+      "prompt": "How long should they go on & how long should they stay?",
+      "showIf": null,
+      "axisKey": "application",
+      "options": [
+       {
+        "label": "Press & go - No glue needed, up to 5 days",
+        "showIf": {
+         "axis_key": "length",
+         "axis_value": "super_short"
+        },
+        "imageUrl": null,
+        "position": 0,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "press_and_go"
+       },
+       {
+        "label": "Glue-on classic - The full salon mani, up to 2 weeks",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 1,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "glue_on"
+       },
+       {
+        "label": "Adhesive tabs - No glue, up to 3 days, gentlest on natural nails",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 2,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "glue_on"
+       }
+      ],
+      "helperText": null,
+      "multiSelect": false,
+      "optionStyle": null,
+      "screenGroup": null,
+      "maxSelections": null
+     },
+     {
+      "prompt": "Pick your shapes",
+      "showIf": null,
+      "axisKey": "shape",
+      "options": [
+       {
+        "label": "Almond",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 0,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "almond"
+       },
+       {
+        "label": "Coffin",
+        "showIf": {
+         "axis_key": "application",
+         "axis_value": "glue_on"
+        },
+        "imageUrl": null,
+        "position": 1,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "coffin"
+       },
+       {
+        "label": "Oval",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 2,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "oval"
+       },
+       {
+        "label": "Round",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 3,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "round"
+       },
+       {
+        "label": "Squoval",
+        "showIf": {
+         "axis_key": "application",
+         "axis_value": "glue_on"
+        },
+        "imageUrl": null,
+        "position": 4,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "squoval"
+       },
+       {
+        "label": "Square",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 5,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "square"
+       },
+       {
+        "label": "Open to anything",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 6,
+        "selectAll": true,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "almond"
+       }
+      ],
+      "helperText": null,
+      "multiSelect": true,
+      "optionStyle": null,
+      "screenGroup": null,
+      "maxSelections": null
+     },
+     {
+      "prompt": "Which colors are you drawn to?",
+      "showIf": null,
+      "axisKey": "color_family",
+      "options": [
+       {
+        "label": "Nudes & neutrals",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 0,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "nudes_neutrals"
+       },
+       {
+        "label": "Pinks & pastels",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 1,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "pinks_pastels"
+       },
+       {
+        "label": "Reds & berries",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 2,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "reds_berries"
+       },
+       {
+        "label": "Bold & bright",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 3,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "bold_bright"
+       },
+       {
+        "label": "Dark & moody",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 4,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "dark_moody"
+       },
+       {
+        "label": "Metallics & shimmer",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 5,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "metallics_shimmer"
+       },
+       {
+        "label": "Classic french & white",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 6,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "french_white"
+       },
+       {
+        "label": "🎨 Surprise me",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 7,
+        "selectAll": true,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "nudes_neutrals"
+       }
+      ],
+      "helperText": null,
+      "multiSelect": true,
+      "optionStyle": null,
+      "screenGroup": null,
+      "maxSelections": null
+     },
+     {
+      "prompt": "Last one — what's your style?",
+      "showIf": null,
+      "axisKey": "style_tier",
+      "options": [
+       {
+        "label": "Clean & Classic: Solids, french tips, glazed",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 0,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "clean"
+       },
+       {
+        "label": "A little extra: Pearls, ombre, subtle art",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 1,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "extra"
+       },
+       {
+        "label": "Statement: Chrome, glitter, cat eye",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 2,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "statement"
+       },
+       {
+        "label": "Full-on nail art: 3D gems, patterns, abstract",
+        "showIf": null,
+        "imageUrl": null,
+        "position": 3,
+        "selectAll": false,
+        "reasonText": null,
+        "botResponse": null,
+        "displayMeta": null,
+        "axisValueValue": "art"
+       }
+      ],
+      "helperText": null,
+      "multiSelect": true,
+      "optionStyle": null,
+      "screenGroup": null,
+      "maxSelections": 2
+     }
+    ]
+   },
+   "settings": {
+    "enabled": false,
+    "title_font": "serif",
+    "ai_guidance": "Glamnetic press-on nail quiz (Find My Nail Match). Rank nail sets for the shopper's answers. Apply these rules in order; higher rules win conflicts. Judge ONLY from the PRODUCT FACTS below — never from a product's name.\n\nFACTS LEGEND: each line is \"Name: [system] [length] shape(s) | color families | style tier | style tags | collection | BS\". Defaults: a set is glue-on and short unless marked otherwise; \"qp\" = Quick Press (press & go, always extra short); other lengths are spelled out (super_short, medium, long). BS = current bestseller. Shape \"natural\" is Glamnetic's super-short line: one natural rounded profile — treat it as matching round or oval picks, and as the primary answer whenever the shopper picked super short with glue-on.\n\nHARD RULES — never violate:\n1. If the shopper's application answer is press & go: recommend ONLY qp (Quick Press) sets. They come extra short by design — ignore any length picks, and say so in the reason (\"Quick Press comes extra short\").\n2. Otherwise (glue-on classic or adhesive tabs): recommend ONLY glue sets. Tabs is the same catalog — same sets, worn with adhesive tabs instead of glue.\n3. length must be one of the shopper's picked lengths (skip this rule for qp per rule 1). Catalog fact: true long sets are nearly nonexistent — a long pick will usually relax to medium; the reason should own it (\"closest to the long you wanted\").\n4. shape must be one of the shopper's picked shapes, unless they said open to anything. \"natural\" counts as round/oval per the legend.\nIf fewer than 5 sets satisfy the hard rules, relax in THIS order only, one step at a time: (1) shape to its nearest neighbor (coffin→square→squoval, round→oval→almond, squoval→square→oval, and the reverse directions); (2) length one adjacent step; (3) style tier one step down; (4) drop the least-weighted color family. NEVER relax the system rule. A relaxed pick's reason must read like \"Closest to what you picked\", never pretend it matched exactly.\n\nSOFT SCORING — rank the hard-rule survivors:\n+3 for each picked color family the set matches. +3 for each picked style tier matched. +2 for vibe boosts (below). +1 if BS. \"Surprise me\" on color, and any skipped question, contribute ZERO — do not treat surprise-me as \"every family matches\".\n\nVIBE BOOSTS (the vibe answer weights, never filters):\n- Model off-duty: nudes families, clean tier, Glazed/Glossy styles, SoftLaunch collection, qp nudes.\n- Soft & sweet: pinks, clean or extra tier, Pearl/Ombre/Glazed styles.\n- French girl forever: French Tip style, french + nudes + reds families, GlamIcons collection.\n- Girls night out: statement tier, reds + dark families, Glitter/Velvet styles.\n- Main character energy: statement or art tier, Chrome/Glitter/3D/3D Gems styles, Gems collection.\n- Vacation: bold family, Summer collection.\n- After hours: dark family, Velvet or glossy Solid Color, Cat Eye styles.\n- Spooky season: Spells collection first, then dark family + art tier.\n- Surprise me: no vibe weight — rank by BS then family/tier score.\n\nASSEMBLY:\n- Return the 5 best, best first. Slots 1-3 are the primary matches: at least 2 of them must match a picked color family (the 3rd may be a near-miss only if it clearly wins everything else). Slots 4-5 flex the shopper's LOOSEST dimension (the multi-select where she picked most, or anything she answered surprise-me on).\n- Slot 1 should be the set that satisfies every hard rule plus at least one picked color family plus at least one picked tier with NO relaxation; if no set does, just rank the best fit first.\n- Each reason (max 140 chars) speaks to the shopper in her own answer words — \"Short almond, both your picks\", \"Dark & moody, exactly\", \"Quick Press comes extra short\". Never a claim the FACTS don't back. If she chose adhesive tabs, it still fits: same sets, tabs just wear up to 3 days with no glue.\n- Avoid 3 near-identical sets in the primaries (same family + tier + style) unless her picks leave no room.\n\nPRODUCT FACTS (200 sets, from catalog tags):\n- Blueberry Milk: almond | bold | clean | Solid Color | Summer | BS\n- Caviar: almond | dark/french | clean | French Tip | GlamIcons | BS\n- Cobalt Blue: almond | bold | clean | Solid Color | Summer | BS\n- Creamer: round | nudes/french | extra | Ombre,Solid Color | GlamIcons | BS\n- Deathly Hallows™: almond | dark/french | extra | Accent Nail,French Tip | HP | BS\n- Fiery Red: almond | reds | clean | Solid Color | Summer | BS\n- Goal Digger: round | metal/nudes/pinks | extra | Accent Nail | GlamIcons | BS\n- Hailey: almond | metal/french | statement | Sparkles | BS\n- Heavenly: almond | nudes/french | clean | French Tip | BS\n- Hot Pink: oval | pinks | clean | Solid Color | Summer | BS\n- Lilac: round | dark | clean | Solid Color | Summer | BS\n- Ma Damn: almond | nudes/french | clean | French Tip | BS\n- Marauder's Map™: oval | nudes/reds | art | Patterns,Solid Color | HP | BS\n- Merlot: almond | reds/french | clean | French Tip,Solid Color | BS\n- Pure Intentions: round | metal/french | statement | Sparkles,Velvet | BS\n- Rosé: almond | pinks | statement | Solid Color,Velvet | Summer | BS\n- Selenite: almond | metal/french | statement | Sparkles,Velvet | BS\n- Think Pink: oval | pinks | clean | Solid Color | GlamIcons | BS\n- Aura Reading: qp square | dark | statement | Solid Color,Velvet | Spells\n- Blue Halo: qp oval | bold/nudes/french | clean | French Tip | Summer\n- Dainty Dots: qp square | nudes | extra | Polka Dots | Summer\n- Daydream Veil: qp square | french | statement | Solid Color,Velvet\n- French Noir: qp almond | dark/nudes/french | clean | French Tip\n- Ink Spell: qp round | dark | clean | Spells\n- Lime Beam: qp almond | bold/nudes/french | clean | French Tip,Solid Color | Summer\n- Mauve Muse: qp oval | pinks | clean | Solid Color | Summer\n- Midnight Merlot: qp oval | reds | clean | Solid Color | Spells\n- Nude Glazed: qp oval | nudes | clean | Solid Color\n- Ocean Prism: qp almond | bold | clean | Solid Color | Summer\n- Porcelain: qp square | french | clean | Solid Color\n- Purple Reign: qp oval | dark | clean | Solid Color | Spells\n- Red Allure: qp square | reds | clean | Solid Color\n- Sherbert: qp round | pinks/bold | extra | Ombre,Solid Color | Summer\n- Sparkly Brown: qp oval | nudes | clean | Solid Color\n- Sparkly Moss: qp oval | bold | statement | Solid Color,Velvet | Summer\n- Teddy: qp oval | nudes | clean | Solid Color\n- Velvet Chrome: qp almond | nudes/metal/french | clean | French Tip\n- Velvet French: qp round | nudes/french | clean | French Tip\n- Velveteen Trance: qp almond | dark | statement | Ombre,Solid Color | Spells\n- After Hours: oval | dark | clean | Solid Color | SoftLaunch\n- Cherry Mocha: medium square | nudes/reds | clean | Solid Color | SoftLaunch\n- Cloud Dance: oval | bold/metal | statement | Aura,Magnetic Cat Eye | SoftLaunch\n- Dotted Mulberry: medium oval | nudes/dark/french | statement | French Tip,Polka Dots | SoftLaunch\n- Gold Goals: medium coffin | metal/nudes/french | clean | French Tip | SoftLaunch\n- Heavenly Metal: almond | dark/metal/french | statement | French Tip,Glitter | SoftLaunch\n- Heavenly Touch: almond | metal/nudes/french | statement | Chrome,French Tip | SoftLaunch\n- Iced Latte: oval | nudes | statement | Solid Color,Velvet | SoftLaunch\n- Love Current: almond | pinks/metal | art | 3D Gem,Aura | SoftLaunch\n- Pink Whisper: round | pinks | clean | Solid Color | SoftLaunch\n- Pixie Dusted: squoval | pinks/french | statement | French Tip,Magnetic Cat Eye | SoftLaunch\n- Polar Night: almond | nudes/pinks/metal/french | statement | Ombre,Velvet | SoftLaunch\n- Soft Skyline: medium coffin | bold/nudes/french | extra | French Tip,Ombre | SoftLaunch\n- Strawberry Icing: almond | pinks/french | clean | French Tip | SoftLaunch\n- Alakazam: oval | bold/reds | clean | Solid Color | Spells\n- Bat Check: almond | dark/nudes/french | art | French Tip,Patterns | Spells\n- Batty Bits: squoval | dark | art | Accent Nail,Patterns | Spells\n- Bitter Orange: oval | nudes/bold/pinks | extra | Ombre | Spells\n- Burgundy Chrome: almond | dark/reds/metal | statement | Chrome,Metallic Chrome | Spells\n- Carving Contest: almond | bold | art | Accent Nail,Patterns | Spells\n- Crystal Cantation: medium oval | bold | clean | Solid Color | Spells\n- Dark Romance: oval | dark | extra | Ombre,Solid Color | Spells\n- Dark Waters: medium oval | dark/bold | extra | Ombre,Solid Color | Spells\n- Espresso Glow: medium coffin | nudes | statement | Solid Color,Velvet | Spells\n- Fall Boo: almond | dark/nudes/bold/french | art | Accent Nail,Patterns | Spells\n- Ghost Besties: almond | nudes/metal/french | art | 3D,Chrome | Spells\n- Ghosted: almond | dark/nudes/french | art | French Tip,Patterns | Spells\n- Golden Gourds: oval | metal/bold | art | 3D,Patterns | Spells\n- Immortal Kiss: medium coffin | pinks/dark/metal | art | 3D,Ombre | Spells\n- In The Spirit: almond | dark/nudes | art | Accent Nail,Patterns | Spells\n- Just A Ghoul: almond | pinks/metal/french | art | Patterns,Velvet | Spells\n- Lady Web: almond | dark/nudes/metal | art | Patterns,Sparkles | Spells\n- Lil Devils: almond | dark/reds | extra | Accent Nail,Ombre | Spells\n- Lil Gremlins: oval | nudes/bold/french | art | Accent Nail,Patterns | Spells\n- Mani De Los Muertos: almond | dark/metal/bold/pinks/french | art | Accent Nail,French Tip | Spells\n- My Boo: almond | dark/nudes/bold | art | Accent Nail,Patterns | Spells\n- Nine Lives: oval | dark/french | art | Accent Nail,French Tip | Spells\n- October Nights: almond | dark/nudes/bold/french | art | French Tip,Patterns | Spells\n- Phantom Glow: medium coffin | dark/metal | art | Accent Nail,Accent Nails | Spells\n- Scarlet Spell: squoval | nudes/metal/reds | clean | Solid Color | Spells\n- Shriek Boutique: oval | dark/nudes/french | art | Accent Nail,Patterns | Spells\n- Sicilian Sun: almond | nudes | statement | Solid Color,Velvet | Spells\n- Silver Daggers: oval | metal | art | 3D,Solid Color | Spells\n- Smoke N' Mirrors: almond | dark | extra | Ombre,Solid Color | Spells\n- Tiny Pumpkin: squoval | dark/nudes/bold/french | art | 3D,French Tip | Spells\n- Tricks & Treats: almond | dark | art | Patterns | Spells\n- Vampiress: medium almond | dark/nudes | clean | Solid Color | Spells\n- Vintage Silver: almond | bold/metal | extra | Ombre,Solid Color | Spells\n- Weblings: oval | dark/metal | art | 3D,Patterns | Spells\n- Witchy Woman: squoval | dark/nudes/french | extra | Accent Nail,French Tip | Spells\n- Wrapped Up: almond | nudes/bold/french | art | Accent Nail,Patterns | Spells\n- Amethyst: squoval | metal/dark | art | 3D Gems,Patterns | Gems\n- Aquamarine: oval | bold/nudes | art | 3D Gems,Accent Nail | Gems\n- Blue Topaz: oval | bold | art | 3D Gems,Accent Nail | Gems\n- Citrine: almond | metal/nudes/french | art | 3D Gems,French Tip | Gems\n- Diamond: oval | metal/french | art | 3D Gems,Accent Nail | Gems\n- Emerald: almond | bold/nudes/french | art | 3D Gems,French Tip | Gems\n- Enstatite: super_short natural | nudes/bold | statement | Solid Color,Velvet | Gems\n- Garnet: almond | nudes/reds/french | art | 3D Gems,French Tip | Gems\n- Moonstone: almond | metal/nudes/french | art | 3D Gems,Ombre | Gems\n- Mystic Topaz: medium oval | dark/bold | statement | Solid Color,Velvet | Gems\n- Obsidian: almond | dark | statement | Cat Eye,Solid Color | Gems\n- Pink Pearl: medium oval | nudes/pinks | extra | Ombre,Solid Color | Gems\n- Pink Petalite: almond | pinks | extra | Ombre,Solid Color | Gems\n- Pink Tourmaline: almond | pinks | art | 3D Gems,Accent Nail | Gems\n- Ruby: squoval | metal/nudes/reds | art | 3D Gems,Accent Nail | Gems\n- Sapphire: oval | bold | art | 3D Gems,Ombre | Gems\n- Spinel: almond | nudes/reds/french | art | 3D Gems,French Tip | Gems\n- Tiger Eye: super_short natural | nudes | clean | Solid Color | Gems\n- Powder Bleu: squoval | bold | clean | Solid Color | Refresh\n- Soft Skin: oval | nudes/pinks | clean | Solid Color | Refresh\n- Soft Tulle: squoval | french | clean | French Tip | Refresh\n- Dementor™: medium almond | dark/french | clean | French Tip | HP\n- Godric Gryffindor™: almond | bold/reds/metal | statement | Metallic Chrome,Ombre | HP\n- Golden Cup™: almond | nudes/metal/bold | extra | Solid Color,Waves | HP\n- Gryffindor™: almond | reds/metal | statement | Accent Nail,Chrome | HP\n- Alabama Crimson Tide Press-On Nail Set: almond | nudes/reds/french | extra | Accent Nail,French Tip | Fanatics\n- Arizona Cardinals Press-On Nail Set: almond | nudes/reds/french | extra | Accent Nail,French Tip | Fanatics\n- Arizona Diamondbacks Press-On Nail Set: almond | bold/nudes/french | extra | Accent Nail,French Tip | Fanatics\n- Arizona State Sun Devils Press-On Nail Set: almond | nudes/reds/french | extra | Accent Nail,French Tip | Fanatics\n- 4 THE GLAMSQUAD: almond | dark/nudes/french/bold | art | Accent Nail,French Tip | Glamzilla\n- ALWAYS & FOREVER: almond | nudes/french | art | 3D,Accent Nail | Glamzilla\n- BIG BUNNY ENERGY: almond | pinks | statement | Solid Color,Velvet | Glamzilla\n- EARNED NOT GIVEN: almond | nudes/french | statement | French Tip,Ombre | Glamzilla\n- Juicy: long coffin | pinks/metal | statement | Solid Color,Sparkles | Summer\n- Bailey: medium square | metal/french | clean | Glazed | Summer\n- Bare Bliss: medium square | nudes | clean | Solid Color\n- Classy French: medium square | nudes/french | clean | French Tip\n- Dusty Pink: medium square | pinks | extra | Jelly\n- In The Nude: medium square | nudes | extra | Ombre\n- Berry Baby: super_short natural | reds | clean | Solid Color | GlamIcons\n- Burnt Miso: super_short natural | dark/nudes/french | clean | French Tip | GlamIcons\n- Clear Skies: super_short natural | bold | clean | Solid Color | Summer\n- Cool Whip: super_short natural | french | clean | Solid Color | GlamIcons\n- French Peach: super_short natural | bold/french | clean | French Tip | Summer\n- Hotline Red: super_short natural | reds/french | clean | French Tip | Summer\n- Lilac Steel: super_short natural | dark/metal | statement | Metallic Chrome | Summer\n- Mauve Cutie: super_short natural | pinks | clean | Solid Color | GlamIcons\n- Berry Obsession: medium almond | reds | clean | Solid Color | GlamIcons\n- Black Truffle: medium almond | dark/nudes/french | clean | French Tip | GlamIcons\n- Blush Blanket: medium almond | pinks | clean | Solid Color | GlamIcons\n- Cherry Bow: medium almond | pinks/french | art | Accent Nail,French Tip | Summer\n- Azure Blue: round | bold | clean | Solid Color | Summer\n- Athenian Gold: medium oval | metal/nudes | art | 3D,Patterns | Summer\n- Balsamic Glaze: medium coffin | dark/nudes/french | clean | French Tip | GlamIcons\n- ‘Til Death: almond | dark/nudes | art | 3D,Ombre\n- 24K: almond | metal | art | Accent Nail,Patterns\n- Ace of Hearts: oval | french | art | Patterns,Solid Color\n- All Time Love: almond | pinks/french | art | 3D,Accent Nail\n- Angel in Blue: almond | bold/nudes/french | art | Accent Nail,French Tip\n- Angelic Touch: oval | nudes/french | statement | French Tip,Velvet\n- Antipasto: almond | nudes/bold/french | art | French Tip,Patterns | Summer\n- Aperitivo Hour: almond | bold/nudes/french | art | 3D,Accent Nail | Summer\n- Arizona Wildcats Press-On Nail Set: almond | bold/nudes/french | extra | Accent Nail,French Tip | Fanatics\n- Arkansas Razorbacks Press-On Nail Set: almond | nudes/reds/french | extra | Accent Nail,French Tip | Fanatics\n- Astro: almond | nudes/metal/french | art | 3D,Accent Nail\n- Atlanta Braves Press-On Nail Set: almond | bold/nudes/french | extra | Accent Nail,French Tip | Fanatics\n- Auburn Tigers Press-On Nail Set: almond | nudes/bold/french | extra | Accent Nail,French Tip | Fanatics\n- Baby Blues: almond | bold | statement | Solid Color,Velvet\n- Ballet Pink: almond | pinks | clean | Solid Color\n- Baltimore Orioles Press-On Nail Set: almond | nudes/bold/french | extra | Accent Nail,French Tip | Fanatics\n- Baltimore Ravens Press-On Nail Set: almond | nudes/dark/french | extra | Accent Nail,French Tip | Fanatics\n- Barely Spotted: almond | pinks/french | extra | Polka Dots,Solid Color | Summer\n- Bark Brown: round | nudes/reds | clean | Solid Color\n- Berry Crush: squoval | reds | clean | Solid Color | GlamIcons\n- Berry Fierce: medium coffin | reds | clean | Solid Color | GlamIcons\n- Berry Fizz: oval | dark | statement | Solid Color,Velvet | Summer\n- Berry Kiss: almond | reds | clean | Solid Color | GlamIcons\n- Berry Maroon: round | pinks/reds | clean | Solid Color | GlamIcons\n- Berry Mood: oval | reds | clean | Solid Color | GlamIcons\n- Berry Tempted: medium oval | reds | clean | Solid Color | GlamIcons\n- Black Metal: almond | dark/bold/metal | statement | Metallic Chrome | Summer\n- Blue A Kiss: squoval | bold/french | art | Accent Nail,French Tip\n- Blue Steel: almond | bold/metal | statement | Metallic Chrome | Summer\n- Bluebelle: almond | bold/nudes/french | art | French Tip,Patterns | Summer\n- Blueberry Icing: almond | bold/french | clean | French Tip\n- Blush Dream: medium coffin | pinks | clean | Solid Color | GlamIcons\n- Blush Dunes: squoval | nudes/pinks/metal/french | art | 3D,Accent Nail | Summer\n- Blushing Aura: almond | pinks/metal | statement | Aura,Ombre | Summer\n- Boba: almond | dark | clean | Solid Color\n- Boston Bruins Press-On Nail Set: almond | dark/nudes/french | extra | Accent Nail,French Tip | Fanatics\n- Boston Celtics Press-On Nail Set: almond | bold/nudes/french | extra | Accent Nail,French Tip | Fanatics\n- Boston Red Sox Press-On Nail Set: almond | nudes/reds/french | extra | Accent Nail,French Tip | Fanatics\n- Buffalo Bills Press-On Nail Set: almond | bold/nudes/french | extra | Accent Nail,French Tip | Fanatics\n- Butterfly Effect: almond | dark/nudes/french | art | Accent Nail,French Tip | Summer\n- Candy Corn: oval | nudes/bold | extra | Ombre,Solid Color\n- Candy Crush: oval | reds/french | art | Accent Nail,Patterns\n- Capri Coast: medium oval | bold/french | extra | Accent Nail,French Tip | Summer\n- Carolina Panthers Press-On Nail Set: almond | bold/nudes/french | extra | Accent Nail,French Tip | Fanatics\n- Cashmere Blue: squoval | bold | clean | Solid Color\n- Château: almond | bold/french | clean | French Tip\n- Cherry Bomb: almond | reds/french | art | Accent Nail,French Tip | Summer\n- Cherry Glaze: round | reds | clean | Solid Color\n- Cherry Mood: oval | nudes/reds/french | clean | French Tip | Summer\n- Chicago Bears Press-On Nail Set: almond | bold/nudes/french | extra | Accent Nail,French Tip | Fanatics\n- Chicago Blackhawks Press-On Nail Set: almond | nudes/reds/french | extra | Accent Nail,French Tip | Fanatics\n- Chicago Bulls Press-On Nail Set: almond | dark/nudes/reds/french | extra | Accent Nail,French Tip | Fanatics\n- Chicago Cubs Press-On Nail Set: almond | bold/nudes/reds/french | extra | Accent Nail,French Tip | Fanatics\n- Chicago Sky Press-On Nail Set: almond | bold/nudes/french | extra | Accent Nail,French Tip | Fanatics\n- Chicago White Sox Press-On Nail Set: almond | nudes/french | extra | Accent Nail,French Tip | Fanatics\n- Chocolat: almond | nudes/french | clean | French Tip",
+    "accent_color": "#8b5cf6",
+    "quiz_eyebrow": "Find my fit",
+    "quiz_subtext": "Answer a few quick questions and we'll match you to exactly what suits you.",
+    "product_scope": "selected",
+    "quiz_headline": "Your perfect match, in 60 seconds",
+    "assistant_mode": "quiz",
+    "assistant_name": "Laura",
+    "quiz_cta_color": null,
+    "quiz_ink_color": null,
+    "quiz_line_color": null,
+    "quiz_shade_body": "Both paths unlock your complete match.",
+    "quiz_upsell_cta": "Try them on me",
+    "quiz_card_radius": null,
+    "quiz_gate_helper": "Add a quick photo and we'll show your match on you — or skip straight to your results.",
+    "quiz_trust_items": [],
+    "quiz_upsell_body": "One quick photo — we'll re-render your matches on you.",
+    "quiz_accent_color": "#b6637b",
+    "quiz_intro_layout": null,
+    "quiz_privacy_note": "Your photo is processed instantly and never stored.",
+    "quiz_retake_label": "Retake photo",
+    "quiz_upsell_title": "See these on you ✨",
+    "quiz_button_radius": null,
+    "quiz_card_bg_color": null,
+    "quiz_gate_headline": "Want to see it on you?",
+    "num_recommendations": 5,
+    "quiz_progress_style": null,
+    "quiz_shade_headline": "Now let's nail your shade",
+    "quiz_visual_caption": "",
+    "recommendation_mode": "ai",
+    "priority_product_ids": [
+     "1424032e-1376-4084-a3ea-237c1b789d51",
+     "9df6af67-5596-4e88-bfa2-0acd13c5062b",
+     "49923295-769b-484f-a1b8-698603e9ed6a",
+     "c46ada7f-3db3-4457-943d-5ffa63d7e839",
+     "0bba79b3-f624-40ea-906c-3e78e0154457",
+     "851f59a6-ccfb-4690-a3ef-4da967160ec7",
+     "afb68752-2c16-4f69-9077-df6c6c527d95",
+     "880787f6-489b-47e7-b99b-eb9a9f3fa9d4",
+     "a0710d66-80fe-45a4-a401-9cfea2ce02e3",
+     "4c8455ef-7ae6-4c38-84e7-f34e38d803fa"
+    ],
+    "quiz_after_image_url": null,
+    "quiz_animation_style": null,
+    "quiz_best_match_pill": "Best match",
+    "quiz_gate_skip_label": "Just take me to my results",
+    "quiz_results_subtext": "{count} picks made for your answers.",
+    "quiz_shade_cta_photo": "Match my shade for me",
+    "quiz_shade_fallbacks": null,
+    "selected_product_ids": [
+     "1424032e-1376-4084-a3ea-237c1b789d51",
+     "9df6af67-5596-4e88-bfa2-0acd13c5062b",
+     "49923295-769b-484f-a1b8-698603e9ed6a",
+     "c46ada7f-3db3-4457-943d-5ffa63d7e839",
+     "0bba79b3-f624-40ea-906c-3e78e0154457",
+     "851f59a6-ccfb-4690-a3ef-4da967160ec7",
+     "afb68752-2c16-4f69-9077-df6c6c527d95",
+     "880787f6-489b-47e7-b99b-eb9a9f3fa9d4",
+     "a0710d66-80fe-45a4-a401-9cfea2ce02e3",
+     "4c8455ef-7ae6-4c38-84e7-f34e38d803fa",
+     "e87f9928-0847-4ff1-b055-b60972e8a18c",
+     "4cf8712a-96f9-4208-acf4-a24b931e1cb5",
+     "b85d22da-6abc-4921-9e6e-5885854e432f",
+     "b6fe13ee-003b-46de-8823-b56983cdaa48",
+     "a4795208-d177-4083-986f-8596504280a5",
+     "5cbd3e68-1a9d-4ab2-b03e-12adead1e7de",
+     "18252268-3d6f-4551-9b13-2eabfd574bb6",
+     "9574b875-6ed5-4da0-ab6d-fc474a56414b",
+     "66b75205-43ac-4d5d-92ba-25dbac8842fb",
+     "4e82f544-c856-4c41-a64b-1e4636a017cb",
+     "95af9717-482e-47bb-a654-2c6df3978d61",
+     "e975e2ed-be5d-4f53-9865-4b56d8286fd3",
+     "9509626d-d33e-47cd-b7aa-5f9f28f586e2",
+     "4dd01ba7-8868-4b03-a220-0ca65a3306ee",
+     "cedca58b-8123-4b36-9aed-a7ce51017036",
+     "f5a2c1ff-361d-4933-8724-0b1ae406de3f",
+     "d0b15088-2067-4f37-a6ba-b490ab01a793",
+     "1da1959e-9638-424c-a49a-831665b4ed40",
+     "20c0973a-317a-49c6-9d46-72bbfbe47345",
+     "e5f70878-ce5a-4787-b04f-6901d1fcfc80",
+     "049281f0-9d60-4b31-839d-9f7efa7d8fdd",
+     "6af28260-b850-4e4f-aa6d-c341b3401c89",
+     "ef4f4501-abaa-4a6a-9564-d55a70c181d1",
+     "aff31563-d4f0-4d16-8b46-1bb02ce02cbd",
+     "136c735c-50f0-440e-888d-febd860344d9",
+     "72ce628c-6655-4d74-b5ca-cd0a8131e7a1",
+     "2b13de3f-07f1-4ac1-a58b-6ed094b3460b",
+     "d2d67bc1-f0b7-4053-a597-899b469d46ed",
+     "aeb2da82-ccb7-4aea-87c8-c1037f715177",
+     "9f4cba56-8804-460b-9863-2fece476d901",
+     "d2e0a1e1-0f0c-49bb-8bbc-06953a134552",
+     "e6e1e571-a6d2-487c-89cf-720fcec88155",
+     "2069efd8-d16b-4338-9c33-78365697f7b4",
+     "352ee1e1-bfda-47e5-ad3d-6911d15a721a",
+     "066bc8e8-adb2-49fa-94be-687f38c9b364",
+     "bd734c84-0727-43be-8ecd-d417498c1120",
+     "20c5a6f7-e71e-4321-890a-6a91db8dc01b",
+     "960bd02a-060d-4a1a-ac0c-1b8129a78890",
+     "bc8291fb-679a-4df0-8039-9a3b911a37e2",
+     "773e552c-f9ac-4bef-8c65-00e8bc2c8169",
+     "96b8f6ad-138b-4917-b52d-df69d24254d8",
+     "fea2c935-89a4-45a8-ba7e-fe3d03f2ae79",
+     "40d3d681-cde3-4ce7-bf46-86358216372e",
+     "a9216929-e1e9-4b17-ae28-55ce3d45fc00",
+     "303a3915-2912-4d1d-b09c-2992db9b674c",
+     "33b9ccf5-ff68-46b6-98d7-1050bee5624f",
+     "9e92fb24-a17e-44dc-a9df-094f6ba0828f",
+     "2b4b4d9a-06c6-47fb-9e77-42225fa8b98b",
+     "42473785-3c18-4ab4-872f-3d2255e919e4",
+     "89df08be-b8d5-448f-99a8-c4c131c6204d",
+     "ef26baa4-2086-40ed-86c4-8bb720422eb7",
+     "ee9ce5e6-e0b3-4e1f-a703-046ea2aeebad",
+     "1d714c03-139b-4c66-a52b-238e764e0e62",
+     "6d52cb72-0659-4497-9d77-9f4ddfde4fd0",
+     "b2ceb2b1-ef51-4031-b5f7-a30219950a09",
+     "57c5c522-56c6-4308-a488-ed382619c171",
+     "47642b5f-0977-4674-8340-4ced68d73152",
+     "85654cdd-6d76-4ca4-9554-30ef67b59695",
+     "c8490377-d3e7-40ce-a4cc-42ef485652d0",
+     "0caa775c-5765-490c-b628-f5d9f4e53c86",
+     "17400d0c-4682-4881-9008-20c3e5176bb2",
+     "15aaabb0-32db-47e1-98d0-bad6ab788238",
+     "229f969d-bf78-433f-a50d-5c65d3cefeba",
+     "0c44ffb7-e373-4199-a5ca-4f94b91b724c",
+     "c54e9682-3f3f-4807-bc8f-de92c57ef4d1",
+     "49d647f0-c506-4636-9003-1c8848f463fd",
+     "d628037f-0e05-4d83-ae00-fa59d2cdb230",
+     "cda26f48-e707-456f-a8a6-7adb4623bdb3",
+     "108f0463-b678-4092-9ec5-40195c80ad37",
+     "f0ce2367-7bde-4ffe-a446-86cf60032f34",
+     "73da9f5e-1495-4c27-9feb-24ca802a3575",
+     "70dcceb8-12de-44e3-b77c-44d9d22ba297",
+     "cd468e54-dc84-4163-a2c7-7eb2b288ff0c",
+     "046a427a-dc87-4d6b-ba50-d45a7a2afdc5",
+     "25ee1396-bcf7-46bc-9930-c3d594c942f9",
+     "52d14763-f31f-46d9-baee-258daf2916ce",
+     "c8c65be2-3d70-4d17-8a3a-cd1177459b12",
+     "f3bb0bea-b312-4ccd-b042-4c2ebc2a665b",
+     "7aec16c4-fbe3-4b15-a2f9-5508641190c9",
+     "6572d0e7-34b1-430b-8f20-3714d973f7b9",
+     "88153cd6-13cf-45f0-8545-b7287220a12b",
+     "36e0b0a5-fa40-4a73-8831-26985fd726ee",
+     "9816fdfd-adf5-40ee-b28b-50af0fb0969b",
+     "0d67ad0c-2079-46d2-a439-c1b1f1135163",
+     "d3695593-8790-4a2b-888b-a74667a57117",
+     "4fd937d2-0ae4-464f-aec8-9ee03e73a333",
+     "dfc5c8e2-7e06-41f6-8ad6-0e3b40cbe391",
+     "4a1db912-35ad-40c2-b356-b57d660b5715",
+     "f240371c-06cd-4e1e-a128-9cb06693d345",
+     "d7a4bbc4-14be-4fae-b5d5-4f26db1463ee",
+     "58899432-34cc-4fe9-812e-579e043300ca",
+     "7b4d8a31-00e8-4184-be9c-8309c723dabe",
+     "0b6c71aa-b3f7-4387-9eba-368ce98c66e8",
+     "9bb1d6d6-77a9-4fe9-9525-3cce20a4e3f5",
+     "10c41ef8-fba7-4be6-b019-af2baff7c3c9",
+     "5e86ddc1-2ae3-4b1c-a66e-4b77bb708c5f",
+     "d670f71f-ebd6-4649-8bb3-b4d8a28a0993",
+     "62be4e77-0d44-4f13-a89a-2c93d4690225",
+     "83663b58-38b6-4027-9c17-fd00dcae1ede",
+     "9f4c7756-333b-42cb-aee0-b6c62cc631ab",
+     "f2fda09e-1bf0-4824-89ab-20fd8d473333",
+     "c832b736-8555-4913-a5b3-d90ebc39b2ad",
+     "faba798b-415a-4dde-a9bf-11e57776c22f",
+     "d170ba7b-fbf1-4c4a-bd35-f0391d434d63",
+     "4b186365-308e-47fa-b024-df6591fe1fcf",
+     "4d9c56ba-3ee9-46d8-b814-4db9af36df87",
+     "7408d224-8a93-4abc-b8b2-bdf05890d19e",
+     "3a8d7ece-757c-4ae7-863b-ae4875d62f78",
+     "ba03aebe-145c-471a-b675-d1d79a067e62",
+     "8794f64f-ee05-42ac-8ed0-a63eef4ecf8f",
+     "33385cbe-277a-416d-8ff9-e7b6c1584bc4",
+     "4d715a07-18bc-4605-9f03-73d0f5231ac6",
+     "b49a343a-4aab-4002-bd12-2b18cb2f1632",
+     "77625e90-609f-4c07-92f1-39fd426a986a",
+     "991ffe1e-f9c1-4ae1-97fe-037634e93e66",
+     "b025fae1-d004-4155-a616-d25f243b314f",
+     "9f7ec0af-7352-4de1-8010-5c7641baca5a",
+     "27186bf0-9aa6-4e66-965a-d2c9de3163e9",
+     "05e060e1-2c1e-4519-b74b-4c4f50664a16",
+     "13e72106-d9de-4786-b823-946f9ac4e7ed",
+     "646053fa-6f8c-45cf-b346-5d5f7ded57ab",
+     "b16f5939-5c78-4dfe-a376-b3c15dedb8a6",
+     "ea94fce5-57d3-4743-8710-baf3f97fd47d",
+     "72f8bdad-1770-4cf4-bef3-b4ef52bf934c",
+     "527da371-cf94-42c1-91e9-86660a7990c7",
+     "32a55d41-d6d2-420a-8715-c7e1f22ed84e",
+     "51a81d60-7bfa-40a7-a9af-c963c84015dc",
+     "f8a5c0b1-e9d2-4f7c-9676-e52d2adfe070",
+     "76f8f93b-e25b-4712-a821-1bef85628cb8",
+     "62c4a851-74dd-494f-821b-bbd4bcc6b3f9",
+     "c2144dcd-15e7-43ad-9d94-63ce4b64826f",
+     "2e048692-1517-4e44-a8ee-db369595ba89",
+     "03bebfde-92bc-48cf-8f08-26159e4805d0",
+     "7d4d8bc8-d65b-4741-b787-504220d077cd",
+     "07148ebf-72a8-436b-aed3-328ac51f4c94",
+     "2cec3118-3066-47ee-b8c0-fc71fd2dfee4",
+     "bf447741-20a8-4e2b-8f94-58a6b4478809",
+     "758d1df0-cfee-4b5b-8811-d1cb0df07833",
+     "e3435ba9-18f8-4485-83e4-95808636d689",
+     "a96d20b9-ddd5-471d-9656-5ddc57b04bd4",
+     "d38d809f-6939-4815-86d3-01301b3e8203",
+     "7bf0455c-40a1-488d-bcf1-6fb262e94e0e",
+     "8e8e9720-f73a-4caf-a9de-9eb57306a102",
+     "53e75412-2788-4c80-bff1-b5cb57ad5870",
+     "771fd820-8e4f-4d75-9fec-93b180859266",
+     "80b4e07d-d5f0-4634-b98e-cfc467baefa2",
+     "a4c73cd3-83ca-40d1-91ad-a034d469e6da",
+     "ee421152-71a8-47e9-bf70-570f267d1a20",
+     "f14ac004-119b-4ae5-8f48-efcf8e6e0895",
+     "bb29aa04-aa53-4a79-9570-17d500b7ea6c",
+     "a6b170bf-b4b2-4e31-bfa5-4b5815f4661f",
+     "ece5d73f-c8ab-45c6-8015-413d97720dd8",
+     "d92b2ee2-fc68-4856-979c-80406c64682f",
+     "c8863980-7aa9-48d9-bb25-a88d349b7ff5",
+     "3fea2aec-6cd0-4f03-b4f6-247d5830a893",
+     "5b64246a-a68c-42ce-9bcf-f171c28da833",
+     "fe7b121a-ce8d-4293-a3dc-1c9b475ccb47",
+     "66b13c0f-7c2c-4e91-8393-7250ef734c1f",
+     "8358aa88-a845-453c-96d0-ee05eeab167c",
+     "9072e02a-c31e-40b2-80a7-2f79db719b56",
+     "430c68ab-43d9-460d-beae-aa7dcc38b796",
+     "bdda2654-1f26-4797-8dde-45e30116260c",
+     "be3eb5bd-95ab-44ee-bcb0-57b66bcd7b78",
+     "9fd2dfc7-d89f-4dda-97c3-c976cd1235e6",
+     "8103d80f-46bb-439a-91d3-ba87df2b1a06",
+     "8b592500-0d49-4ed9-9781-072e3096cf46",
+     "654535bf-901e-40f0-b560-7c2f01bb41d3",
+     "c503502c-8344-446c-88e0-0a2e771eb980",
+     "e74a983e-f7e5-4654-9937-a339471ff0ff",
+     "b8258ff8-dfab-4dde-b4da-0b6bcbb9dd86",
+     "7520e00e-6f8c-4671-8c85-f7334bce0c9a",
+     "2e31adeb-9a44-466d-a5aa-dd0711e3a1bf",
+     "f38cf3fb-2bb1-4aa5-aa43-237edcf78fe3",
+     "3c91c804-b016-4505-abc4-7435cf22a35e",
+     "90419479-2e52-4175-8340-f54d02016ada",
+     "3c49a2b4-db4b-4c28-891a-67407f4ebec4",
+     "83e599fc-d5e2-43d5-9da7-f4f74c55d16f",
+     "3698ffd5-5430-4f6c-99dc-cfe2fa904f27",
+     "747f2e89-3448-42a5-be27-1748cb0c2339",
+     "a8d15c2b-49eb-4593-81b7-fb4e57726246",
+     "6b451d99-f1b8-49e5-b9b5-ab5535052e26",
+     "ab7b940c-6457-4c60-8852-de2b950f71ff",
+     "4cde919d-e598-4f20-b077-a38fff57e4e8",
+     "68f692fb-4f2d-44ca-ad5d-edb08722500e",
+     "35f15957-7298-4612-a070-061176782b81",
+     "e4411f62-149c-451a-8b9a-02031e75a4a4",
+     "5d053a7c-6ccb-4ddc-839d-d0169f16c6e5",
+     "af2de87b-b0c7-47d1-93f0-19e4e5f6b03a",
+     "a4f7adcc-74cd-417c-904a-bbcdec4462e2",
+     "c95efc9e-05d0-419b-9d84-bf5940bda540"
+    ],
+    "quiz_alt_audience_url": "",
+    "quiz_before_image_url": null,
+    "quiz_gate_photo_label": "Show my match on me",
+    "quiz_multi_set_prompt": null,
+    "quiz_shade_cta_manual": "I know my shade",
+    "recommendation_tuning": {
+     "llmReasons": true,
+     "colorFilter": "off",
+     "rankerModel": "flash",
+     "mismatchGuard": true,
+     "priorityStyle": "boost",
+     "maxLlmCandidates": 200,
+     "productDiversity": true,
+     "priorityBoostSlots": 2
+    },
+    "quiz_also_matched_label": "Also matched for you",
+    "quiz_alt_audience_label": "",
+    "quiz_body_font_override": "Inter, system-ui, sans-serif",
+    "quiz_show_matches_label": "Show my matches",
+    "quiz_view_product_label": "View full product",
+    "quiz_add_button_template": "Add {count} to bag · {total}",
+    "quiz_availability_filter": true,
+    "quiz_manual_shade_enabled": true,
+    "quiz_heading_font_override": "Inter, system-ui, sans-serif",
+    "quiz_results_headline_photo": "Here's your match — on you",
+    "quiz_heading_weight_override": "400",
+    "quiz_results_headline_nophoto": "We found your fit"
+   }
+  },
+  "updated_at": "2026-09-14T20:04:51.39+00:00"
+ }
+]

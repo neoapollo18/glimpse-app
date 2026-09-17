@@ -1,0 +1,64 @@
+[
+ {
+  "id": "fc115741-0f05-4b76-93f3-1787f7097844",
+  "status": "draft",
+  "created_by": "manual",
+  "config": {
+   "flow": {
+    "axes": [
+     {
+      "key": "question_1",
+      "label": "Question 1",
+      "source": "user_question",
+      "values": [
+       {
+        "label": "Option 1",
+        "value": "option_1",
+        "position": 0
+       },
+       {
+        "label": "Option 2",
+        "value": "option_2",
+        "position": 1
+       }
+      ],
+      "position": 0
+     }
+    ],
+    "rules": [],
+    "questions": [
+     {
+      "prompt": "What;s the vibe",
+      "showIf": null,
+      "axisKey": "question_1",
+      "options": [
+       {
+        "label": "",
+        "position": 0,
+        "botResponse": null,
+        "axisValueValue": "option_1"
+       },
+       {
+        "label": "",
+        "position": 1,
+        "botResponse": null,
+        "axisValueValue": "option_2"
+       }
+      ],
+      "helperText": null,
+      "multiSelect": false,
+      "optionStyle": null,
+      "screenGroup": null,
+      "maxSelections": null
+     }
+    ]
+   },
+   "settings": {
+    "enabled": true,
+    "assistant_mode": "quiz"
+   }
+  },
+  "created_at": "2026-09-09T01:39:32.607929+00:00",
+  "updated_at": "2026-09-09T01:47:21.942+00:00"
+ }
+]

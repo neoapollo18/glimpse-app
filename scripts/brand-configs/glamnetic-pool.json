@@ -1,0 +1,6352 @@
+{
+ "shopDomain": "glamrco.myshopify.com",
+ "builtAt": "2026-09-09T01:57:56.242Z",
+ "pool": [
+  {
+   "id": "1424032e-1376-4084-a3ea-237c1b789d51",
+   "name": "Blueberry Milk",
+   "handle": "blueberry-milk-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2024_02_SpringBloomUGC_BlueberryMilk.jpg?v=1762201310",
+   "price": 15.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "bold_bright"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Employee Faves Flash Sale 2025",
+    "The Spring Edit",
+    "The Spring Shop 2026",
+    "Spring Bloom",
+    "Summer Shop 2026",
+    "The Solids"
+   ],
+   "bestseller": true,
+   "poolTier": "T1 bestseller"
+  },
+  {
+   "id": "9df6af67-5596-4e88-bfa2-0acd13c5062b",
+   "name": "Caviar",
+   "handle": "caviar",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2025_11_Caviar_PDP_1.webp?v=1765823968",
+   "price": 15.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "dark_moody",
+    "french_white"
+   ],
+   "tier": "clean",
+   "styles": [
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Falloween 2026",
+    "Halloween Shop 2025",
+    "The Spring Shop 2026",
+    "Glam Icons",
+    "Glam Icons NAILS ONLY",
+    "Summer Picnic"
+   ],
+   "bestseller": true,
+   "poolTier": "T1 bestseller"
+  },
+  {
+   "id": "49923295-769b-484f-a1b8-698603e9ed6a",
+   "name": "Cobalt Blue",
+   "handle": "cobalt-blue-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_04_CobaltBluePDP_1.webp?v=1776798546",
+   "price": 15.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "bold_bright"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Festival Season 2026",
+    "Summer Shop 2026",
+    "Summer Vivids",
+    "The Solids"
+   ],
+   "bestseller": true,
+   "poolTier": "T1 bestseller"
+  },
+  {
+   "id": "c46ada7f-3db3-4457-943d-5ffa63d7e839",
+   "name": "Creamer",
+   "handle": "creamer-short-round-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Creamer_1_23a660a1-74c5-4f81-a3bf-1d1af03d6b41.webp?v=1762301772",
+   "price": 15.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "round"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Ombre",
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "The Spring Shop 2026",
+    "Coffee Date",
+    "Glam Icons",
+    "Glam Icons NAILS ONLY"
+   ],
+   "bestseller": true,
+   "poolTier": "T1 bestseller"
+  },
+  {
+   "id": "0bba79b3-f624-40ea-906c-3e78e0154457",
+   "name": "Deathly Hallows™",
+   "handle": "deathly-hallows-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_03_HarryPotter2023_UGCUpdate_DeathlyHallow.webp?v=1773875401",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "dark_moody",
+    "french_white"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Accent Nail",
+    "French Tip",
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy",
+    "Matte"
+   ],
+   "collections": [
+    "Fall",
+    "Falloween 2026",
+    "Halloween Shop 2025",
+    "Harry Potter",
+    "Harry Potter 2023",
+    "HP Full Collection"
+   ],
+   "bestseller": true,
+   "poolTier": "T1 bestseller"
+  },
+  {
+   "id": "851f59a6-ccfb-4690-a3ef-4da967160ec7",
+   "name": "Fiery Red",
+   "handle": "fiery-red-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_04_FieryRedPDP_1.webp?v=1776798511",
+   "price": 15.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "reds_berries"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Festival Season 2026",
+    "Summer Shop 2026",
+    "Summer Vivids",
+    "The Solids"
+   ],
+   "bestseller": true,
+   "poolTier": "T1 bestseller"
+  },
+  {
+   "id": "afb68752-2c16-4f69-9077-df6c6c527d95",
+   "name": "Goal Digger",
+   "handle": "goal-digger-short-round-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/GoalDigger_1.webp?v=1762301524",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "round"
+   ],
+   "families": [
+    "metallics_shimmer",
+    "nudes_neutrals",
+    "pinks_pastels"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Accent Nail"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "The Spring Edit",
+    "The Spring Shop 2026",
+    "Glam Icons",
+    "Glam Icons NAILS ONLY",
+    "Reversed Gold Foil French Tip",
+    "Short & Sweet"
+   ],
+   "bestseller": true,
+   "poolTier": "T1 bestseller"
+  },
+  {
+   "id": "880787f6-489b-47e7-b99b-eb9a9f3fa9d4",
+   "name": "Hailey",
+   "handle": "hailey",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/products/11_22_Dayanna-Sapiens_Disseynails_Short-_-Sweet_Hailey_Static-Image_3.jpg?v=1771018923",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "metallics_shimmer",
+    "french_white"
+   ],
+   "tier": "statement",
+   "styles": [
+    "Sparkles"
+   ],
+   "finishes": [
+    "Glazed",
+    "Glossy"
+   ],
+   "collections": [
+    "Employee Faves Flash Sale 2025",
+    "Fall",
+    "Festival Season 2026",
+    "Short & Sweet"
+   ],
+   "bestseller": true,
+   "poolTier": "T1 bestseller"
+  },
+  {
+   "id": "a0710d66-80fe-45a4-a401-9cfea2ce02e3",
+   "name": "Heavenly",
+   "handle": "heavenly-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/10_2022_Leanne-Duong_leannekduong_Sleigh-All-Day_Heavenly_Static-Image---Copy.jpg?v=1762199222",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "clean",
+   "styles": [
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "The Spring Edit",
+    "The Spring Shop 2026",
+    "Sleigh All Day"
+   ],
+   "bestseller": true,
+   "poolTier": "T1 bestseller"
+  },
+  {
+   "id": "4c8455ef-7ae6-4c38-84e7-f34e38d803fa",
+   "name": "Hot Pink",
+   "handle": "hot-pink-short-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_04_HotPinkPDP_1.webp?v=1776798387",
+   "price": 15.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "pinks_pastels"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Festival Season 2026",
+    "Sweet 7th Birthday",
+    "The Spring Edit",
+    "The Spring Shop 2026",
+    "Summer Shop 2026",
+    "Summer Vivids",
+    "The Solids"
+   ],
+   "bestseller": true,
+   "poolTier": "T1 bestseller"
+  },
+  {
+   "id": "e87f9928-0847-4ff1-b055-b60972e8a18c",
+   "name": "Lilac",
+   "handle": "lilac-short-round-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2024_02_SpringBloomUGC_Lilac.jpg?v=1762201312",
+   "price": 15.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "round"
+   ],
+   "families": [
+    "dark_moody"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "The Spring Edit",
+    "The Spring Shop 2026",
+    "Spring Bloom",
+    "Summer Shop 2026",
+    "The Solids"
+   ],
+   "bestseller": true,
+   "poolTier": "T1 bestseller"
+  },
+  {
+   "id": "4cf8712a-96f9-4208-acf4-a24b931e1cb5",
+   "name": "Ma Damn",
+   "handle": "ma-damn-short-pointed-almond-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_04_MaDamnPDP_1.webp?v=1776798039",
+   "price": 15.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "clean",
+   "styles": [
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "The Spring Edit",
+    "The Spring Shop 2026",
+    " Winter Collection"
+   ],
+   "bestseller": true,
+   "poolTier": "T1 bestseller"
+  },
+  {
+   "id": "b85d22da-6abc-4921-9e6e-5885854e432f",
+   "name": "Marauder's Map™",
+   "handle": "marauders-map-short-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_03_HarryPotter2023_UGCUpdate_MaraudersMap.webp?v=1773875539",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "reds_berries"
+   ],
+   "tier": "art",
+   "styles": [
+    "Patterns",
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Falloween 2026",
+    "Halloween Shop 2025",
+    "Harry Potter",
+    "Harry Potter 2023",
+    "HP Full Collection"
+   ],
+   "bestseller": true,
+   "poolTier": "T1 bestseller"
+  },
+  {
+   "id": "b6fe13ee-003b-46de-8823-b56983cdaa48",
+   "name": "Merlot",
+   "handle": "merlot-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2023_Merlot_pop_polished-ugc.jpg?v=1762200926",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "reds_berries",
+    "french_white"
+   ],
+   "tier": "clean",
+   "styles": [
+    "French Tip",
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy",
+    "Matte"
+   ],
+   "collections": [
+    "Fall",
+    "Falloween 2026",
+    "Festival Season 2026",
+    "Halloween Shop 2025",
+    "Snow Day"
+   ],
+   "bestseller": true,
+   "poolTier": "T1 bestseller"
+  },
+  {
+   "id": "a4795208-d177-4083-986f-8596504280a5",
+   "name": "Pure Intentions",
+   "handle": "pure-intentions-short-round-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_03_IndividualPDPUpdates_Batch3_PureIntentionsUGC.webp?v=1776799117",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "round"
+   ],
+   "families": [
+    "metallics_shimmer",
+    "french_white"
+   ],
+   "tier": "statement",
+   "styles": [
+    "Sparkles",
+    "Velvet"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Fall",
+    "Choose Your Vibe"
+   ],
+   "bestseller": true,
+   "poolTier": "T1 bestseller"
+  },
+  {
+   "id": "5cbd3e68-1a9d-4ab2-b03e-12adead1e7de",
+   "name": "Rosé",
+   "handle": "rose-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_03_IndividualPDPUpdates_Batch3_RoseUGC.webp?v=1776799420",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "pinks_pastels"
+   ],
+   "tier": "statement",
+   "styles": [
+    "Solid Color",
+    "Velvet"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Festival Season 2026",
+    "Summer Shop 2026",
+    "Velvet Crush"
+   ],
+   "bestseller": true,
+   "poolTier": "T1 bestseller"
+  },
+  {
+   "id": "18252268-3d6f-4551-9b13-2eabfd574bb6",
+   "name": "Selenite",
+   "handle": "selenite",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2023_12_CatchingFeelingsUGC_GlassSlipper.jpg?v=1771018923",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "metallics_shimmer",
+    "french_white"
+   ],
+   "tier": "statement",
+   "styles": [
+    "Sparkles",
+    "Velvet"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Employee Faves Flash Sale 2025",
+    "Fall",
+    "Festival Season 2026",
+    "Catching Feelings"
+   ],
+   "bestseller": true,
+   "poolTier": "T1 bestseller"
+  },
+  {
+   "id": "9574b875-6ed5-4da0-ab6d-fc474a56414b",
+   "name": "Think Pink",
+   "handle": "think-pink",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/ThinkPink_1_114a8d6b-f933-4349-a534-661d70c034ec.webp?v=1780425721",
+   "price": 15.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "pinks_pastels"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Employee Faves Flash Sale 2025",
+    "The Spring Edit",
+    "The Spring Shop 2026",
+    "Glam Icons",
+    "Glam Icons 2026",
+    "Glam Icons NAILS ONLY",
+    "Glossy Blush Pink",
+    "Spring Bloom",
+    "Summer Shop 2026",
+    "The Solids"
+   ],
+   "bestseller": true,
+   "poolTier": "T1 bestseller"
+  },
+  {
+   "id": "66b75205-43ac-4d5d-92ba-25dbac8842fb",
+   "name": "Aura Reading",
+   "handle": "aura-reading-extra-short-square-quick-press-mani-no-glue-needed-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/AuraReading_1.webp?v=1785889180",
+   "price": 11.99,
+   "system": "quick_press",
+   "length": "extra_short",
+   "shapes": [
+    "square"
+   ],
+   "families": [
+    "dark_moody"
+   ],
+   "tier": "statement",
+   "styles": [
+    "Solid Color",
+    "Velvet"
+   ],
+   "finishes": [
+    "Velvet"
+   ],
+   "collections": [
+    "Fall",
+    "Quick Press Mani 2026",
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T2 quick_press"
+  },
+  {
+   "id": "4e82f544-c856-4c41-a64b-1e4636a017cb",
+   "name": "Blue Halo",
+   "handle": "blue-halo-extra-short-oval-quick-press-mani-no-glue-needed-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/BLUE-HALO_1.webp?v=1773182416",
+   "price": 11.99,
+   "system": "quick_press",
+   "length": "extra_short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "bold_bright",
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "clean",
+   "styles": [
+    "French Tip"
+   ],
+   "finishes": [
+    "Glazed"
+   ],
+   "collections": [
+    "Quick Press Mani 2026",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T2 quick_press"
+  },
+  {
+   "id": "95af9717-482e-47bb-a654-2c6df3978d61",
+   "name": "Dainty Dots",
+   "handle": "dainty-dots-extra-short-square-quick-press-mani-no-glue-needed-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/DAINTY-DOTS_1.webp?v=1773182357",
+   "price": 11.99,
+   "system": "quick_press",
+   "length": "extra_short",
+   "shapes": [
+    "square"
+   ],
+   "families": [
+    "nudes_neutrals"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Polka Dots"
+   ],
+   "finishes": [
+    "Glazed"
+   ],
+   "collections": [
+    "Fall",
+    "Quick Press Mani 2026",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T2 quick_press"
+  },
+  {
+   "id": "e975e2ed-be5d-4f53-9865-4b56d8286fd3",
+   "name": "Daydream Veil",
+   "handle": "daydream-veil-extra-short-square-quick-press-mani-no-glue-needed-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/DAYDREAM-VEIL_1.webp?v=1773182247",
+   "price": 11.99,
+   "system": "quick_press",
+   "length": "extra_short",
+   "shapes": [
+    "square"
+   ],
+   "families": [
+    "french_white"
+   ],
+   "tier": "statement",
+   "styles": [
+    "Solid Color",
+    "Velvet"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Fall",
+    "Quick Press Mani 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T2 quick_press"
+  },
+  {
+   "id": "9509626d-d33e-47cd-b7aa-5f9f28f586e2",
+   "name": "French Noir",
+   "handle": "french-noir-extra-short-quick-press-mani-no-glue-needed-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/FrenchNoir_1.webp?v=1773182172",
+   "price": 11.99,
+   "system": "quick_press",
+   "length": "extra_short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "dark_moody",
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "clean",
+   "styles": [
+    "French Tip"
+   ],
+   "finishes": [
+    "Glazed"
+   ],
+   "collections": [
+    "Fall",
+    "Quick Press Mani 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T2 quick_press"
+  },
+  {
+   "id": "4dd01ba7-8868-4b03-a220-0ca65a3306ee",
+   "name": "Ink Spell",
+   "handle": "ink-spell-extra-short-round-quick-press-mani-no-glue-needed-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/InkSpell_1.webp?v=1785889193",
+   "price": 11.99,
+   "system": "quick_press",
+   "length": "extra_short",
+   "shapes": [
+    "round"
+   ],
+   "families": [
+    "dark_moody"
+   ],
+   "tier": "clean",
+   "styles": [],
+   "finishes": [
+    "Glazed"
+   ],
+   "collections": [
+    "Fall",
+    "Quick Press Mani 2026",
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T2 quick_press"
+  },
+  {
+   "id": "cedca58b-8123-4b36-9aed-a7ce51017036",
+   "name": "Lime Beam",
+   "handle": "lime-beam-extra-short-almond-quick-press-mani-no-glue-needed-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/LIME-BEAM_1.webp?v=1773182106",
+   "price": 11.99,
+   "system": "quick_press",
+   "length": "extra_short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "bold_bright",
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "clean",
+   "styles": [
+    "French Tip",
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Fall",
+    "Quick Press Mani 2026",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T2 quick_press"
+  },
+  {
+   "id": "f5a2c1ff-361d-4933-8724-0b1ae406de3f",
+   "name": "Mauve Muse",
+   "handle": "mauve-muse-extra-short-oval-quick-press-mani-no-glue-needed-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/MAUVE-MUSE_1.webp?v=1773182038",
+   "price": 11.99,
+   "system": "quick_press",
+   "length": "extra_short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "pinks_pastels"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glazed"
+   ],
+   "collections": [
+    "Fall",
+    "Quick Press Mani 2026",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T2 quick_press"
+  },
+  {
+   "id": "d0b15088-2067-4f37-a6ba-b490ab01a793",
+   "name": "Midnight Merlot",
+   "handle": "midnight-merlot-extra-short-oval-quick-press-mani-no-glue-needed-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/MidnightMerlot_1.webp?v=1785889206",
+   "price": 11.99,
+   "system": "quick_press",
+   "length": "extra_short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "reds_berries"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Velvet"
+   ],
+   "collections": [
+    "Fall",
+    "Quick Press Mani 2026",
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T2 quick_press"
+  },
+  {
+   "id": "1da1959e-9638-424c-a49a-831665b4ed40",
+   "name": "Nude Glazed",
+   "handle": "nude-glazed-extra-short-oval-quick-press-mani-no-glue-needed-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/NUDE-GLAZED_1.webp?v=1773181947",
+   "price": 11.99,
+   "system": "quick_press",
+   "length": "extra_short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "nudes_neutrals"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glazed"
+   ],
+   "collections": [
+    "Fall",
+    "Quick Press Mani 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T2 quick_press"
+  },
+  {
+   "id": "20c0973a-317a-49c6-9d46-72bbfbe47345",
+   "name": "Ocean Prism",
+   "handle": "ocean-prism-extra-short-almond-quick-press-mani-no-glue-needed-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/OCEAN-PRISM_1.webp?v=1773181887",
+   "price": 11.99,
+   "system": "quick_press",
+   "length": "extra_short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "bold_bright"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glazed"
+   ],
+   "collections": [
+    "Fall",
+    "Quick Press Mani 2026",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T2 quick_press"
+  },
+  {
+   "id": "e5f70878-ce5a-4787-b04f-6901d1fcfc80",
+   "name": "Porcelain",
+   "handle": "porcelain-extra-short-square-quick-press-mani-no-glue-needed-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/PORCELAIN_1.webp?v=1773181822",
+   "price": 11.99,
+   "system": "quick_press",
+   "length": "extra_short",
+   "shapes": [
+    "square"
+   ],
+   "families": [
+    "french_white"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Quick Press Mani 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T2 quick_press"
+  },
+  {
+   "id": "049281f0-9d60-4b31-839d-9f7efa7d8fdd",
+   "name": "Purple Reign",
+   "handle": "purple-reign-extra-short-oval-quick-press-mani-no-glue-needed-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/PurpleReign_1.webp?v=1785889217",
+   "price": 11.99,
+   "system": "quick_press",
+   "length": "extra_short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "dark_moody"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Quick Press Mani 2026",
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T2 quick_press"
+  },
+  {
+   "id": "6af28260-b850-4e4f-aa6d-c341b3401c89",
+   "name": "Red Allure",
+   "handle": "red-allure-extra-short-square-quick-press-mani-no-glue-needed-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/RED-ALLURE_1.webp?v=1773181752",
+   "price": 11.99,
+   "system": "quick_press",
+   "length": "extra_short",
+   "shapes": [
+    "square"
+   ],
+   "families": [
+    "reds_berries"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Fall",
+    "Quick Press Mani 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T2 quick_press"
+  },
+  {
+   "id": "ef4f4501-abaa-4a6a-9564-d55a70c181d1",
+   "name": "Sherbert",
+   "handle": "sherbert-extra-short-round-quick-press-mani-no-glue-needed-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Sherbert_1.webp?v=1773181687",
+   "price": 11.99,
+   "system": "quick_press",
+   "length": "extra_short",
+   "shapes": [
+    "round"
+   ],
+   "families": [
+    "pinks_pastels",
+    "bold_bright"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Ombre",
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Quick Press Mani 2026",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T2 quick_press"
+  },
+  {
+   "id": "aff31563-d4f0-4d16-8b46-1bb02ce02cbd",
+   "name": "Sparkly Brown",
+   "handle": "sparkly-brown-extra-short-oval-quick-press-mani-no-glue-needed-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/SPARKLY-BROWN_1.webp?v=1773181624",
+   "price": 11.99,
+   "system": "quick_press",
+   "length": "extra_short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "nudes_neutrals"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Quick Press Mani 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T2 quick_press"
+  },
+  {
+   "id": "136c735c-50f0-440e-888d-febd860344d9",
+   "name": "Sparkly Moss",
+   "handle": "sparkly-moss-extra-short-oval-quick-press-mani-no-glue-needed-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/SPARKLY-MOSS_1.webp?v=1773181558",
+   "price": 11.99,
+   "system": "quick_press",
+   "length": "extra_short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "bold_bright"
+   ],
+   "tier": "statement",
+   "styles": [
+    "Solid Color",
+    "Velvet"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Fall",
+    "Quick Press Mani 2026",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T2 quick_press"
+  },
+  {
+   "id": "72ce628c-6655-4d74-b5ca-cd0a8131e7a1",
+   "name": "Teddy",
+   "handle": "teddy-extra-short-oval-quick-press-mani-no-glue-needed-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/TEDDY_1.webp?v=1773181445",
+   "price": 11.99,
+   "system": "quick_press",
+   "length": "extra_short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "nudes_neutrals"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Quick Press Mani 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T2 quick_press"
+  },
+  {
+   "id": "2b13de3f-07f1-4ac1-a58b-6ed094b3460b",
+   "name": "Velvet Chrome",
+   "handle": "velvet-chrome-extra-short-almond-quick-press-mani-no-glue-needed-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/VELVET-CHROME_1.webp?v=1773181317",
+   "price": 11.99,
+   "system": "quick_press",
+   "length": "extra_short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "metallics_shimmer",
+    "french_white"
+   ],
+   "tier": "clean",
+   "styles": [
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Fall",
+    "Quick Press Mani 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T2 quick_press"
+  },
+  {
+   "id": "d2d67bc1-f0b7-4053-a597-899b469d46ed",
+   "name": "Velvet French",
+   "handle": "velvet-french-extra-short-round-quick-press-mani-no-glue-needed-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/VelvetFrench_1.webp?v=1773182816",
+   "price": 11.99,
+   "system": "quick_press",
+   "length": "extra_short",
+   "shapes": [
+    "round"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "clean",
+   "styles": [
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Fall",
+    "Quick Press Mani 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T2 quick_press"
+  },
+  {
+   "id": "aeb2da82-ccb7-4aea-87c8-c1037f715177",
+   "name": "Velveteen Trance",
+   "handle": "velveteen-trance-extra-short-almond-quick-press-mani-no-glue-needed-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/VelveteenTrance_1.webp?v=1785889231",
+   "price": 11.99,
+   "system": "quick_press",
+   "length": "extra_short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "dark_moody"
+   ],
+   "tier": "statement",
+   "styles": [
+    "Ombre",
+    "Solid Color",
+    "Velvet"
+   ],
+   "finishes": [
+    "Velvet"
+   ],
+   "collections": [
+    "Fall",
+    "Quick Press Mani 2026",
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T2 quick_press"
+  },
+  {
+   "id": "9f4cba56-8804-460b-9863-2fece476d901",
+   "name": "After Hours",
+   "handle": "after-hours-short-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/AfterHours_1.webp?v=1786994104",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "dark_moody"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glazed",
+    "Glossy"
+   ],
+   "collections": [
+    "The Soft Launch 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "d2e0a1e1-0f0c-49bb-8bbc-06953a134552",
+   "name": "Cherry Mocha",
+   "handle": "cherry-mocha-medium-square-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/CherryMocha_1.webp?v=1786995919",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "medium",
+   "shapes": [
+    "square"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "reds_berries"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Falloween 2026",
+    "Festival Season 2026",
+    "Halloween Shop 2025",
+    "Fright Night",
+    "The Soft Launch 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "e6e1e571-a6d2-487c-89cf-720fcec88155",
+   "name": "Cloud Dance",
+   "handle": "cloud-dance-short-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/CloudDance_1.webp?v=1786994525",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "bold_bright",
+    "metallics_shimmer"
+   ],
+   "tier": "statement",
+   "styles": [
+    "Aura",
+    "Magnetic Cat Eye",
+    "Ombre",
+    "Solid Color",
+    "Velvet"
+   ],
+   "finishes": [
+    "Velvet"
+   ],
+   "collections": [
+    "The Soft Launch 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "2069efd8-d16b-4338-9c33-78365697f7b4",
+   "name": "Dotted Mulberry",
+   "handle": "dotted-mulberry-medium-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/DottedMulberry_1.webp?v=1786994116",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "medium",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "dark_moody",
+    "french_white"
+   ],
+   "tier": "statement",
+   "styles": [
+    "French Tip",
+    "Polka Dots",
+    "Solid Color",
+    "Velvet"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "The Soft Launch 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "352ee1e1-bfda-47e5-ad3d-6911d15a721a",
+   "name": "Gold Goals",
+   "handle": "gold-goals-medium-coffin-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_06_GoldGoals_1.webp?v=1782417596",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "medium",
+   "shapes": [
+    "coffin"
+   ],
+   "families": [
+    "metallics_shimmer",
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "clean",
+   "styles": [
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Festival Season 2026",
+    "The Spring Shop 2026",
+    "Glam Icons",
+    "Glam Icons 2025",
+    "Glam Icons NAILS ONLY",
+    "Reversed Gold Foil French Tip",
+    "The Soft Launch 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "066bc8e8-adb2-49fa-94be-687f38c9b364",
+   "name": "Heavenly Metal",
+   "handle": "heavenly-metal-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/HeavenlyMetal_1.webp?v=1786994490",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "dark_moody",
+    "metallics_shimmer",
+    "french_white"
+   ],
+   "tier": "statement",
+   "styles": [
+    "French Tip",
+    "Glitter",
+    "Solid Color"
+   ],
+   "finishes": [
+    "Velvet"
+   ],
+   "collections": [
+    "The Soft Launch 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "bd734c84-0727-43be-8ecd-d417498c1120",
+   "name": "Heavenly Touch",
+   "handle": "heavenly-touch-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/HeavenlyTouch_1.webp?v=1786994503",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "metallics_shimmer",
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "statement",
+   "styles": [
+    "Chrome",
+    "French Tip"
+   ],
+   "finishes": [
+    "Chrome",
+    "Glossy"
+   ],
+   "collections": [
+    "The Soft Launch 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "20c5a6f7-e71e-4321-890a-6a91db8dc01b",
+   "name": "Iced Latte",
+   "handle": "iced-latte-short-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/IcedLatte_1.webp?v=1786994086",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "nudes_neutrals"
+   ],
+   "tier": "statement",
+   "styles": [
+    "Solid Color",
+    "Velvet"
+   ],
+   "finishes": [
+    "Velvet"
+   ],
+   "collections": [
+    "Halloween Shop 2025",
+    "The Soft Launch 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "960bd02a-060d-4a1a-ac0c-1b8129a78890",
+   "name": "Love Current",
+   "handle": "love-current-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/LoveCurrent_1.webp?v=1786994578",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "pinks_pastels",
+    "metallics_shimmer"
+   ],
+   "tier": "art",
+   "styles": [
+    "3D Gem",
+    "Aura",
+    "Ombre",
+    "Patterns",
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glazed",
+    "Glazed Pearl",
+    "Glossy",
+    "Pearl"
+   ],
+   "collections": [
+    "The Soft Launch 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "bc8291fb-679a-4df0-8039-9a3b911a37e2",
+   "name": "Pink Whisper",
+   "handle": "pink-whisper-short-round-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/PinkWhisper_1.webp?v=1780425722",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "round"
+   ],
+   "families": [
+    "pinks_pastels"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Glam Icons",
+    "Glam Icons 2026",
+    "Glam Icons NAILS ONLY",
+    "Summer Shop 2026",
+    "The Soft Launch 2026",
+    "Velvet Pink"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "773e552c-f9ac-4bef-8c65-00e8bc2c8169",
+   "name": "Pixie Dusted",
+   "handle": "pixie-dusted-short-squoval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/PixieDusted_1.webp?v=1786994127",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "squoval"
+   ],
+   "families": [
+    "pinks_pastels",
+    "french_white"
+   ],
+   "tier": "statement",
+   "styles": [
+    "French Tip",
+    "Magnetic Cat Eye",
+    "Pearl",
+    "Solid Color",
+    "Velvet"
+   ],
+   "finishes": [
+    "Velvet"
+   ],
+   "collections": [
+    "The Soft Launch 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "96b8f6ad-138b-4917-b52d-df69d24254d8",
+   "name": "Polar Night",
+   "handle": "polar-night-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/PolarNight_1.webp?v=1786995981",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "pinks_pastels",
+    "metallics_shimmer",
+    "french_white"
+   ],
+   "tier": "statement",
+   "styles": [
+    "Ombre",
+    "Velvet"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Fall",
+    "Summer Shop 2026",
+    "The Soft Launch 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "fea2c935-89a4-45a8-ba7e-fe3d03f2ae79",
+   "name": "Soft Skyline",
+   "handle": "soft-skyline-medium-coffin-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/SoftSkyline_1.webp?v=1786993767",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "medium",
+   "shapes": [
+    "coffin"
+   ],
+   "families": [
+    "bold_bright",
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "extra",
+   "styles": [
+    "French Tip",
+    "Ombre",
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "The Soft Launch 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "40d3d681-cde3-4ce7-bf46-86358216372e",
+   "name": "Strawberry Icing",
+   "handle": "strawberry-icing-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/StrawberryIcing_1.webp?v=1786994094",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "pinks_pastels",
+    "french_white"
+   ],
+   "tier": "clean",
+   "styles": [
+    "French Tip"
+   ],
+   "finishes": [
+    "Glazed",
+    "Glossy"
+   ],
+   "collections": [
+    "The Soft Launch 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "a9216929-e1e9-4b17-ae28-55ce3d45fc00",
+   "name": "Alakazam",
+   "handle": "alakazam-short-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Alakazam_1.webp?v=1785888075",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "bold_bright",
+    "reds_berries"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Velvet"
+   ],
+   "collections": [
+    "Fall",
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "303a3915-2912-4d1d-b09c-2992db9b674c",
+   "name": "Bat Check",
+   "handle": "bat-check-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/BatCheck-1.webp?v=1785888109",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "dark_moody",
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "French Tip",
+    "Patterns"
+   ],
+   "finishes": [
+    "Glazed"
+   ],
+   "collections": [
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "33b9ccf5-ff68-46b6-98d7-1050bee5624f",
+   "name": "Batty Bits",
+   "handle": "batty-bits-short-squoval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/BattyBits_1.webp?v=1785888183",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "squoval"
+   ],
+   "families": [
+    "dark_moody"
+   ],
+   "tier": "art",
+   "styles": [
+    "Accent Nail",
+    "Patterns"
+   ],
+   "finishes": [
+    "Glazed"
+   ],
+   "collections": [
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "9e92fb24-a17e-44dc-a9df-094f6ba0828f",
+   "name": "Bitter Orange",
+   "handle": "bitter-orange-short-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/BitterOrange_1.webp?v=1785888241",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "bold_bright",
+    "pinks_pastels"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Ombre"
+   ],
+   "finishes": [
+    "Velvet"
+   ],
+   "collections": [
+    "Fall",
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "2b4b4d9a-06c6-47fb-9e77-42225fa8b98b",
+   "name": "Burgundy Chrome",
+   "handle": "burgundy-chrome-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/BurgundyChrome_1.webp?v=1785889379",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "dark_moody",
+    "reds_berries",
+    "metallics_shimmer"
+   ],
+   "tier": "statement",
+   "styles": [
+    "Chrome",
+    "Metallic Chrome",
+    "Solid Color"
+   ],
+   "finishes": [
+    "Chrome",
+    "Metallic Chrome"
+   ],
+   "collections": [
+    "Fall",
+    "Falloween 2026",
+    "Festival Season 2026",
+    "Halloween Shop 2025",
+    "Fright Night",
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "42473785-3c18-4ab4-872f-3d2255e919e4",
+   "name": "Carving Contest",
+   "handle": "carving-contest-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/CarvingContest-1.webp?v=1785888262",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "bold_bright"
+   ],
+   "tier": "art",
+   "styles": [
+    "Accent Nail",
+    "Patterns"
+   ],
+   "finishes": [
+    "Velvet"
+   ],
+   "collections": [
+    "Fall",
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "89df08be-b8d5-448f-99a8-c4c131c6204d",
+   "name": "Crystal Cantation",
+   "handle": "crystal-cantation-medium-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/CrystalCantation_1.webp?v=1785888296",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "medium",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "bold_bright"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Velvet"
+   ],
+   "collections": [
+    "Fall",
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "ef26baa4-2086-40ed-86c4-8bb720422eb7",
+   "name": "Dark Romance",
+   "handle": "dark-romance-short-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/DarkRomance_1.webp?v=1785888365",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "dark_moody"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Ombre",
+    "Solid Color"
+   ],
+   "finishes": [
+    "Velvet"
+   ],
+   "collections": [
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "ee9ce5e6-e0b3-4e1f-a703-046ea2aeebad",
+   "name": "Dark Waters",
+   "handle": "dark-waters-medium-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/DarkWaters-1.webp?v=1786655239",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "medium",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "dark_moody",
+    "bold_bright"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Ombre",
+    "Solid Color"
+   ],
+   "finishes": [
+    "Velvet"
+   ],
+   "collections": [
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "1d714c03-139b-4c66-a52b-238e764e0e62",
+   "name": "Espresso Glow",
+   "handle": "espresso-glow-medium-coffin-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/EuroSummerPDP_EspressoGlow_1.webp?v=1776204122",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "medium",
+   "shapes": [
+    "coffin"
+   ],
+   "families": [
+    "nudes_neutrals"
+   ],
+   "tier": "statement",
+   "styles": [
+    "Solid Color",
+    "Velvet"
+   ],
+   "finishes": [
+    "Gloss",
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Fall",
+    "Falloween 2026",
+    "Euro Summer 2026",
+    "Spells & Sparkles 2026",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "6d52cb72-0659-4497-9d77-9f4ddfde4fd0",
+   "name": "Fall Boo",
+   "handle": "fall-boo-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/FallBoo_6.jpg?v=1769555091",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "dark_moody",
+    "nudes_neutrals",
+    "bold_bright",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "Accent Nail",
+    "Patterns",
+    "Solid Color",
+    "Waves"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Falloween 2026",
+    "Fright Night",
+    "Simply Spooky 2024",
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "b2ceb2b1-ef51-4031-b5f7-a30219950a09",
+   "name": "Ghost Besties",
+   "handle": "ghost-besties-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/GhostBesties-1.webp?v=1785888407",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "metallics_shimmer",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "3D",
+    "Chrome",
+    "Patterns"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "57c5c522-56c6-4308-a488-ed382619c171",
+   "name": "Ghosted",
+   "handle": "ghosted-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Ghosted_1.webp?v=1785889559",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "dark_moody",
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "French Tip",
+    "Patterns",
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Falloween 2026",
+    "Halloween Shop 2025",
+    "Fright Night",
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "47642b5f-0977-4674-8340-4ced68d73152",
+   "name": "Golden Gourds",
+   "handle": "golden-gourds-short-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/GoldenGourds-1.webp?v=1785888475",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "metallics_shimmer",
+    "bold_bright"
+   ],
+   "tier": "art",
+   "styles": [
+    "3D",
+    "Patterns",
+    "Velvet"
+   ],
+   "finishes": [
+    "Velvet"
+   ],
+   "collections": [
+    "Fall",
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "85654cdd-6d76-4ca4-9554-30ef67b59695",
+   "name": "Immortal Kiss",
+   "handle": "immortal-kiss-medium-coffin-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/ImmortalKiss-1.webp?v=1785888631",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "medium",
+   "shapes": [
+    "coffin"
+   ],
+   "families": [
+    "pinks_pastels",
+    "dark_moody",
+    "metallics_shimmer"
+   ],
+   "tier": "art",
+   "styles": [
+    "3D",
+    "Ombre"
+   ],
+   "finishes": [
+    "Glazed",
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "c8490377-d3e7-40ce-a4cc-42ef485652d0",
+   "name": "In The Spirit",
+   "handle": "in-the-spirit-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/InTheSpirit-1.webp?v=1785888495",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "dark_moody",
+    "nudes_neutrals"
+   ],
+   "tier": "art",
+   "styles": [
+    "Accent Nail",
+    "Patterns"
+   ],
+   "finishes": [
+    "Glazed"
+   ],
+   "collections": [
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "0caa775c-5765-490c-b628-f5d9f4e53c86",
+   "name": "Just A Ghoul",
+   "handle": "just-a-ghoul-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/JustAGhoul-1.webp?v=1785888714",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "pinks_pastels",
+    "metallics_shimmer",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "Patterns",
+    "Velvet"
+   ],
+   "finishes": [
+    "Velvet"
+   ],
+   "collections": [
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "17400d0c-4682-4881-9008-20c3e5176bb2",
+   "name": "Lady Web",
+   "handle": "lady-web-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/LadyWeb_1.webp?v=1785889634",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "dark_moody",
+    "nudes_neutrals",
+    "metallics_shimmer"
+   ],
+   "tier": "art",
+   "styles": [
+    "Patterns",
+    "Sparkles"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Falloween 2026",
+    "Simply Spooky 2024",
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "15aaabb0-32db-47e1-98d0-bad6ab788238",
+   "name": "Lil Devils",
+   "handle": "lil-devils-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/LilDevils_1.webp?v=1785888759",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "dark_moody",
+    "reds_berries"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Accent Nail",
+    "Ombre"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "229f969d-bf78-433f-a50d-5c65d3cefeba",
+   "name": "Lil Gremlins",
+   "handle": "lil-gremlins-short-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/LilGremlins_1.webp?v=1785888810",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "bold_bright",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "Accent Nail",
+    "Patterns"
+   ],
+   "finishes": [
+    "Glazed"
+   ],
+   "collections": [
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "0c44ffb7-e373-4199-a5ca-4f94b91b724c",
+   "name": "Mani De Los Muertos",
+   "handle": "mani-de-los-muertos-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/ManiDeLosMuertos-1.webp?v=1785888829",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "dark_moody",
+    "metallics_shimmer",
+    "bold_bright",
+    "pinks_pastels",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "Accent Nail",
+    "French Tip",
+    "Patterns"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "c54e9682-3f3f-4807-bc8f-de92c57ef4d1",
+   "name": "My Boo",
+   "handle": "my-boo-short-almond-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/MyBoo_1.webp?v=1785889688",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "dark_moody",
+    "nudes_neutrals",
+    "bold_bright"
+   ],
+   "tier": "art",
+   "styles": [
+    "Accent Nail",
+    "Patterns"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Falloween 2026",
+    "Simply Spooky 2024",
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "49d647f0-c506-4636-9003-1c8848f463fd",
+   "name": "Nine Lives",
+   "handle": "nine-lives-short-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/NineLives_1.webp?v=1785889727",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "dark_moody",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "Accent Nail",
+    "French Tip",
+    "Patterns"
+   ],
+   "finishes": [
+    "Glossy",
+    "Matte",
+    "Velvet"
+   ],
+   "collections": [
+    "Falloween 2026",
+    "Fright Night",
+    "Simply Spooky 2024",
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "d628037f-0e05-4d83-ae00-fa59d2cdb230",
+   "name": "October Nights",
+   "handle": "october-nights-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/OctoberNights_1.webp?v=1785888880",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "dark_moody",
+    "nudes_neutrals",
+    "bold_bright",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "French Tip",
+    "Patterns"
+   ],
+   "finishes": [
+    "Glazed"
+   ],
+   "collections": [
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "cda26f48-e707-456f-a8a6-7adb4623bdb3",
+   "name": "Phantom Glow",
+   "handle": "phantom-glow-medium-coffin-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Phantom-Glow_6.jpg?v=1762201701",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "medium",
+   "shapes": [
+    "coffin"
+   ],
+   "families": [
+    "dark_moody",
+    "metallics_shimmer"
+   ],
+   "tier": "art",
+   "styles": [
+    "Accent Nail",
+    "Accent Nails",
+    "Glow in the Dark",
+    "Sparkles",
+    "Velvet"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Falloween 2026",
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "108f0463-b678-4092-9ec5-40195c80ad37",
+   "name": "Scarlet Spell",
+   "handle": "scarlet-spell-short-squoval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/ScarletSpell-1.webp?v=1785888893",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "squoval"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "metallics_shimmer",
+    "reds_berries"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Fall",
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "f0ce2367-7bde-4ffe-a446-86cf60032f34",
+   "name": "Shriek Boutique",
+   "handle": "shriek-boutique-short-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/ShriekBoutique-1.webp?v=1785888903",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "dark_moody",
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "Accent Nail",
+    "Patterns"
+   ],
+   "finishes": [
+    "Velvet"
+   ],
+   "collections": [
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "73da9f5e-1495-4c27-9feb-24ca802a3575",
+   "name": "Sicilian Sun",
+   "handle": "sicilian-sun-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/EuroSummerPDP_SicilianSunset_1.webp?v=1776204122",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "nudes_neutrals"
+   ],
+   "tier": "statement",
+   "styles": [
+    "Solid Color",
+    "Velvet"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Fall",
+    "Euro Summer 2026",
+    "Spells & Sparkles 2026",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "70dcceb8-12de-44e3-b77c-44d9d22ba297",
+   "name": "Silver Daggers",
+   "handle": "silver-daggers-short-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/SilverDaggers_1.webp?v=1785888942",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "metallics_shimmer"
+   ],
+   "tier": "art",
+   "styles": [
+    "3D",
+    "Solid Color"
+   ],
+   "finishes": [
+    "Velvet"
+   ],
+   "collections": [
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "cd468e54-dc84-4163-a2c7-7eb2b288ff0c",
+   "name": "Smoke N' Mirrors",
+   "handle": "smoke-n-mirrors-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/SmokeN_Mirrors_1.webp?v=1785888983",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "dark_moody"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Ombre",
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glazed"
+   ],
+   "collections": [
+    "Fall",
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "046a427a-dc87-4d6b-ba50-d45a7a2afdc5",
+   "name": "Tiny Pumpkin",
+   "handle": "tiny-pumpkin-short-squoval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/TinyPumpkin_1.webp?v=1769555091",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "squoval"
+   ],
+   "families": [
+    "dark_moody",
+    "nudes_neutrals",
+    "bold_bright",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "3D",
+    "French Tip",
+    "Patterns"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Falloween 2026",
+    "Festival Season 2026",
+    "Halloween Shop 2025",
+    "Fright Night",
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "25ee1396-bcf7-46bc-9930-c3d594c942f9",
+   "name": "Tricks & Treats",
+   "handle": "tricks-and-treats-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Tricks_Treats_1.webp?v=1785889030",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "dark_moody"
+   ],
+   "tier": "art",
+   "styles": [
+    "Patterns"
+   ],
+   "finishes": [
+    "Glazed"
+   ],
+   "collections": [
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "52d14763-f31f-46d9-baee-258daf2916ce",
+   "name": "Vampiress",
+   "handle": "vampiress-medium-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Vampiress_1_1.webp?v=1785889799",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "medium",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "dark_moody",
+    "nudes_neutrals"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Falloween 2026",
+    "Fright Night",
+    "Simply Spooky 2024",
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "c8c65be2-3d70-4d17-8a3a-cd1177459b12",
+   "name": "Vintage Silver",
+   "handle": "vintage-silver-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/VintageSilver_1.webp?v=1785889051",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "bold_bright",
+    "metallics_shimmer"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Ombre",
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glazed"
+   ],
+   "collections": [
+    "Fall",
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "f3bb0bea-b312-4ccd-b042-4c2ebc2a665b",
+   "name": "Weblings",
+   "handle": "weblings-short-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Weblings-1.webp?v=1785889069",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "dark_moody",
+    "metallics_shimmer"
+   ],
+   "tier": "art",
+   "styles": [
+    "3D",
+    "Patterns",
+    "Velvet"
+   ],
+   "finishes": [
+    "Velvet"
+   ],
+   "collections": [
+    "Fall",
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "7aec16c4-fbe3-4b15-a2f9-5508641190c9",
+   "name": "Witchy Woman",
+   "handle": "witchy-woman-short-squoval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/WitchyWoman_1.webp?v=1785889113",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "squoval"
+   ],
+   "families": [
+    "dark_moody",
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Accent Nail",
+    "French Tip"
+   ],
+   "finishes": [
+    "Glazed"
+   ],
+   "collections": [
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "6572d0e7-34b1-430b-8f20-3714d973f7b9",
+   "name": "Wrapped Up",
+   "handle": "wrapped-up-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/WrappedUp_1_80bd656a-a845-4836-9693-167b70c53e55.webp?v=1785889827",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "bold_bright",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "Accent Nail",
+    "Patterns",
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Falloween 2026",
+    "Fright Night",
+    "Simply Spooky 2024",
+    "Spells & Sparkles 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "88153cd6-13cf-45f0-8545-b7287220a12b",
+   "name": "Amethyst",
+   "handle": "amethyst-short-squoval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Amethyst-1.webp?v=1783553208",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "squoval"
+   ],
+   "families": [
+    "metallics_shimmer",
+    "dark_moody"
+   ],
+   "tier": "art",
+   "styles": [
+    "3D Gems",
+    "Patterns",
+    "Solid Color",
+    "Velvet"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Fall",
+    "Falloween 2026",
+    "Halloween Shop 2025",
+    "Sparkling Gems",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "36e0b0a5-fa40-4a73-8831-26985fd726ee",
+   "name": "Aquamarine",
+   "handle": "aquamarine-short-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Aquamarine-1.webp?v=1783553151",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "bold_bright",
+    "nudes_neutrals"
+   ],
+   "tier": "art",
+   "styles": [
+    "3D Gems",
+    "Accent Nail",
+    "Patterns",
+    "Solid Color",
+    "Velvet"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Sparkling Gems",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "9816fdfd-adf5-40ee-b28b-50af0fb0969b",
+   "name": "Blue Topaz",
+   "handle": "blue-topaz-short-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Blue_Topaz_1_1.webp?v=1783553090",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "bold_bright"
+   ],
+   "tier": "art",
+   "styles": [
+    "3D Gems",
+    "Accent Nail",
+    "Patterns",
+    "Solid Color",
+    "Velvet"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Sparkling Gems",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "0d67ad0c-2079-46d2-a439-c1b1f1135163",
+   "name": "Citrine",
+   "handle": "citrine-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Citrine_1_1.webp?v=1783553049",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "metallics_shimmer",
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "3D Gems",
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Sparkling Gems",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "d3695593-8790-4a2b-888b-a74667a57117",
+   "name": "Diamond",
+   "handle": "diamond-short-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Diamond-1_0ed9ec5f-a667-43c2-acbf-ca0c02d60a52.webp?v=1783552885",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "metallics_shimmer",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "3D Gems",
+    "Accent Nail",
+    "French Tip",
+    "Patterns",
+    "Velvet"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Fall",
+    "Sparkling Gems",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "4fd937d2-0ae4-464f-aec8-9ee03e73a333",
+   "name": "Emerald",
+   "handle": "emerald-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Emerald-1.webp?v=1783553260",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "bold_bright",
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "3D Gems",
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Fall",
+    "Sparkling Gems",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "dfc5c8e2-7e06-41f6-8ad6-0e3b40cbe391",
+   "name": "Enstatite",
+   "handle": "enstatite-super-short-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Enstatite_1.webp?v=1783552789",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "super_short",
+   "shapes": [
+    "natural"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "bold_bright"
+   ],
+   "tier": "statement",
+   "styles": [
+    "Solid Color",
+    "Velvet"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Fall",
+    "Falloween 2026",
+    "Halloween Shop 2025",
+    "Sparkling Gems",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "4a1db912-35ad-40c2-b356-b57d660b5715",
+   "name": "Garnet",
+   "handle": "garnet-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Garnet-1.webp?v=1783552692",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "reds_berries",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "3D Gems",
+    "French Tip",
+    "Velvet"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Sparkling Gems",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "f240371c-06cd-4e1e-a128-9cb06693d345",
+   "name": "Moonstone",
+   "handle": "moonstone-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Moonstone-1.webp?v=1783552618",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "metallics_shimmer",
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "3D Gems",
+    "Ombre"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Sweet 7th Birthday",
+    "Sparkling Gems",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "d7a4bbc4-14be-4fae-b5d5-4f26db1463ee",
+   "name": "Mystic Topaz",
+   "handle": "mystic-topaz-medium-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/MysticTopaz_1.webp?v=1783552541",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "medium",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "dark_moody",
+    "bold_bright"
+   ],
+   "tier": "statement",
+   "styles": [
+    "Solid Color",
+    "Velvet"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Falloween 2026",
+    "Halloween Shop 2025",
+    "Sparkling Gems",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "58899432-34cc-4fe9-812e-579e043300ca",
+   "name": "Obsidian",
+   "handle": "obsidian-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Obsidian_1.webp?v=1783552477",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "dark_moody"
+   ],
+   "tier": "statement",
+   "styles": [
+    "Cat Eye",
+    "Solid Color",
+    "Velvet"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Fall",
+    "Falloween 2026",
+    "Halloween Shop 2025",
+    "Sparkling Gems",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "7b4d8a31-00e8-4184-be9c-8309c723dabe",
+   "name": "Pink Pearl",
+   "handle": "pink-pearl-medium-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/PinkPearl_1.webp?v=1783552391",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "medium",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "pinks_pastels"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Ombre",
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glazed",
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Sparkling Gems",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "0b6c71aa-b3f7-4387-9eba-368ce98c66e8",
+   "name": "Pink Petalite",
+   "handle": "pink-petalite-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/PinkPetalite_1_1.webp?v=1783552322",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "pinks_pastels"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Ombre",
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Sparkling Gems",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "9bb1d6d6-77a9-4fe9-9525-3cce20a4e3f5",
+   "name": "Pink Tourmaline",
+   "handle": "pink-tourmaline-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Pink_Tourmaline_1_1.webp?v=1783552240",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "pinks_pastels"
+   ],
+   "tier": "art",
+   "styles": [
+    "3D Gems",
+    "Accent Nail",
+    "Ombre",
+    "Patterns",
+    "Solid Color",
+    "Velvet"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Sparkling Gems",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "10c41ef8-fba7-4be6-b019-af2baff7c3c9",
+   "name": "Ruby",
+   "handle": "ruby-short-squoval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Ruby_1_1.webp?v=1783552064",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "squoval"
+   ],
+   "families": [
+    "metallics_shimmer",
+    "nudes_neutrals",
+    "reds_berries"
+   ],
+   "tier": "art",
+   "styles": [
+    "3D Gems",
+    "Accent Nail",
+    "Ombre",
+    "Patterns",
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glazed",
+    "Glossy"
+   ],
+   "collections": [
+    "Sparkling Gems",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "5e86ddc1-2ae3-4b1c-a66e-4b77bb708c5f",
+   "name": "Sapphire",
+   "handle": "sapphire-short-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Sapphire_1_1.webp?v=1783552019",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "bold_bright"
+   ],
+   "tier": "art",
+   "styles": [
+    "3D Gems",
+    "Ombre",
+    "Velvet"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Sparkling Gems",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "d670f71f-ebd6-4649-8bb3-b4d8a28a0993",
+   "name": "Spinel",
+   "handle": "spinel-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Spinel_1_1.webp?v=1783551949",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "reds_berries",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "3D Gems",
+    "French Tip",
+    "Velvet"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Sparkling Gems",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "62be4e77-0d44-4f13-a89a-2c93d4690225",
+   "name": "Tiger Eye",
+   "handle": "tiger-eye-super-short-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/TigerEye_1.webp?v=1783551870",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "super_short",
+   "shapes": [
+    "natural"
+   ],
+   "families": [
+    "nudes_neutrals"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Falloween 2026",
+    "Sparkling Gems",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "83663b58-38b6-4027-9c17-fd00dcae1ede",
+   "name": "Powder Bleu",
+   "handle": "powder-bleu-short-squoval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/PowderBleu-1.webPo_3e90d9bf-eb91-4a7b-8d00-e6c213f985ab.webp?v=1784585028",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "squoval"
+   ],
+   "families": [
+    "bold_bright"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glazed"
+   ],
+   "collections": [
+    "Fall",
+    "Routine Refresh 2026",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "9f4c7756-333b-42cb-aee0-b6c62cc631ab",
+   "name": "Soft Skin",
+   "handle": "soft-skin-short-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/SoftSkin-1.webp?v=1784585109",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "pinks_pastels"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glazed"
+   ],
+   "collections": [
+    "Fall",
+    "Routine Refresh 2026",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "f2fda09e-1bf0-4824-89ab-20fd8d473333",
+   "name": "Soft Tulle",
+   "handle": "soft-tulle-short-squoval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/SoftTulle-1.webp?v=1784584081",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "squoval"
+   ],
+   "families": [
+    "french_white"
+   ],
+   "tier": "clean",
+   "styles": [
+    "French Tip"
+   ],
+   "finishes": [
+    "Glazed"
+   ],
+   "collections": [
+    "Fall",
+    "Routine Refresh 2026",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T3 season"
+  },
+  {
+   "id": "c832b736-8555-4913-a5b3-d90ebc39b2ad",
+   "name": "Dementor™",
+   "handle": "dementor-medium-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Dementor_1.webp?v=1765823968",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "medium",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "dark_moody",
+    "french_white"
+   ],
+   "tier": "clean",
+   "styles": [
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Falloween 2026",
+    "Festival Season 2026",
+    "Halloween Shop 2025",
+    "Harry Potter 2025",
+    "HP Full Collection"
+   ],
+   "bestseller": false,
+   "poolTier": "T4 collab:harry_potter"
+  },
+  {
+   "id": "faba798b-415a-4dde-a9bf-11e57776c22f",
+   "name": "Godric Gryffindor™",
+   "handle": "godric-gryffindor-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/GodricGryffindor_1_00d1ed9d-ee99-471b-a478-11f1d9be7f43.webp?v=1788277283",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "bold_bright",
+    "reds_berries",
+    "metallics_shimmer"
+   ],
+   "tier": "statement",
+   "styles": [
+    "Metallic Chrome",
+    "Ombre",
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy",
+    "Metallic Chrome"
+   ],
+   "collections": [
+    "Fall",
+    "Falloween 2026",
+    "Festival Season 2026",
+    "Halloween Shop 2025",
+    "Harry Potter 2025",
+    "HP Full Collection"
+   ],
+   "bestseller": false,
+   "poolTier": "T4 collab:harry_potter"
+  },
+  {
+   "id": "d170ba7b-fbf1-4c4a-bd35-f0391d434d63",
+   "name": "Golden Cup™",
+   "handle": "golden-cup-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_03_HarryPotter2023_UGCUpdate_GoldenCup.webp?v=1773875460",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "metallics_shimmer",
+    "bold_bright"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Solid Color",
+    "Waves"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Falloween 2026",
+    "Halloween Shop 2025",
+    "Harry Potter",
+    "Harry Potter 2023",
+    "HP Full Collection"
+   ],
+   "bestseller": false,
+   "poolTier": "T4 collab:harry_potter"
+  },
+  {
+   "id": "4b186365-308e-47fa-b024-df6591fe1fcf",
+   "name": "Gryffindor™",
+   "handle": "gryffindor-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_03_HarryPotter2023_UGCUpdate_Gryffindor.webp?v=1773875279",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "reds_berries",
+    "metallics_shimmer"
+   ],
+   "tier": "statement",
+   "styles": [
+    "Accent Nail",
+    "Chrome",
+    "Solid Color"
+   ],
+   "finishes": [
+    "Chrome"
+   ],
+   "collections": [
+    "Fall",
+    "Falloween 2026",
+    "Halloween Shop 2025",
+    "Harry Potter",
+    "Harry Potter 2023",
+    "HP Full Collection"
+   ],
+   "bestseller": false,
+   "poolTier": "T4 collab:harry_potter"
+  },
+  {
+   "id": "4d9c56ba-3ee9-46d8-b814-4db9af36df87",
+   "name": "Alabama Crimson Tide Press-On Nail Set",
+   "handle": "fanatics-alabama-crimson-tide-ncaa-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/AlabamaCrimsonTide_1.webp?v=1754509175",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "reds_berries",
+    "french_white"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Accent Nail",
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fanatics",
+    "NCAA"
+   ],
+   "bestseller": false,
+   "poolTier": "T4 collab:fanatics"
+  },
+  {
+   "id": "7408d224-8a93-4abc-b8b2-bdf05890d19e",
+   "name": "Arizona Cardinals Press-On Nail Set",
+   "handle": "fanatics-arizona-cardinals-nfl-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/ArizonaCardinals_1.webp?v=1762898089",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "reds_berries",
+    "french_white"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Accent Nail",
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fanatics",
+    "NFL",
+    "NFL Expansion"
+   ],
+   "bestseller": false,
+   "poolTier": "T4 collab:fanatics"
+  },
+  {
+   "id": "3a8d7ece-757c-4ae7-863b-ae4875d62f78",
+   "name": "Arizona Diamondbacks Press-On Nail Set",
+   "handle": "fanatics-arizona-diamondbacks-mlb-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_04_PDPAssetsFanatics_MLB_ArizonaDiamondbacks_1.webp?v=1776871017",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "bold_bright",
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Accent Nail",
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fanatics",
+    "MLB",
+    "MLB MLS 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T4 collab:fanatics"
+  },
+  {
+   "id": "ba03aebe-145c-471a-b675-d1d79a067e62",
+   "name": "Arizona State Sun Devils Press-On Nail Set",
+   "handle": "fanatics-arizona-state-sun-devils-ncaa-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2025_12_ArizonaStateSunDevilsPDP_1.webp?v=1765305568",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "reds_berries",
+    "french_white"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Accent Nail",
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fanatics",
+    "NCAA",
+    "NHL NCAA Expansion"
+   ],
+   "bestseller": false,
+   "poolTier": "T4 collab:fanatics"
+  },
+  {
+   "id": "8794f64f-ee05-42ac-8ed0-a63eef4ecf8f",
+   "name": "4 THE GLAMSQUAD",
+   "handle": "4-the-glamsquad-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/4-The-Glamsquad_1.webp?v=1778624668",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "dark_moody",
+    "nudes_neutrals",
+    "french_white",
+    "bold_bright"
+   ],
+   "tier": "art",
+   "styles": [
+    "Accent Nail",
+    "French Tip",
+    "Patterns"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Glamzilla",
+    "Glamzilla 2026",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T4 collab:glamzilla"
+  },
+  {
+   "id": "33385cbe-277a-416d-8ff9-e7b6c1584bc4",
+   "name": "ALWAYS & FOREVER",
+   "handle": "always-and-forever-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Always_Forever_1_58fb7b7e-30d2-40d4-91d9-83948fe6acf8.webp?v=1788276236",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "3D",
+    "Accent Nail",
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "The Spring Shop 2026",
+    "Glamzilla",
+    "Glamzilla 2025"
+   ],
+   "bestseller": false,
+   "poolTier": "T4 collab:glamzilla"
+  },
+  {
+   "id": "4d715a07-18bc-4605-9f03-73d0f5231ac6",
+   "name": "BIG BUNNY ENERGY",
+   "handle": "big-bunny-energy-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Big-Bunny-Energy_1.webp?v=1778624722",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "pinks_pastels"
+   ],
+   "tier": "statement",
+   "styles": [
+    "Solid Color",
+    "Velvet"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Glamzilla",
+    "Glamzilla 2026",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T4 collab:glamzilla"
+  },
+  {
+   "id": "b49a343a-4aab-4002-bd12-2b18cb2f1632",
+   "name": "EARNED NOT GIVEN",
+   "handle": "earned-not-given-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Earned-Not-Given_1.webp?v=1778624522",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "statement",
+   "styles": [
+    "French Tip",
+    "Ombre",
+    "Solid Color",
+    "Velvet"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Glamzilla",
+    "Glamzilla 2026",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T4 collab:glamzilla"
+  },
+  {
+   "id": "77625e90-609f-4c07-92f1-39fd426a986a",
+   "name": "Juicy",
+   "handle": "juicy-long-coffin-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_03_IndividualPDPUpdates_Batch3_JuicyUGC.webp?v=1776799047",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "long",
+   "shapes": [
+    "coffin"
+   ],
+   "families": [
+    "pinks_pastels",
+    "metallics_shimmer"
+   ],
+   "tier": "statement",
+   "styles": [
+    "Solid Color",
+    "Sparkles"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Festival Season 2026",
+    "The Spring Edit",
+    "The Spring Shop 2026",
+    "Summer Shop 2026",
+    "Y2K"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 cell-fill"
+  },
+  {
+   "id": "991ffe1e-f9c1-4ae1-97fe-037634e93e66",
+   "name": "Bailey",
+   "handle": "bailey-medium-square-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Bailey_1.webp?v=1762202050",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "medium",
+   "shapes": [
+    "square"
+   ],
+   "families": [
+    "metallics_shimmer",
+    "french_white"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Glazed"
+   ],
+   "finishes": [
+    "Glazed",
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Summer Shop 2026",
+    "Timeless Tones"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 cell-fill"
+  },
+  {
+   "id": "b025fae1-d004-4155-a616-d25f243b314f",
+   "name": "Bare Bliss",
+   "handle": "bare-bliss-medium-square-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/BareBliss_1.webp?v=1762202050",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "medium",
+   "shapes": [
+    "square"
+   ],
+   "families": [
+    "nudes_neutrals"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Timeless Tones"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 cell-fill"
+  },
+  {
+   "id": "9f7ec0af-7352-4de1-8010-5c7641baca5a",
+   "name": "Classy French",
+   "handle": "classy-french-medium-square-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/ClassyFrench_1.webp?v=1762202048",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "medium",
+   "shapes": [
+    "square"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "clean",
+   "styles": [
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Timeless Tones"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 cell-fill"
+  },
+  {
+   "id": "27186bf0-9aa6-4e66-965a-d2c9de3163e9",
+   "name": "Dusty Pink",
+   "handle": "dusty-pink-medium-square-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/DustyPink_1_13593a8f-bdde-4c7d-87d8-af1f6af8a134.webp?v=1788278094",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "medium",
+   "shapes": [
+    "square"
+   ],
+   "families": [
+    "pinks_pastels"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Jelly"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Timeless Tones"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 cell-fill"
+  },
+  {
+   "id": "05e060e1-2c1e-4519-b74b-4c4f50664a16",
+   "name": "In The Nude",
+   "handle": "in-the-nude-medium-square-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/InTheNude_1.webp?v=1762202045",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "medium",
+   "shapes": [
+    "square"
+   ],
+   "families": [
+    "nudes_neutrals"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Ombre"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Timeless Tones"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 cell-fill"
+  },
+  {
+   "id": "13e72106-d9de-4786-b823-946f9ac4e7ed",
+   "name": "Berry Baby",
+   "handle": "berry-baby-super-short-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/BerryBaby_1.webp?v=1780425722",
+   "price": 15.99,
+   "system": "glue_on",
+   "length": "super_short",
+   "shapes": [
+    "natural"
+   ],
+   "families": [
+    "reds_berries"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Halloween Shop 2025",
+    "Glam Icons",
+    "Glam Icons 2026",
+    "Glam Icons NAILS ONLY",
+    "Glossy Dark Maroon",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 cell-fill"
+  },
+  {
+   "id": "646053fa-6f8c-45cf-b346-5d5f7ded57ab",
+   "name": "Burnt Miso",
+   "handle": "burnt-miso-super-short-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2025_11_GlamIcons_BurntMiso_PDP_1.webp?v=1770309061",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "super_short",
+   "shapes": [
+    "natural"
+   ],
+   "families": [
+    "dark_moody",
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "clean",
+   "styles": [
+    "French Tip"
+   ],
+   "finishes": [
+    "Glazed",
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Festival Season 2026",
+    "The Spring Shop 2026",
+    "Glam Icons",
+    "Glam Icons 2025",
+    "Glam Icons NAILS ONLY",
+    "Glazed Black French"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 cell-fill"
+  },
+  {
+   "id": "b16f5939-5c78-4dfe-a376-b3c15dedb8a6",
+   "name": "Clear Skies",
+   "handle": "clear-skies-super-short-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/ClearSkies_1.webp?v=1776204122",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "super_short",
+   "shapes": [
+    "natural"
+   ],
+   "families": [
+    "bold_bright"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glazed",
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Euro Summer 2026",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 cell-fill"
+  },
+  {
+   "id": "ea94fce5-57d3-4743-8710-baf3f97fd47d",
+   "name": "Cool Whip",
+   "handle": "cool-whip-super-short-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2025_11_GlamIcons_CoolWhip_PDP_1.webp?v=1770309061",
+   "price": 15.99,
+   "system": "glue_on",
+   "length": "super_short",
+   "shapes": [
+    "natural"
+   ],
+   "families": [
+    "french_white"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Festival Season 2026",
+    "The Spring Shop 2026",
+    "Glam Icons",
+    "Glam Icons 2025",
+    "Glam Icons NAILS ONLY",
+    "Milky White"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 cell-fill"
+  },
+  {
+   "id": "72f8bdad-1770-4cf4-bef3-b4ef52bf934c",
+   "name": "French Peach",
+   "handle": "french-peach-super-short-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/FrenchPeach-6.webp?v=1770309061",
+   "price": 15.99,
+   "system": "glue_on",
+   "length": "super_short",
+   "shapes": [
+    "natural"
+   ],
+   "families": [
+    "bold_bright",
+    "french_white"
+   ],
+   "tier": "clean",
+   "styles": [
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Festival Season 2026",
+    "The Spring Edit",
+    "The Spring Shop 2026",
+    "Spring French Tips Collection Vol. 5",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 cell-fill"
+  },
+  {
+   "id": "527da371-cf94-42c1-91e9-86660a7990c7",
+   "name": "Hotline Red",
+   "handle": "hotline-red-super-short-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_01_HotlineRed_LoveNotesPDP_1.webp?v=1770309061",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "super_short",
+   "shapes": [
+    "natural"
+   ],
+   "families": [
+    "reds_berries",
+    "french_white"
+   ],
+   "tier": "clean",
+   "styles": [
+    "French Tip"
+   ],
+   "finishes": [
+    "Glazed",
+    "Glossy"
+   ],
+   "collections": [
+    "Festival Season 2026",
+    "Love Notes",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 cell-fill"
+  },
+  {
+   "id": "32a55d41-d6d2-420a-8715-c7e1f22ed84e",
+   "name": "Lilac Steel",
+   "handle": "lilac-steel-metallic-chrome-super-short-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/LilacSteel_1.webp?v=1770309061",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "super_short",
+   "shapes": [
+    "natural"
+   ],
+   "families": [
+    "dark_moody",
+    "metallics_shimmer"
+   ],
+   "tier": "statement",
+   "styles": [
+    "Metallic Chrome"
+   ],
+   "finishes": [
+    "Metallic Chrome"
+   ],
+   "collections": [
+    "Festival Season 2026",
+    "Summer Shop 2026",
+    "Summer Steel"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 cell-fill"
+  },
+  {
+   "id": "51a81d60-7bfa-40a7-a9af-c963c84015dc",
+   "name": "Mauve Cutie",
+   "handle": "mauve-cutie-super-short-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/MauveCutie_1.webp?v=1770309061",
+   "price": 15.99,
+   "system": "glue_on",
+   "length": "super_short",
+   "shapes": [
+    "natural"
+   ],
+   "families": [
+    "pinks_pastels"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Festival Season 2026",
+    "The Spring Shop 2026",
+    "Glam Icons",
+    "Glam Icons 2025",
+    "Glam Icons NAILS ONLY",
+    "Muted Blush Mauve"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 cell-fill"
+  },
+  {
+   "id": "f8a5c0b1-e9d2-4f7c-9676-e52d2adfe070",
+   "name": "Berry Obsession",
+   "handle": "berry-obsession-medium-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/BerryObsession_1.webp?v=1780425720",
+   "price": 15.99,
+   "system": "glue_on",
+   "length": "medium",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "reds_berries"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Halloween Shop 2025",
+    "Glam Icons",
+    "Glam Icons 2026",
+    "Glam Icons NAILS ONLY",
+    "Glossy Dark Maroon"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 cell-fill"
+  },
+  {
+   "id": "76f8f93b-e25b-4712-a821-1bef85628cb8",
+   "name": "Black Truffle",
+   "handle": "black-truffle-medium-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_06_BlackTruffle_1.webp?v=1782416679",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "medium",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "dark_moody",
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "clean",
+   "styles": [
+    "French Tip"
+   ],
+   "finishes": [
+    "Glazed",
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Festival Season 2026",
+    "The Spring Shop 2026",
+    "Glam Icons",
+    "Glam Icons 2025",
+    "Glam Icons NAILS ONLY",
+    "Glazed Black French"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 cell-fill"
+  },
+  {
+   "id": "62c4a851-74dd-494f-821b-bbd4bcc6b3f9",
+   "name": "Blush Blanket",
+   "handle": "blush-blanket-medium-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_06_BlushBlanket_1.webp?v=1782416246",
+   "price": 15.99,
+   "system": "glue_on",
+   "length": "medium",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "pinks_pastels"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Festival Season 2026",
+    "The Spring Shop 2026",
+    "Glam Icons",
+    "Glam Icons 2025",
+    "Glam Icons NAILS ONLY",
+    "Milky Blush Pink"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 cell-fill"
+  },
+  {
+   "id": "c2144dcd-15e7-43ad-9d94-63ce4b64826f",
+   "name": "Cherry Bow",
+   "handle": "cherry-bow-medium-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_01_TheJuicyDrop_PDP_1_833457af-1bec-4368-831d-38b103761bf1.webp?v=1770905401",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "medium",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "pinks_pastels",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "Accent Nail",
+    "French Tip",
+    "Patterns"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Festival Season 2026",
+    "The Spring Shop 2026",
+    "Summer Shop 2026",
+    "The Juicy Drop"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 cell-fill"
+  },
+  {
+   "id": "2e048692-1517-4e44-a8ee-db369595ba89",
+   "name": "Azure Blue",
+   "handle": "azure-blue-short-round-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_04_AzureBluePDP_1.webp?v=1776798589",
+   "price": 15.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "round"
+   ],
+   "families": [
+    "bold_bright"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Festival Season 2026",
+    "Summer Shop 2026",
+    "Summer Vivids",
+    "The Solids"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 cell-fill"
+  },
+  {
+   "id": "03bebfde-92bc-48cf-8f08-26159e4805d0",
+   "name": "Athenian Gold",
+   "handle": "athenian-gold-medium-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/AthenianGold_1.webp?v=1776108958",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "medium",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "metallics_shimmer",
+    "nudes_neutrals"
+   ],
+   "tier": "art",
+   "styles": [
+    "3D",
+    "Patterns"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Euro Summer 2026",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 cell-fill"
+  },
+  {
+   "id": "7d4d8bc8-d65b-4741-b787-504220d077cd",
+   "name": "Balsamic Glaze",
+   "handle": "balsamic-glaze-medium-coffin-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_06_BalsamicGlaze_1.webp?v=1782416650",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "medium",
+   "shapes": [
+    "coffin"
+   ],
+   "families": [
+    "dark_moody",
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "clean",
+   "styles": [
+    "French Tip"
+   ],
+   "finishes": [
+    "Glazed",
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Festival Season 2026",
+    "The Spring Shop 2026",
+    "Glam Icons",
+    "Glam Icons 2025",
+    "Glam Icons NAILS ONLY",
+    "Glazed Black French"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 cell-fill"
+  },
+  {
+   "id": "07148ebf-72a8-436b-aed3-328ac51f4c94",
+   "name": "‘Til Death",
+   "handle": "til-death-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/TilDeath_1.webp?v=1769555091",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "dark_moody",
+    "nudes_neutrals"
+   ],
+   "tier": "art",
+   "styles": [
+    "3D",
+    "Ombre",
+    "Patterns",
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Falloween 2026",
+    "Festival Season 2026",
+    "Halloween Shop 2025",
+    "Fright Night"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "2cec3118-3066-47ee-b8c0-fc71fd2dfee4",
+   "name": "24K",
+   "handle": "24k-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_04_24kPDP_1_30be0936-19b2-405a-b98d-47004423ad15.webp?v=1782415525",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "metallics_shimmer"
+   ],
+   "tier": "art",
+   "styles": [
+    "Accent Nail",
+    "Patterns"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Snow Day"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "bf447741-20a8-4e2b-8f94-58a6b4478809",
+   "name": "Ace of Hearts",
+   "handle": "ace-of-hearts-short-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_01_AceOfHearts_LoveNotesPDP_1.webp?v=1768391199",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "Patterns",
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Festival Season 2026",
+    "Love Notes"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "758d1df0-cfee-4b5b-8811-d1cb0df07833",
+   "name": "All Time Love",
+   "handle": "all-time-love-short-almond-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/AllTimeLove_6_75e84ae0-6ab7-4606-a972-684c936653e9.jpg?v=1762201873",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "pinks_pastels",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "3D",
+    "Accent Nail",
+    "French Tip",
+    "Patterns"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Festival Season 2026",
+    "The Spring Edit",
+    "The Spring Shop 2026",
+    "Love in Bloom"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "e3435ba9-18f8-4485-83e4-95808636d689",
+   "name": "Angel in Blue",
+   "handle": "angel-in-blue-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_01_AngelInBlue_LoveNotesPDP_1.webp?v=1768391199",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "bold_bright",
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "Accent Nail",
+    "French Tip",
+    "Patterns",
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Festival Season 2026",
+    "Love Notes"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "a96d20b9-ddd5-471d-9656-5ddc57b04bd4",
+   "name": "Angelic Touch",
+   "handle": "angelic-touch-short-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_01_AngelicTouch_LoveNotesPDP_1.webp?v=1776724478",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "statement",
+   "styles": [
+    "French Tip",
+    "Velvet"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Festival Season 2026",
+    "Love Notes"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "d38d809f-6939-4815-86d3-01301b3e8203",
+   "name": "Antipasto",
+   "handle": "antipasto-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Antipasto_1.webp?v=1776108920",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "bold_bright",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "French Tip",
+    "Patterns"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Euro Summer 2026",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "7bf0455c-40a1-488d-bcf1-6fb262e94e0e",
+   "name": "Aperitivo Hour",
+   "handle": "aperitivo-hour-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/AperitivoHour_1.webp?v=1776204122",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "bold_bright",
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "3D",
+    "Accent Nail",
+    "French Tip",
+    "Patterns"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Euro Summer 2026",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "8e8e9720-f73a-4caf-a9de-9eb57306a102",
+   "name": "Arizona Wildcats Press-On Nail Set",
+   "handle": "fanatics-arizona-wildcats-ncaa-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2025_12_ArizonaWildcatsPDP_1.webp?v=1765305622",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "bold_bright",
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Accent Nail",
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fanatics",
+    "NCAA",
+    "NHL NCAA Expansion"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "53e75412-2788-4c80-bff1-b5cb57ad5870",
+   "name": "Arkansas Razorbacks Press-On Nail Set",
+   "handle": "fanatics-arkansas-razorbacks-ncaa-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/ArkansasRazorbacks_1.webp?v=1754509175",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "reds_berries",
+    "french_white"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Accent Nail",
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fanatics",
+    "NCAA"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "771fd820-8e4f-4d75-9fec-93b180859266",
+   "name": "Astro",
+   "handle": "astro-short-almond-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_05_AstroPDP_1.webp?v=1781823328",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "metallics_shimmer",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "3D",
+    "Accent Nail"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Falloween 2026",
+    "Festival Season 2026",
+    "Halloween Shop 2025",
+    "Moon Child"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "80b4e07d-d5f0-4634-b98e-cfc467baefa2",
+   "name": "Atlanta Braves Press-On Nail Set",
+   "handle": "fanatics-atlanta-braves-mlb-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/AtlantaBraves_1.webp?v=1754502604",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "bold_bright",
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Accent Nail",
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fanatics",
+    "MLB"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "a4c73cd3-83ca-40d1-91ad-a034d469e6da",
+   "name": "Auburn Tigers Press-On Nail Set",
+   "handle": "fanatics-auburn-tigers-ncaa-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2025_12_AuburnTigersPDP_1.webp?v=1765305699",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "bold_bright",
+    "french_white"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Accent Nail",
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fanatics",
+    "NCAA",
+    "NHL NCAA Expansion"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "ee421152-71a8-47e9-bf70-570f267d1a20",
+   "name": "Baby Blues",
+   "handle": "baby-blues-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/04_30_Connie-Wi_concon_wi_Velvet-Crush_Baby-Blues_UGC.jpg?v=1762199555",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "bold_bright"
+   ],
+   "tier": "statement",
+   "styles": [
+    "Solid Color",
+    "Velvet"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Festival Season 2026",
+    "Velvet Crush"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "f14ac004-119b-4ae5-8f48-efcf8e6e0895",
+   "name": "Ballet Pink",
+   "handle": "ballet-pink-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2024_02_SpringBloomUGC_BalletPink.jpg?v=1762201313",
+   "price": 15.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "pinks_pastels"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "The Spring Shop 2026",
+    "Spring Bloom",
+    "The Solids"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "bb29aa04-aa53-4a79-9570-17d500b7ea6c",
+   "name": "Baltimore Orioles Press-On Nail Set",
+   "handle": "fanatics-baltimore-orioles-mlb-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_04_PDPAssetsFanatics_MLB_BaltimoreOrioles_1.webp?v=1776871044",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "bold_bright",
+    "french_white"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Accent Nail",
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fanatics",
+    "MLB",
+    "MLB MLS 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "a6b170bf-b4b2-4e31-bfa5-4b5815f4661f",
+   "name": "Baltimore Ravens Press-On Nail Set",
+   "handle": "fanatics-baltimore-ravens-nfl-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/BaltimoreRavens_1.webp?v=1754502027",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "dark_moody",
+    "french_white"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Accent Nail",
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fanatics",
+    "NFL"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "ece5d73f-c8ab-45c6-8015-413d97720dd8",
+   "name": "Barely Spotted",
+   "handle": "barely-spotted-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/TheSpringEdit_BarelySpotted_PDP_1.webp?v=1774478722",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "pinks_pastels",
+    "french_white"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Polka Dots",
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glazed",
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Festival Season 2026",
+    "Summer Shop 2026",
+    "The Spring Edit 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "d92b2ee2-fc68-4856-979c-80406c64682f",
+   "name": "Bark Brown",
+   "handle": "bark-brown-short-round-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/BarkBrown_6.jpg?v=1762201683",
+   "price": 15.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "round"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "reds_berries"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Falloween 2026",
+    "Festival Season 2026",
+    "Halloween Shop 2025",
+    "The Solids",
+    "The Solids Vol.3 Fall Forest"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "c8863980-7aa9-48d9-bb25-a88d349b7ff5",
+   "name": "Berry Crush",
+   "handle": "berry-crush-short-squoval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/BerryCrush_1.webp?v=1780425720",
+   "price": 15.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "squoval"
+   ],
+   "families": [
+    "reds_berries"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Halloween Shop 2025",
+    "Glam Icons",
+    "Glam Icons 2026",
+    "Glam Icons NAILS ONLY",
+    "Glossy Dark Maroon"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "3fea2aec-6cd0-4f03-b4f6-247d5830a893",
+   "name": "Berry Fierce",
+   "handle": "berry-fierce-medium-coffin-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/BerryFierce_1.webp?v=1780425721",
+   "price": 15.99,
+   "system": "glue_on",
+   "length": "medium",
+   "shapes": [
+    "coffin"
+   ],
+   "families": [
+    "reds_berries"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Halloween Shop 2025",
+    "Glam Icons",
+    "Glam Icons 2026",
+    "Glam Icons NAILS ONLY",
+    "Glossy Dark Maroon"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "5b64246a-a68c-42ce-9bcf-f171c28da833",
+   "name": "Berry Fizz",
+   "handle": "berry-fizz-short-round-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_03_IndividualPDPUpdates_Batch3_BerryFizzUGC.webp?v=1776799190",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "dark_moody"
+   ],
+   "tier": "statement",
+   "styles": [
+    "Solid Color",
+    "Velvet"
+   ],
+   "finishes": [
+    "Velvet"
+   ],
+   "collections": [
+    "Festival Season 2026",
+    "Sweet 7th Birthday",
+    "Summer Shop 2026",
+    "Velvet Crush"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "fe7b121a-ce8d-4293-a3dc-1c9b475ccb47",
+   "name": "Berry Kiss",
+   "handle": "berry-kiss-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/BerryKiss_1.webp?v=1780425721",
+   "price": 15.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "reds_berries"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Glam Icons",
+    "Glam Icons 2026",
+    "Glam Icons NAILS ONLY",
+    "Glossy Dark Maroon"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "66b13c0f-7c2c-4e91-8393-7250ef734c1f",
+   "name": "Berry Maroon",
+   "handle": "berry-maroon-short-round-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/BerryMaroon_1.webp?v=1780425722",
+   "price": 15.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "round"
+   ],
+   "families": [
+    "pinks_pastels",
+    "reds_berries"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Falloween 2026",
+    "Festival Season 2026",
+    "Halloween Shop 2025",
+    "Glam Icons",
+    "Glam Icons 2026",
+    "Glam Icons NAILS ONLY",
+    "Glossy Dark Maroon",
+    "The Solids",
+    "The Solids Vol.3 Fall Forest"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "8358aa88-a845-453c-96d0-ee05eeab167c",
+   "name": "Berry Mood",
+   "handle": "berry-mood-short-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/BerryMood_1.webp?v=1780425722",
+   "price": 15.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "reds_berries"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Halloween Shop 2025",
+    "Glam Icons",
+    "Glam Icons 2026",
+    "Glam Icons NAILS ONLY",
+    "Glossy Dark Maroon"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "9072e02a-c31e-40b2-80a7-2f79db719b56",
+   "name": "Berry Tempted",
+   "handle": "berry-tempted-medium-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/BerryTempted_1.webp?v=1780425721",
+   "price": 15.99,
+   "system": "glue_on",
+   "length": "medium",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "reds_berries"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Halloween Shop 2025",
+    "Glam Icons",
+    "Glam Icons 2026",
+    "Glam Icons NAILS ONLY",
+    "Glossy Dark Maroon"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "430c68ab-43d9-460d-beae-aa7dcc38b796",
+   "name": "Black Metal",
+   "handle": "black-metal-metallic-chrome-short-almond-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/BlackMetal_1_738666c1-0bed-489d-81b2-482c42cd3348.webp?v=1788278138",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "dark_moody",
+    "bold_bright",
+    "metallics_shimmer"
+   ],
+   "tier": "statement",
+   "styles": [
+    "Metallic Chrome"
+   ],
+   "finishes": [
+    "Metallic Chrome"
+   ],
+   "collections": [
+    "Falloween 2026",
+    "Festival Season 2026",
+    "Halloween Shop 2025",
+    "Summer Shop 2026",
+    "Summer Steel"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "bdda2654-1f26-4797-8dde-45e30116260c",
+   "name": "Blue A Kiss",
+   "handle": "blue-a-kiss-short-squoval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_01_BlueAKiss_LoveNotesPDP_1.webp?v=1768391199",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "squoval"
+   ],
+   "families": [
+    "bold_bright",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "Accent Nail",
+    "French Tip",
+    "Patterns",
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Festival Season 2026",
+    "Love Notes"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "be3eb5bd-95ab-44ee-bcb0-57b66bcd7b78",
+   "name": "Blue Steel",
+   "handle": "blue-steel-metallic-chrome-short-almond-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/BlueSteel_1_6735446c-dceb-4948-bf2b-2a3ce93bf365.webp?v=1762202081",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "bold_bright",
+    "metallics_shimmer"
+   ],
+   "tier": "statement",
+   "styles": [
+    "Metallic Chrome"
+   ],
+   "finishes": [
+    "Metallic Chrome"
+   ],
+   "collections": [
+    "Festival Season 2026",
+    "Halloween Shop 2025",
+    "Summer Shop 2026",
+    "Summer Steel"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "9fd2dfc7-d89f-4dda-97c3-c976cd1235e6",
+   "name": "Bluebelle",
+   "handle": "bluebelle-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_01_TheJuicyDrop_PDP_1_fa81eb8f-a141-4162-87fe-6259006dd384.webp?v=1770905401",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "bold_bright",
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "French Tip",
+    "Patterns"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Festival Season 2026",
+    "The Spring Shop 2026",
+    "Summer Shop 2026",
+    "The Juicy Drop"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "8103d80f-46bb-439a-91d3-ba87df2b1a06",
+   "name": "Blueberry Icing",
+   "handle": "blueberry-icing-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2024_03_SweetTreats_PDP_BlueberryIcing_6.jpg?v=1762201361",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "bold_bright",
+    "french_white"
+   ],
+   "tier": "clean",
+   "styles": [
+    "French Tip"
+   ],
+   "finishes": [
+    "Glazed",
+    "Glossy"
+   ],
+   "collections": [
+    "Employee Faves Flash Sale 2025",
+    "Festival Season 2026",
+    "The Spring Edit",
+    "The Spring Shop 2026",
+    "Sweet Treats"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "8b592500-0d49-4ed9-9781-072e3096cf46",
+   "name": "Blush Dream",
+   "handle": "blush-dream-medium-coffin-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_06_BlushDream_1.webp?v=1782416170",
+   "price": 15.99,
+   "system": "glue_on",
+   "length": "medium",
+   "shapes": [
+    "coffin"
+   ],
+   "families": [
+    "pinks_pastels"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Festival Season 2026",
+    "The Spring Shop 2026",
+    "Glam Icons",
+    "Glam Icons 2025",
+    "Glam Icons NAILS ONLY",
+    "Milky Blush Pink"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "654535bf-901e-40f0-b560-7c2f01bb41d3",
+   "name": "Blush Dunes",
+   "handle": "blush-dunes-short-squoval-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/BlushDunes_1_bf88ab32-9b38-4def-b57e-74f44558c77d.webp?v=1787774868",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "squoval"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "pinks_pastels",
+    "metallics_shimmer",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "3D",
+    "Accent Nail",
+    "Chrome",
+    "French Tip"
+   ],
+   "finishes": [
+    "Chrome",
+    "Glossy"
+   ],
+   "collections": [
+    "Festival Season 2026",
+    "The Spring Shop 2026",
+    "Siren's Cove",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "c503502c-8344-446c-88e0-0a2e771eb980",
+   "name": "Blushing Aura",
+   "handle": "blushing-aura-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2023_12_CatchingFeelingsUGC_BlushingAura.jpg?v=1762201267",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "pinks_pastels",
+    "metallics_shimmer"
+   ],
+   "tier": "statement",
+   "styles": [
+    "Aura",
+    "Ombre"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Festival Season 2026",
+    "The Spring Edit",
+    "The Spring Shop 2026",
+    "Catching Feelings",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "e74a983e-f7e5-4654-9937-a339471ff0ff",
+   "name": "Boba",
+   "handle": "boba-short-pointed-almond-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/1_23_Connie-Wi_connie.wi_Boba_Static-Image---Copy.jpg?v=1762198757",
+   "price": 15.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "dark_moody"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Falloween 2026",
+    "Halloween Shop 2025",
+    " Winter Collection"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "b8258ff8-dfab-4dde-b4da-0b6bcbb9dd86",
+   "name": "Boston Bruins Press-On Nail Set",
+   "handle": "fanatics-boston-bruins-nhl-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/BostonBruins_1.webp?v=1765304899",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "dark_moody",
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Accent Nail",
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fanatics",
+    "NHL",
+    "NHL NCAA Expansion"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "7520e00e-6f8c-4671-8c85-f7334bce0c9a",
+   "name": "Boston Celtics Press-On Nail Set",
+   "handle": "fanatics-boston-celtics-nba-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/BostonCeltics_1.webp?v=1779823617",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "bold_bright",
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Accent Nail",
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fanatics",
+    "NBA",
+    "NBA WNBA 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "2e31adeb-9a44-466d-a5aa-dd0711e3a1bf",
+   "name": "Boston Red Sox Press-On Nail Set",
+   "handle": "fanatics-boston-red-sox-mlb-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/BostonRedSox_1.webp?v=1754502604",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "reds_berries",
+    "french_white"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Accent Nail",
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fanatics",
+    "MLB"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "f38cf3fb-2bb1-4aa5-aa43-237edcf78fe3",
+   "name": "Buffalo Bills Press-On Nail Set",
+   "handle": "fanatics-buffalo-bills-nfl-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/BuffaloBills_1.webp?v=1754502027",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "bold_bright",
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Accent Nail",
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fanatics",
+    "NFL"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "3c91c804-b016-4505-abc4-7435cf22a35e",
+   "name": "Butterfly Effect",
+   "handle": "butterfly-effect-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/TheSpringEdit_ButterflyEffect_PDP_1.webp?v=1774478722",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "dark_moody",
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "Accent Nail",
+    "French Tip",
+    "Patterns"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Festival Season 2026",
+    "Summer Shop 2026",
+    "The Spring Edit 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "90419479-2e52-4175-8340-f54d02016ada",
+   "name": "Candy Corn",
+   "handle": "candy-corn-short-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/CandyCorn_1.webp?v=1785889419",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "bold_bright"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Ombre",
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glazed"
+   ],
+   "collections": [
+    "Fall",
+    "Falloween 2026",
+    "Halloween Shop 2025",
+    "Fright Night"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "3c49a2b4-db4b-4c28-891a-67407f4ebec4",
+   "name": "Candy Crush",
+   "handle": "candy-crush-short-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2025_10_SnowedIn_CandyCrushPDP_1.webp?v=1760568979",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "reds_berries",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "Accent Nail",
+    "Patterns",
+    "Solid Color",
+    "Velvet"
+   ],
+   "finishes": [
+    "Glossy",
+    "Velvet"
+   ],
+   "collections": [
+    "Snowed In"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "83e599fc-d5e2-43d5-9da7-f4f74c55d16f",
+   "name": "Capri Coast",
+   "handle": "capri-coast-medium-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/CapriCoast_1.webp?v=1776204122",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "medium",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "bold_bright",
+    "french_white"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Accent Nail",
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Euro Summer 2026",
+    "Summer Shop 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "3698ffd5-5430-4f6c-99dc-cfe2fa904f27",
+   "name": "Carolina Panthers Press-On Nail Set",
+   "handle": "fanatics-carolina-panthers-nfl-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/CarolinaPanthers_1.webp?v=1762898014",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "bold_bright",
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Accent Nail",
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fanatics",
+    "NFL",
+    "NFL Expansion"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "747f2e89-3448-42a5-be27-1748cb0c2339",
+   "name": "Cashmere Blue",
+   "handle": "cashmere-blue-short-squoval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/CashmereBlue_UGC.jpg?v=1762201794",
+   "price": 15.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "squoval"
+   ],
+   "families": [
+    "bold_bright"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Festival Season 2026",
+    "The Spring Edit",
+    "The Spring Shop 2026",
+    "The Solids",
+    "The Solids Vol. 3 Winter Opulence",
+    "The Solids Vol. 4 Winter Opulence"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "a8d15c2b-49eb-4593-81b7-fb4e57726246",
+   "name": "Château",
+   "handle": "chateau-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Chateau_6.jpg?v=1762201752",
+   "price": 15.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "bold_bright",
+    "french_white"
+   ],
+   "tier": "clean",
+   "styles": [
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Falloween 2026",
+    "Festival Season 2026",
+    "Fall French Tips"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "6b451d99-f1b8-49e5-b9b5-ab5535052e26",
+   "name": "Cherry Bomb",
+   "handle": "cherry-bomb-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_01_TheJuicyDrop_PDP_1_9afaed49-4d24-43d8-96f3-5c815e7453d5.webp?v=1770905401",
+   "price": 19.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "reds_berries",
+    "french_white"
+   ],
+   "tier": "art",
+   "styles": [
+    "Accent Nail",
+    "French Tip",
+    "Patterns"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Festival Season 2026",
+    "The Spring Shop 2026",
+    "Summer Shop 2026",
+    "The Juicy Drop"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "ab7b940c-6457-4c60-8852-de2b950f71ff",
+   "name": "Cherry Glaze",
+   "handle": "cherry-glaze-short-round-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_04_CherryGlazePDP_1.webp?v=1778003202",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "round"
+   ],
+   "families": [
+    "reds_berries"
+   ],
+   "tier": "clean",
+   "styles": [
+    "Solid Color"
+   ],
+   "finishes": [
+    "Glazed",
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Festival Season 2026",
+    "Glossy",
+    "The Glossy Collection"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "4cde919d-e598-4f20-b077-a38fff57e4e8",
+   "name": "Cherry Mood",
+   "handle": "cherry-mood-short-oval-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_01_TheJuicyDrop_PDP_1_cea32afa-e706-43ba-ac93-60cc4b91d799.webp?v=1770905401",
+   "price": 17.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "oval"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "reds_berries",
+    "french_white"
+   ],
+   "tier": "clean",
+   "styles": [
+    "French Tip"
+   ],
+   "finishes": [
+    "Glazed",
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Festival Season 2026",
+    "The Spring Shop 2026",
+    "Summer Shop 2026",
+    "The Juicy Drop"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "68f692fb-4f2d-44ca-ad5d-edb08722500e",
+   "name": "Chicago Bears Press-On Nail Set",
+   "handle": "fanatics-chicago-bears-nfl-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/ChicagoBears_1.webp?v=1754502027",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "bold_bright",
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Accent Nail",
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fanatics",
+    "NFL"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "35f15957-7298-4612-a070-061176782b81",
+   "name": "Chicago Blackhawks Press-On Nail Set",
+   "handle": "fanatics-chicago-blackhawks-nhl-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/ChicagoBlackhawks_1.webp?v=1765304892",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "reds_berries",
+    "french_white"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Accent Nail",
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fanatics",
+    "NHL",
+    "NHL NCAA Expansion"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "e4411f62-149c-451a-8b9a-02031e75a4a4",
+   "name": "Chicago Bulls Press-On Nail Set",
+   "handle": "fanatics-chicago-bulls-nba-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/ChicagoBulls_1.webp?v=1779823623",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "dark_moody",
+    "nudes_neutrals",
+    "reds_berries",
+    "french_white"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Accent Nail",
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fanatics",
+    "NBA",
+    "NBA WNBA 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "5d053a7c-6ccb-4ddc-839d-d0169f16c6e5",
+   "name": "Chicago Cubs Press-On Nail Set",
+   "handle": "fanatics-chicago-cubs-mlb-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/ChicagoCubs_1.webp?v=1754502604",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "bold_bright",
+    "nudes_neutrals",
+    "reds_berries",
+    "french_white"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Accent Nail",
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fanatics",
+    "MLB"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "af2de87b-b0c7-47d1-93f0-19e4e5f6b03a",
+   "name": "Chicago Sky Press-On Nail Set",
+   "handle": "fanatics-chicago-sky-wnba-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/ChicagoSky_1.webp?v=1779824310",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "bold_bright",
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Accent Nail",
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fanatics",
+    "NBA WNBA 2026",
+    "WNBA"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "a4f7adcc-74cd-417c-904a-bbcdec4462e2",
+   "name": "Chicago White Sox Press-On Nail Set",
+   "handle": "fanatics-chicago-white-sox-mlb-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_04_PDPAssetsFanatics_MLB_ChicagoWhiteSox_1.webp?v=1776870994",
+   "price": 21.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "extra",
+   "styles": [
+    "Accent Nail",
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fanatics",
+    "MLB",
+    "MLB MLS 2026"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  },
+  {
+   "id": "c95efc9e-05d0-419b-9d84-bf5940bda540",
+   "name": "Chocolat",
+   "handle": "chocolat-short-almond-press-on-nails",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/Chocolat_6.jpg?v=1762201751",
+   "price": 15.99,
+   "system": "glue_on",
+   "length": "short",
+   "shapes": [
+    "almond"
+   ],
+   "families": [
+    "nudes_neutrals",
+    "french_white"
+   ],
+   "tier": "clean",
+   "styles": [
+    "French Tip"
+   ],
+   "finishes": [
+    "Glossy"
+   ],
+   "collections": [
+    "Fall",
+    "Falloween 2026",
+    "Festival Season 2026",
+    "Halloween Shop 2025",
+    "Fall French Tips"
+   ],
+   "bestseller": false,
+   "poolTier": "T5 fill"
+  }
+ ]
+}
