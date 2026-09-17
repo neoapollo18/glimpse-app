@@ -32,7 +32,8 @@ const AI_MODEL = 'gemini-3.1-flash-image-preview';
 const dryRun = process.argv.includes('--dry-run');
 const { buildGuidance, ATTRIBUTES_PATH } = require('./orly-guidance.cjs');
 
-// Handoff bestseller ranks (page-1, best-selling sort). Rank 16 is absent in
+// Fallback bestseller ranks (handoff page-1, best-selling sort) — used only
+// when the live Bestsellers collection scrape fails. Rank 16 is absent in
 // the handoff table. French anchors + extras carry no rank.
 const BESTSELLER_RANK = {
   "All Dahlia'd Up": 1, "She's A Wildflower": 2, 'Retrograde': 3, 'Turn It Up': 4,
@@ -47,7 +48,81 @@ const BESTSELLER_RANK = {
 const TARGETS = Object.keys(BESTSELLER_RANK).concat([
   'Bare Rose', 'Sheer Nude', 'Pointe Blanche', 'Des Fleurs', 'Beverly Hills Plum',
   'Canyon Clay',
+  // Find Your Vibe spec (2026-08-23) pool additions.
+  'Charmed', 'Claim To Fame', 'Double Espresso', 'Down To Earth', 'Earl Grey',
+  'Fresh Start', 'Golden Afternoon', 'Hibis-Kiss', 'Main Character',
+  'Midnight Stars', 'Mirror Mirror', 'Pine-ing For You', 'Playa Papaya',
+  'Rave Wave', 'Red Flare', 'Red Rock', 'Replay the Night', 'Ruby',
+  'Set On Fire', 'Snatched', 'Velvet Dreams', 'Wanderlust',
+  'Golden Hour', 'Pink Moon',
+  // NOT listed: 'Peaches and Dreams' — active again in the spec, but the shop
+  // already has a row pointing at the discontinued full-size product id.
+  // Reactivating it means repointing that row's shopify_id to the live
+  // "Peaches and Dreams Breathable 11mL" catalog id (targeted UPDATE, needs
+  // sign-off), NOT onboarding a duplicate row.
 ]);
+
+// Depth (light/mid/deep) per the Find Your Vibe spec Section 6 — not in
+// ORLY's catalog data (spec's one-time enrichment), keyed by norm(name).
+const DEPTH = {
+  avibe: 'mid', alldahliadup: 'mid', almondmilk: 'light', anythinggoes: 'mid',
+  astralflaire: 'mid', backforsmore: 'deep', barerose: 'light',
+  beautifullybizarre: 'mid', beverlyhillsplum: 'light', bluetango: 'mid',
+  bubblybombshell: 'mid', canyonclay: 'mid', charmed: 'mid', claimtofame: 'mid',
+  destresseddenim: 'mid', desfleurs: 'light', detoxmysocksoff: 'mid',
+  dontbesuspicious: 'mid', dontpopmyballoon: 'light', doubleespresso: 'deep',
+  downtoearth: 'mid', earlgrey: 'mid', earthfire: 'mid', embracedanger: 'mid',
+  fairygodmother: 'light', freshstart: 'light', frondofyou: 'mid',
+  goldenafternoon: 'light', happyandhealthy: 'light', hautered: 'mid',
+  heartbeet: 'mid', hibiskiss: 'mid', itsnotaphase: 'deep',
+  kaleidoscopeeyes: 'mid', kissmeimkind: 'light', kissthebride: 'light',
+  liquidvinyl: 'deep', losttreasure: 'mid', lovemynails: 'mid',
+  maincharacter: 'mid', midnightstars: 'deep', mindovermatter: 'deep',
+  mirrormirror: 'mid', morningmantra: 'light', peachesanddreams: 'light',
+  pineingforyou: 'deep', playapapaya: 'mid', pointeblanche: 'light',
+  ravewave: 'mid', redflare: 'mid', redrock: 'deep', replaythenight: 'deep',
+  retrograde: 'mid', ruby: 'mid', sagebrush: 'mid', setonfire: 'mid',
+  sheernude: 'light', shesawildflower: 'light', snatched: 'mid',
+  starspangled: 'mid', sweetserenity: 'light', velvetdreams: 'deep',
+  wanderlust: 'light', whitetips: 'light',
+  citrusgotreal: 'mid', coralcrush: 'light', crush: 'mid',
+  crystalhealing: 'light', goldenhour: 'mid', kickglass: 'light',
+  pinkmoon: 'light', turnitup: 'mid',
+  crashtheparty: 'mid', youhadmeathydrangea: 'mid', rage: 'mid',
+};
+
+// Catalog Color_* family -> quiz color chips (the 12 values on Q3), aligned
+// with the spec's Section 6 chip assignments. Catalog tags stay authoritative
+// (spec Section 7); this just translates them into quiz vocabulary.
+const CHIP_MAP = {
+  red: ['reds'], pink: ['pinks'], magenta: ['pinks', 'purples'],
+  orange: ['oranges'], peach: ['oranges'], coral: ['oranges', 'pinks'],
+  yellow: ['yellows'], gold: ['yellows'], green: ['greens'],
+  teal: ['blues', 'greens'], turquoise: ['blues', 'greens'], blue: ['blues'],
+  purple: ['purples'], lilac: ['purples'], mauve: ['purples', 'pinks'],
+  brown: ['browns'], nude: ['nudes'], neutral: ['nudes'], beige: ['nudes'],
+  white: ['whites'], black: ['blacks'], grey: ['greys'], gray: ['greys'],
+  'rose gold': ['pinks'], copper: ['oranges', 'browns'],
+  multi: ['multi'], rainbow: ['multi'], holo: ['multi'], iridescent: ['multi'],
+};
+// Depth lookup tolerant of catalog title suffixes ("- Gel Nail Color",
+// "Breathable 11mL").
+function depthFor(name) {
+  const n = norm(name);
+  if (DEPTH[n]) return DEPTH[n];
+  for (const k of Object.keys(DEPTH)) if (n.startsWith(k)) return DEPTH[k];
+  return null;
+}
+
+function chipsFor(colors) {
+  const out = [];
+  for (const c of colors || []) {
+    for (const chip of CHIP_MAP[c.toLowerCase()] || []) {
+      if (!out.includes(chip)) out.push(chip);
+    }
+  }
+  return out;
+}
 
 // Canonical fallback hex per Color_* family, also used to sanity-check the
 // extracted color's hue family.
@@ -131,6 +206,9 @@ async function extractHex(sharp, buf) {
   return `#${hx(best.r)}${hx(best.g)}${hx(best.b)}`;
 }
 
+// Spec Section 6 toppers the catalog doesn't tag Type_Topper (Pink Moon).
+const SPEC_TOPPERS = new Set(['citrusgotreal', 'coralcrush', 'crush', 'crystalhealing', 'goldenhour', 'kickglass', 'pinkmoon', 'turnitup']);
+
 function attrsFromCatalog(c) {
   const tags = c.tags || [];
   const colors = tags.filter((t) => t.startsWith('Color_')).map((t) => t.slice(6));
@@ -141,7 +219,7 @@ function attrsFromCatalog(c) {
     colors,
     types,
     formula,
-    topper: types.includes('Topper'),
+    topper: types.includes('Topper') || SPEC_TOPPERS.has(norm(c.title)),
     available: (c.variants || []).some((v) => v.available),
   };
 }
@@ -217,6 +295,25 @@ function buildPrompt(name, a, hex) {
   }
   console.log(`catalog: ${catalog.length} products`);
 
+  // Live bestseller order (spec Rule 6: ORLY Bestsellers collection sort,
+  // refreshed on each scrape). Falls back to the static handoff ranks.
+  let bestsellerOrder = [];
+  try {
+    for (let page = 1; page <= 4; page++) {
+      const res = await fetch(`https://www.orlybeauty.com/collections/bestsellers/products.json?limit=250&page=${page}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const prods = (await res.json()).products || [];
+      if (prods.length === 0) break;
+      bestsellerOrder.push(...prods);
+    }
+  } catch (e) {
+    console.warn(`WARN bestsellers collection scrape failed (${e.message}); using static handoff ranks`);
+    bestsellerOrder = [];
+  }
+  console.log(`bestsellers collection: ${bestsellerOrder.length} products`);
+
   const isColorSku = (c) => /lacquer|breathable|gel/i.test(c.product_type || '');
   const byNorm = new Map();
   for (const c of catalog) {
@@ -240,7 +337,12 @@ function buildPrompt(name, a, hex) {
   // ---- Resolve targets against the catalog ----
   const toOnboard = [];
   for (const t of TARGETS) {
-    const candidates = (byNorm.get(norm(t)) || []).filter(isColorSku);
+    let candidates = (byNorm.get(norm(t)) || []).filter(isColorSku);
+    if (candidates.length === 0) {
+      // Suffix-tolerant fallback: catalog titles like
+      // "Claim To Fame - Gel Nail Color" or "... Breathable 11mL".
+      candidates = catalog.filter((c) => norm(c.title).startsWith(norm(t))).filter(isColorSku);
+    }
     const c = candidates.find((x) => (x.variants || []).some((v) => v.available)) || candidates[0];
     if (!c) { console.warn(`SKIP (not in catalog): ${t}`); continue; }
     if (existingByNumericId.has(String(c.id))) continue; // already configured
@@ -260,7 +362,12 @@ function buildPrompt(name, a, hex) {
         const imgRes = await fetch(c.images[0].src, { headers: { 'User-Agent': 'Mozilla/5.0' } });
         const buf = Buffer.from(await imgRes.arrayBuffer());
         const extracted = await extractHex(sharp, buf);
-        if (extracted && hexMatchesFamily(extracted, families)) {
+        const depth = depthFor(c.title) ?? depthFor(handoffName);
+        const tooDark = (h) => {
+          const { l } = rgbToHsl(parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16));
+          return (depth === 'light' && l < 0.45) || (depth === 'mid' && l < 0.22);
+        };
+        if (extracted && hexMatchesFamily(extracted, families) && !tooDark(extracted)) {
           hex = extracted; hexSource = 'image';
         } else {
           hex = FAMILY_HEX[families[0]] || null; hexSource = extracted ? 'family-fallback (image off-family)' : 'family-fallback (no signal)';
@@ -321,14 +428,29 @@ function buildPrompt(name, a, hex) {
     ? Promise.resolve(existing)
     : sb.from('products').select('id, product_name, shopify_id').eq('shop_id', shopId));
   const catalogById = new Map(catalog.map((c) => [String(c.id), c]));
+  // Scraped rank: position among this shop's pool products in the live
+  // Bestsellers collection order (1-based). null when the scrape failed.
+  const poolNorms = new Set((all.data || []).map((p) => norm(p.product_name)));
+  const scrapedRank = new Map();
+  for (const c of bestsellerOrder) {
+    const n = norm(c.title);
+    if (poolNorms.has(n) && !scrapedRank.has(n)) scrapedRank.set(n, scrapedRank.size + 1);
+  }
   const products = (all.data || []).map((p) => {
     const c = catalogById.get(p.shopify_id.split('/').pop());
     if (!c) {
-      return { gleameId: p.id, name: p.product_name, colors: [], types: [], formula: 'Lacquer', retired: true };
+      return { gleameId: p.id, name: p.product_name, colors: [], chips: [], types: [], formula: 'Lacquer', depth: depthFor(p.product_name), retired: true };
     }
     const a = attrsFromCatalog(c);
-    const rank = BESTSELLER_RANK[p.product_name.replace(/’/g, "'")] ?? null;
-    return { gleameId: p.id, name: p.product_name, ...a, bestsellerRank: rank, retired: false };
+    const rank = scrapedRank.get(norm(p.product_name))
+      ?? BESTSELLER_RANK[p.product_name.replace(/’/g, "'")]
+      ?? null;
+    return {
+      gleameId: p.id, name: p.product_name, ...a,
+      chips: chipsFor(a.colors),
+      depth: depthFor(p.product_name),
+      bestsellerRank: rank, retired: false,
+    };
   });
   // Retired names get their handoff color notes for the guidance line.
   const RETIRED_COLORS = {
@@ -336,7 +458,10 @@ function buildPrompt(name, a, hex) {
     'Peaches and Dreams': ['Peach'], 'Rage': ['Copper'],
   };
   for (const p of products) {
-    if (p.retired && RETIRED_COLORS[p.name]) p.colors = RETIRED_COLORS[p.name];
+    if (p.retired && RETIRED_COLORS[p.name]) {
+      p.colors = RETIRED_COLORS[p.name];
+      p.chips = chipsFor(p.colors);
+    }
   }
   if (!dryRun) {
     fs.mkdirSync(path.dirname(ATTRIBUTES_PATH), { recursive: true });

@@ -14,6 +14,10 @@
    "formula": "Lacquer",
    "topper": false,
    "available": true,
+   "chips": [
+    "reds"
+   ],
+   "depth": "mid",
    "bestsellerRank": null,
    "retired": false
   },
@@ -31,6 +35,10 @@
    "formula": "Lacquer",
    "topper": false,
    "available": true,
+   "chips": [
+    "multi"
+   ],
+   "depth": "mid",
    "bestsellerRank": null,
    "retired": false
   },
@@ -47,6 +55,11 @@
    "formula": "Lacquer",
    "topper": false,
    "available": true,
+   "chips": [
+    "browns",
+    "nudes"
+   ],
+   "depth": "mid",
    "bestsellerRank": null,
    "retired": false
   },
@@ -62,6 +75,10 @@
    "formula": "Lacquer",
    "topper": false,
    "available": true,
+   "chips": [
+    "purples"
+   ],
+   "depth": "mid",
    "bestsellerRank": null,
    "retired": false
   },
@@ -79,6 +96,10 @@
    "formula": "Lacquer",
    "topper": true,
    "available": true,
+   "chips": [
+    "multi"
+   ],
+   "depth": "mid",
    "bestsellerRank": 4,
    "retired": false
   },
@@ -88,8 +109,12 @@
    "colors": [
     "Red"
    ],
+   "chips": [
+    "reds"
+   ],
    "types": [],
    "formula": "Lacquer",
+   "depth": "mid",
    "retired": true
   },
   {
@@ -99,8 +124,13 @@
     "Blue",
     "Purple"
    ],
+   "chips": [
+    "blues",
+    "purples"
+   ],
    "types": [],
    "formula": "Lacquer",
+   "depth": "mid",
    "retired": true
   },
   {
@@ -115,6 +145,10 @@
    "formula": "Lacquer",
    "topper": false,
    "available": true,
+   "chips": [
+    "purples"
+   ],
+   "depth": "mid",
    "bestsellerRank": 5,
    "retired": false
   },
@@ -132,6 +166,11 @@
    "formula": "Lacquer",
    "topper": false,
    "available": true,
+   "chips": [
+    "greens",
+    "greys"
+   ],
+   "depth": "mid",
    "bestsellerRank": 6,
    "retired": false
   },
@@ -148,6 +187,11 @@
    "formula": "Breathable",
    "topper": false,
    "available": true,
+   "chips": [
+    "blacks",
+    "purples"
+   ],
+   "depth": "deep",
    "bestsellerRank": 18,
    "retired": false
   },
@@ -157,8 +201,12 @@
    "colors": [
     "Peach"
    ],
+   "chips": [
+    "oranges"
+   ],
    "types": [],
    "formula": "Lacquer",
+   "depth": "light",
    "retired": true
   },
   {
@@ -173,6 +221,10 @@
    "formula": "Breathable",
    "topper": false,
    "available": true,
+   "chips": [
+    "blues"
+   ],
+   "depth": "light",
    "bestsellerRank": 7,
    "retired": false
   },
@@ -189,6 +241,10 @@
    "formula": "Breathable",
    "topper": false,
    "available": true,
+   "chips": [
+    "pinks"
+   ],
+   "depth": "light",
    "bestsellerRank": 8,
    "retired": false
   },
@@ -206,6 +262,10 @@
    "formula": "Breathable",
    "topper": true,
    "available": true,
+   "chips": [
+    "oranges"
+   ],
+   "depth": "mid",
    "bestsellerRank": 9,
    "retired": false
   },
@@ -215,8 +275,13 @@
    "colors": [
     "Copper"
    ],
+   "chips": [
+    "oranges",
+    "browns"
+   ],
    "types": [],
    "formula": "Lacquer",
+   "depth": "mid",
    "retired": true
   },
   {
@@ -232,6 +297,10 @@
    "formula": "Lacquer",
    "topper": true,
    "available": true,
+   "chips": [
+    "multi"
+   ],
+   "depth": "light",
    "bestsellerRank": 11,
    "retired": false
   },
@@ -247,7 +316,11 @@
    "formula": "Lacquer",
    "topper": false,
    "available": true,
-   "bestsellerRank": 12,
+   "chips": [
+    "pinks"
+   ],
+   "depth": "light",
+   "bestsellerRank": 13,
    "retired": false
   },
   {
@@ -260,7 +333,11 @@
    "formula": "Lacquer",
    "topper": false,
    "available": true,
-   "bestsellerRank": null,
+   "chips": [
+    "oranges"
+   ],
+   "depth": "mid",
+   "bestsellerRank": 35,
    "retired": false
   },
   {
@@ -276,6 +353,11 @@
    "formula": "Breathable",
    "topper": false,
    "available": true,
+   "chips": [
+    "pinks",
+    "purples"
+   ],
+   "depth": "mid",
    "bestsellerRank": 23,
    "retired": false
   },
@@ -291,6 +373,10 @@
    "formula": "Breathable",
    "topper": false,
    "available": true,
+   "chips": [
+    "greens"
+   ],
+   "depth": "mid",
    "bestsellerRank": null,
    "retired": false
   },
@@ -308,7 +394,13 @@
    "formula": "Lacquer",
    "topper": false,
    "available": true,
-   "bestsellerRank": null,
+   "chips": [
+    "oranges",
+    "pinks",
+    "reds"
+   ],
+   "depth": "mid",
+   "bestsellerRank": 32,
    "retired": false
   },
   {
@@ -325,6 +417,11 @@
    "formula": "Lacquer",
    "topper": false,
    "available": true,
+   "chips": [
+    "blues",
+    "greens"
+   ],
+   "depth": "mid",
    "bestsellerRank": 3,
    "retired": false
   },
@@ -341,7 +438,11 @@
    "formula": "Breathable",
    "topper": false,
    "available": true,
-   "bestsellerRank": 15,
+   "chips": [
+    "pinks"
+   ],
+   "depth": "light",
+   "bestsellerRank": 16,
    "retired": false
   },
   {
@@ -357,6 +458,11 @@
    "formula": "Breathable",
    "topper": false,
    "available": true,
+   "chips": [
+    "pinks",
+    "purples"
+   ],
+   "depth": "mid",
    "bestsellerRank": 10,
    "retired": false
   },
@@ -373,6 +479,11 @@
    "formula": "Breathable",
    "topper": false,
    "available": true,
+   "chips": [
+    "blues",
+    "greys"
+   ],
+   "depth": "mid",
    "bestsellerRank": 17,
    "retired": false
   },
@@ -388,6 +499,10 @@
    "formula": "Lacquer",
    "topper": false,
    "available": true,
+   "chips": [
+    "pinks"
+   ],
+   "depth": "mid",
    "bestsellerRank": 25,
    "retired": false
   },
@@ -403,6 +518,10 @@
    "formula": "Breathable",
    "topper": false,
    "available": true,
+   "chips": [
+    "blacks"
+   ],
+   "depth": "deep",
    "bestsellerRank": 19,
    "retired": false
   },
@@ -420,7 +539,12 @@
    "formula": "Lacquer",
    "topper": true,
    "available": true,
-   "bestsellerRank": 27,
+   "chips": [
+    "multi",
+    "pinks"
+   ],
+   "depth": "mid",
+   "bestsellerRank": 26,
    "retired": false
   },
   {
@@ -435,6 +559,10 @@
    "formula": "Breathable",
    "topper": false,
    "available": true,
+   "chips": [
+    "reds"
+   ],
+   "depth": "mid",
    "bestsellerRank": 20,
    "retired": false
   },
@@ -455,6 +583,12 @@
    "formula": "Breathable",
    "topper": true,
    "available": true,
+   "chips": [
+    "multi",
+    "purples",
+    "whites"
+   ],
+   "depth": "light",
    "bestsellerRank": 26,
    "retired": false
   },
@@ -470,6 +604,10 @@
    "formula": "Breathable",
    "topper": false,
    "available": true,
+   "chips": [
+    "pinks"
+   ],
+   "depth": "light",
    "bestsellerRank": 2,
    "retired": false
   },
@@ -485,7 +623,11 @@
    "formula": "Lacquer",
    "topper": false,
    "available": true,
-   "bestsellerRank": null,
+   "chips": [
+    "oranges"
+   ],
+   "depth": "mid",
+   "bestsellerRank": 34,
    "retired": false
   },
   {
@@ -498,6 +640,10 @@
    "formula": "Breathable",
    "topper": false,
    "available": true,
+   "chips": [
+    "blacks"
+   ],
+   "depth": "deep",
    "bestsellerRank": null,
    "retired": false
   },
@@ -513,6 +659,10 @@
    "formula": "Lacquer",
    "topper": false,
    "available": true,
+   "chips": [
+    "blacks"
+   ],
+   "depth": "deep",
    "bestsellerRank": 21,
    "retired": false
   },
@@ -529,7 +679,12 @@
    "formula": "Breathable",
    "topper": false,
    "available": true,
-   "bestsellerRank": 28,
+   "chips": [
+    "pinks",
+    "reds"
+   ],
+   "depth": "light",
+   "bestsellerRank": 27,
    "retired": false
   },
   {
@@ -544,7 +699,11 @@
    "formula": "Lacquer",
    "topper": false,
    "available": true,
-   "bestsellerRank": 29,
+   "chips": [
+    "reds"
+   ],
+   "depth": "mid",
+   "bestsellerRank": 28,
    "retired": false
   },
   {
@@ -562,7 +721,12 @@
    "formula": "Breathable",
    "topper": false,
    "available": true,
-   "bestsellerRank": 13,
+   "chips": [
+    "nudes",
+    "whites"
+   ],
+   "depth": "light",
+   "bestsellerRank": 14,
    "retired": false
   },
   {
@@ -577,6 +741,10 @@
    "formula": "Lacquer",
    "topper": false,
    "available": true,
+   "chips": [
+    "blues"
+   ],
+   "depth": "mid",
    "bestsellerRank": null,
    "retired": false
   },
@@ -592,6 +760,10 @@
    "formula": "Lacquer",
    "topper": false,
    "available": true,
+   "chips": [
+    "whites"
+   ],
+   "depth": "light",
    "bestsellerRank": 22,
    "retired": false
   },
@@ -609,7 +781,12 @@
    "formula": "Lacquer",
    "topper": true,
    "available": true,
-   "bestsellerRank": null,
+   "chips": [
+    "oranges",
+    "pinks"
+   ],
+   "depth": "light",
+   "bestsellerRank": 33,
    "retired": false
   },
   {
@@ -627,7 +804,12 @@
    "formula": "Breathable",
    "topper": false,
    "available": true,
-   "bestsellerRank": 14,
+   "chips": [
+    "blues",
+    "greens"
+   ],
+   "depth": "mid",
+   "bestsellerRank": 15,
    "retired": false
   },
   {
@@ -642,6 +824,10 @@
    "formula": "Lacquer",
    "topper": false,
    "available": true,
+   "chips": [
+    "pinks"
+   ],
+   "depth": "light",
    "bestsellerRank": 24,
    "retired": false
   },
@@ -657,7 +843,11 @@
    "formula": "Lacquer",
    "topper": false,
    "available": true,
-   "bestsellerRank": null,
+   "chips": [
+    "pinks"
+   ],
+   "depth": "light",
+   "bestsellerRank": 31,
    "retired": false
   },
   {
@@ -670,6 +860,10 @@
    "formula": "Breathable",
    "topper": false,
    "available": true,
+   "chips": [
+    "pinks"
+   ],
+   "depth": "light",
    "bestsellerRank": null,
    "retired": false
   },
@@ -686,6 +880,11 @@
    "formula": "Breathable",
    "topper": false,
    "available": true,
+   "chips": [
+    "pinks",
+    "reds"
+   ],
+   "depth": "mid",
    "bestsellerRank": 1,
    "retired": false
   },
@@ -701,6 +900,10 @@
    "formula": "Lacquer",
    "topper": false,
    "available": true,
+   "chips": [
+    "blues"
+   ],
+   "depth": "mid",
    "bestsellerRank": null,
    "retired": false
   },
@@ -716,7 +919,11 @@
    "formula": "Lacquer",
    "topper": false,
    "available": true,
-   "bestsellerRank": null,
+   "chips": [
+    "nudes"
+   ],
+   "depth": "light",
+   "bestsellerRank": 36,
    "retired": false
   },
   {
@@ -731,6 +938,10 @@
    "formula": "Lacquer",
    "topper": false,
    "available": true,
+   "chips": [
+    "whites"
+   ],
+   "depth": "light",
    "bestsellerRank": null,
    "retired": false
   },
@@ -746,6 +957,10 @@
    "formula": "Lacquer",
    "topper": false,
    "available": true,
+   "chips": [
+    "pinks"
+   ],
+   "depth": "light",
    "bestsellerRank": null,
    "retired": false
   },
@@ -761,7 +976,11 @@
    "formula": "Lacquer",
    "topper": false,
    "available": true,
-   "bestsellerRank": null,
+   "chips": [
+    "pinks"
+   ],
+   "depth": "light",
+   "bestsellerRank": 29,
    "retired": false
   },
   {
@@ -778,7 +997,466 @@
    "formula": "Lacquer",
    "topper": false,
    "available": true,
+   "chips": [
+    "browns",
+    "nudes"
+   ],
+   "depth": "mid",
    "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "gleameId": "955f2520-e3ad-4a39-a832-8dfb219c26e2",
+   "name": "Charmed",
+   "colors": [
+    "Pink",
+    "Purple"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "chips": [
+    "pinks",
+    "purples"
+   ],
+   "depth": "mid",
+   "bestsellerRank": 50,
+   "retired": false
+  },
+  {
+   "gleameId": "496c591c-1d39-406c-a15b-0e3e6430c19a",
+   "name": "Claim To Fame - Gel Nail Color",
+   "colors": [
+    "Yellow"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "GELFX",
+   "topper": false,
+   "available": true,
+   "chips": [
+    "yellows"
+   ],
+   "depth": "mid",
+   "bestsellerRank": 49,
+   "retired": false
+  },
+  {
+   "gleameId": "06a89dc3-7f3a-49fe-9d2a-7c990a8a21b8",
+   "name": "Double Espresso",
+   "colors": [
+    "Brown",
+    "Neutral",
+    "Nude"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Breathable",
+   "topper": false,
+   "available": true,
+   "chips": [
+    "browns",
+    "nudes"
+   ],
+   "depth": "deep",
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "gleameId": "cba54605-10a3-4440-ab6f-c1ec79033da3",
+   "name": "Down To Earth",
+   "colors": [
+    "Brown",
+    "Neutral",
+    "Taupe"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Breathable",
+   "topper": false,
+   "available": true,
+   "chips": [
+    "browns",
+    "nudes"
+   ],
+   "depth": "mid",
+   "bestsellerRank": 30,
+   "retired": false
+  },
+  {
+   "gleameId": "3ec85812-6358-48f7-a2eb-db6c8a227f0e",
+   "name": "Fresh Start",
+   "colors": [
+    "Green",
+    "Mint"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Breathable",
+   "topper": false,
+   "available": true,
+   "chips": [
+    "greens"
+   ],
+   "depth": "light",
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "gleameId": "3b3c8898-d0be-48b3-8ac4-fa15a03120b4",
+   "name": "Golden Afternoon",
+   "colors": [
+    "Yellow"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "chips": [
+    "yellows"
+   ],
+   "depth": "light",
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "gleameId": "b0ece989-9f11-4ccf-b430-c9523c0e0c65",
+   "name": "Hibis-Kiss",
+   "colors": [
+    "Pink"
+   ],
+   "types": [
+    "Creme",
+    "Neon"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "chips": [
+    "pinks"
+   ],
+   "depth": "mid",
+   "bestsellerRank": 37,
+   "retired": false
+  },
+  {
+   "gleameId": "90896eba-78ad-4062-9f31-7a36bc828d78",
+   "name": "Main Character",
+   "colors": [
+    "Pink"
+   ],
+   "types": [
+    "Flakie",
+    "Shimmer"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "chips": [
+    "pinks"
+   ],
+   "depth": "mid",
+   "bestsellerRank": 47,
+   "retired": false
+  },
+  {
+   "gleameId": "91a6fcb1-cb41-4d78-a285-1f5040c86d07",
+   "name": "Mirror Mirror",
+   "colors": [
+    "Grey"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "chips": [
+    "greys"
+   ],
+   "depth": "mid",
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "gleameId": "4b7b0072-c9b0-4aa6-acd1-fb261716ddd0",
+   "name": "Pine-ing For You",
+   "colors": [
+    "Green"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Breathable",
+   "topper": false,
+   "available": true,
+   "chips": [
+    "greens"
+   ],
+   "depth": "deep",
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "gleameId": "5e2ca411-391b-4cde-a982-6b50c317645c",
+   "name": "Midnight Stars",
+   "colors": [
+    "Blue"
+   ],
+   "types": [
+    "Flakie",
+    "Shimmer"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "chips": [
+    "blues"
+   ],
+   "depth": "deep",
+   "bestsellerRank": 44,
+   "retired": false
+  },
+  {
+   "gleameId": "b56c096c-5673-4ef3-aef7-bf2f22e1908b",
+   "name": "Playa Papaya",
+   "colors": [
+    "Coral",
+    "Orange"
+   ],
+   "types": [
+    "Creme",
+    "Neon"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "chips": [
+    "oranges",
+    "pinks"
+   ],
+   "depth": "mid",
+   "bestsellerRank": 41,
+   "retired": false
+  },
+  {
+   "gleameId": "b3802ec7-329a-4580-bfa7-97fdf2397b05",
+   "name": "Rave Wave",
+   "colors": [
+    "Purple"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "chips": [
+    "purples"
+   ],
+   "depth": "mid",
+   "bestsellerRank": 43,
+   "retired": false
+  },
+  {
+   "gleameId": "47f0140d-20a7-4d1b-978e-44c0c2380bef",
+   "name": "Snatched",
+   "colors": [
+    "Yellow"
+   ],
+   "types": [
+    "Neon"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "chips": [
+    "yellows"
+   ],
+   "depth": "mid",
+   "bestsellerRank": 40,
+   "retired": false
+  },
+  {
+   "gleameId": "a90de704-215a-4c38-9e97-6ca54ab0f0a3",
+   "name": "Red Flare",
+   "colors": [
+    "Red"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "chips": [
+    "reds"
+   ],
+   "depth": "mid",
+   "bestsellerRank": 38,
+   "retired": false
+  },
+  {
+   "gleameId": "412fe214-e818-406c-94c4-4ea0f9935b2e",
+   "name": "Red Rock",
+   "colors": [
+    "Red"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "chips": [
+    "reds"
+   ],
+   "depth": "deep",
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "gleameId": "9287a354-b2ad-4d9f-8c6c-1d21ebfbf095",
+   "name": "Replay The Night",
+   "colors": [
+    "Purple"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "chips": [
+    "purples"
+   ],
+   "depth": "deep",
+   "bestsellerRank": 51,
+   "retired": false
+  },
+  {
+   "gleameId": "1a5c89f3-c938-4050-8d8e-00a3f869b565",
+   "name": "Ruby",
+   "colors": [
+    "Red"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "chips": [
+    "reds"
+   ],
+   "depth": "mid",
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "gleameId": "1a31f20e-0c19-41af-a43b-8484c3e70c5f",
+   "name": "Set On Fire",
+   "colors": [
+    "Red"
+   ],
+   "types": [
+    "Flakie",
+    "Shimmer"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "chips": [
+    "reds"
+   ],
+   "depth": "mid",
+   "bestsellerRank": 46,
+   "retired": false
+  },
+  {
+   "gleameId": "3542aeb2-271c-41c4-86b3-1b3253dcbe34",
+   "name": "Velvet Dreams",
+   "colors": [
+    "Purple"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "chips": [
+    "purples"
+   ],
+   "depth": "deep",
+   "bestsellerRank": 48,
+   "retired": false
+  },
+  {
+   "gleameId": "e4b394ea-d76d-4cc0-b9d0-f109fedca1b0",
+   "name": "Wanderlust",
+   "colors": [
+    "Purple"
+   ],
+   "types": [
+    "Creme"
+   ],
+   "formula": "Lacquer",
+   "topper": false,
+   "available": true,
+   "chips": [
+    "purples"
+   ],
+   "depth": "light",
+   "bestsellerRank": 39,
+   "retired": false
+  },
+  {
+   "gleameId": "2bf8f7d1-7ea9-43fe-904f-74f85fb0c413",
+   "name": "Golden Hour",
+   "colors": [
+    "Gold"
+   ],
+   "types": [
+    "Topper"
+   ],
+   "formula": "Lacquer",
+   "topper": true,
+   "available": true,
+   "chips": [
+    "yellows"
+   ],
+   "depth": "mid",
+   "bestsellerRank": 45,
+   "retired": false
+  },
+  {
+   "gleameId": "7342f05c-b603-4109-ba9e-90d223288bad",
+   "name": "Pink Moon",
+   "colors": [
+    "Pink"
+   ],
+   "types": [
+    "Holo",
+    "Shimmer"
+   ],
+   "formula": "Lacquer",
+   "topper": true,
+   "available": true,
+   "chips": [
+    "pinks"
+   ],
+   "depth": "light",
+   "bestsellerRank": 42,
    "retired": false
   }
  ]
