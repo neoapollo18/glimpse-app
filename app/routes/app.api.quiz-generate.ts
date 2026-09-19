@@ -69,6 +69,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     modePreference: (["matrix", "ai", "hybrid"] as const).find((m) => m === formData.get("modePreference")) ?? "auto",
     extraNotes: String(formData.get("extraNotes") ?? "").slice(0, 2000) || undefined,
   };
+  // Overhaul Part 3 scope: product subset from the install-flow scope
+  // screen. scopeProductIds is a JSON array of gleame product uuids.
+  const scopeKind = String(formData.get("scopeKind") ?? "");
+  if (["all", "collection", "type", "tag", "freetext"].includes(scopeKind)) {
+    let ids: string[] | null = null;
+    try {
+      const parsed = JSON.parse(String(formData.get("scopeProductIds") ?? "null"));
+      if (Array.isArray(parsed)) ids = parsed.filter((x) => typeof x === "string").slice(0, 5000);
+    } catch {
+      /* whole catalog */
+    }
+    brief.scope = {
+      kind: scopeKind as NonNullable<BrandBrief["scope"]>["kind"],
+      label: String(formData.get("scopeLabel") ?? "").slice(0, 120),
+      productIds: scopeKind === "all" ? null : ids,
+    };
+  }
 
   const stream = new ReadableStream({
     async start(controller) {

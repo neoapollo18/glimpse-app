@@ -1,5 +1,5 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
-import { json } from "@remix-run/node";
+import { json, redirect } from "@remix-run/node";
 import { useLoaderData, useNavigate, useFetcher, useSearchParams, useRevalidator } from "@remix-run/react";
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
@@ -146,6 +146,24 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   };
 
   console.log(`[Onboarding Loader] shop=${shopDomain}, step=${onboarding.step}, completed=${onboarding.completed}`);
+
+  // Overhaul install flow (Part 3, flagged): fresh shops on the flag skip
+  // the wizard entirely — scope -> build -> Reveal at /app/onboard. Shops
+  // with an existing quiz or finished onboarding never re-enter it.
+  if (shopRow && !onboarding.completed && (counts?.questions ?? 0) === 0) {
+    const flagOn =
+      process.env.OVERHAUL_ONBOARDING === "true" ||
+      Boolean(
+        (
+          await supabase
+            .from("shops")
+            .select("overhaul_enabled")
+            .eq("id", shopRow.id)
+            .maybeSingle()
+        ).data?.overhaul_enabled,
+      );
+    if (flagOn) throw redirect("/app/onboard");
+  }
 
   // "Configured" means TRY-ON configured (has a transformation prompt).
   // Catalog sync inserts prompt-less rows into the same table mid-onboarding;
