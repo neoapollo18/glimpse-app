@@ -39,6 +39,10 @@ export interface BrandBrief {
   modePreference: "matrix" | "ai" | "hybrid" | "auto";
   extraNotes?: string;
   priorityProductIds?: string[];
+  /** Overhaul Part 3: the product subset the quiz recommends from.
+   * productIds null/absent = whole catalog. label is merchant-facing
+   * ("Lip products"). */
+  scope?: { kind: "all" | "collection" | "type" | "tag" | "freetext"; label: string; productIds: string[] | null };
 }
 
 // ---------------------------------------------------------------------
@@ -277,7 +281,15 @@ export async function generateQuizConfig(args: {
   };
 
   onProgress?.("Reading your catalog…");
-  const catalog = await loadCatalogForShop(shopId);
+  const fullCatalog = await loadCatalogForShop(shopId);
+  // Scope (Overhaul Part 3): generation only ever sees in-scope products,
+  // so every question, rule, and annotation is grounded in the subset the
+  // merchant picked. Whole-catalog scope keeps the copilot's prompt-cache
+  // bytes identical.
+  const scopeIds = args.brief.scope?.productIds?.length
+    ? new Set(args.brief.scope.productIds)
+    : null;
+  const catalog = scopeIds ? fullCatalog.filter((p) => scopeIds.has(p.id)) : fullCatalog;
   const activeCount = catalog.filter((p) => p.status == null || p.status === "active").length;
   if (activeCount === 0) {
     // Don't point back at sync: a 0-product (or all-draft) store syncs
@@ -300,8 +312,13 @@ export async function generateQuizConfig(args: {
   onProgress?.("Drafting your quiz…");
   // Exactly ONE repair round-trip total, spent on whichever failure comes
   // first: a schema-parse miss (free-form JSON) or a validation miss.
-  let config: GeneratedQuizConfig;
+  // An LLM HARD failure no longer dead-ends: the archetype stock bank
+  // instantiates a catalog-grounded quiz instead (fallback_generation) so
+  // the merchant still lands on a Reveal (Overhaul Part 3).
+  let config: GeneratedQuizConfig | null = null;
   let repairUsed = false;
+  let fallbackGeneration = false;
+  const llmFailures: string[] = [];
   try {
     let call = await callGenerator(system, messages, shopDomain, "quiz-generate", tokenProgress("Drafting your quiz…"));
     usage.push(call.usage);
@@ -320,17 +337,50 @@ export async function generateQuizConfig(args: {
       call = await callGenerator(system, messages, shopDomain, "quiz-generate-repair", tokenProgress("Fixing a few issues…"));
       usage.push(call.usage);
       if (call.parseErrors) {
-        return {
-          ok: false,
-          error: `Generation failed: model output stayed malformed (${call.parseErrors[0]})`,
-          warnings: [],
-          usage,
-        };
+        llmFailures.push(`model output stayed malformed (${call.parseErrors[0]})`);
       }
     }
-    config = call.config!;
+    if (!llmFailures.length) config = call.config!;
   } catch (e) {
-    return { ok: false, error: `Generation failed: ${(e as Error).message}`, warnings: [], usage };
+    llmFailures.push((e as Error).message);
+  }
+
+  if (!config) {
+    const { archetypeForCategory, stockConfigFromCatalog } = await import("./quiz-archetypes.server");
+    const archetype = archetypeForCategory(brief.category || null);
+    config = stockConfigFromCatalog(archetype, catalog, null);
+    fallbackGeneration = true;
+    console.warn(
+      `[quiz-generate] LLM fallback for ${shopDomain} (${llmFailures[0] ?? "?"}) — stock bank ${archetype}`
+    );
+  }
+
+  // Grounding (Overhaul Part 3): every answer must map to real in-scope
+  // products; failing answers are dropped BEFORE validation. Deterministic
+  // post-check — the model proposes, the validator disposes.
+  const { enforceGrounding } = await import("./quiz-grounding.server");
+  const grounded = enforceGrounding(config, catalog, null);
+  config = grounded.config;
+  const groundingWarnings: string[] = [];
+  if (grounded.report.droppedAnswers.length) {
+    groundingWarnings.push(
+      `Grounding dropped ${grounded.report.droppedAnswers.length} answer(s) that matched fewer than ${grounded.report.floor} products` +
+        (grounded.report.droppedQuestions.length
+          ? ` and ${grounded.report.droppedQuestions.length} question(s)`
+          : "")
+    );
+  }
+  if (grounded.report.reachability < 0.8) {
+    groundingWarnings.push(
+      `Only ${Math.round(grounded.report.reachability * 100)}% of in-scope products are reachable through an answer path`
+    );
+  }
+  if ((config.questions as any[]).length < 2 && !fallbackGeneration) {
+    // Grounding gutted the LLM config — fall back to the stock bank rather
+    // than shipping a one-question quiz.
+    const { archetypeForCategory, stockConfigFromCatalog } = await import("./quiz-archetypes.server");
+    config = stockConfigFromCatalog(archetypeForCategory(brief.category || null), catalog, null);
+    fallbackGeneration = true;
   }
 
   let result = validateGeneratedConfig(config, catalog);
@@ -372,7 +422,12 @@ export async function generateQuizConfig(args: {
     };
   }
 
-  const warnings = [...result.warnings];
+  const warnings = [...result.warnings, ...groundingWarnings];
+  if (fallbackGeneration) {
+    warnings.push(
+      "Built from the stock question bank (AI generation unavailable) — the copilot can restyle it any time"
+    );
+  }
   if (truncated > 0) warnings.push(`Catalog truncated: ${truncated} products were not shown to the AI`);
 
   onProgress?.("Saving your quiz…");
@@ -384,6 +439,12 @@ export async function generateQuizConfig(args: {
   // there too when the merchant turns it on.
   if (accentColor && /^#[0-9a-fA-F]{6}$/.test(accentColor)) {
     (draft.settings as Record<string, unknown>).quiz_accent_color = accentColor;
+  }
+  // Scope narrows serving too, not just generation: the recommender's
+  // candidate pool honors product_scope 'selected'.
+  if (scopeIds) {
+    (draft.settings as Record<string, unknown>).product_scope = "selected";
+    (draft.settings as Record<string, unknown>).selected_product_ids = [...scopeIds];
   }
   // Locked save with an overwrite guard: generation runs for a minute or
   // more, and the unconditional save could stomp a quiz the merchant
@@ -404,6 +465,17 @@ export async function generateQuizConfig(args: {
     });
   });
   if (!saved.ok) return { ok: false, error: `Save failed: ${saved.error}`, warnings, usage };
+
+  // Part 6: generation_completed with the properties the funnel needs.
+  const { trackOverhaulEvent } = await import("./overhaul-events.server");
+  trackOverhaulEvent(shopDomain, "generation_completed", {
+    fallback_generation: fallbackGeneration,
+    scope_kind: brief.scope?.kind ?? "all",
+    questions: draft.flow.questions.length,
+    rules: draft.flow.rules.length,
+    reachability: Math.round(grounded.report.reachability * 100) / 100,
+    dropped_answers: grounded.report.droppedAnswers.length,
+  });
 
   return {
     ok: true,
