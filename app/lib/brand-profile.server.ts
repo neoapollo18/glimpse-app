@@ -703,6 +703,17 @@ export async function extractBrandProfile(
   );
   if (up.error) throw new Error(`brand-profile: save failed: ${up.error.message}`);
 
+  // Every assignment is explainable (spec Part 2): the full payload goes
+  // to telemetry as well as the profile row.
+  const { trackOverhaulEvent } = await import("./overhaul-events.server");
+  trackOverhaulEvent(shopDomain, "template_assigned", {
+    template: templateAssignment.template,
+    scores: templateAssignment.scores,
+    signals: templateAssignment.signals,
+    confidence: overall,
+    theme_name: profile.theme.name,
+  });
+
   return profile;
 }
 

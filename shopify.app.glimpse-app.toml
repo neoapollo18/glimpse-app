@@ -42,6 +42,14 @@ api_version = "2025-07"
   compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
   uri = "https://glimpse-app-charles.onrender.com/webhooks"
 
+# On-store draft preview (Overhaul Part 4): /apps/gleame/* on the
+# storefront forwards here; the preview route answers application/liquid
+# so the live theme wraps it.
+[app_proxy]
+url = "https://glimpse-app-charles.onrender.com/proxy"
+subpath = "gleame"
+prefix = "apps"
+
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 # read_themes: Brand Profile extraction (settings_data.json). Pages/nav:

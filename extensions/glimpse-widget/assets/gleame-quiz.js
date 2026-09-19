@@ -3048,7 +3048,11 @@
       config = results[0];
       flow = results[1];
       if (PREVIEW) initPreviewListener();
-      if (!config || !config.enabled) {               // quiz mode off — section stays empty
+      // On-store proxy preview (Overhaul Part 4): the page is tokenized
+      // and unlisted, so render even while the surface is off — that is
+      // the point of previewing before publish.
+      var forced = Boolean(window.GLEAME_QUIZ_FORCE);
+      if (!config || (!config.enabled && !forced)) {  // quiz mode off — section stays empty
         if (PREVIEW) renderPreviewPlaceholder();      // previews explain themselves instead
         return;
       }
