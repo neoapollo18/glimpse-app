@@ -5,6 +5,8 @@ import {
   shopHasValidAccess,
   getChatAssistantConfig,
 } from "../lib/supabase.server";
+import { getBrandProfile } from "../lib/brand-profile.server";
+import { resolveQuizTokens } from "../lib/quiz-templates";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -43,6 +45,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const config = await getChatAssistantConfig(verifiedShop.shop_domain);
 
+  // Overhaul template system (migration 072): only assigned shops pay the
+  // brand-profile read; quiz_template NULL = legacy rendering, brandTokens
+  // absent, nothing changes.
+  const brandProfile = config.quiz_template
+    ? await getBrandProfile(verifiedShop.shop_domain).catch(() => null)
+    : null;
+  const brandTokens = resolveQuizTokens(
+    config.quiz_template,
+    config.quiz_preset,
+    brandProfile?.tokens ?? null
+  );
+
   const renderTokens = (s: string) =>
     s.replace(/\{assistant_name\}/g, config.assistant_name);
 
@@ -59,7 +73,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       avatarUrl: config.avatar_url,
       // Style: explicit quiz accent, else the assistant's global accent.
       // Null radius/fonts = widget defaults / runtime theme inheritance.
-      accentColor: config.quiz_accent_color || config.accent_color,
+      // Template shops skip the global-accent fallback: accent_color has a
+      // house default that would stomp the extracted brand accent.
+      accentColor: config.quiz_accent_color || (config.quiz_template ? null : config.accent_color),
       buttonRadius: config.quiz_button_radius,
       headingFontOverride: config.quiz_heading_font_override,
       bodyFontOverride: config.quiz_body_font_override,
@@ -74,6 +90,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       progressStyle: config.quiz_progress_style,
       introLayout: config.quiz_intro_layout,
       animationStyle: config.quiz_animation_style,
+      // Overhaul templates (Contract 2/3): template id sets the widget's
+      // root layout class; brandTokens map onto the --gq-* vars before the
+      // merchant overrides above. Both absent for legacy shops.
+      template: config.quiz_template,
+      brandTokens,
+      // T3's immersive backdrop: the Brand API cover image in v1
+      // (per-question imagery lands with the generation pipeline).
+      screenImageUrl:
+        config.quiz_template === "t3" ? brandProfile?.brand?.coverImageUrl ?? null : null,
       numRecommendations: config.num_recommendations,
       // Migration 069: false = never generate try-on images (hero
       // transform, "See on me", post-results upsell); the photo step and

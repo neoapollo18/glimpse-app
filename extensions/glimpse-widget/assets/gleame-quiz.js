@@ -494,7 +494,55 @@
     root.style.setProperty('--gq-heading-weight', headingWeight || '600');
   }
 
+  // Overhaul templates (Contract 2/3): brand tokens land on the same
+  // --gq-* vars the stylesheet ships, BEFORE applyStyleConfig so merchant
+  // Studio overrides still win. config.template adds the root layout
+  // class (gq-t1..gq-t5); absent template = legacy rendering, untouched.
+  function applyBrandTokens() {
+    var t = config.brandTokens;
+    if (config.template && /^t[1-5]$/.test(config.template)) {
+      root.classList.add('gq-' + config.template);
+    }
+    if (!t) return;
+    var set = function(name, val) {
+      if (val !== null && val !== undefined && val !== '') root.style.setProperty(name, String(val));
+    };
+    // On-store, the surrounding theme's already-loaded fonts are the truth
+    // (detectThemeTypography). The extracted font tokens only apply where
+    // no theme surrounds the quiz — the admin preview / Reveal frame.
+    if (PREVIEW) {
+      set('--gq-font-heading', t.fontHeading);
+      set('--gq-font-body', t.fontBody);
+    }
+    set('--gq-bg', t.colorBg);
+    if (t.colorText) {
+      set('--gq-ink', t.colorText);
+      set('--gq-ink-soft', 'color-mix(in srgb, ' + t.colorText + ' 62%, transparent)');
+      set('--gq-ink-faint', 'color-mix(in srgb, ' + t.colorText + ' 42%, transparent)');
+      set('--gq-dark', t.colorText);
+    }
+    set('--gq-accent', t.colorAccent);
+    set('--gq-accent-text', t.colorAccentText);
+    set('--gq-card-bg', t.colorSurface);
+    set('--gq-line', t.colorBorder);
+    if (typeof t.radiusButton === 'number') set('--gq-radius-btn', t.radiusButton + 'px');
+    if (typeof t.radiusCard === 'number') set('--gq-radius-card', t.radiusCard + 'px');
+    if (typeof t.maxWidth === 'number') set('--gq-max-width', t.maxWidth + 'px');
+    // T3's immersive backdrop (brand cover / per-question image later).
+    if (config.screenImageUrl && /^https:\/\//.test(config.screenImageUrl)) {
+      set('--gq-screen-image', 'url("' + config.screenImageUrl.replace(/"/g, '') + '")');
+    }
+    if (typeof t.spaceUnit === 'number' && t.spaceUnit !== 4) {
+      // The space ladder is unit × {1,2,3,4,6,8,12,16}.
+      var steps = [1, 2, 3, 4, 6, 8, 12, 16];
+      for (var i = 0; i < steps.length; i++) {
+        set('--gq-space-' + (i + 1), t.spaceUnit * steps[i] + 'px');
+      }
+    }
+  }
+
   function applyStyleConfig() {
+    applyBrandTokens();
     if (config.accentColor) root.style.setProperty('--gq-accent', config.accentColor);
     if (typeof config.buttonRadius === 'number') {
       root.style.setProperty('--gq-radius-btn', config.buttonRadius + 'px');

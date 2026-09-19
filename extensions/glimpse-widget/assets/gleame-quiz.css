@@ -39,6 +39,9 @@
   --gq-font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --gq-heading-weight: 600;
   --gq-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Overhaul token contract (docs/overhaul/CONTRACTS.md): text on accent
+     surfaces. Default matches the shipped design exactly. */
+  --gq-accent-text: #ffffff;
 
   display: block;
   background: var(--gq-bg);
@@ -1517,4 +1520,137 @@
   display: block;
   margin-left: auto;
   margin-right: auto;
+}
+
+/* =======================================================================
+   Overhaul templates T1-T5 (docs/overhaul/CONTRACTS.md Contract 3).
+   One runtime, one component set: a template is a root class that
+   recomposes the existing structures. No template class = legacy look,
+   byte-identical to the shipped design. Brand tokens arrive via the
+   --gq-* vars (applyBrandTokens); these blocks only lock layout,
+   type scale, and spacing rhythm per template.
+   ======================================================================= */
+
+/* ---- T1 · Editorial Split — refined type, kicker, locked 55/45 ---- */
+#gleame-quiz-root.gq-t1 .gq-intro { grid-template-columns: 55fr 45fr; }
+#gleame-quiz-root.gq-t1 .gq-eyebrow,
+#gleame-quiz-root.gq-t1 .gq-step-count {
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: 11.5px;
+}
+#gleame-quiz-root.gq-t1 .gq-headline { font-size: clamp(34px, 4.4vw, 52px); line-height: 1.08; }
+#gleame-quiz-root.gq-t1 .gq-question-title { font-size: clamp(32px, 3.6vw, 48px); line-height: 1.1; }
+#gleame-quiz-root.gq-t1 .gq-chip,
+#gleame-quiz-root.gq-t1 .gq-option-card { border-width: 1px; }
+#gleame-quiz-root.gq-t1 .gq-add-btn { letter-spacing: 0.12em; }
+
+/* ---- T2 · Centered Minimal — the safe default; discipline is the
+        template. Narrow centered column, hairline borders, quiet
+        selected state, no decorative imagery. ---- */
+#gleame-quiz-root.gq-t2 { --gq-max-width: 680px; --gq-shadow-card: none; --gq-shadow-lift: none; }
+#gleame-quiz-root.gq-t2 .gq-intro,
+#gleame-quiz-root.gq-t2 .gq-step { grid-template-columns: 1fr; text-align: center; }
+#gleame-quiz-root.gq-t2 .gq-intro-visual { display: none; }
+#gleame-quiz-root.gq-t2 .gq-headline { font-size: clamp(28px, 3.4vw, 40px); }
+#gleame-quiz-root.gq-t2 .gq-question-title { font-size: clamp(24px, 2.8vw, 34px); }
+#gleame-quiz-root.gq-t2 .gq-chip-row,
+#gleame-quiz-root.gq-t2 .gq-option-list,
+#gleame-quiz-root.gq-t2 .gq-option-grid { justify-content: center; }
+#gleame-quiz-root.gq-t2 .gq-chip,
+#gleame-quiz-root.gq-t2 .gq-option-card,
+#gleame-quiz-root.gq-t2 .gq-option-row {
+  border: 1px solid var(--gq-line);
+  background: var(--gq-card-bg);
+  box-shadow: none;
+}
+#gleame-quiz-root.gq-t2 .gq-chip.is-selected,
+#gleame-quiz-root.gq-t2 .gq-option-card.is-selected,
+#gleame-quiz-root.gq-t2 .gq-option-row.is-selected {
+  border-color: var(--gq-accent);
+  background: var(--gq-tint);
+  transform: none;
+}
+#gleame-quiz-root.gq-t2 .gq-progress-pips { display: none; }
+#gleame-quiz-root.gq-t2 .gq-step-count { display: inline-block; }
+
+/* ---- T3 · Full-Bleed Immersive — question over imagery with a locked
+        gradient scrim; translucent stacked answer bars. The screen image
+        arrives as --gq-screen-image (brand cover / per-question). ---- */
+#gleame-quiz-root.gq-t3 {
+  background:
+    linear-gradient(115deg, color-mix(in srgb, var(--gq-bg) 82%, #000000) 0%,
+      color-mix(in srgb, var(--gq-bg) 45%, transparent) 60%, transparent 100%),
+    var(--gq-screen-image, none) center / cover no-repeat,
+    var(--gq-bg);
+  min-height: 70vh;
+}
+#gleame-quiz-root.gq-t3 .gq-question-title,
+#gleame-quiz-root.gq-t3 .gq-headline {
+  max-width: 560px;
+  text-align: left;
+  font-size: clamp(30px, 3.6vw, 46px);
+}
+#gleame-quiz-root.gq-t3 .gq-chip,
+#gleame-quiz-root.gq-t3 .gq-option-card,
+#gleame-quiz-root.gq-t3 .gq-option-row {
+  background: color-mix(in srgb, var(--gq-card-bg) 26%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--gq-line);
+  color: var(--gq-ink);
+}
+#gleame-quiz-root.gq-t3 .gq-chip.is-selected,
+#gleame-quiz-root.gq-t3 .gq-option-card.is-selected,
+#gleame-quiz-root.gq-t3 .gq-option-row.is-selected {
+  background: color-mix(in srgb, var(--gq-card-bg) 45%, transparent);
+  border-color: var(--gq-accent);
+}
+
+/* ---- T4 · Gallery — image tiles on an airy ground, slim bar progress,
+        accent ring + slight scale on selection. ---- */
+#gleame-quiz-root.gq-t4 .gq-question-title { text-align: center; font-size: clamp(26px, 3vw, 38px); }
+#gleame-quiz-root.gq-t4 .gq-question-helper { text-align: center; }
+#gleame-quiz-root.gq-t4 .gq-option-grid { gap: var(--gq-space-4); }
+#gleame-quiz-root.gq-t4 .gq-option-card {
+  border-radius: var(--gq-radius-card);
+  overflow: hidden;
+  transition: transform 140ms var(--gq-ease), box-shadow 140ms var(--gq-ease);
+}
+#gleame-quiz-root.gq-t4 .gq-option-card.is-selected {
+  outline: 2px solid var(--gq-accent);
+  outline-offset: 2px;
+  transform: scale(1.02);
+}
+#gleame-quiz-root.gq-t4 .gq-progress-pips { display: none; }
+
+/* ---- T5 · Playful Cards — the current house look, demoted to one of
+        five; chunky rounded cards, bouncy micro-interactions ≤150ms.
+        Never assigned without playful signals (selector rule). ---- */
+#gleame-quiz-root.gq-t5 {
+  --gq-radius-card: max(var(--gq-radius-card, 22px), 16px);
+  --gq-radius-btn: max(var(--gq-radius-btn, 18px), 14px);
+}
+#gleame-quiz-root.gq-t5 .gq-chip,
+#gleame-quiz-root.gq-t5 .gq-option-card,
+#gleame-quiz-root.gq-t5 .gq-option-row {
+  transition: transform 130ms var(--gq-ease), box-shadow 130ms var(--gq-ease);
+}
+#gleame-quiz-root.gq-t5 .gq-chip:hover:not(.is-selected),
+#gleame-quiz-root.gq-t5 .gq-option-card:hover:not(.is-selected) { transform: translateY(-2px) scale(1.015); }
+#gleame-quiz-root.gq-t5 .gq-add-btn,
+#gleame-quiz-root.gq-t5 .gq-continue-btn { font-weight: 800; }
+
+/* Templates: accent-surface text obeys the contract token everywhere the
+   accent paints a surface. Default #fff = the shipped look. */
+#gleame-quiz-root.gq-t1 .gq-add-btn.is-added,
+#gleame-quiz-root.gq-t2 .gq-add-btn.is-added,
+#gleame-quiz-root.gq-t3 .gq-add-btn.is-added,
+#gleame-quiz-root.gq-t4 .gq-add-btn.is-added,
+#gleame-quiz-root.gq-t5 .gq-add-btn.is-added { color: var(--gq-accent-text); }
+
+/* Mobile: every template collapses to a single centered column. */
+@media (max-width: 768px) {
+  #gleame-quiz-root.gq-t1 .gq-intro,
+  #gleame-quiz-root.gq-t3 .gq-question-title { grid-template-columns: 1fr; max-width: 100%; }
 }

@@ -20,6 +20,8 @@ import {
 } from "./supabase.server";
 import { isLiveProduct, isLiveVariant } from "./quiz-config-schema.server";
 import type { QuizDraft } from "./quiz-draft.server";
+import { getBrandProfile } from "./brand-profile.server";
+import { resolveQuizTokens } from "./quiz-templates";
 
 const SWATCH_HEX_RE = /^#[0-9a-fA-F]{3,8}$/;
 const hexOrNull = (v: unknown): string | null =>
@@ -104,13 +106,16 @@ export async function buildPreviewQuizConfig(shopDomain: string, draft: QuizDraf
   const live = await getChatAssistantConfig(shopDomain);
   const config = { ...live, ...(draft.settings as Partial<ChatAssistantConfig>) } as ChatAssistantConfig;
   const renderTokens = (s: string) => (s ?? "").replace(/\{assistant_name\}/g, config.assistant_name);
+  const brandProfile = config.quiz_template
+    ? await getBrandProfile(shopDomain).catch(() => null)
+    : null;
 
   return {
     enabled: true,
     assistantMode: config.assistant_mode,
     assistantName: config.assistant_name,
     avatarUrl: config.avatar_url,
-    accentColor: config.quiz_accent_color || config.accent_color,
+    accentColor: config.quiz_accent_color || (config.quiz_template ? null : config.accent_color),
     buttonRadius: config.quiz_button_radius,
     headingFontOverride: config.quiz_heading_font_override,
     bodyFontOverride: config.quiz_body_font_override,
@@ -123,6 +128,16 @@ export async function buildPreviewQuizConfig(shopDomain: string, draft: QuizDraf
     progressStyle: config.quiz_progress_style,
     introLayout: config.quiz_intro_layout,
     animationStyle: config.quiz_animation_style,
+    // Overhaul templates (Contract 2/3): same shape as the storefront
+    // endpoint so the studio canvas and the published page can't diverge.
+    template: config.quiz_template,
+    brandTokens: resolveQuizTokens(
+      config.quiz_template,
+      config.quiz_preset,
+      brandProfile?.tokens ?? null
+    ),
+    screenImageUrl:
+      config.quiz_template === "t3" ? brandProfile?.brand?.coverImageUrl ?? null : null,
     numRecommendations: config.num_recommendations,
     // Migration 069. Previews never generate try-ons anyway (requestTryon
     // short-circuits in PREVIEW mode); carried for payload-shape parity.
