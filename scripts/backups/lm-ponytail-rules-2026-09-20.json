@@ -1,0 +1,1122 @@
+[
+ {
+  "id": "f0ac78e5-435b-4169-9b07-08934c831b38",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "peanutbuttercup",
+   "current_length": "mid_back"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "1a7e9aff-8260-4465-8a9b-278509007a2d",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "espresso",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": "7d58e236-cf1a-4d9c-9bd2-9fe75fe7295c",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "d64f869e-3966-4043-bd42-55ee95bce608",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "toastedmarshmallow",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": "c1d11175-e0a6-4b01-948c-86fcc7a1bc69",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "63666ffe-3748-438f-81bd-18a44c279f2f",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "volume",
+   "hair_shade": "vanilla",
+   "current_length": "mid_back"
+  },
+  "variant_id": "8424ea96-41e9-4ac2-b360-7e34481f375e",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "9bbf582e-e024-448e-8b46-f92c1e69dd87",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "peanutbuttercup",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "59b80635-dba3-4eb4-91b6-e1d7922085d2",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "volume",
+   "hair_shade": "butterpecan",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": "27eb48ab-dd8a-4e83-bb1d-e97bee54814a",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "390746ec-b663-446d-a998-c76c4f2744ba",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "gingerbread",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "58e28229-deaa-4fd5-9805-bfbd218df80c",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "volume",
+   "hair_shade": "gingerbread",
+   "current_length": "mid_back"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "d469ce9a-8391-47b2-8ab7-ea58538212ca",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "butterscotch",
+   "current_length": "at_shoulders"
+  },
+  "variant_id": "66627020-ee49-4dab-9a27-2a4aaf0e6ce2",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "c5837c95-3bcc-476b-aff3-52011b846980",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "butterscotch",
+   "current_length": "at_shoulders"
+  },
+  "variant_id": "66627020-ee49-4dab-9a27-2a4aaf0e6ce2",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "bd4eaa48-1963-4c02-b12a-4079a938b7dd",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "cinnamonbun",
+   "current_length": "at_shoulders"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "8e3bca23-2ac0-4cb2-85b5-a8610143a6d6",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "butterpecan",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": "27eb48ab-dd8a-4e83-bb1d-e97bee54814a",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "a98c631d-abcf-435b-836c-27a8eb673998",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "volume",
+   "hair_shade": "toastedmarshmallow",
+   "current_length": "mid_back"
+  },
+  "variant_id": "c1d11175-e0a6-4b01-948c-86fcc7a1bc69",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "fd94f323-1b2b-4eda-a336-7a21de9141f4",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "espresso",
+   "current_length": "at_shoulders"
+  },
+  "variant_id": "7d58e236-cf1a-4d9c-9bd2-9fe75fe7295c",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "191c08c4-55cc-49ea-ac18-4e7d1aa1304b",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "butterscotch",
+   "current_length": "mid_back"
+  },
+  "variant_id": "66627020-ee49-4dab-9a27-2a4aaf0e6ce2",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "8a9bf55b-6f51-4280-9ee2-822766f90542",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "toastedmarshmallow",
+   "current_length": "mid_back"
+  },
+  "variant_id": "c1d11175-e0a6-4b01-948c-86fcc7a1bc69",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "9016fc71-aec6-47dc-8039-e04a1de7dc77",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "peanutbuttercup",
+   "current_length": "at_shoulders"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "54fc8296-6241-48e4-812b-22265b6b19ac",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "volume",
+   "hair_shade": "espresso",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": "7d58e236-cf1a-4d9c-9bd2-9fe75fe7295c",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "35ead7a8-1301-4611-808e-8b440157d7af",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "darkchocolate",
+   "current_length": "mid_back"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "487711b2-fced-4d29-84a4-6013ca41dff6",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "toastedmarshmallow",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": "c1d11175-e0a6-4b01-948c-86fcc7a1bc69",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "2821b3f3-549d-4463-b5b9-8e765dd8fb43",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "espresso",
+   "current_length": "at_shoulders"
+  },
+  "variant_id": "7d58e236-cf1a-4d9c-9bd2-9fe75fe7295c",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "b17ba73f-2aba-450b-8756-91ab4a869048",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "volume",
+   "hair_shade": "peanutbuttercup",
+   "current_length": "mid_back"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "8a03d0ba-e3d9-4100-a7df-0df1b9dc8dc8",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "peanutbuttercup",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "54f6757c-0694-4836-9a90-a5d1a6e68f92",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "milkchocolate",
+   "current_length": "mid_back"
+  },
+  "variant_id": "05a02626-3165-45c4-b590-8448541ee5ec",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "de6a9cb5-d136-4bfc-81ec-4619c8c8c304",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "butterpecan",
+   "current_length": "at_shoulders"
+  },
+  "variant_id": "27eb48ab-dd8a-4e83-bb1d-e97bee54814a",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "15f6bc24-1021-4f2f-8ad3-5f54bec95186",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "butterscotch",
+   "current_length": "mid_back"
+  },
+  "variant_id": "66627020-ee49-4dab-9a27-2a4aaf0e6ce2",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "f23a7739-2b2f-41dc-abc2-3b741c0e3e7a",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "espresso",
+   "current_length": "mid_back"
+  },
+  "variant_id": "7d58e236-cf1a-4d9c-9bd2-9fe75fe7295c",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "4bcd5d37-5b46-4f63-81be-86f8d168c5fb",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "gingerbread",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "e45e95a9-042e-4043-8a24-ef9baff39a6c",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "volume",
+   "hair_shade": "espresso",
+   "current_length": "mid_back"
+  },
+  "variant_id": "7d58e236-cf1a-4d9c-9bd2-9fe75fe7295c",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "90fa3671-fad9-4150-a27b-7cb74e09f385",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "gingerbread",
+   "current_length": "at_shoulders"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "e6492d02-d473-46fc-828a-262d247e535f",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "butterscotch",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": "66627020-ee49-4dab-9a27-2a4aaf0e6ce2",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "5b7d491e-11af-4ff0-966f-70bf92408734",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "vanilla",
+   "current_length": "mid_back"
+  },
+  "variant_id": "8424ea96-41e9-4ac2-b360-7e34481f375e",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "940b48b0-9046-47df-b7d7-ae7f31f30344",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "cinnamonbun",
+   "current_length": "mid_back"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "9da30136-bcc4-4e80-9511-42cccf1f1144",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "volume",
+   "hair_shade": "milkchocolate",
+   "current_length": "mid_back"
+  },
+  "variant_id": "05a02626-3165-45c4-b590-8448541ee5ec",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "1b876052-8b32-4633-8ae6-7b9de10d9fca",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "toastedmarshmallow",
+   "current_length": "at_shoulders"
+  },
+  "variant_id": "c1d11175-e0a6-4b01-948c-86fcc7a1bc69",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "c57b9df4-6ad6-43f8-a39e-4b95c8849f98",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "espresso",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": "7d58e236-cf1a-4d9c-9bd2-9fe75fe7295c",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "458ac036-b10e-4fa3-97d0-f780133851eb",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "milkchocolate",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": "05a02626-3165-45c4-b590-8448541ee5ec",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "ecda3aeb-0517-44e7-88dd-e0a83d2b6915",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "darkchocolate",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "61bcae93-6bd6-42a6-bbfb-aca0ba3bc80c",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "volume",
+   "hair_shade": "butterpecan",
+   "current_length": "mid_back"
+  },
+  "variant_id": "27eb48ab-dd8a-4e83-bb1d-e97bee54814a",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "918a62c5-745b-467a-b779-d93114db2e2d",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "volume",
+   "hair_shade": "milkchocolate",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": "05a02626-3165-45c4-b590-8448541ee5ec",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "0a9daf49-3345-4644-8316-0a7e9bf8bd47",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "volume",
+   "hair_shade": "darkchocolate",
+   "current_length": "mid_back"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "46bfe54d-2ad2-4657-90fb-d54716bafcb8",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "volume",
+   "hair_shade": "gingerbread",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "89daefc6-816d-40f6-971c-6803779cc6fb",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "vanilla",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": "8424ea96-41e9-4ac2-b360-7e34481f375e",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "6d0969c0-5b72-4eab-8832-6ed72bd62326",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "volume",
+   "hair_shade": "toastedmarshmallow",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": "c1d11175-e0a6-4b01-948c-86fcc7a1bc69",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "69184a2f-f4ae-4c51-b3ee-e707b364a81a",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "butterscotch",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": "66627020-ee49-4dab-9a27-2a4aaf0e6ce2",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "ae2ef8d6-d8a1-45e4-b224-e6e6b1fdd63e",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "darkchocolate",
+   "current_length": "at_shoulders"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "1901b6b2-c9c2-4703-b9d0-eaea5812cc54",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "volume",
+   "hair_shade": "cinnamonbun",
+   "current_length": "mid_back"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "38067722-aa32-4be8-9283-cf058f80d1bb",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "milkchocolate",
+   "current_length": "at_shoulders"
+  },
+  "variant_id": "05a02626-3165-45c4-b590-8448541ee5ec",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "4be4c0ac-bf67-47c0-88da-4041bcdd7bae",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "darkchocolate",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "4379b540-408e-484c-9af2-503de5c2bfe7",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "butterpecan",
+   "current_length": "mid_back"
+  },
+  "variant_id": "27eb48ab-dd8a-4e83-bb1d-e97bee54814a",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "f1f95878-ba5b-44c0-bf04-29642b57a217",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "cinnamonbun",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "4ed4bdba-f209-4e86-8e09-45ec3795448a",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "gingerbread",
+   "current_length": "mid_back"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "64d4d483-4ba4-4c1d-93cc-db074fef4f08",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "vanilla",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": "8424ea96-41e9-4ac2-b360-7e34481f375e",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "9a70a0ac-2336-4265-9c8c-30ea9a45de58",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "darkchocolate",
+   "current_length": "at_shoulders"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "df2f13e3-ee94-4492-abae-6e97c86d6008",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "volume",
+   "hair_shade": "butterscotch",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": "66627020-ee49-4dab-9a27-2a4aaf0e6ce2",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "acb59832-280d-4af3-b510-4916be3b0299",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "milkchocolate",
+   "current_length": "at_shoulders"
+  },
+  "variant_id": "05a02626-3165-45c4-b590-8448541ee5ec",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "c0bc8cef-7dc7-48ee-8dc3-56e6fdbd4ffd",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "milkchocolate",
+   "current_length": "mid_back"
+  },
+  "variant_id": "05a02626-3165-45c4-b590-8448541ee5ec",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "4a728f7f-08f6-4795-b329-12e3e8351bb6",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "cinnamonbun",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "ebd19068-7f6d-4231-b4ce-715175049b87",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "vanilla",
+   "current_length": "at_shoulders"
+  },
+  "variant_id": "8424ea96-41e9-4ac2-b360-7e34481f375e",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "f54b317d-727b-4d47-9df0-3a4ea7231264",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "butterpecan",
+   "current_length": "at_shoulders"
+  },
+  "variant_id": "27eb48ab-dd8a-4e83-bb1d-e97bee54814a",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "4b59013e-71f1-4950-9d4b-c72e492beda0",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "vanilla",
+   "current_length": "mid_back"
+  },
+  "variant_id": "8424ea96-41e9-4ac2-b360-7e34481f375e",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "9b977911-9cc3-4dd5-8852-c276d7ae2e36",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "espresso",
+   "current_length": "mid_back"
+  },
+  "variant_id": "7d58e236-cf1a-4d9c-9bd2-9fe75fe7295c",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "8a66aaa6-af9a-4329-8111-1bdee3a4c24f",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "milkchocolate",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": "05a02626-3165-45c4-b590-8448541ee5ec",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "06d79e00-f363-4576-8f91-2ce1f0c0b556",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "volume",
+   "hair_shade": "darkchocolate",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "c477deeb-78b6-47e8-aa77-3a89b44ab503",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "volume",
+   "hair_shade": "cinnamonbun",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "cd6bdfea-56c2-4792-886f-94e68adbaf64",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "gingerbread",
+   "current_length": "at_shoulders"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "9dc492b7-5df5-4e37-aa43-f2098488e5dc",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "volume",
+   "hair_shade": "butterscotch",
+   "current_length": "mid_back"
+  },
+  "variant_id": "66627020-ee49-4dab-9a27-2a4aaf0e6ce2",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "1744dd19-7797-4f3d-a44a-8244e09e90ea",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "butterpecan",
+   "current_length": "mid_back"
+  },
+  "variant_id": "27eb48ab-dd8a-4e83-bb1d-e97bee54814a",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "ed963868-ce05-4e4c-ae98-ab66054e642c",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "darkchocolate",
+   "current_length": "mid_back"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "7bee58a2-d359-48b4-9f8c-d5c91b13c0d5",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "butterpecan",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": "27eb48ab-dd8a-4e83-bb1d-e97bee54814a",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "31a08e43-d298-4384-b2c2-c9e6ec35d4e1",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "gingerbread",
+   "current_length": "mid_back"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "c4d6947f-d739-41e1-b486-5bc915a0751f",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "toastedmarshmallow",
+   "current_length": "mid_back"
+  },
+  "variant_id": "c1d11175-e0a6-4b01-948c-86fcc7a1bc69",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "d03081bc-fa12-4324-8ab3-702580f47f18",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "cinnamonbun",
+   "current_length": "mid_back"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "9e06aa47-976f-4f42-be19-5c5a5ba00e1c",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "volume",
+   "hair_shade": "peanutbuttercup",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "c9818dab-1ab5-4272-9c58-51c78c85526d",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "peanutbuttercup",
+   "current_length": "at_shoulders"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "17dfaed8-5161-43e6-a830-32a0ca016ca7",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "volume",
+   "hair_shade": "vanilla",
+   "current_length": "past_shoulders"
+  },
+  "variant_id": "8424ea96-41e9-4ac2-b360-7e34481f375e",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "3d544f3e-db14-4241-98e6-bd67e4db24f8",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "vanilla",
+   "current_length": "at_shoulders"
+  },
+  "variant_id": "8424ea96-41e9-4ac2-b360-7e34481f375e",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "6e82ac9c-2fbe-49c8-84ab-a18254fce96d",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "toastedmarshmallow",
+   "current_length": "at_shoulders"
+  },
+  "variant_id": "c1d11175-e0a6-4b01-948c-86fcc7a1bc69",
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": null,
+  "quantity": 1
+ },
+ {
+  "id": "be8be038-17cb-4235-a668-45caf8bdab5f",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "both",
+   "hair_shade": "cinnamonbun",
+   "current_length": "at_shoulders"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ },
+ {
+  "id": "f26d912b-11e8-4027-b3c1-58db803bd3db",
+  "shop_id": "d5cbb856-a311-4419-a081-e2fd691fb7f4",
+  "criteria": {
+   "goal": "length",
+   "hair_shade": "peanutbuttercup",
+   "current_length": "mid_back"
+  },
+  "variant_id": null,
+  "rank": 2,
+  "created_at": "2026-09-17T18:36:30.024549+00:00",
+  "product_id": "ce24c2d4-7052-4136-9934-02e317a7608f",
+  "quantity": 1
+ }
+]

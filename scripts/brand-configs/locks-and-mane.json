@@ -186,20 +186,20 @@
   },
 
   "matrix": {
-    "$comment": "Rule Set 3 — 2026-07-31 lengths table: current_length × goal → hero clip-in and optional complementary ponytail. Set counts are NOT encoded per cell anymore; quantity comes entirely from setsTable. 'pony' omitted = single-recommendation cell (the whole above-shoulders row and at-shoulders+volume have no ponytail in the table).",
+    "$comment": "Rule Set 3 — 2026-07-31 lengths table: current_length × goal → hero clip-in. PONYTAILS REMOVED 2026-09-20 per Charles (availability filter kept dropping OOS clip-in shade variants while the product-level pony survived, making results pony-only; DB rules deleted, backup in scripts/backups/lm-ponytail-rules-2026-09-20.json). Set counts are NOT encoded per cell anymore; quantity comes entirely from setsTable. 'pony' omitted = single-recommendation cell (the whole above-shoulders row and at-shoulders+volume have no ponytail in the table).",
     "cells": [
       { "current_length": "above_shoulders", "goal": "length", "clipIn": "clip_16" },
       { "current_length": "above_shoulders", "goal": "volume", "clipIn": "clip_12" },
       { "current_length": "above_shoulders", "goal": "both",   "clipIn": "clip_16" },
-      { "current_length": "at_shoulders",    "goal": "length", "clipIn": "clip_16", "pony": "pony_18" },
+      { "current_length": "at_shoulders",    "goal": "length", "clipIn": "clip_16" },
       { "current_length": "at_shoulders",    "goal": "volume", "clipIn": "clip_12" },
-      { "current_length": "at_shoulders",    "goal": "both",   "clipIn": "clip_16", "pony": "pony_18" },
-      { "current_length": "past_shoulders",  "goal": "length", "clipIn": "clip_18", "pony": "pony_18" },
-      { "current_length": "past_shoulders",  "goal": "volume", "clipIn": "clip_16", "pony": "pony_18" },
-      { "current_length": "past_shoulders",  "goal": "both",   "clipIn": "clip_18", "pony": "pony_18" },
-      { "current_length": "mid_back",        "goal": "length", "clipIn": "clip_20", "pony": "pony_18" },
-      { "current_length": "mid_back",        "goal": "volume", "clipIn": "clip_18", "pony": "pony_18" },
-      { "current_length": "mid_back",        "goal": "both",   "clipIn": "clip_20", "pony": "pony_18" }
+      { "current_length": "at_shoulders",    "goal": "both",   "clipIn": "clip_16" },
+      { "current_length": "past_shoulders",  "goal": "length", "clipIn": "clip_18" },
+      { "current_length": "past_shoulders",  "goal": "volume", "clipIn": "clip_16" },
+      { "current_length": "past_shoulders",  "goal": "both",   "clipIn": "clip_18" },
+      { "current_length": "mid_back",        "goal": "length", "clipIn": "clip_20" },
+      { "current_length": "mid_back",        "goal": "volume", "clipIn": "clip_18" },
+      { "current_length": "mid_back",        "goal": "both",   "clipIn": "clip_20" }
     ]
   },
 
