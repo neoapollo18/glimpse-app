@@ -434,6 +434,8 @@ const COPY_KEYS = new Set([
   "quiz_lead_skip_label", "quiz_lead_consent_text",
   // Results "add all" bundle button (migrations 070/071)
   "quiz_bundle_enabled", "quiz_bundle_label", "quiz_bundle_size",
+  // Overhaul template system (migration 072) — values validated below.
+  "quiz_template", "quiz_preset",
 ]);
 
 // Copy keys that are booleans on the live config row — String() coercion
@@ -476,6 +478,9 @@ export function applyUpdateCopy(draft: DraftShape, input: any, _catalog: Catalog
         return { ok: false, error: `${k} must be a whole number >= 0 (got ${JSON.stringify(v)})` };
       }
       continue;
+    }
+    if (k === "quiz_template" && !/^t[1-5]$/.test(String(v))) {
+      return { ok: false, error: `quiz_template must be t1-t5 (got ${JSON.stringify(v)})` };
     }
     if (Array.isArray(v)) {
       if (v.some((s) => typeof s !== "string" && typeof s !== "number")) {

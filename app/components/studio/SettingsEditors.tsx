@@ -14,6 +14,19 @@ import {
 } from "@shopify/polaris";
 import type { StudioActionData } from "../../routes/studio";
 import { postStudioAction } from "./studio-data";
+import { TEMPLATE_IDS, TEMPLATES } from "../../lib/quiz-templates";
+
+// Overhaul templates (Part 5 Style panel): pure registry, safe client-side.
+const STYLE_TEMPLATES = TEMPLATE_IDS.map((id) => ({
+  id,
+  name: TEMPLATES[id].name,
+  presets: TEMPLATES[id].presets.map((p) => ({
+    id: p.id,
+    label: p.label,
+    bg: p.tokens.colorBg,
+    accent: p.tokens.colorAccent,
+  })),
+}));
 
 // In-studio editors for the fixed slides (Intro, Photo, Results) and the
 // Theme item. These edit DRAFT SETTINGS through the same update_copy /
@@ -847,13 +860,103 @@ export function ThemeEditor({
   };
 
   const disabled = chatBusy;
+  const [tpl, setTpl] = useState<string>(str(settings, "quiz_template"));
+  const [preset, setPreset] = useState<string>(str(settings, "quiz_preset"));
+  const [resetting, setResetting] = useState(false);
+  const pickTemplate = (id: string) => {
+    setTpl(id);
+    schedule("copy", "quiz_template", id);
+  };
+  const pickPreset = (id: string) => {
+    setPreset(id);
+    schedule("copy", "quiz_preset", id);
+  };
+  const resetToTheme = async () => {
+    setResetting(true);
+    try {
+      // Re-extract the brand profile, then drop preset + manual color
+      // overrides so the extracted tokens show through.
+      const fd = new FormData();
+      fd.append("intent", "extract");
+      const res = await fetch("/app/api/brand-profile", { method: "POST", body: fd });
+      const body = await res.json();
+      schedule("copy", "quiz_preset", null as unknown as string);
+      for (const k of ["quiz_accent_color", "quiz_ink_color", "quiz_card_bg_color", "quiz_line_color", "quiz_cta_color"]) {
+        setValues((prev) => ({ ...prev, [k]: "" }));
+        schedule("design", k, null);
+      }
+      if (body?.ok && body.profile?.templateAssignment?.template) {
+        pickTemplate(body.profile.templateAssignment.template);
+      }
+      setPreset("");
+    } finally {
+      setResetting(false);
+    }
+  };
   return (
     <BlockStack gap="400">
-      <EditorHeader title="Theme" saveState={saveState} />
+      <EditorHeader title="Style" saveState={saveState} />
       {error && (
         <Banner tone="critical" onDismiss={clearError}>
           {error}
         </Banner>
+      )}
+      <Text as="h4" variant="headingSm">
+        Template
+      </Text>
+      <InlineStack gap="200" wrap>
+        {STYLE_TEMPLATES.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            disabled={disabled}
+            onClick={() => pickTemplate(t.id)}
+            style={{
+              padding: "8px 14px",
+              borderRadius: 999,
+              border: tpl === t.id ? "1px solid #1a1a1e" : "1px solid #d9d6d2",
+              boxShadow: tpl === t.id ? "0 0 0 1px #1a1a1e" : "none",
+              background: "#fff",
+              fontWeight: tpl === t.id ? 700 : 500,
+              fontSize: 13,
+              cursor: "pointer",
+            }}
+          >
+            {t.name}
+          </button>
+        ))}
+      </InlineStack>
+      {tpl && (
+        <InlineStack gap="200" blockAlign="center">
+          {STYLE_TEMPLATES.find((t) => t.id === tpl)?.presets.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              title={p.label}
+              disabled={disabled}
+              onClick={() => pickPreset(p.id)}
+              style={{
+                width: 26,
+                height: 26,
+                borderRadius: "50%",
+                border: 0,
+                cursor: "pointer",
+                background: `linear-gradient(135deg, ${p.bg} 60%, ${p.accent} 60%)`,
+                outline: preset === p.id ? "2px solid #1a1a1e" : "1px solid #d9d6d2",
+                outlineOffset: 1,
+              }}
+            />
+          ))}
+          <Button size="slim" onClick={resetToTheme} loading={resetting} disabled={disabled}>
+            Reset to my theme
+          </Button>
+        </InlineStack>
+      )}
+      {!tpl && (
+        <Text as="p" variant="bodySm" tone="subdued">
+          No template assigned yet — this quiz uses the classic Gleame look. Pick one above to
+          restyle it with your store's fonts and colors.
+        </Text>
       )}
       <Text as="p" variant="bodySm" tone="subdued">
         Blank fields inherit the quiz's polished defaults.

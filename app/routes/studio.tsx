@@ -45,6 +45,7 @@ import { PreviewCanvas } from "../components/studio/PreviewCanvas";
 import { EditPanel } from "../components/studio/EditPanel";
 import { ChatPanel } from "../components/studio/ChatPanel";
 import { LogicStep } from "../components/studio/LogicStep";
+import { CheckMatches } from "../components/studio/CheckMatches";
 import { PublishStep } from "../components/studio/PublishStep";
 import { OnboardingWizard } from "../components/studio/OnboardingWizard";
 import { FlowMap } from "../components/studio/FlowMap";
@@ -1056,7 +1057,11 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
             </div>
           )}
           {step === "logic" ? (
-            <LogicStep data={data} chatBusy={chatBusy} />
+            <CheckMatches
+              data={data}
+              chatBusy={chatBusy}
+              advanced={<LogicStep data={data} chatBusy={chatBusy} />}
+            />
           ) : step === "publish" ? (
             <PublishStep
               data={data}

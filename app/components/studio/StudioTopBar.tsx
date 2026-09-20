@@ -8,7 +8,7 @@ import type { StudioStep } from "../../routes/studio";
 // saves to the store directly; there is no publish action anymore.
 const STEPS: Array<{ id: StudioStep; label: string }> = [
   { id: "build", label: "Build" },
-  { id: "logic", label: "Logic" },
+  { id: "logic", label: "Check matches" },
   { id: "publish", label: "Live" },
 ];
 
