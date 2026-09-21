@@ -161,19 +161,7 @@
   },
 
   "shadeFallbacks": {
-    "$comment": "TODO Jenn: nearest-shade adjacencies (used only when the availability filter finds a shade fully out of stock). Written to chat_assistant_config.quiz_shade_fallbacks. Placeholder = simple neighbors in the depth scale above.",
-    "hair_shade": {
-      "vanilla": ["toastedmarshmallow", "cinnamonbun"],
-      "toastedmarshmallow": ["vanilla", "cinnamonbun"],
-      "cinnamonbun": ["toastedmarshmallow", "butterpecan"],
-      "butterpecan": ["cinnamonbun", "butterscotch"],
-      "butterscotch": ["butterpecan", "peanutbuttercup"],
-      "peanutbuttercup": ["butterscotch", "gingerbread"],
-      "gingerbread": ["peanutbuttercup", "milkchocolate"],
-      "milkchocolate": ["gingerbread", "darkchocolate"],
-      "darkchocolate": ["milkchocolate", "espresso"],
-      "espresso": ["darkchocolate", "milkchocolate"]
-    }
+    "$comment": "DISABLED 2026-09-21 per Charles: the adjacency swap served a DIFFERENT shade's product when the detected shade's variant was out of stock ('identifies the shade but offers the wrong product'). Empty = availability filter serves the exact-shade pick unfiltered when it's fully OOS. Old map is in git history."
   },
 
   "setsTable": {

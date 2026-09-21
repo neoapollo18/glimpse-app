@@ -7,6 +7,7 @@ import {
   getPhotoAxes,
 } from "../lib/supabase.server";
 import { classifyPhotoAxesForShopDetailed } from "../lib/photo-axis-classifier.server";
+import { shadeBoardConfigForShop } from "../lib/shade-board-config.server";
 import { checkRateLimit, getClientIP } from "../lib/rate-limiter.server";
 
 const CORS_HEADERS = {
@@ -44,10 +45,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ error: "Method not allowed" }, { status: 405, headers: CORS_HEADERS });
   }
 
+  let requestShopDomain = "";
   try {
     const formData = await request.formData();
     const imageFile = formData.get("image") as File;
     const shopDomain = formData.get("shopDomain") as string;
+    requestShopDomain = shopDomain ?? "";
 
     if (!imageFile || !shopDomain) {
       return json(
@@ -118,14 +121,31 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       if (match) labels[axis.key] = match.label;
     }
 
-    // Explicit NO_MATCH (shade outside the board — grey, fashion colors) with
-    // merchant copy: the quiz shows this instead of the generic retry notice.
+    // Merchant copy on EVERY unresolved-shade outcome for shade-board shops
+    // (L&M 2026-09-21): not just the explicit NO_MATCH verdict — a classify
+    // hiccup that resolves nothing must show the same stylist-referral line,
+    // never the generic retry notice.
+    const board = shadeBoardConfigForShop(verifiedDomain);
+    const shadeUnresolved = Boolean(board && !values[board.axisKey]);
     return json(
-      shadeNoMatch && noMatchMessage ? { values, labels, noMatchMessage } : { values, labels },
+      shadeUnresolved && board?.noMatchMessage
+        ? { values, labels, noMatchMessage: board.noMatchMessage }
+        : shadeNoMatch && noMatchMessage
+          ? { values, labels, noMatchMessage }
+          : { values, labels },
       { headers: CORS_HEADERS },
     );
   } catch (err) {
     console.error("Quiz shade error:", err);
+    // Board shops: even a hard failure speaks the merchant's line (the
+    // widget treats a 200 with no values as "not detected" and shows it).
+    const board = requestShopDomain ? shadeBoardConfigForShop(requestShopDomain) : null;
+    if (board?.noMatchMessage) {
+      return json(
+        { values: {}, labels: {}, noMatchMessage: board.noMatchMessage },
+        { headers: CORS_HEADERS },
+      );
+    }
     return json({ error: "Internal server error" }, { status: 500, headers: CORS_HEADERS });
   }
 };
