@@ -61,9 +61,10 @@ const CONFIGS: Record<string, ShadeBoardConfig> = {
     boardImageUrl:
       'https://glglqybgabptczqskbcj.supabase.co/storage/v1/object/public/reference-images/locks-mane.myshopify.com/shade-board-1600.jpg',
     axisKey: 'hair_shade',
+    // Exact merchant copy (L&M, 2026-09-21) — do not rephrase.
     noMatchMessage:
-      "We couldn't pin down your exact shade from this photo — but our stylists can! " +
-      "Send a pic of your hair in natural light to info@locksandmane.com and they'll find your shade.",
+      "Sorry, we're having trouble finding your shade. Can you send a photo of your hair " +
+      "in natural light and send it to info@locksandmane.com for one of our stylists to match?",
   },
 };
 

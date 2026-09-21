@@ -451,7 +451,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             return json({
               ok: false,
               error:
-                "Your quiz has no recommendation logic yet. Open the Logic step and generate it before turning the quiz on.",
+                "Your quiz has no recommendation logic yet. Open Check matches to pin products to answer paths (or generate logic under Advanced) before turning the quiz on.",
               intent,
             });
           }

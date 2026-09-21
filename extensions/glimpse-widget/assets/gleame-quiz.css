@@ -1379,7 +1379,12 @@
  * ===================================================================== */
 @media (max-width: 980px) {
   #gleame-quiz-root .gq-results-layout { grid-template-columns: minmax(0, 1fr); }
+  /* Product recommendations FIRST on mobile (L&M 2026-09-21): the answers
+     rail stacked above the picks pushed the actual products below the
+     fold. Grid order flips the DOM order; desktop keeps rail-left. */
+  #gleame-quiz-root .gq-results-main { order: 1; }
   #gleame-quiz-root .gq-answers-rail {
+    order: 2;
     position: static;
     flex-direction: row;
     flex-wrap: wrap;
