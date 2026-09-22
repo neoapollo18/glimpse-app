@@ -657,6 +657,7 @@ export function ResultsEditor({
     quiz_retake_label: str(settings, "quiz_retake_label"),
     quiz_show_matches_label: str(settings, "quiz_show_matches_label"),
     quiz_add_button_template: str(settings, "quiz_add_button_template"),
+    quiz_match_footnote: str(settings, "quiz_match_footnote"),
     quiz_bundle_label: str(settings, "quiz_bundle_label"),
     quiz_upsell_title: str(settings, "quiz_upsell_title"),
     quiz_upsell_body: str(settings, "quiz_upsell_body"),
@@ -707,6 +708,15 @@ export function ResultsEditor({
           <CopyField label="Add to cart template" fieldKey="quiz_add_button_template" values={values} setValue={setValue} disabled={disabled} helpText="{price} inserts the price" />
         </div>
       </InlineStack>
+      <CopyField
+        label="Note under each match card"
+        fieldKey="quiz_match_footnote"
+        values={values}
+        setValue={setValue}
+        disabled={disabled}
+        multiline={3}
+        helpText="Optional small print under every recommendation (e.g. how to reach you for a second opinion). Email addresses become tappable mailto links. Leave blank to hide."
+      />
       <Checkbox
         label={'Show an "add all" bundle button'}
         checked={bundleEnabled}

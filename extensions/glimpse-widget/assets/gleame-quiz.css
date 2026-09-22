@@ -1171,6 +1171,20 @@
   transition: color 160ms ease;
 }
 #gleame-quiz-root .gq-view-link:hover { color: var(--gq-ink); }
+/* Merchant note under every match card (migration 074) */
+#gleame-quiz-root .gq-match-footnote {
+  margin: var(--gq-space-2) 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--gq-ink-soft);
+}
+#gleame-quiz-root .gq-footnote-link {
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+#gleame-quiz-root .gq-footnote-link:hover { color: var(--gq-ink); }
 #gleame-quiz-root .gq-link-btn {
   appearance: none;
   -webkit-appearance: none;

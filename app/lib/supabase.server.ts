@@ -3140,6 +3140,10 @@ export interface ChatAssistantConfig {
   // 0 = bundle every match; N>0 = shopper picks exactly N matches (top N
   // pre-selected) before the button arms (migration 071).
   quiz_bundle_size: number;
+  // Small note under EVERY results match card (migration 074) — built for
+  // Locks & Mane's "email us for a second opinion" line. Emails in the
+  // text become mailto links client-side. NULL/empty = hidden.
+  quiz_match_footnote: string | null;
   // Overhaul template system (migration 072, docs/overhaul/CONTRACTS.md).
   // NULL template = legacy rendering — existing shops never change until
   // a template is assigned (Reveal or Studio Style panel).
@@ -3347,6 +3351,7 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   quiz_bundle_enabled: false,
   quiz_bundle_label: 'Add all {count} to bag · {total}',
   quiz_bundle_size: 0,
+  quiz_match_footnote: null,
   quiz_template: null,
   quiz_preset: null,
   quiz_multi_set_prompt: null,
@@ -3521,6 +3526,10 @@ function mapChatAssistantRow(data: any): ChatAssistantConfig {
     quiz_bundle_size: Number.isFinite(Number(data.quiz_bundle_size))
       ? Math.max(0, Math.floor(Number(data.quiz_bundle_size)))
       : CHAT_ASSISTANT_DEFAULTS.quiz_bundle_size,
+    quiz_match_footnote:
+      typeof data.quiz_match_footnote === 'string' && data.quiz_match_footnote.trim()
+        ? data.quiz_match_footnote
+        : CHAT_ASSISTANT_DEFAULTS.quiz_match_footnote,
     quiz_template: typeof data.quiz_template === 'string' ? data.quiz_template : null,
     quiz_preset: typeof data.quiz_preset === 'string' ? data.quiz_preset : null,
     quiz_multi_set_prompt:

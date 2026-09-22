@@ -151,6 +151,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         bundleLabel: config.quiz_bundle_label,
         // 0 = all matches; N>0 = shopper picks N (migration 071).
         bundleSize: config.quiz_bundle_size,
+        // Per-card merchant note (migration 074). Null = hidden; the
+        // widget linkifies email addresses into mailto links.
+        matchFootnote: config.quiz_match_footnote
+          ? renderTokens(config.quiz_match_footnote)
+          : null,
       },
       upsell: {
         title: renderTokens(config.quiz_upsell_title),

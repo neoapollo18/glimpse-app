@@ -434,6 +434,8 @@ const COPY_KEYS = new Set([
   "quiz_lead_skip_label", "quiz_lead_consent_text",
   // Results "add all" bundle button (migrations 070/071)
   "quiz_bundle_enabled", "quiz_bundle_label", "quiz_bundle_size",
+  // Per-card note under every results match (migration 074)
+  "quiz_match_footnote",
   // Overhaul template system (migration 072) — values validated below.
   "quiz_template", "quiz_preset",
 ]);

@@ -2499,6 +2499,26 @@
     media.appendChild(el('span', 'gq-media-badge', 'On you'));
   }
 
+  // Merchant note under a match card. Built from text nodes (never
+  // innerHTML on merchant copy); email addresses, with or without a
+  // pasted "mailto:" prefix, become tappable mailto links.
+  function buildMatchFootnote(text) {
+    var p = el('p', 'gq-match-footnote');
+    var re = /(?:mailto:)?([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/g;
+    var last = 0;
+    var mm;
+    while ((mm = re.exec(text)) !== null) {
+      if (mm.index > last) p.appendChild(document.createTextNode(text.slice(last, mm.index)));
+      var a = el('a', 'gq-footnote-link');
+      a.href = 'mailto:' + mm[1];
+      a.textContent = mm[1];
+      p.appendChild(a);
+      last = mm.index + mm[0].length;
+    }
+    if (last < text.length) p.appendChild(document.createTextNode(text.slice(last)));
+    return p;
+  }
+
   function buildMatchCard(m, idx, definitive, hasPhotoNow, results) {
     var card = el('div', 'gq-match-card' + (idx === 0 ? ' gq-match-card--top' : ''));
 
@@ -2590,6 +2610,12 @@
         (m.variantNumericId ? '?variant=' + encodeURIComponent(m.variantNumericId) : '');
       view.onclick = function() { trackEvent('quiz_view_product'); saveState(); };
       body.appendChild(view);
+    }
+
+    // Merchant note under every card (migration 074), e.g. L&M's "email
+    // us for a second opinion" line.
+    if (results.matchFootnote) {
+      body.appendChild(buildMatchFootnote(results.matchFootnote));
     }
     card.appendChild(body);
 

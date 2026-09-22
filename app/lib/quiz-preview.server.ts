@@ -178,6 +178,9 @@ export async function buildPreviewQuizConfig(shopDomain: string, draft: QuizDraf
       bundleEnabled: config.quiz_bundle_enabled,
       bundleLabel: config.quiz_bundle_label,
       bundleSize: config.quiz_bundle_size,
+      matchFootnote: config.quiz_match_footnote
+        ? renderTokens(config.quiz_match_footnote)
+        : null,
     },
     upsell: {
       title: renderTokens(config.quiz_upsell_title),
