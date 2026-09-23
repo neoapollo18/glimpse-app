@@ -62,12 +62,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (!shop) return json({ ok: false, error: "Shop not found" }, { status: 404 });
 
   const formData = await request.formData();
+  // v2 spec Part 0.1 (failure 4): generation consumes ONLY machine-derived
+  // inputs. category/brandVoice arrive from the Brand Profile (the build
+  // screen posts profile.category/profile.tone) and the generator re-derives
+  // them server-side anyway; the old free-text extraNotes field is gone.
+  // The only merchant free text allowed near generation is the scope
+  // product filter below - and that is scope, not brief.
   const brief: BrandBrief = {
     category: String(formData.get("category") ?? "").slice(0, 200) || "beauty products",
     brandVoice: String(formData.get("brandVoice") ?? "").slice(0, 400) || "warm and confident",
     quizLength: formData.get("quizLength") === "short" ? "short" : "standard",
     modePreference: (["matrix", "ai", "hybrid"] as const).find((m) => m === formData.get("modePreference")) ?? "auto",
-    extraNotes: String(formData.get("extraNotes") ?? "").slice(0, 2000) || undefined,
   };
   // Overhaul Part 3 scope: product subset from the install-flow scope
   // screen. scopeProductIds is a JSON array of gleame product uuids.

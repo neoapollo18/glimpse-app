@@ -15,6 +15,9 @@
 
 // zod/v4 API (shipped inside the zod 3.25+ package under this subpath).
 import { z } from "zod/v4";
+// Pure client-safe module (ids + questionRange + imageryModel) - the v2
+// floors read the per-template contract from the single registry.
+import { TEMPLATES, TEMPLATE_IDS, type TemplateId } from "./quiz-templates";
 
 // ---------------------------------------------------------------------
 // Catalog input (passed in by callers; sourced from the synced tables)
@@ -26,6 +29,8 @@ export interface CatalogVariant {
   displayColor?: string | null;
   price?: number | null;
   status?: string | null;
+  /** product_variants.image_url (migration 057) - feeds the v2 imagery floor. */
+  imageUrl?: string | null;
 }
 
 export interface CatalogProduct {
@@ -36,6 +41,8 @@ export interface CatalogProduct {
   tags?: string[] | null;
   price?: number | null;
   status?: string | null;
+  /** products.image_url (migration 057) - feeds the v2 imagery floor. */
+  imageUrl?: string | null;
   variants: CatalogVariant[];
 }
 
@@ -86,6 +93,11 @@ const GeneratedOptionSchema = z.object({
   showIf: ShowIfSchema,
   selectAll: z.boolean().nullish(),
   displayMeta: DisplayMetaSchema,
+  // Answer-tile image (spec 4.2, attachment by construction). The MODEL is
+  // still told it cannot add images; the GENERATOR injects resolved urls
+  // (brand library / catalog imagery) before validation, and they flow
+  // through the draft's option imageUrl into the save RPC.
+  imageUrl: z.string().nullish(),
 });
 
 const GeneratedQuestionSchema = z.object({
@@ -160,6 +172,14 @@ export const GeneratedQuizConfigSchema = z.object({
   aiGuidance: z.string().nullish(),
   copy: GeneratedCopySchema,
   designTokens: GeneratedDesignTokensSchema,
+  // "Everything else" wildcard slot (spec 5.4): in-scope products no answer
+  // path reaches, parked explicitly by the GENERATOR (never the model) so
+  // "N products no path reaches" is impossible post-generation. During
+  // normalization it materializes as low-priority catch-all rules
+  // (matrix/hybrid) or an aiGuidance assembly note (ai).
+  wildcard: z
+    .object({ label: z.string(), productIds: z.array(z.string()) })
+    .nullish(),
 });
 
 export type GeneratedQuizConfig = z.infer<typeof GeneratedQuizConfigSchema>;
@@ -194,6 +214,148 @@ export const CAPS = {
  */
 export const isLiveProduct = (p: { status?: string | null }) => p.status == null || p.status === "active";
 export const isLiveVariant = (v: { status?: string | null }) => v.status !== "deleted";
+
+// ---------------------------------------------------------------------
+// v2 floors (spec Part 5.2): answer -> product mapping, shared by the
+// products / reachability / coverage / imagery floors and by the
+// generator's wildcard + imagery-injection passes.
+//
+// Semantics MIRROR quiz-grounding.server.ts (rule coverage for rule-backed
+// answers, deterministic token match for ai/hybrid, universal treatment
+// for non-concrete vibe answers). This module cannot import that one
+// (quiz-grounding imports from here), so keep the two in sync by hand.
+// ---------------------------------------------------------------------
+
+/** Hard question floor, any catalog size (spec 5.1 - the Luna failure). */
+export const MIN_QUESTIONS_FLOOR = 4;
+/** In-scope catalogs under this size use the small-scope product floor of 2. */
+export const SMALL_SCOPE_PRODUCT_COUNT = 20;
+/** Rank band for materialized wildcard rules - low priority by construction
+ * (lower rank wins, real rules are authored in the 1-2 digit range). */
+export const WILDCARD_RULE_RANK = 900;
+
+export interface AnswerFacetImage {
+  url: string;
+  role: string;
+}
+
+/** v2 validation floors - passed by GENERATION only. The copilot's editing
+ * gate omits `floors`, so hand-authored live configs keep validating. */
+export interface V2FloorOpts {
+  /** Assigned template id (t1-t5) - sets questionRange max + imageryModel. */
+  templateId?: string | null;
+  /** Brand-library imagery resolved per facet, keyed `${axis}:${value}`
+   * (resolveImagesForFacets contract). null/absent = no imagery data; the
+   * imagery floor then falls back to catalog image_url checks only. */
+  imagery?: Record<string, AnswerFacetImage | null> | null;
+}
+
+const FLOOR_STOP_WORDS = new Set([
+  "the", "and", "for", "with", "your", "our", "all", "any", "not",
+  "something", "else", "other", "more", "less", "very",
+]);
+
+const CONCRETE_ANSWER_HINTS =
+  /(red|pink|blue|green|black|white|nude|gold|silver|purple|orange|yellow|brown|matte|gloss|shimmer|cream|liquid|powder|stick|pencil|spf|oil|gel|serum|short|long|medium|square|round|almond|coffin|oval)/;
+
+function answerTokens(s: string): string[] {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((t) => t.length >= 3 && !FLOOR_STOP_WORDS.has(t));
+}
+
+function productHaystack(p: CatalogProduct): string {
+  return [p.name, p.productType ?? "", ...(p.tags ?? [])].join(" ").toLowerCase();
+}
+
+/**
+ * Per-answer product mapping over the LIVE catalog, keyed
+ * `${axisKey}:${axisValueValue}` (selectAll options excluded - they stand
+ * for every value). Rule-backed answers map to the distinct products their
+ * rules target; ai/hybrid answers without rules token-match; non-concrete
+ * vibe answers that match nothing map to the whole scope (the LLM ranker
+ * interprets them at serve time).
+ */
+export function computeAnswerProductMap(
+  config: GeneratedQuizConfig,
+  catalog: CatalogProduct[],
+): Map<string, Set<string>> {
+  const inScope = catalog.filter(isLiveProduct);
+  const scopeIds = new Set(inScope.map((p) => p.id));
+  const haystacks = inScope.map((p) => ({ id: p.id, hay: productHaystack(p) }));
+
+  const variantToProduct = new Map<string, string>();
+  for (const p of inScope) for (const v of p.variants) variantToProduct.set(v.id, p.id);
+
+  const ruleCoverage = new Map<string, Set<string>>();
+  for (const rule of config.rules ?? []) {
+    const productId = rule.productId ?? (rule.variantId ? variantToProduct.get(rule.variantId) : null);
+    if (!productId || !scopeIds.has(productId)) continue;
+    for (const pair of rule.criteria ?? []) {
+      if (typeof pair?.axisKey !== "string" || typeof pair?.axisValue !== "string") continue;
+      const key = `${pair.axisKey}:${pair.axisValue}`;
+      if (!ruleCoverage.has(key)) ruleCoverage.set(key, new Set());
+      ruleCoverage.get(key)!.add(productId);
+    }
+  }
+
+  const hasRules = (config.rules ?? []).length > 0;
+  const map = new Map<string, Set<string>>();
+  for (const q of config.questions) {
+    for (const opt of q.options ?? []) {
+      if (!opt.axisValueValue || opt.selectAll) continue;
+      const key = `${q.axisKey}:${opt.axisValueValue}`;
+      let ids: Set<string>;
+      if (hasRules && ruleCoverage.has(key)) {
+        ids = ruleCoverage.get(key)!;
+      } else if (hasRules && config.recommendationMode === "matrix") {
+        ids = new Set(); // matrix with no rule for this answer = nothing
+      } else {
+        const terms = [
+          ...answerTokens(String(opt.axisValueValue).replace(/_/g, " ")),
+          ...answerTokens(String(opt.label ?? "")),
+        ];
+        ids = new Set(
+          haystacks.filter(({ hay }) => terms.some((t) => hay.includes(t))).map(({ id }) => id),
+        );
+        if (ids.size === 0 && terms.length > 0 && !terms.some((t) => CONCRETE_ANSWER_HINTS.test(t))) {
+          ids = new Set(scopeIds); // vibe answer - universal, ranker-interpreted
+        }
+      }
+      map.set(key, ids);
+    }
+  }
+  return map;
+}
+
+/**
+ * Deterministic catalog image for a facet's product set: sorted by product
+ * id, product image first, else the first live variant image (sorted by
+ * variant id). Null when the facet owns no imagery at all.
+ */
+export function catalogImageForProducts(
+  productIds: Iterable<string>,
+  catalog: CatalogProduct[],
+): string | null {
+  const byId = new Map(catalog.map((p) => [p.id, p]));
+  for (const id of [...productIds].sort()) {
+    const p = byId.get(id);
+    if (!p || !isLiveProduct(p)) continue;
+    const own = (p.imageUrl ?? "").trim();
+    if (own) return own;
+    const variants = p.variants
+      .filter(isLiveVariant)
+      .slice()
+      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    for (const v of variants) {
+      const vi = (v.imageUrl ?? "").trim();
+      if (vi) return vi;
+    }
+  }
+  return null;
+}
 
 // ---------------------------------------------------------------------
 // Validation + normalization into QuizDraft shape
@@ -254,6 +416,13 @@ export interface ValidationResult {
   errors: string[];
   warnings: string[];
   draft: NormalizedDraft | null;
+  /** v2 imagery floor misses (spec 5.2c). NEVER block ok/publishing -
+   * the generator spends its repair round on them, then degrades. */
+  imageryFailures?: string[];
+  /** Set when the assigned template's imagery floor failed hard enough
+   * that the caller should reassign to T5 Clean and log
+   * template_assigned.signals.degraded_from (spec 4.3). */
+  degradedTo?: "t5" | null;
 }
 
 const trimOrNull = (s: string | null | undefined): string | null => {
@@ -264,10 +433,12 @@ const trimOrNull = (s: string | null | undefined): string | null => {
 export function validateGeneratedConfig(
   config: GeneratedQuizConfig,
   catalog: CatalogProduct[],
-  opts?: { rulelessMatrixOk?: boolean },
+  opts?: { rulelessMatrixOk?: boolean; floors?: V2FloorOpts },
 ): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
+  let imageryFailures: string[] | undefined;
+  let degradedTo: "t5" | null | undefined;
 
   // ---- axes ----
   if (config.axes.length === 0) errors.push("No axes generated");
@@ -427,6 +598,193 @@ export function validateGeneratedConfig(
     else errors.push(message);
   }
 
+  // ---- wildcard slot (spec 5.4) - materialize AFTER the ruleless check so
+  // a model that produced zero real matrix rules still fails loudly ----
+  const wildcardIds = [...new Set(config.wildcard?.productIds ?? [])].filter((id) =>
+    productIds.has(id),
+  );
+  const droppedWildcard = (config.wildcard?.productIds?.length ?? 0) - wildcardIds.length;
+  if (droppedWildcard > 0) {
+    warnings.push(`Wildcard slot dropped ${droppedWildcard} id(s) not in the live catalog`);
+  }
+  if (wildcardIds.length > 0 && config.recommendationMode !== "ai") {
+    // Catch-all rules: every parked product attached to EVERY value of the
+    // first asked axis at a low-priority rank, so parked products are
+    // literally reachable from every path (only surfacing when nothing
+    // better matches - matchRecommendationRules sorts rank ascending).
+    const firstAxis = config.questions.length > 0 ? axisByKey.get(config.questions[0].axisKey) : null;
+    if (firstAxis && firstAxis.values.length > 0) {
+      let truncated = 0;
+      outer: for (const [i, id] of wildcardIds.entries()) {
+        for (const v of firstAxis.values) {
+          if (keptRules.length >= CAPS.maxRules) {
+            truncated = wildcardIds.length - i;
+            break outer;
+          }
+          keptRules.push({
+            criteria: { [firstAxis.key]: v.value },
+            productId: id,
+            variantId: null,
+            rank: WILDCARD_RULE_RANK,
+            quantity: 1,
+          });
+        }
+      }
+      if (truncated > 0) {
+        warnings.push(`Wildcard slot truncated at the ${CAPS.maxRules}-rule cap (${truncated} products left un-materialized)`);
+      }
+    }
+  }
+
+  // ---- v2 floors (spec 5.1-5.5) - GENERATION ONLY (opts.floors) ----
+  if (opts?.floors) {
+    const floorTemplate =
+      opts.floors.templateId && (TEMPLATE_IDS as string[]).includes(opts.floors.templateId)
+        ? TEMPLATES[opts.floors.templateId as TemplateId]
+        : null;
+    const [tplMin, tplMax] = floorTemplate?.questionRange ?? [MIN_QUESTIONS_FLOOR, 6];
+
+    // 5.1: hard floor of 4 regardless of catalog size; max per template.
+    if (config.questions.length < MIN_QUESTIONS_FLOOR) {
+      errors.push(
+        `Only ${config.questions.length} question(s) generated - the hard minimum is ${MIN_QUESTIONS_FLOOR} regardless of catalog size`,
+      );
+    } else if (config.questions.length < tplMin) {
+      warnings.push(
+        `${config.questions.length} questions is below the ${floorTemplate!.name} template's preferred minimum of ${tplMin}`,
+      );
+    }
+    if (config.questions.length > tplMax) {
+      errors.push(
+        `${config.questions.length} questions exceeds the ${floorTemplate ? `${floorTemplate.name} template's ` : ""}maximum of ${tplMax}`,
+      );
+    }
+
+    // 5.3: intro is its own screen, always generated - headline + one
+    // support line (the runtime's intro screen renders both; CTA is fixed).
+    if (!trimOrNull(config.copy?.quiz_headline)) {
+      errors.push("Intro screen is missing its headline (copy.quiz_headline) - the intro is always generated as its own screen");
+    }
+    if (!trimOrNull(config.copy?.quiz_subtext)) {
+      errors.push("Intro screen is missing its support line (copy.quiz_subtext)");
+    }
+
+    // 5.2a + 5.5: per-answer product floor; every answer must map to a
+    // non-empty facet (generic vibe answers with nothing behind them fail).
+    const inScope = catalog.filter(isLiveProduct);
+    const inScopeIds = new Set(inScope.map((p) => p.id));
+    const productFloor = inScope.length < SMALL_SCOPE_PRODUCT_COUNT ? 2 : 3;
+    const answerMap = computeAnswerProductMap(config, catalog);
+    const reachable = new Set<string>();
+    type AnswerRef = {
+      key: string;
+      label: string;
+      axisKey: string;
+      imageUrl: string | null;
+      ids: Set<string>;
+    };
+    const answerRefs: AnswerRef[] = [];
+    for (const q of config.questions) {
+      for (const opt of q.options ?? []) {
+        if (!opt.axisValueValue || opt.selectAll) continue;
+        const key = `${q.axisKey}:${opt.axisValueValue}`;
+        const ids = answerMap.get(key) ?? new Set<string>();
+        answerRefs.push({ key, label: opt.label, axisKey: q.axisKey, imageUrl: trimOrNull(opt.imageUrl), ids });
+        if (ids.size === 0) {
+          errors.push(`Answer "${opt.label}" (${key}) maps to no catalog facet - every answer must be grounded in real products`);
+        } else if (ids.size < productFloor) {
+          errors.push(`Answer "${opt.label}" (${key}) reaches only ${ids.size} product(s) - the floor is ${productFloor}`);
+        }
+        for (const id of ids) reachable.add(id);
+      }
+    }
+
+    // 5.2b: reachability floor. Wildcard-parked products count as reachable
+    // for matrix/hybrid because materialized catch-all rules attach them to
+    // every first-axis path; in ai mode the wildcard is guidance only.
+    const parked = new Set(wildcardIds.filter((id) => inScopeIds.has(id)));
+    const reachableEffective = new Set(reachable);
+    if (config.recommendationMode !== "ai") for (const id of parked) reachableEffective.add(id);
+    const reachPct = inScope.length > 0 ? reachableEffective.size / inScope.length : 1;
+    if (reachPct < 0.8) {
+      errors.push(
+        `Only ${Math.round(reachPct * 100)}% of in-scope products are reachable through an answer path (floor 80%)`,
+      );
+    }
+
+    // 5.4: 100% coverage - unreachable AND unparked products are a hard
+    // failure, never a merchant-facing warning.
+    const unparked = inScope.filter((p) => !reachable.has(p.id) && !parked.has(p.id));
+    if (unparked.length > 0) {
+      errors.push(
+        `${unparked.length} in-scope product(s) are unreachable by any answer path and not parked in the "everything else" wildcard slot`,
+      );
+    }
+
+    // 5.2c: imagery floor per the assigned template's imagery model.
+    // NEVER a hard failure (publishing is never blocked by imagery): misses
+    // are reported for the repair round, then degrade the template to T5.
+    const model = floorTemplate?.imageryModel ?? null;
+    const imageryMap = opts.floors.imagery ?? null;
+    const lifestyleRoles = new Set(["lifestyle", "banner", "hero"]);
+    const failures: string[] = [];
+    if (model === "per-answer") {
+      const failingQuestions = new Set<string>();
+      for (const a of answerRefs) {
+        const resolved = a.imageUrl ?? imageryMap?.[a.key]?.url ?? catalogImageForProducts(a.ids, catalog);
+        if (!resolved) {
+          failures.push(`Answer "${a.label}" (${a.key}) has no resolvable image`);
+          failingQuestions.add(a.axisKey);
+        }
+      }
+      // T2 tolerates T5-style bars on at most ONE question (spec Part 3);
+      // beyond that, or past the 20% answer-coverage gate, degrade.
+      if (
+        failures.length > 0 &&
+        (failingQuestions.size > 1 || failures.length / Math.max(1, answerRefs.length) > 0.2)
+      ) {
+        degradedTo = "t5";
+      }
+    } else if (model === "per-question") {
+      let failing = 0;
+      for (const q of config.questions) {
+        const keys = (q.options ?? [])
+          .filter((o) => o.axisValueValue && !o.selectAll)
+          .map((o) => `${q.axisKey}:${o.axisValueValue}`);
+        let hit = false;
+        if (imageryMap) {
+          hit = keys.some((k) => {
+            const e = imageryMap[k];
+            return Boolean(e?.url) && lifestyleRoles.has(e!.role);
+          });
+        } else {
+          // No brand-library data - fall back to catalog image_url only.
+          hit = keys.some((k) => catalogImageForProducts(answerMap.get(k) ?? [], catalog) !== null);
+        }
+        if (!hit) {
+          failing++;
+          failures.push(`Question "${q.axisKey}" has no lifestyle/banner image candidate`);
+        }
+      }
+      // T3 gate: banner/lifestyle coverage for >= 80% of questions.
+      if (failing / Math.max(1, config.questions.length) > 0.2) degradedTo = "t5";
+    } else if (model === "hero") {
+      let hit = false;
+      if (imageryMap) {
+        hit = Object.values(imageryMap).some((e) => Boolean(e?.url) && lifestyleRoles.has(e!.role));
+      }
+      if (!hit) hit = catalogImageForProducts(inScopeIds, catalog) !== null;
+      if (!hit) {
+        failures.push("No brand hero image candidate found");
+        degradedTo = "t5";
+      }
+    }
+    if (failures.length > 0) {
+      imageryFailures = failures;
+      for (const f of failures.slice(0, 10)) warnings.push(f);
+    }
+  }
+
   // ---- settings (copy + design + mode + guidance) ----
   const settings: Record<string, unknown> = {
     recommendation_mode: config.recommendationMode,
@@ -441,6 +799,22 @@ export function validateGeneratedConfig(
     settings.ai_guidance = guidance.slice(0, CAPS.maxGuidanceLength);
   } else if (config.recommendationMode !== "matrix") {
     warnings.push("recommendationMode is ai/hybrid but no aiGuidance was generated");
+  }
+  if (wildcardIds.length > 0 && config.recommendationMode === "ai") {
+    // ai mode has no rules to materialize - the wildcard slot lands as an
+    // assembly note for the LLM ranker instead (names, not uuids: the
+    // ranker sees the catalog by name).
+    const byId = new Map(catalog.map((p) => [p.id, p]));
+    const names = wildcardIds
+      .map((id) => byId.get(id)?.name?.trim())
+      .filter((n): n is string => Boolean(n))
+      .slice(0, 40);
+    if (names.length > 0) {
+      const line = `\n\nEVERYTHING ELSE (wildcard slot): these products match no specific answer path - use them to fill remaining recommendation slots when they suit the shopper's answers: ${names.join("; ")}.`;
+      settings.ai_guidance = (((settings.ai_guidance as string | undefined) ?? "") + line)
+        .trim()
+        .slice(0, CAPS.maxGuidanceLength);
+    }
   }
   for (const [key, value] of Object.entries(config.copy ?? {})) {
     if (value == null) continue;
@@ -468,7 +842,9 @@ export function validateGeneratedConfig(
     settings[key] = value;
   }
 
-  if (errors.length > 0) return { ok: false, errors, warnings, draft: null };
+  if (errors.length > 0) {
+    return { ok: false, errors, warnings, draft: null, imageryFailures, degradedTo };
+  }
 
   // .nullish() fields mean displayMeta can arrive with explicit nulls; scrub
   // them so the DB stores only meaningful keys, and an all-null meta
@@ -518,7 +894,9 @@ export function validateGeneratedConfig(
           axisValueValue: opt.axisValueValue,
           botResponse: null,
           reasonText: trimOrNull(opt.reasonText),
-          imageUrl: null,
+          // Injected by the generator's imagery pass (spec 4.2, attachment
+          // by construction) - flows into the save RPC's option image_url.
+          imageUrl: trimOrNull(opt.imageUrl),
           showIf: opt.showIf ?? null,
           selectAll: opt.selectAll ?? false,
           displayMeta: scrubDisplayMeta(opt.displayMeta),
@@ -530,7 +908,7 @@ export function validateGeneratedConfig(
     settings,
   };
 
-  return { ok: true, errors, warnings, draft };
+  return { ok: true, errors, warnings, draft, imageryFailures, degradedTo };
 }
 
 // ---------------------------------------------------------------------
