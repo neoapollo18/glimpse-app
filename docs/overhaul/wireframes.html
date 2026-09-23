@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gleame v2 — Reference Wireframes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#1a1c1e; --sub:#6b7075; --line:#e3e5e8; --bg:#f6f6f7; --panel:#ffffff;
+  --brand:#4a3aff; --ok:#1a7f4e; --warn:#9a6700;
+  --shadow:0 1px 2px rgba(20,22,26,.06), 0 8px 24px rgba(20,22,26,.08);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{font-size:16px}
+body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
+button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+img{max-width:100%}
+
+/* ============ shell / switcher ============ */
+.shell-header{position:sticky;top:0;z-index:60;background:#141519;color:#fff;padding:10px 20px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.shell-header .logo{font-weight:700;letter-spacing:-.02em}
+.shell-header .logo span{color:#9aa4ff}
+.shell-nav{display:flex;gap:4px;flex-wrap:wrap}
+.shell-nav button{padding:7px 13px;border-radius:8px;color:#c8cbd4;font-size:13.5px;font-weight:500}
+.shell-nav button:hover{background:rgba(255,255,255,.08);color:#fff}
+.shell-nav button.on{background:#fff;color:#141519;font-weight:600}
+.shell-note{margin-left:auto;font-size:12px;color:#8b8f9c}
+.screen{display:none}
+.screen.on{display:block}
+.spec-note{max-width:1280px;margin:14px auto 0;padding:0 20px;font-size:13px;color:var(--sub)}
+.spec-note b{color:var(--ink)}
+
+/* ============ admin chrome (Studio) ============ */
+.studio{max-width:1280px;margin:16px auto 60px;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow)}
+.topbar{display:flex;align-items:center;gap:16px;height:56px;padding:0 16px;border-bottom:1px solid var(--line);background:#fff}
+.quiz-name{font-weight:600;font-size:14.5px;display:flex;align-items:center;gap:6px}
+.quiz-name svg{opacity:.4}
+.tabs{display:flex;background:var(--bg);border-radius:9px;padding:3px;margin:0 auto}
+.tabs button{padding:6px 16px;border-radius:7px;font-size:13.5px;font-weight:500;color:var(--sub)}
+.tabs button.on{background:#fff;color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.btn{border-radius:9px;font-size:13.5px;font-weight:600;padding:8px 15px;display:inline-flex;align-items:center;gap:7px}
+.btn.primary{background:var(--ink);color:#fff}
+.btn.primary:hover{background:#000}
+.btn.secondary{background:#fff;border:1px solid var(--line);color:var(--ink)}
+.btn.secondary:hover{border-color:#c6c9ce}
+.btn.ghost{color:var(--sub)}
+.studio-body{display:grid;grid-template-columns:236px 1fr 316px;min-height:660px}
+.rail{border-right:1px solid var(--line);padding:12px 10px;background:#fcfcfd}
+.rail h4{font-size:11px;font-weight:600;color:var(--sub);letter-spacing:.06em;text-transform:uppercase;padding:6px 10px 4px}
+.rail .item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;font-size:13.5px;color:#3c4045;margin-bottom:1px}
+.rail .item:hover{background:#f1f2f4}
+.rail .item.on{background:#ecebff;color:var(--brand);font-weight:600}
+.rail .item .ic{width:17px;height:17px;border-radius:5px;background:#dfe1e5;flex:none;display:grid;place-items:center;font-size:10px;color:#7b7f86}
+.rail .item.on .ic{background:#d8d5ff;color:var(--brand)}
+.rail .divider{height:1px;background:var(--line);margin:10px 6px}
+.rail .item .badge{margin-left:auto;font-size:10.5px;background:#e8f5ee;color:var(--ok);padding:2px 7px;border-radius:99px;font-weight:600}
+.editrail{border-left:1px solid var(--line);background:#fcfcfd;display:flex;flex-direction:column}
+.editrail .section{padding:16px;border-bottom:1px solid var(--line)}
+.editrail h4{font-size:12.5px;font-weight:600;margin-bottom:10px}
+.field label{display:block;font-size:11.5px;color:var(--sub);margin-bottom:5px;font-weight:500}
+.field input,.field textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px;background:#fff}
+.field{margin-bottom:12px}
+.chat{margin-top:auto;padding:14px 16px;border-top:1px solid var(--line)}
+.chat .bubble{background:#f1f2f4;border-radius:10px;padding:9px 12px;font-size:12.5px;color:#3c4045;margin-bottom:10px}
+.chat .input{display:flex;gap:8px}
+.chat .input input{flex:1;border:1px solid var(--line);border-radius:9px;padding:8px 11px;font-size:13px}
+
+/* banner */
+.banner{display:flex;align-items:center;gap:14px;padding:11px 16px;background:#f4f3ff;border-bottom:1px solid #e2e0f7;font-size:13px}
+.banner .dot{width:8px;height:8px;border-radius:99px;background:var(--brand);flex:none}
+.banner b{font-weight:600}
+.banner .chips{color:var(--sub)}
+.banner .actions{margin-left:auto;display:flex;gap:10px;align-items:center}
+.banner .play{color:var(--brand);font-weight:600;font-size:13px}
+.banner .x{color:#9a9eab;font-size:15px}
+
+/* canvas */
+.canvas-wrap{position:relative;background:#eceef0;display:flex;flex-direction:column;overflow:hidden}
+.store-strip{height:34px;background:var(--tpl-bg,#F5F2EB);border-bottom:1px solid rgba(0,0,0,.06);display:flex;align-items:center;padding:0 22px;gap:22px;flex:none}
+.store-strip .slogo{font-family:'Cormorant Garamond',serif;font-size:15px;letter-spacing:.16em;color:var(--tpl-ink,#1F1D1A)}
+.store-strip .snav{font-size:10.5px;letter-spacing:.08em;color:var(--tpl-ink,#1F1D1A);opacity:.55;display:flex;gap:16px;margin-left:auto}
+.canvas{flex:1;overflow:auto;background:var(--tpl-bg,#F5F2EB)}
+.device-toggle{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);background:#141519;color:#fff;border-radius:99px;padding:4px;display:flex;gap:2px;box-shadow:var(--shadow)}
+.device-toggle button{padding:5px 13px;border-radius:99px;font-size:12px;color:#b9bcc7}
+.device-toggle button.on{background:#3a3d46;color:#fff}
+
+/* ============ T1 Salon (Maison Véla) ============ */
+.t1{--t1bg:#F5F2EB;--t1ink:#211E19;--t1acc:#3E4A3D;--t1line:rgba(33,30,25,.16);
+ display:grid;grid-template-columns:44% 56%;min-height:560px;background:var(--t1bg);color:var(--t1ink)}
+.t1-hero{background:
+  radial-gradient(120% 90% at 70% 20%, #cfc4ad 0%, transparent 55%),
+  linear-gradient(160deg,#8d8672 0%, #5d5a4c 48%, #33322b 100%);
+ position:relative}
+.t1-hero .cap{position:absolute;left:26px;bottom:22px;color:#f2efe6;font-size:10.5px;letter-spacing:.18em;opacity:.85}
+.t1-hero .bottle{position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);width:88px;height:150px;border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,.5),rgba(255,255,255,.12));backdrop-filter:blur(1px);border:1px solid rgba(255,255,255,.45)}
+.t1-hero .bottle:before{content:"";position:absolute;top:-26px;left:50%;transform:translateX(-50%);width:30px;height:26px;background:#2c2a24;border-radius:3px}
+.t1-right{padding:70px 8% 60px;position:relative;max-width:640px}
+.t1-prog{position:absolute;top:0;left:0;right:0;height:2px;background:var(--t1line)}
+.t1-prog i{display:block;height:100%;width:40%;background:var(--t1acc)}
+.t1-kicker{font-size:11.5px;letter-spacing:.16em;color:var(--t1acc);margin-bottom:18px}
+.t1-q{font-family:'Cormorant Garamond',serif;font-weight:500;font-size:clamp(30px,3.2vw,42px);line-height:1.14;letter-spacing:-.01em;margin-bottom:8px}
+.t1-help{font-size:14px;color:rgba(33,30,25,.62);margin-bottom:34px}
+.t1-answers{border-top:1px solid var(--t1line)}
+.t1-a{display:flex;align-items:baseline;gap:14px;padding:19px 2px;border-bottom:1px solid var(--t1line);font-family:'Cormorant Garamond',serif;font-size:21px;transition:padding-left .15s ease;cursor:pointer}
+.t1-a small{font-family:Inter;font-size:12.5px;color:rgba(33,30,25,.55)}
+.t1-a:hover{padding-left:10px}
+.t1-a.sel{border-left:2px solid var(--t1acc);padding-left:14px;color:var(--t1acc)}
+/* T1 results */
+.t1r{max-width:620px;margin:0 auto;padding:64px 24px;background:var(--t1bg);color:var(--t1ink)}
+.t1r .t1-kicker{text-align:center}
+.t1r h2{font-family:'Cormorant Garamond',serif;font-weight:500;font-size:36px;text-align:center;margin-bottom:16px}
+.t1r .prose{font-family:'Cormorant Garamond',serif;font-size:19px;line-height:1.55;text-align:center;color:rgba(33,30,25,.85);font-style:italic;margin:0 auto 40px;max-width:480px}
+.t1r-card{display:flex;gap:20px;padding:22px 0;border-top:1px solid var(--t1line);align-items:center}
+.t1r-card:last-child{border-bottom:1px solid var(--t1line)}
+.t1r-img{width:104px;height:104px;flex:none;background:linear-gradient(150deg,#b9ae95,#6a6555);border-radius:4px}
+.t1r-card h3{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:500}
+.t1r-card .price{font-size:13px;color:rgba(33,30,25,.6);margin:2px 0 6px}
+.t1r-card .why{font-size:13px;color:rgba(33,30,25,.72);line-height:1.45}
+.t1r-card .add{margin-left:auto;flex:none;font-size:12px;letter-spacing:.12em;border-bottom:1px solid var(--t1ink);padding-bottom:2px;white-space:nowrap}
+
+/* ============ T2 Studio (Tint Beauty) ============ */
+.t2{--t2bg:#fff;--t2ink:#191517;--t2acc:#B04A5A;background:var(--t2bg);color:var(--t2ink);padding:44px 6% 60px;min-height:560px}
+.t2-prog{height:3px;background:#f0e9ea;border-radius:99px;max-width:880px;margin:0 auto 40px}
+.t2-prog i{display:block;height:100%;width:55%;background:var(--t2acc);border-radius:99px}
+.t2-wrap{max-width:880px;margin:0 auto}
+.t2-q{font-size:clamp(26px,2.6vw,34px);font-weight:700;letter-spacing:-.02em;text-align:center;margin-bottom:8px}
+.t2-help{text-align:center;font-size:14px;color:#8a7f82;margin-bottom:34px}
+.t2-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.t2-tile{border-radius:12px;overflow:hidden;border:2px solid transparent;transition:transform .12s ease;cursor:pointer;background:#fff}
+.t2-tile .sw{aspect-ratio:1;display:block}
+.t2-tile figcaption{font-size:13.5px;font-weight:600;padding:9px 4px 4px;text-align:center}
+.t2-tile figcaption small{display:block;font-weight:400;color:#8a7f82;font-size:11.5px;margin-top:1px}
+.t2-tile.sel{border-color:var(--t2acc);transform:scale(1.02)}
+.t2-tile.sel figcaption{color:var(--t2acc)}
+/* T2 loading */
+.t2l{background:#fff;min-height:420px;display:grid;place-items:center;text-align:center;padding:40px}
+.t2l .ring{width:52px;height:52px;border-radius:99px;border:3px solid #f0e2e4;border-top-color:var(--t2acc);margin:0 auto 26px;animation:spin 1.2s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.t2l h3{font-size:21px;font-weight:700;margin-bottom:10px;letter-spacing:-.01em}
+.t2l p{font-size:14px;color:#8a7f82;max-width:380px;margin:0 auto 4px}
+.t2l .rot{font-size:12.5px;color:#b09a9e;margin-top:18px;letter-spacing:.02em}
+/* T2 results */
+.t2r{background:#fff;padding:50px 6%;color:var(--t2ink)}
+.t2r-wrap{max-width:760px;margin:0 auto}
+.t2r .echo{background:#faf6f7;border:1px solid #f0e6e8;border-radius:14px;padding:16px 20px;margin-bottom:34px}
+.t2r .echo h4{font-size:12px;font-weight:600;letter-spacing:.04em;color:#8a7f82;margin-bottom:9px}
+.t2r .echo .chips{display:flex;gap:8px;flex-wrap:wrap}
+.t2r .echo .chip{font-size:12.5px;background:#fff;border:1px solid #ecdfe1;border-radius:99px;padding:5px 12px}
+.t2r .echo .chip b{font-weight:600}
+.t2r-hero{display:grid;grid-template-columns:220px 1fr;gap:28px;align-items:center;margin-bottom:30px}
+.t2r-hero .sw{aspect-ratio:1;border-radius:16px;background:linear-gradient(140deg,#c96a72,#8e3742)}
+.t2r-hero .lbl{font-size:12px;font-weight:600;color:var(--t2acc);letter-spacing:.06em;margin-bottom:6px}
+.t2r-hero h2{font-size:30px;font-weight:700;letter-spacing:-.02em}
+.t2r-hero .price{font-size:15px;color:#8a7f82;margin:4px 0 10px}
+.t2r-hero .why{font-size:14px;line-height:1.5;color:#4c4346;margin-bottom:16px}
+.t2r-hero .cta{background:var(--t2ink);color:#fff;border-radius:10px;padding:11px 20px;font-weight:600;font-size:14px}
+.t2r-alt{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:34px}
+.t2r-alt .a{display:flex;gap:13px;align-items:center;border:1px solid #f0e6e8;border-radius:14px;padding:12px}
+.t2r-alt .sw{width:62px;height:62px;border-radius:10px;flex:none}
+.t2r-alt h4{font-size:14px;font-weight:600}
+.t2r-alt small{font-size:12px;color:#8a7f82}
+.t2r-vto{border:1px dashed #e0ccd0;border-radius:16px;padding:22px;display:flex;gap:18px;align-items:center}
+.t2r-vto .ba{display:flex;gap:6px}
+.t2r-vto .face{width:74px;height:92px;border-radius:10px;background:linear-gradient(180deg,#e9d4c8,#d4b3a4);position:relative}
+.t2r-vto .face.after:after{content:"";position:absolute;left:22%;right:22%;top:58%;height:9px;border-radius:99px;background:#b04a5a}
+.t2r-vto h4{font-size:15px;font-weight:700;margin-bottom:3px}
+.t2r-vto p{font-size:13px;color:#8a7f82}
+.t2r-vto .cta2{margin-left:auto;white-space:nowrap;border:1.5px solid var(--t2ink);border-radius:10px;padding:9px 16px;font-weight:600;font-size:13px}
+
+/* ============ T3 Guide (Fernwood Sleep) ============ */
+.t3{--t3bg:#FAFAF7;--t3ink:#23262B;--t3acc:#2E5E4E;background:var(--t3bg);color:var(--t3ink);padding:46px 6% 60px;min-height:560px}
+.t3-wrap{max-width:960px;margin:0 auto}
+.t3-meta{display:flex;justify-content:flex-end;font-size:12.5px;color:#7c8188;margin-bottom:10px;font-weight:500}
+.t3-q{font-family:Fraunces,serif;font-size:clamp(26px,2.8vw,36px);font-weight:600;letter-spacing:-.01em;margin-bottom:6px}
+.t3-help{font-size:14px;color:#6f747b;margin-bottom:28px}
+.t3-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.t3-card{border:1px solid #e2e4e0;border-radius:12px;overflow:hidden;background:#fff;cursor:pointer;position:relative}
+.t3-card .ph{aspect-ratio:3/2;display:block}
+.t3-card .tx{padding:13px 15px}
+.t3-card h4{font-size:15.5px;font-weight:600;margin-bottom:3px}
+.t3-card p{font-size:13px;color:#6f747b;line-height:1.4}
+.t3-card.sel{border:1.5px solid var(--t3acc)}
+.t3-card.sel:after{content:"✓";position:absolute;top:10px;right:10px;width:22px;height:22px;border-radius:99px;background:var(--t3acc);color:#fff;font-size:12px;display:grid;place-items:center}
+/* T3 results */
+.t3r{background:var(--t3bg);padding:50px 6%;color:var(--t3ink)}
+.t3r-wrap{max-width:860px;margin:0 auto}
+.t3r h2{font-family:Fraunces,serif;font-size:32px;font-weight:600;margin-bottom:16px}
+.t3r .recap{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:30px}
+.t3r .recap .chip{font-size:12.5px;background:#fff;border:1px solid #e2e4e0;border-radius:99px;padding:5px 12px;color:#4a4f56}
+.t3r-hero{display:grid;grid-template-columns:280px 1fr;gap:26px;background:#fff;border:1px solid #e2e4e0;border-radius:14px;padding:22px;margin-bottom:26px}
+.t3r-hero .ph{border-radius:10px;min-height:190px}
+.t3r-hero .lbl{font-size:12px;font-weight:600;color:var(--t3acc);letter-spacing:.05em;margin-bottom:5px}
+.t3r-hero h3{font-family:Fraunces,serif;font-size:24px;font-weight:600}
+.t3r-hero .price{font-size:14px;color:#6f747b;margin:3px 0 12px}
+.t3r-hero ul{list-style:none;font-size:13.5px;line-height:1.5;color:#3c4147}
+.t3r-hero li{padding-left:20px;position:relative;margin-bottom:7px}
+.t3r-hero li:before{content:"→";position:absolute;left:0;color:var(--t3acc)}
+.t3r table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #e2e4e0;border-radius:12px;overflow:hidden;font-size:13px}
+.t3r th,.t3r td{padding:11px 14px;text-align:left;border-bottom:1px solid #eef0ec}
+.t3r th{font-size:12px;color:#6f747b;font-weight:600;background:#f4f5f2}
+.t3r td:first-child{color:#6f747b}
+.t3r .pick{color:var(--t3acc);font-weight:600}
+
+/* ============ T4 Pop (GlowPop) ============ */
+.t4{--t4bg:#FFF6EA;--t4ink:#2A2118;--t4acc:#FF5C8A;font-family:Nunito,Inter,sans-serif;background:var(--t4bg);color:var(--t4ink);padding:44px 6% 60px;min-height:560px}
+.t4-wrap{max-width:720px;margin:0 auto;text-align:center}
+.t4-prog{display:flex;gap:6px;max-width:340px;margin:0 auto 36px}
+.t4-prog i{height:8px;flex:1;border-radius:99px;background:#f4dfc9}
+.t4-prog i.f{background:var(--t4acc)}
+.t4-q{font-size:clamp(28px,3vw,38px);font-weight:800;letter-spacing:-.02em;margin-bottom:6px}
+.t4-help{font-size:14.5px;color:#a08a72;font-weight:600;margin-bottom:30px}
+.t4-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;text-align:left}
+.t4-a{background:#fff;border-radius:18px;padding:17px 18px;font-weight:700;font-size:16px;display:flex;gap:11px;align-items:center;box-shadow:0 2px 0 #f0dcc4;cursor:pointer;transition:transform .12s}
+.t4-a .e{font-size:21px}
+.t4-a.sel{background:var(--t4acc);color:#fff;transform:scale(1.03);box-shadow:0 3px 0 #d13e6c}
+/* T4 results */
+.t4r{background:var(--t4bg);padding:50px 6%;font-family:Nunito,Inter,sans-serif;color:var(--t4ink);text-align:center}
+.t4r .arch{font-size:13px;font-weight:800;letter-spacing:.1em;color:var(--t4acc);margin-bottom:8px}
+.t4r h2{font-size:38px;font-weight:800;letter-spacing:-.02em;margin-bottom:8px}
+.t4r .line{font-size:15.5px;font-weight:600;color:#8f7a63;margin-bottom:32px}
+.t4r-hero{background:#fff;border-radius:22px;padding:22px;max-width:420px;margin:0 auto 30px;box-shadow:0 3px 0 #f0dcc4}
+.t4r-hero .ph{aspect-ratio:4/3;border-radius:14px;background:linear-gradient(135deg,#ffd3e0,#ff8fb0);margin-bottom:14px}
+.t4r-hero h3{font-size:20px;font-weight:800}
+.t4r-hero .price{font-size:14px;color:#a08a72;font-weight:700;margin:2px 0 12px}
+.t4r-hero .cta{background:var(--t4acc);color:#fff;border-radius:14px;padding:12px 22px;font-weight:800;font-size:15px;width:100%}
+.t4r-kit{max-width:560px;margin:0 auto}
+.t4r-kit h4{font-size:16px;font-weight:800;margin-bottom:14px}
+.t4r-kit .row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+.t4r-kit .m{background:#fff;border-radius:16px;padding:12px;box-shadow:0 2px 0 #f0dcc4}
+.t4r-kit .m .ph{aspect-ratio:1;border-radius:10px;margin-bottom:8px}
+.t4r-kit .m h5{font-size:13px;font-weight:800}
+.t4r-kit .m small{font-size:12px;color:#a08a72;font-weight:700}
+.t4r-kit .addall{border:2.5px solid var(--t4ink);border-radius:14px;padding:11px 22px;font-weight:800;font-size:14.5px}
+
+/* ============ T5 Clean (Aria Skincare) ============ */
+.t5{--t5bg:#fff;--t5ink:#16181b;--t5acc:#2F5AA8;background:var(--t5bg);color:var(--t5ink);padding:52px 6% 60px;min-height:560px}
+.t5-wrap{max-width:640px;margin:0 auto}
+.t5-meta{display:flex;align-items:center;gap:12px;margin-bottom:36px}
+.t5-prog{flex:1;height:2px;background:#eceef1}
+.t5-prog i{display:block;height:100%;width:60%;background:var(--t5acc)}
+.t5-meta span{font-size:12px;color:#8b9098}
+.t5-q{font-size:clamp(24px,2.4vw,31px);font-weight:600;letter-spacing:-.015em;margin-bottom:6px}
+.t5-help{font-size:14px;color:#767c84;margin-bottom:28px}
+.t5-a{border:1px solid #e4e6ea;border-radius:10px;padding:15px 17px;font-size:15px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:12px}
+.t5-a:hover{border-color:#c9cdd4}
+.t5-a.sel{border:1.5px solid var(--t5acc);background:#f6f8fc}
+/* T5 results */
+.t5r{background:#fff;padding:50px 6%;color:var(--t5ink)}
+.t5r-wrap{max-width:720px;margin:0 auto}
+.t5r h2{font-size:27px;font-weight:600;letter-spacing:-.015em;margin-bottom:6px}
+.t5r>.t5r-wrap>p{font-size:14px;color:#767c84;margin-bottom:28px}
+.t5r-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.t5r-card{border:1px solid #e4e6ea;border-radius:12px;padding:14px}
+.t5r-card .ph{aspect-ratio:4/3;border-radius:8px;background:#f1f3f5;display:grid;place-items:center;font-size:26px;color:#c3c8cf;font-weight:600;margin-bottom:12px}
+.t5r-card h4{font-size:15px;font-weight:600}
+.t5r-card .price{font-size:13px;color:#767c84;margin:2px 0 8px}
+.t5r-card .why{font-size:13px;color:#4d535b;line-height:1.45;margin-bottom:12px}
+.t5r-card .cta{border:1px solid #16181b;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;width:100%}
+
+/* ============ overlay / gallery ============ */
+.overlay{max-width:1280px;margin:16px auto 60px;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+.overlay-head{display:flex;align-items:center;padding:18px 24px;border-bottom:1px solid var(--line)}
+.overlay-head h2{font-size:17px;font-weight:700;letter-spacing:-.01em}
+.overlay-head p{font-size:13px;color:var(--sub);margin-top:2px}
+.overlay-head .x{margin-left:auto;width:32px;height:32px;border-radius:8px;border:1px solid var(--line);display:grid;place-items:center;color:var(--sub)}
+.tpl-grid{display:grid;grid-template-columns:1fr 1fr;gap:22px;padding:24px}
+.tpl-card{border:1px solid var(--line);border-radius:13px;overflow:hidden;position:relative}
+.tpl-card.current{border:2px solid var(--brand)}
+.tpl-card .render{height:280px;overflow:hidden;position:relative;border-bottom:1px solid var(--line)}
+.tpl-card .render .scaled{transform:scale(.52);transform-origin:top left;width:192%;pointer-events:none}
+.tpl-card .meta{display:flex;align-items:center;gap:12px;padding:14px 16px}
+.tpl-card .meta h3{font-size:14.5px;font-weight:700}
+.tpl-card .meta p{font-size:12.5px;color:var(--sub);margin-top:1px}
+.tpl-card .meta .use{margin-left:auto;flex:none}
+.tpl-card .curchip{position:absolute;top:12px;left:12px;z-index:2;background:var(--brand);color:#fff;font-size:11px;font-weight:700;border-radius:99px;padding:4px 11px}
+.tpl-card.dim .render{opacity:.4}
+.tpl-card.dim .reason{position:absolute;top:12px;left:12px;z-index:2;background:#fff;border:1px solid var(--line);color:var(--warn);font-size:11.5px;font-weight:600;border-radius:99px;padding:4px 11px;box-shadow:var(--shadow)}
+.tpl-card.dim .fix{color:var(--brand);font-size:12.5px;font-weight:600}
+
+/* ============ images rail & picker ============ */
+.img-rail-panel{border-right:1px solid var(--line);background:#fcfcfd;padding:14px}
+.img-rail-panel h4{font-size:12.5px;font-weight:700;margin-bottom:4px}
+.img-rail-panel .sub{font-size:12px;color:var(--sub);margin-bottom:14px}
+.slot{display:flex;gap:11px;align-items:center;padding:9px;border:1px solid var(--line);border-radius:10px;margin-bottom:9px;background:#fff}
+.slot .th{width:52px;height:52px;border-radius:8px;flex:none}
+.slot h5{font-size:13px;font-weight:600}
+.slot .src{font-size:11px;color:var(--sub);margin-top:2px}
+.slot .chg{margin-left:auto;font-size:12.5px;font-weight:600;color:var(--brand)}
+.picker{position:relative;background:rgba(20,22,26,.45);padding:34px;display:grid;place-items:center}
+.picker-modal{background:#fff;border-radius:14px;width:100%;max-width:820px;box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden}
+.picker-head{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px}
+.picker-head h3{font-size:15.5px;font-weight:700}
+.picker-head input{margin-left:auto;border:1px solid var(--line);border-radius:9px;padding:7px 12px;font-size:13px;width:220px}
+.picker-filters{display:flex;gap:8px;padding:12px 20px;border-bottom:1px solid var(--line)}
+.picker-filters button{font-size:12.5px;font-weight:600;border:1px solid var(--line);border-radius:99px;padding:6px 13px;color:var(--sub)}
+.picker-filters button.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.picker-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:18px 20px;max-height:340px;overflow:auto}
+.pk{border-radius:10px;overflow:hidden;position:relative;cursor:pointer;border:2px solid transparent}
+.pk .im{display:block;width:100%}
+.pk .tag{position:absolute;bottom:6px;left:6px;background:rgba(20,22,26,.75);color:#fff;font-size:10px;border-radius:6px;padding:2px 7px}
+.pk.sel{border-color:var(--brand)}
+.pk.sel:after{content:"✓";position:absolute;top:6px;right:6px;width:20px;height:20px;border-radius:99px;background:var(--brand);color:#fff;font-size:11px;display:grid;place-items:center}
+.picker-foot{display:flex;align-items:center;padding:14px 20px;border-top:1px solid var(--line)}
+.picker-foot .up{font-size:13px;font-weight:600;color:var(--sub)}
+.picker-foot .sel-btn{margin-left:auto}
+
+/* ============ check matches ============ */
+.cm-body{display:grid;grid-template-columns:55% 45%;min-height:640px}
+.cm-left{border-right:1px solid var(--line);overflow:hidden;display:flex;flex-direction:column}
+.cm-right{background:#fcfcfd;padding:18px;overflow:auto}
+.cm-right h3{font-size:14.5px;font-weight:700;margin-bottom:3px}
+.cm-right .sub{font-size:12.5px;color:var(--sub);margin-bottom:16px}
+.cm-path{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+.cm-path .chip{font-size:11.5px;background:#ecebff;color:var(--brand);font-weight:600;border-radius:99px;padding:4px 11px}
+.cm-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:13px;margin-bottom:11px}
+.cm-card .row{display:flex;gap:12px;align-items:center;margin-bottom:9px}
+.cm-card .th{width:46px;height:46px;border-radius:8px;background:linear-gradient(140deg,#b9ae95,#6a6555);flex:none}
+.cm-card h4{font-size:13.5px;font-weight:600}
+.cm-card .price{font-size:12px;color:var(--sub)}
+.cm-card .why{font-size:12px;color:#4a4f56;background:#f6f6f8;border-radius:8px;padding:7px 10px;margin-bottom:10px}
+.cm-card .why b{color:var(--brand);font-weight:600}
+.cm-acts{display:flex;gap:7px}
+.cm-acts button{flex:1;font-size:12px;font-weight:600;border:1px solid var(--line);border-radius:8px;padding:7px 0;color:#3c4045}
+.cm-acts button.on-pin{background:#e8f5ee;border-color:#bfe3d0;color:var(--ok)}
+.cm-adv{font-size:12.5px;color:var(--sub);padding:10px 2px;display:flex;gap:7px;align-items:center}
+.cm-drawer{margin-top:14px;border:1px dashed #d9b46a;background:#fdf8ee;border-radius:10px;padding:11px 13px;font-size:12.5px;color:#7a5a12;display:flex;align-items:center;gap:9px}
+.cm-drawer .att{margin-left:auto;font-weight:600;color:var(--brand)}
+.undo-toast{position:absolute;bottom:16px;left:16px;background:#141519;color:#fff;border-radius:10px;padding:10px 14px;font-size:12.5px;display:flex;gap:14px;box-shadow:var(--shadow)}
+.undo-toast b{color:#9aa4ff;font-weight:600}
+
+/* small helpers */
+.pill-note{display:inline-flex;align-items:center;gap:7px;background:#fff;border:1px solid var(--line);border-radius:99px;padding:5px 13px;font-size:12px;color:var(--sub);box-shadow:var(--shadow)}
+.section-title{max-width:1280px;margin:26px auto 8px;padding:0 20px;font-size:13px;font-weight:700;letter-spacing:.02em;color:var(--sub)}
+.results-flip{position:absolute;top:12px;right:14px;z-index:5}
+.results-flip button{background:#141519;color:#fff;border-radius:99px;padding:6px 14px;font-size:12px;font-weight:600;box-shadow:var(--shadow)}
+@media (max-width:1024px){
+ .studio-body{grid-template-columns:200px 1fr}
+ .editrail{display:none}
+ .tpl-grid{grid-template-columns:1fr}
+ .cm-body{grid-template-columns:1fr}
+ .t1{grid-template-columns:1fr}
+ .t1-hero{min-height:220px}
+ .t2-grid{grid-template-columns:repeat(2,1fr)}
+ .t3-grid,.t4-grid,.t5r-grid,.t2r-alt{grid-template-columns:1fr}
+ .t2r-hero,.t3r-hero{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<header class="shell-header">
+  <div class="logo">Gleame <span>v2 wireframes</span></div>
+  <nav class="shell-nav" id="nav">
+    <button data-s="s-reveal" class="on">1 · Studio Reveal</button>
+    <button data-s="s-overlay">2 · Template overlay</button>
+    <button data-s="s-images">3 · Images &amp; library</button>
+    <button data-s="s-matches">4 · Check matches</button>
+    <button data-s="s-t1">T1 Salon</button>
+    <button data-s="s-t2">T2 Studio</button>
+    <button data-s="s-t3">T3 Guide</button>
+    <button data-s="s-t4">T4 Pop</button>
+    <button data-s="s-t5">T5 Clean</button>
+  </nav>
+  <div class="shell-note">Reference of record — spec Part 0.1(3)</div>
+</header>
+
+<!-- ================= 1 · STUDIO REVEAL ================= -->
+<section class="screen on" id="s-reveal">
+<p class="spec-note"><b>Spec Part 2.</b> Arrival state of <code>/studio/:id/build</code>. The quiz is finished, on the themed canvas (demo store: Maison Véla, assigned T1 Salon). No white card, no fake browser chrome. Editing tools present but quiet.</p>
+<div class="studio">
+  <div class="topbar">
+    <div class="quiz-name">Find Your Fragrance <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M11 2l3 3-8 8H3v-3l8-8z" stroke="currentColor" stroke-width="1.4"/></svg></div>
+    <div class="tabs"><button class="on">Build</button><button>Check matches</button><button>Live</button></div>
+    <button class="btn secondary">View on my store ↗</button>
+    <button class="btn primary">Publish</button>
+  </div>
+  <div class="banner">
+    <span class="dot"></span>
+    <div><b>Built from your 17 products in your store's style.</b> <span class="chips">Cormorant serif · warm ivory palette · Salon template.</span> Nothing is live until you publish.</div>
+    <div class="actions"><button class="play">Play the quiz</button><button class="x">✕</button></div>
+  </div>
+  <div class="studio-body">
+    <aside class="rail">
+      <h4>Design</h4>
+      <div class="item"><span class="ic">S</span>Style</div>
+      <div class="item"><span class="ic">I</span>Images</div>
+      <div class="divider"></div>
+      <h4>Screens</h4>
+      <div class="item on"><span class="ic">→</span>Intro</div>
+      <div class="item"><span class="ic">1</span>Your vibe</div>
+      <div class="item"><span class="ic">2</span>Scent family</div>
+      <div class="item"><span class="ic">3</span>When you wear it</div>
+      <div class="item"><span class="ic">4</span>Intensity</div>
+      <div class="item"><span class="ic">@</span>Email capture</div>
+      <div class="item"><span class="ic">★</span>Results <span class="badge">3 matches</span></div>
+      <div class="item" style="color:#9a9eab"><span class="ic">+</span>Add question</div>
+    </aside>
+    <div class="canvas-wrap">
+      <div class="store-strip"><span class="slogo">MAISON&nbsp;VÉLA</span><span class="snav"><span>Shop</span><span>Journal</span><span>About</span></span></div>
+      <div class="canvas">
+        <div class="t1" style="min-height:100%">
+          <div class="t1-hero"><div class="bottle"></div><div class="cap">MAISON VÉLA · EAU DE PARFUM</div></div>
+          <div class="t1-right">
+            <div class="t1-prog"><i></i></div>
+            <div class="t1-kicker">Question two</div>
+            <div class="t1-q">Which world does your scent live in?</div>
+            <div class="t1-help">Choose the family you're drawn to — we'll refine from there.</div>
+            <div class="t1-answers">
+              <div class="t1-a">Warm amber &amp; woods <small>Vela Noir, Ombre</small></div>
+              <div class="t1-a sel">White florals <small>Jardin Blanc, Néroli</small></div>
+              <div class="t1-a">Citrus &amp; green <small>Riviera, Verte</small></div>
+              <div class="t1-a">Soft musk &amp; skin <small>Seconde Peau</small></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="device-toggle"><button class="on">Desktop</button><button>Mobile</button></div>
+    </div>
+    <aside class="editrail">
+      <div class="section">
+        <h4>Question 2 · Scent family</h4>
+        <div class="field"><label>Question</label><input value="Which world does your scent live in?"></div>
+        <div class="field"><label>Helper text</label><input value="Choose the family you're drawn to — we'll refine from there."></div>
+        <div class="field"><label>Answers</label><input value="Warm amber & woods  ·  White florals  ·  +2"></div>
+      </div>
+      <div class="chat">
+        <div class="bubble">I matched your theme's serif and ivory palette. Want a different angle — a gift-finder version, say?</div>
+        <div class="input"><input placeholder="Ask Gleame to change anything…"><button class="btn primary" style="padding:8px 12px">↑</button></div>
+      </div>
+    </aside>
+  </div>
+</div>
+</section>
+
+<!-- ================= 2 · TEMPLATE OVERLAY ================= -->
+<section class="screen" id="s-overlay">
+<p class="spec-note"><b>Spec Part 2.4.</b> Full-screen overlay inside Studio (Shopify theme-library pattern). Each card is a <b>live render of this merchant's own Q1</b> in that template — never stock screenshots. Ineligible templates dim with a reason and a fix link.</p>
+<div class="overlay">
+  <div class="overlay-head">
+    <div><h2>Choose a template</h2><p>Built for your kind of store · switching never loses your content</p></div>
+    <button class="x">✕</button>
+  </div>
+  <div class="tpl-grid">
+    <div class="tpl-card current">
+      <span class="curchip">Current</span>
+      <div class="render"><div class="scaled">
+        <div class="t1" style="min-height:520px">
+          <div class="t1-hero"><div class="bottle"></div></div>
+          <div class="t1-right"><div class="t1-prog"><i></i></div><div class="t1-kicker">Question two</div><div class="t1-q">Which world does your scent live in?</div>
+          <div class="t1-answers" style="margin-top:24px"><div class="t1-a">Warm amber &amp; woods</div><div class="t1-a">White florals</div><div class="t1-a">Citrus &amp; green</div></div></div>
+        </div>
+      </div></div>
+      <div class="meta"><div><h3>Salon</h3><p>For elegant, editorial brands · 4–5 questions · consultation results</p></div><button class="btn secondary use">Keep</button></div>
+    </div>
+    <div class="tpl-card">
+      <div class="render"><div class="scaled">
+        <div class="t2" style="min-height:520px"><div class="t2-prog"><i></i></div><div class="t2-wrap">
+          <div class="t2-q">Which world does your scent live in?</div>
+          <div class="t2-grid" style="margin-top:26px">
+            <figure class="t2-tile"><span class="sw" style="background:linear-gradient(140deg,#8d6b4f,#4c3524)"></span><figcaption>Amber &amp; woods</figcaption></figure>
+            <figure class="t2-tile sel"><span class="sw" style="background:linear-gradient(140deg,#f2ead9,#d9cbb0)"></span><figcaption>White florals</figcaption></figure>
+            <figure class="t2-tile"><span class="sw" style="background:linear-gradient(140deg,#cfe0c2,#8fae7e)"></span><figcaption>Citrus &amp; green</figcaption></figure>
+            <figure class="t2-tile"><span class="sw" style="background:linear-gradient(140deg,#e8d7cd,#c8ada0)"></span><figcaption>Soft musk</figcaption></figure>
+          </div>
+        </div></div>
+      </div></div>
+      <div class="meta"><div><h3>Studio</h3><p>Shade &amp; visual-attribute finders · answers are the visuals</p></div><button class="btn primary use">Use this template</button></div>
+    </div>
+    <div class="tpl-card dim">
+      <span class="reason">Needs lifestyle photos</span>
+      <div class="render"><div class="scaled">
+        <div class="t3" style="min-height:520px"><div class="t3-wrap"><div class="t3-meta">Question 2 of 7</div>
+          <div class="t3-q">Which world does your scent live in?</div>
+          <div class="t3-grid" style="margin-top:22px">
+            <div class="t3-card"><span class="ph" style="background:linear-gradient(150deg,#b8a98c,#6f6650)"></span><div class="tx"><h4>Amber &amp; woods</h4><p>Warm, enveloping, evening-first.</p></div></div>
+            <div class="t3-card"><span class="ph" style="background:linear-gradient(150deg,#e9e3d3,#c3bba4)"></span><div class="tx"><h4>White florals</h4><p>Luminous and classic.</p></div></div>
+          </div>
+        </div></div>
+      </div></div>
+      <div class="meta"><div><h3>Guide</h3><p>Considered purchases · 6–8 questions · comparison results</p></div><button class="btn ghost fix use">Fix images →</button></div>
+    </div>
+    <div class="tpl-card">
+      <div class="render"><div class="scaled">
+        <div class="t4" style="min-height:520px"><div class="t4-wrap"><div class="t4-prog"><i class="f"></i><i class="f"></i><i></i><i></i></div>
+          <div class="t4-q">Which world does your scent live in? ✨</div>
+          <div class="t4-grid" style="margin-top:24px">
+            <div class="t4-a"><span class="e">🔥</span>Amber &amp; woods</div>
+            <div class="t4-a sel"><span class="e">🌸</span>White florals</div>
+            <div class="t4-a"><span class="e">🍋</span>Citrus &amp; green</div>
+            <div class="t4-a"><span class="e">🫧</span>Soft musk</div>
+          </div>
+        </div></div>
+      </div></div>
+      <div class="meta"><div><h3>Pop</h3><p>Playful brands · personality reveal + bundle results</p></div><button class="btn primary use">Use this template</button></div>
+    </div>
+    <div class="tpl-card" style="grid-column:1/-1;max-width:610px">
+      <div class="render"><div class="scaled">
+        <div class="t5" style="min-height:520px"><div class="t5-wrap"><div class="t5-meta"><div class="t5-prog"><i></i></div><span>2/4</span></div>
+          <div class="t5-q">Which world does your scent live in?</div>
+          <div style="margin-top:22px">
+            <div class="t5-a">Warm amber &amp; woods</div>
+            <div class="t5-a sel">White florals</div>
+            <div class="t5-a">Citrus &amp; green</div>
+          </div>
+        </div></div>
+      </div></div>
+      <div class="meta"><div><h3>Clean</h3><p>Universal default · works with zero imagery</p></div><button class="btn primary use">Use this template</button></div>
+    </div>
+  </div>
+</div>
+</section>
+<!-- ================= 3 · IMAGES & LIBRARY ================= -->
+<section class="screen" id="s-images">
+<p class="spec-note"><b>Spec Part 4.4–4.5.</b> Images rail lists every slot the current template uses, each with its auto-resolved source. <code>Change</code> opens the brand-library picker — the Shopify theme-editor pattern: the merchant's own indexed images, filterable, with upload allowed here (post-Reveal only).</p>
+<div class="studio">
+  <div class="topbar">
+    <div class="quiz-name">Find Your Fragrance</div>
+    <div class="tabs"><button class="on">Build</button><button>Check matches</button><button>Live</button></div>
+    <button class="btn secondary">View on my store ↗</button>
+    <button class="btn primary">Publish</button>
+  </div>
+  <div class="studio-body" style="grid-template-columns:270px 1fr">
+    <aside class="img-rail-panel">
+      <h4>Images</h4>
+      <div class="sub">Auto-picked from your store. Change any of them.</div>
+      <div class="slot"><span class="th" style="background:linear-gradient(160deg,#8d8672,#33322b)"></span><div><h5>Quiz hero</h5><div class="src">From your homepage</div></div><button class="chg">Change</button></div>
+      <div class="slot"><span class="th" style="background:linear-gradient(140deg,#f2ead9,#d9cbb0)"></span><div><h5>Answer · White florals</h5><div class="src">Product image · Jardin Blanc</div></div><button class="chg">Change</button></div>
+      <div class="slot"><span class="th" style="background:linear-gradient(140deg,#8d6b4f,#4c3524)"></span><div><h5>Answer · Amber &amp; woods</h5><div class="src">Product image · Vela Noir</div></div><button class="chg">Change</button></div>
+      <div class="slot"><span class="th" style="background:linear-gradient(150deg,#b9ae95,#6a6555)"></span><div><h5>Results · match cards</h5><div class="src">Product images (auto)</div></div><button class="chg">Change</button></div>
+    </aside>
+    <div class="picker">
+      <div class="picker-modal">
+        <div class="picker-head"><h3>Your brand library</h3><input placeholder="Search 63 images…"></div>
+        <div class="picker-filters">
+          <button class="on">All</button><button>Products</button><button>Lifestyle</button><button>Banners</button><button>Logos</button>
+        </div>
+        <div class="picker-grid">
+          <figure class="pk sel"><span class="im" style="aspect-ratio:1;background:linear-gradient(160deg,#8d8672,#33322b);display:block"></span><span class="tag">Homepage</span></figure>
+          <figure class="pk"><span class="im" style="aspect-ratio:1;background:linear-gradient(140deg,#f2ead9,#d9cbb0);display:block"></span><span class="tag">Product</span></figure>
+          <figure class="pk"><span class="im" style="aspect-ratio:1;background:linear-gradient(140deg,#8d6b4f,#4c3524);display:block"></span><span class="tag">Product</span></figure>
+          <figure class="pk"><span class="im" style="aspect-ratio:1;background:linear-gradient(150deg,#cfe0c2,#8fae7e);display:block"></span><span class="tag">Product</span></figure>
+          <figure class="pk"><span class="im" style="aspect-ratio:1;background:linear-gradient(120deg,#d8cbb8,#a3947c);display:block"></span><span class="tag">Lifestyle</span></figure>
+          <figure class="pk"><span class="im" style="aspect-ratio:1;background:linear-gradient(160deg,#efe9dc,#cdbfa5);display:block"></span><span class="tag">Banner</span></figure>
+          <figure class="pk"><span class="im" style="aspect-ratio:1;background:linear-gradient(140deg,#e8d7cd,#c8ada0);display:block"></span><span class="tag">Product</span></figure>
+          <figure class="pk"><span class="im" style="aspect-ratio:1;background:linear-gradient(150deg,#b9ae95,#6a6555);display:block"></span><span class="tag">Lifestyle</span></figure>
+        </div>
+        <div class="picker-foot"><button class="up">⬆ Upload image</button><button class="btn primary sel-btn">Select</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ================= 4 · CHECK MATCHES ================= -->
+<section class="screen" id="s-matches">
+<p class="spec-note"><b>Spec Part 6.</b> Route <code>/studio/:id/matches</code>. Left: the real quiz, playable, on the themed canvas. Right: live results for the current answer path with Pin / Exclude / Boost. No dropdowns, no "Not filled in" — answers are chosen by playing.</p>
+<div class="studio" style="position:relative">
+  <div class="topbar">
+    <div class="quiz-name">Find Your Fragrance</div>
+    <div class="tabs"><button>Build</button><button class="on">Check matches</button><button>Live</button></div>
+    <button class="btn secondary">View on my store ↗</button>
+    <button class="btn primary">Publish</button>
+  </div>
+  <div class="cm-body">
+    <div class="cm-left">
+      <div class="store-strip"><span class="slogo">MAISON&nbsp;VÉLA</span></div>
+      <div class="canvas" style="flex:1">
+        <div class="t1" style="grid-template-columns:38% 62%;min-height:100%">
+          <div class="t1-hero"><div class="bottle" style="width:70px;height:120px"></div></div>
+          <div class="t1-right" style="padding:52px 7% 44px">
+            <div class="t1-prog"><i style="width:80%"></i></div>
+            <div class="t1-kicker">Question four</div>
+            <div class="t1-q" style="font-size:30px">How bold should it be?</div>
+            <div class="t1-answers" style="margin-top:22px">
+              <div class="t1-a" style="font-size:19px;padding:15px 2px">A whisper — skin scent</div>
+              <div class="t1-a sel" style="font-size:19px;padding:15px 2px">Present, but polished</div>
+              <div class="t1-a" style="font-size:19px;padding:15px 2px">Enters the room first</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="cm-right">
+      <h3>Play through — do the matches look right?</h3>
+      <div class="sub">Results update as you answer.</div>
+      <div class="cm-path">
+        <span class="chip">Evening out</span><span class="chip">White florals</span><span class="chip">Date night</span><span class="chip">Present, but polished</span>
+      </div>
+      <div class="cm-card">
+        <div class="row"><span class="th" style="background:linear-gradient(140deg,#f2ead9,#d9cbb0)"></span><div><h4>Jardin Blanc EDP 50ml</h4><div class="price">$128</div></div></div>
+        <div class="why">Why: matched <b>White florals</b>, <b>Present, but polished</b></div>
+        <div class="cm-acts"><button class="on-pin">✓ Pinned</button><button>Exclude</button><button>Boost</button></div>
+      </div>
+      <div class="cm-card">
+        <div class="row"><span class="th" style="background:linear-gradient(140deg,#e8d7cd,#c8ada0)"></span><div><h4>Néroli Intense 50ml</h4><div class="price">$118</div></div></div>
+        <div class="why">Why: matched <b>White florals</b>, <b>Date night</b></div>
+        <div class="cm-acts"><button>Pin</button><button>Exclude</button><button>Boost</button></div>
+      </div>
+      <div class="cm-card">
+        <div class="row"><span class="th" style="background:linear-gradient(140deg,#d8cbb8,#a3947c)"></span><div><h4>Seconde Peau 30ml</h4><div class="price">$96</div></div></div>
+        <div class="why">Why: matched <b>Present, but polished</b></div>
+        <div class="cm-acts"><button>Pin</button><button>Exclude</button><button>Boost</button></div>
+      </div>
+      <div class="cm-adv">▸ Advanced: edit matching notes</div>
+      <div class="cm-drawer">2 products unreached after your edits <button class="att">Attach to answer…</button></div>
+    </div>
+  </div>
+  <div class="undo-toast">Pinned Jardin Blanc for this path <b>Undo</b></div>
+</div>
+</section>
+<!-- ================= T1 SALON ================= -->
+<section class="screen" id="s-t1">
+<p class="spec-note"><b>Spec Part 3 · T1 Salon.</b> Demo brand: Maison Véla (fragrance). Fixed 44/56 split, sticky hero, serif question at clamp(30px,3.2vw,44px), hairline text-row answers, 2px unlabeled progress. Results = consultation prose, stacked cards, no grid.</p>
+<div class="section-title">QUESTION SCREEN</div>
+<div class="studio" style="border-radius:12px"><div class="t1">
+  <div class="t1-hero"><div class="bottle"></div><div class="cap">MAISON VÉLA · EAU DE PARFUM</div></div>
+  <div class="t1-right">
+    <div class="t1-prog"><i></i></div>
+    <div class="t1-kicker">Question two</div>
+    <div class="t1-q">Which world does your scent live in?</div>
+    <div class="t1-help">Choose the family you're drawn to — we'll refine from there.</div>
+    <div class="t1-answers">
+      <div class="t1-a">Warm amber &amp; woods <small>Vela Noir, Ombre</small></div>
+      <div class="t1-a sel">White florals <small>Jardin Blanc, Néroli</small></div>
+      <div class="t1-a">Citrus &amp; green <small>Riviera, Verte</small></div>
+      <div class="t1-a">Soft musk &amp; skin <small>Seconde Peau</small></div>
+    </div>
+  </div>
+</div></div>
+<div class="section-title">RESULTS — CONSULTATION PROSE</div>
+<div class="studio" style="border-radius:12px"><div class="t1r">
+  <div class="t1-kicker">Your consultation</div>
+  <h2>Your ritual, composed.</h2>
+  <p class="prose">You chose white florals with a polished presence, worn for evenings out. We'd start you with Jardin Blanc — luminous but never loud — and keep Néroli Intense for the nights that ask for more.</p>
+  <div class="t1r-card"><span class="t1r-img" style="background:linear-gradient(140deg,#f2ead9,#d9cbb0)"></span><div><h3>Jardin Blanc EDP</h3><div class="price">50ml · $128</div><div class="why">The white-floral heart of the house; petals over warm skin, made for candlelight.</div></div><button class="add">ADD TO BAG</button></div>
+  <div class="t1r-card"><span class="t1r-img" style="background:linear-gradient(140deg,#e8d7cd,#c8ada0)"></span><div><h3>Néroli Intense</h3><div class="price">50ml · $118</div><div class="why">Orange blossom, deepened — the bolder sister for date nights.</div></div><button class="add">ADD TO BAG</button></div>
+  <div class="t1r-card"><span class="t1r-img" style="background:linear-gradient(140deg,#d8cbb8,#a3947c)"></span><div><h3>Seconde Peau</h3><div class="price">30ml · $96</div><div class="why">A skin-close musk to layer beneath either.</div></div><button class="add">ADD TO BAG</button></div>
+</div></div>
+</section>
+
+<!-- ================= T2 STUDIO ================= -->
+<section class="screen" id="s-t2">
+<p class="spec-note"><b>Spec Part 3 · T2 Studio.</b> Demo brand: Tint Beauty (lip shades). Answers ARE the visuals — image tiles from variant imagery, by construction. Includes the required 2.5–4s results-computation screen with verbatim-sourced trust lines, and the "About your match" answer echo + VTO module on results.</p>
+<div class="section-title">QUESTION SCREEN — SWATCH GRID</div>
+<div class="studio" style="border-radius:12px"><div class="t2">
+  <div class="t2-prog"><i></i></div>
+  <div class="t2-wrap">
+    <div class="t2-q">Pick the shades you reach for</div>
+    <div class="t2-help">Choose as many as you like</div>
+    <div class="t2-grid">
+      <figure class="t2-tile"><span class="sw" style="background:linear-gradient(140deg,#d98a8f,#b25a63)"></span><figcaption>Rosewood<small>warm rose</small></figcaption></figure>
+      <figure class="t2-tile sel"><span class="sw" style="background:linear-gradient(140deg,#c96a72,#8e3742)"></span><figcaption>First Date<small>berry crush</small></figcaption></figure>
+      <figure class="t2-tile"><span class="sw" style="background:linear-gradient(140deg,#e0a58e,#c07a5e)"></span><figcaption>Terracotta<small>burnt peach</small></figcaption></figure>
+      <figure class="t2-tile"><span class="sw" style="background:linear-gradient(140deg,#a34e52,#6e2e34)"></span><figcaption>After Hours<small>deep wine</small></figcaption></figure>
+      <figure class="t2-tile"><span class="sw" style="background:linear-gradient(140deg,#e8b7ad,#d1938a)"></span><figcaption>Barely<small>your-lips nude</small></figcaption></figure>
+      <figure class="t2-tile sel"><span class="sw" style="background:linear-gradient(140deg,#d1626b,#a53a48)"></span><figcaption>Main Character<small>true red</small></figcaption></figure>
+      <figure class="t2-tile"><span class="sw" style="background:linear-gradient(140deg,#c78d95,#a06670)"></span><figcaption>Mauve Over<small>dusty mauve</small></figcaption></figure>
+      <figure class="t2-tile"><span class="sw" style="background:linear-gradient(140deg,#e6c2b2,#cf9f88)"></span><figcaption>Sunday<small>soft caramel</small></figcaption></figure>
+    </div>
+  </div>
+</div></div>
+<div class="section-title">RESULTS-COMPUTATION SCREEN (REQUIRED, 2.5–4s)</div>
+<div class="studio" style="border-radius:12px"><div class="t2l">
+  <div>
+    <div class="ring"></div>
+    <h3>Finding your shade…</h3>
+    <p>Matching your undertone across 24 shades.</p>
+    <div class="rot">"Made for every skin tone, tested on none of our friends' patience." — Tint Beauty</div>
+  </div>
+</div></div>
+<div class="section-title">RESULTS — SHADE REVEAL WITH ANSWER ECHO + VTO</div>
+<div class="studio" style="border-radius:12px"><div class="t2r"><div class="t2r-wrap">
+  <div class="echo"><h4>About your match</h4><div class="chips">
+    <span class="chip">Undertone: <b>warm</b></span><span class="chip">Finish: <b>satin</b></span><span class="chip">Reaches for: <b>berry, red</b></span><span class="chip">Coverage: <b>buildable</b></span>
+  </div></div>
+  <div class="t2r-hero">
+    <span class="sw"></span>
+    <div>
+      <div class="lbl">YOUR SHADE</div>
+      <h2>First Date</h2>
+      <div class="price">Satin lipstick · $24</div>
+      <div class="why">A warm berry that leans red the way you do — satin finish, buildable from a stain to full colour.</div>
+      <button class="cta">Add to cart — $24</button>
+    </div>
+  </div>
+  <div class="t2r-alt">
+    <div class="a"><span class="sw" style="background:linear-gradient(140deg,#d1626b,#a53a48)"></span><div><h4>Main Character</h4><small>when you want the red-red · $24</small></div></div>
+    <div class="a"><span class="sw" style="background:linear-gradient(140deg,#d98a8f,#b25a63)"></span><div><h4>Rosewood</h4><small>the everyday version · $24</small></div></div>
+  </div>
+  <div class="t2r-vto">
+    <div class="ba"><span class="face"></span><span class="face after"></span></div>
+    <div><h4>See First Date on you</h4><p>Try it on with a selfie before you buy.</p></div>
+    <button class="cta2">Try it on</button>
+  </div>
+</div></div></div>
+</section>
+
+<!-- ================= T3 GUIDE ================= -->
+<section class="screen" id="s-t3">
+<p class="spec-note"><b>Spec Part 3 · T3 Guide.</b> Demo brand: Fernwood Sleep (mattresses). Lifestyle 2×2 cards, honest labeled progress, 6–8 questions. Results = answer recap + why-bullets + comparison table from real catalog facets. Countdown/urgency strings are banned in this template.</p>
+<div class="section-title">QUESTION SCREEN — LIFESTYLE CARDS</div>
+<div class="studio" style="border-radius:12px"><div class="t3"><div class="t3-wrap">
+  <div class="t3-meta">Question 3 of 7</div>
+  <div class="t3-q">How do you sleep most nights?</div>
+  <div class="t3-help">Your position decides how much give the mattress should have.</div>
+  <div class="t3-grid">
+    <div class="t3-card"><span class="ph" style="background:linear-gradient(150deg,#cdd8ce,#8ba18e)"></span><div class="tx"><h4>On my side</h4><p>Needs pressure relief at shoulders and hips.</p></div></div>
+    <div class="t3-card sel"><span class="ph" style="background:linear-gradient(150deg,#dfe3da,#a9b3a0)"></span><div class="tx"><h4>On my back</h4><p>Needs even support along the spine.</p></div></div>
+    <div class="t3-card"><span class="ph" style="background:linear-gradient(150deg,#e7e2d4,#bdb298)"></span><div class="tx"><h4>On my stomach</h4><p>Needs a firmer surface to keep hips level.</p></div></div>
+    <div class="t3-card"><span class="ph" style="background:linear-gradient(150deg,#d5d0c6,#9d968a)"></span><div class="tx"><h4>It changes</h4><p>Combination sleepers do best in the middle of the range.</p></div></div>
+  </div>
+</div></div></div>
+<div class="section-title">RESULTS — RATIONALE + COMPARISON TABLE</div>
+<div class="studio" style="border-radius:12px"><div class="t3r"><div class="t3r-wrap">
+  <h2>Your match: the Fernwood Hybrid</h2>
+  <div class="recap"><span class="chip">Back sleeper</span><span class="chip">Sleeps warm</span><span class="chip">Partner shares the bed</span><span class="chip">Queen</span><span class="chip">Medium-firm</span></div>
+  <div class="t3r-hero">
+    <span class="ph" style="background:linear-gradient(150deg,#dfe3da,#a9b3a0)"></span>
+    <div>
+      <div class="lbl">BEST FOR YOU</div>
+      <h3>Fernwood Hybrid · Queen</h3>
+      <div class="price">$1,290 · 100-night trial</div>
+      <ul>
+        <li>Zoned coils give the even spine support back sleepers need</li>
+        <li>Breathable latex layer for sleeping warm — no memory-foam heat</li>
+        <li>Edge-to-edge coil frame limits motion transfer for two</li>
+      </ul>
+    </div>
+  </div>
+  <table>
+    <tr><th></th><th class="pick">Hybrid — your match</th><th>Original Foam</th><th>Firm+</th></tr>
+    <tr><td>Feel</td><td class="pick">Medium-firm</td><td>Medium-soft</td><td>Firm</td></tr>
+    <tr><td>Cooling</td><td class="pick">Latex + coils</td><td>Gel foam</td><td>Latex + coils</td></tr>
+    <tr><td>Motion transfer</td><td class="pick">Low</td><td>Lowest</td><td>Low</td></tr>
+    <tr><td>Queen price</td><td class="pick">$1,290</td><td>$990</td><td>$1,340</td></tr>
+  </table>
+</div></div></div>
+</section>
+
+<!-- ================= T4 POP ================= -->
+<section class="screen" id="s-t4">
+<p class="spec-note"><b>Spec Part 3 · T4 Pop.</b> Demo brand: GlowPop. Today's Gleame look, earned — assigned only on playful signals, never as a fallback. Chunky ≥16px-radius cards, emoji, bounce select. Results = "You're a ___" archetype + bundle row with Add all.</p>
+<div class="section-title">QUESTION SCREEN</div>
+<div class="studio" style="border-radius:12px"><div class="t4"><div class="t4-wrap">
+  <div class="t4-prog"><i class="f"></i><i class="f"></i><i></i><i></i></div>
+  <div class="t4-q">What's your skin dealing with rn? ✨</div>
+  <div class="t4-help">Pick all that apply — no judgement</div>
+  <div class="t4-grid">
+    <div class="t4-a"><span class="e">🫠</span>Oily by noon</div>
+    <div class="t4-a sel"><span class="e">🌵</span>Desert-level dry</div>
+    <div class="t4-a"><span class="e">🌋</span>Breakout season</div>
+    <div class="t4-a sel"><span class="e">😴</span>Dull &amp; tired</div>
+  </div>
+</div></div></div>
+<div class="section-title">RESULTS — ARCHETYPE + BUNDLE</div>
+<div class="studio" style="border-radius:12px"><div class="t4r">
+  <div class="arch">YOUR GLOW TYPE</div>
+  <h2>You're a Dewy Dreamer 💧</h2>
+  <div class="line">Dry, tired skin that just wants a nap and a glass of water. We got you.</div>
+  <div class="t4r-hero">
+    <span class="ph"></span>
+    <h3>Cloud Cream</h3>
+    <div class="price">$29 · the moisture main character</div>
+    <button class="cta">Add to cart</button>
+  </div>
+  <div class="t4r-kit">
+    <h4>Your Dewy Dreamer kit</h4>
+    <div class="row">
+      <div class="m"><span class="ph" style="background:linear-gradient(135deg,#ffe3c9,#ffb98a)"></span><h5>Glow Drops</h5><small>$24</small></div>
+      <div class="m"><span class="ph" style="background:linear-gradient(135deg,#d9ecff,#9cc6f5)"></span><h5>Hydra Mist</h5><small>$18</small></div>
+      <div class="m"><span class="ph" style="background:linear-gradient(135deg,#ffd3e0,#ff8fb0)"></span><h5>Cloud Cream</h5><small>$29</small></div>
+    </div>
+    <button class="addall">Add all 3 — $64 ✨</button>
+  </div>
+</div></div>
+</section>
+
+<!-- ================= T5 CLEAN ================= -->
+<section class="screen" id="s-t5">
+<p class="spec-note"><b>Spec Part 3 · T5 Clean.</b> Demo brand: Aria Skincare. The universal default and every degradation's destination. Works with zero imagery — results cards fall back to initial blocks, never broken images. Restraint is the design.</p>
+<div class="section-title">QUESTION SCREEN</div>
+<div class="studio" style="border-radius:12px"><div class="t5"><div class="t5-wrap">
+  <div class="t5-meta"><div class="t5-prog"><i></i></div><span>3/5</span></div>
+  <div class="t5-q">What's your main skin goal right now?</div>
+  <div class="t5-help">We'll build your routine around it.</div>
+  <div class="t5-a">Even out tone and dark spots</div>
+  <div class="t5-a sel">More hydration, less tightness</div>
+  <div class="t5-a">Calm redness and sensitivity</div>
+  <div class="t5-a">Smooth fine lines</div>
+</div></div></div>
+<div class="section-title">RESULTS — 2-COL GRID, IMAGE-OPTIONAL</div>
+<div class="studio" style="border-radius:12px"><div class="t5r"><div class="t5r-wrap">
+  <h2>Your routine, in order</h2>
+  <p>Built from your answers · hydration first, barrier always</p>
+  <div class="t5r-grid">
+    <div class="t5r-card"><span class="ph" style="background:linear-gradient(150deg,#dfe8f4,#b7c9e2);color:transparent">A</span><h4>Gentle Gel Cleanser</h4><div class="price">$18</div><div class="why">Cleans without stripping — the base of a hydration-first routine.</div><button class="cta">Add to cart</button></div>
+    <div class="t5r-card"><span class="ph">H</span><h4>Hyaluronic Serum</h4><div class="price">$32</div><div class="why">Your "less tightness" answer, in a bottle. Apply to damp skin.</div><button class="cta">Add to cart</button></div>
+    <div class="t5r-card"><span class="ph" style="background:linear-gradient(150deg,#e9eef3,#c6d2de);color:transparent">B</span><h4>Barrier Cream</h4><div class="price">$28</div><div class="why">Seals the serum in overnight.</div><button class="cta">Add to cart</button></div>
+    <div class="t5r-card"><span class="ph">S</span><h4>Daily SPF 40</h4><div class="price">$22</div><div class="why">Non-negotiable over any routine.</div><button class="cta">Add to cart</button></div>
+  </div>
+</div></div></div>
+</section>
+
+<script>
+const nav=document.getElementById('nav');
+nav.addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  nav.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
+  document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('on',s.id===b.dataset.s));
+  window.scrollTo({top:0});
+});
+</script>
+</body>
+</html>
