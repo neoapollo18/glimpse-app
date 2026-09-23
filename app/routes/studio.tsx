@@ -44,10 +44,8 @@ import { SlideTree, slideIdForQuestion, buildScreens } from "../components/studi
 import { PreviewCanvas } from "../components/studio/PreviewCanvas";
 import { EditPanel } from "../components/studio/EditPanel";
 import { ChatPanel } from "../components/studio/ChatPanel";
-import { LogicStep } from "../components/studio/LogicStep";
 import { CheckMatches } from "../components/studio/CheckMatches";
 import { PublishStep } from "../components/studio/PublishStep";
-import { OnboardingWizard } from "../components/studio/OnboardingWizard";
 import { FlowMap } from "../components/studio/FlowMap";
 import { draftProblems } from "../components/studio/draft-problems";
 import { navigateParent } from "../components/studio/navigate-parent";
@@ -94,7 +92,7 @@ export function ErrorBoundary() {
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session, admin } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const shopDomain = session.shop;
   // Standalone route = not under app.tsx's billing gate; enforce it here.
   // NOT a redirect: the studio loads inside an App Bridge max-modal iframe,
@@ -153,61 +151,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const quizSurfaceEnabled =
     surfaceEnabled && (surfaceMode == null || surfaceMode === "quiz" || surfaceMode === "both");
 
-  // "Fit your store": prefill the onboarding wizard from what the store
-  // already tells us — Shopify brand settings (accent color, slogan) and
-  // the dominant product type in the synced catalog. Best-effort; the
-  // wizard works fine with nulls. ONLY fetched while the wizard can show:
-  // these ran on every autosave revalidation and made editing feel slow.
-  const wizardRelevant = draft === null || draft.flow.questions.length === 0;
-  // Independent fetches — run in parallel (they were serial, and this is
-  // exactly the first-open path where load time is most visible).
-  const [storeBrand, topProductType] = await Promise.all([
-    (async (): Promise<{ accentColor: string | null; slogan: string | null } | null> => {
-      if (!wizardRelevant) return null;
-      try {
-        const res = await admin.graphql(
-          `#graphql
-          query StudioBrand {
-            shop {
-              brandSettings: brand {
-                slogan
-                colors { primary { background } }
-              }
-            }
-          }`,
-        );
-        const body = await res.json();
-        const brand = body?.data?.shop?.brandSettings;
-        const bg = brand?.colors?.primary?.[0]?.background ?? brand?.colors?.primary?.background ?? null;
-        return {
-          accentColor: typeof bg === "string" && /^#[0-9a-fA-F]{6}$/.test(bg) ? bg : null,
-          slogan: brand?.slogan ?? null,
-        };
-      } catch {
-        return null;
-      }
-    })(),
-    (async (): Promise<string | null> => {
-      if (!wizardRelevant) return null;
-      try {
-        const { data: typeRows } = await supabase
-          .from("products")
-          .select("product_type")
-          .eq("shop_id", shop.id)
-          .not("product_type", "is", null)
-          .limit(200);
-        const tally = new Map<string, number>();
-        for (const r of typeRows ?? []) {
-          const t = String((r as any).product_type ?? "").trim();
-          if (t) tally.set(t, (tally.get(t) ?? 0) + 1);
-        }
-        return [...tally.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
-      } catch {
-        return null;
-      }
-    })(),
-  ]);
-
   // 2h: re-minted on every studio load, so only a tab left open past 2h
   // needs a reload for the preview iframe. Keeping it short limits how long
   // a leaked preview URL can read the shop's draft.
@@ -240,8 +183,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     copilotSessionId,
     liveQuestionCount,
     quizSurfaceEnabled,
-    storeBrand,
-    topProductType,
     genStatus: getGenStatus(shop.id),
     catalog: {
       syncEnabled: (shopRow as any)?.catalog_sync_enabled === true,
@@ -650,6 +591,50 @@ function BillingRequired({ apiKey }: { apiKey: string }) {
   );
 }
 
+// Z0 (V2-SPEC Part 1.2): the free-text "tell us more" wizard is deleted.
+// A shop with no quiz gets this minimal blank state; generated quizzes come
+// from the /app/onboard flow, which consumes machine-derived inputs only.
+function BlankState() {
+  const fetcher = useFetcher<StudioActionData>();
+  return (
+    <div
+      style={{
+        maxWidth: 480,
+        margin: "0 auto",
+        padding: "96px 24px",
+        textAlign: "center",
+        display: "flex",
+        flexDirection: "column",
+        gap: 16,
+      }}
+    >
+      <Text as="h2" variant="headingLg">
+        No quiz here yet
+      </Text>
+      <Text as="p" tone="subdued">
+        Start with a blank question and build by hand. Once a question exists,
+        the Chat tab can rewrite, restyle, and extend the quiz for you.
+      </Text>
+      <div>
+        <Button
+          variant="primary"
+          loading={fetcher.state !== "idle"}
+          onClick={() => {
+            const fd = new FormData();
+            fd.append("intent", "start-blank-draft");
+            fetcher.submit(fd, { method: "POST", action: "/studio" });
+          }}
+        >
+          Start with a blank question
+        </Button>
+      </div>
+      {fetcher.data && !fetcher.data.ok && fetcher.data.error && (
+        <Banner tone="critical">{fetcher.data.error}</Banner>
+      )}
+    </div>
+  );
+}
+
 function StudioEditor({ data }: { data: StudioLoaderData }) {
   const [params, setParams] = useSearchParams();
 
@@ -1016,9 +1001,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
           />
         }
         rail={
-          step === "logic" ? (
-            <LogicStep.Rail data={data} />
-          ) : (
+          (
             <SlideTree
               error={treeError}
               onDismissError={() => setTreeError(null)}
@@ -1057,11 +1040,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
             </div>
           )}
           {step === "logic" ? (
-            <CheckMatches
-              data={data}
-              chatBusy={chatBusy}
-              advanced={<LogicStep data={data} chatBusy={chatBusy} />}
-            />
+            <CheckMatches data={data} chatBusy={chatBusy} />
           ) : step === "publish" ? (
             <PublishStep
               data={data}
@@ -1156,21 +1135,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
             }
           />
         }
-        overlay={
-          needsOnboarding ? (
-            <OnboardingWizard
-              data={data}
-              onDone={(firstSlide, notice) => {
-                selectSlide(firstSlide);
-                if (notice) setGenNotice(notice);
-                // The iframe booted against the EMPTY pre-generation config
-                // and is showing "Nothing to preview yet" — without a
-                // reload, a successful generation looks like a failure.
-                reloadPreview();
-              }}
-            />
-          ) : null
-        }
+        overlay={needsOnboarding ? <BlankState /> : null}
       />
       <Modal
         open={pendingDelete !== null}

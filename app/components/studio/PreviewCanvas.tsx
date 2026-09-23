@@ -124,42 +124,21 @@ export function PreviewCanvas({
           overflow: "hidden",
         }}
       >
+        {/* Z0 (V2-SPEC 1.2): no white card, no fake browser chrome, no drop
+            shadow. The quiz renders directly on the canvas; S1 themes it. */}
         <div
           style={{
             width: isMobile ? frame.width : "100%",
-            // Desktop: a hair shorter than the stage so the frame floats
-            // clear of the edges — a big drop shadow clipped by the stage's
-            // overflow rendered as dark bands above and below the frame.
-            height: isMobile ? undefined : "min(660px, calc(100% - 16px))",
+            height: isMobile ? undefined : "100%",
             boxSizing: "border-box",
             display: isMobile ? undefined : "flex",
             flexDirection: isMobile ? undefined : "column",
-            border: isMobile ? "10px solid #1a1a1a" : "1px solid #D6D9DC",
-            borderRadius: isMobile ? 36 : 12,
             overflow: "hidden",
-            background: "#fff",
-            boxShadow: isMobile ? "0 8px 32px rgba(0,0,0,0.18)" : "0 2px 10px rgba(0,0,0,0.08)",
             transform: `scale(${scale})`,
             transformOrigin: "center",
             flexShrink: 0,
           }}
         >
-          {!isMobile && (
-            <div
-              style={{
-                display: "flex",
-                gap: 6,
-                alignItems: "center",
-                padding: "10px 14px",
-                borderBottom: "1px solid #EBEBEB",
-                background: "#F6F6F7",
-              }}
-            >
-              {["#FF5F57", "#FEBC2E", "#28C840"].map((c) => (
-                <span key={c} style={{ width: 10, height: 10, borderRadius: "50%", background: c }} />
-              ))}
-            </div>
-          )}
           <iframe
             key={nonce}
             ref={iframeRef}

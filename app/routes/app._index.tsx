@@ -257,73 +257,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 // Constants
 // ============================================================
 
+// Z0 (V2-SPEC Part 1.2): the goals and attribution survey steps and the
+// book-a-call escape hatch are deleted. DB step numbers 1-7 are kept so
+// merchants mid-wizard resume sanely; steps 2-3 now alias to the welcome
+// screen and welcome advances straight to the catalog step.
 const TOTAL_STEPS = 7;
-
-const CONTACT_URL = "https://www.gleame.ai/contact";
-
-const GOAL_OPTIONS = [
-  {
-    id: "conversion",
-    label: "Improve conversion rates",
-    description: "Help customers make faster purchasing decisions",
-    emoji: "📈",
-  },
-  {
-    id: "returns",
-    label: "Reduce return rates",
-    description: "Fewer wrong picks, shades, and sizes to send back",
-    emoji: "📦",
-  },
-  {
-    id: "other",
-    label: "Other",
-    description: "",
-    emoji: "✨",
-  },
-];
-
-const ATTRIBUTION_OPTIONS = [
-  { id: "shopify_app_store", label: "Shopify App Store", emoji: "🏪" },
-  { id: "google_search", label: "Google Search", emoji: "🔍" },
-  { id: "social_media", label: "Social Media", emoji: "📱" },
-  { id: "tiktok", label: "TikTok", emoji: "📣" },
-  { id: "another_store", label: "Saw it on another store", emoji: "🌐" },
-  { id: "ai_tools", label: "ChatGPT / AI tools", emoji: "🤖" },
-  { id: "word_of_mouth", label: "Word of mouth", emoji: "💬" },
-  { id: "other", label: "Other", emoji: "✨" },
-];
+const VISIBLE_STEPS = 5;
 
 const LOOM_EMBED_URL = "https://www.loom.com/embed/f9049be91b344462980e623eaf232f81";
-
-// ============================================================
-// Selectable Card Component
-// ============================================================
-
-function SelectableCard({
-  selected,
-  onClick,
-  children,
-}: {
-  selected: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      onClick={onClick}
-      style={{
-        border: selected ? "2px solid #2C6ECB" : "1px solid #E1E3E5",
-        borderRadius: "12px",
-        padding: "16px",
-        cursor: "pointer",
-        background: selected ? "#F2F7FE" : "#FFFFFF",
-        transition: "all 0.15s ease",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
 
 // ============================================================
 // Step Components
@@ -396,155 +337,12 @@ function Step1Welcome({ onNext }: { onNext: () => void }) {
   );
 }
 
-function Step2Goals({
-  selectedGoals,
-  onGoalsChange,
-  onNext,
-  onBack,
-}: {
-  selectedGoals: string[];
-  onGoalsChange: (goals: string[]) => void;
-  onNext: () => void;
-  onBack: () => void;
-}) {
-  const toggleGoal = (id: string) => {
-    onGoalsChange(
-      selectedGoals.includes(id)
-        ? selectedGoals.filter((g) => g !== id)
-        : [...selectedGoals, id]
-    );
-  };
-
-  return (
-    <BlockStack gap="600">
-      <BlockStack gap="200" inlineAlign="center">
-        <Text as="h2" variant="headingLg" alignment="center">
-          What do you want to achieve?
-        </Text>
-        <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
-          Select all that apply
-        </Text>
-      </BlockStack>
-
-      <InlineGrid columns={{ xs: 1, sm: 2 }} gap="400">
-        {GOAL_OPTIONS.map((goal) => (
-          <SelectableCard
-            key={goal.id}
-            selected={selectedGoals.includes(goal.id)}
-            onClick={() => toggleGoal(goal.id)}
-          >
-            <BlockStack gap="200">
-              <Text as="span" variant="headingLg">
-                {goal.emoji}
-              </Text>
-              <Text as="span" variant="bodyMd" fontWeight="semibold">
-                {goal.label}
-              </Text>
-              {goal.description && (
-                <Text as="span" variant="bodySm" tone="subdued">
-                  {goal.description}
-                </Text>
-              )}
-            </BlockStack>
-          </SelectableCard>
-        ))}
-      </InlineGrid>
-
-      <InlineStack align="space-between">
-        <Button onClick={onBack}>Back</Button>
-        <Button
-          variant="primary"
-          onClick={onNext}
-          disabled={selectedGoals.length === 0}
-        >
-          Continue
-        </Button>
-      </InlineStack>
-    </BlockStack>
-  );
-}
-
-function Step3Attribution({
-  selectedAttribution,
-  onAttributionChange,
-  onNext,
-  onBack,
-  onSkip,
-}: {
-  selectedAttribution: string[];
-  onAttributionChange: (attr: string[]) => void;
-  onNext: () => void;
-  onBack: () => void;
-  onSkip: () => void;
-}) {
-  const toggleAttribution = (id: string) => {
-    onAttributionChange(
-      selectedAttribution.includes(id)
-        ? selectedAttribution.filter((a) => a !== id)
-        : [...selectedAttribution, id]
-    );
-  };
-
-  return (
-    <BlockStack gap="600">
-      <BlockStack gap="200" inlineAlign="center">
-        <Text as="h2" variant="headingLg" alignment="center">
-          How did you hear about us?
-        </Text>
-        <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
-          This helps us understand how merchants discover Gleame
-        </Text>
-      </BlockStack>
-
-      <InlineGrid columns={{ xs: 2, sm: 4 }} gap="300">
-        {ATTRIBUTION_OPTIONS.map((attr) => (
-          <SelectableCard
-            key={attr.id}
-            selected={selectedAttribution.includes(attr.id)}
-            onClick={() => toggleAttribution(attr.id)}
-          >
-            <BlockStack gap="200" inlineAlign="center">
-              <Text as="span" variant="headingLg" alignment="center">
-                {attr.emoji}
-              </Text>
-              <Text
-                as="span"
-                variant="bodySm"
-                fontWeight="medium"
-                alignment="center"
-              >
-                {attr.label}
-              </Text>
-            </BlockStack>
-          </SelectableCard>
-        ))}
-      </InlineGrid>
-
-      <InlineStack align="space-between">
-        <Button onClick={onBack}>Back</Button>
-        <InlineStack gap="200">
-          <Button onClick={onSkip}>Skip</Button>
-          <Button
-            variant="primary"
-            onClick={onNext}
-            disabled={selectedAttribution.length === 0}
-          >
-            Continue
-          </Button>
-        </InlineStack>
-      </InlineStack>
-    </BlockStack>
-  );
-}
-
 function Step4ConnectCatalog({
   onNext,
   onBack,
-  onBookCall,
 }: {
   onNext: () => void;
   onBack: () => void;
-  onBookCall: () => void;
 }) {
   // Shared chunked-sync driver (same code path as the Quiz Builder card).
   const { start, progress, syncDone, syncError, syncedCount, syncWarnings } = useCatalogSync();
@@ -619,7 +417,7 @@ function Step4ConnectCatalog({
                 </Text>
               )}
               <Button variant="primary" onClick={() => start(catalogSyncCursor ?? undefined)}>
-                {syncError ? "Retry sync" : catalogSyncCursor ? "Resume sync" : "Sync my catalog"}
+                {syncError ? "Retry sync" : catalogSyncCursor ? "Resume sync" : "Sync catalog"}
               </Button>
             </>
           )}
@@ -630,14 +428,9 @@ function Step4ConnectCatalog({
         {/* All exits disabled mid-sync: unmounting this step kills the
             page-by-page chain silently, leaving a partial catalog. */}
         <Button onClick={onBack} disabled={progress !== null}>Back</Button>
-        <InlineStack gap="200" blockAlign="center">
-          <Button variant="plain" onClick={onBookCall} disabled={progress !== null}>
-            Prefer we set it up? Book a call
-          </Button>
-          <Button variant="primary" onClick={onNext} disabled={progress !== null}>
-            {syncDone ? "Continue" : "Skip for now"}
-          </Button>
-        </InlineStack>
+        <Button variant="primary" onClick={onNext} disabled={progress !== null}>
+          {syncDone ? "Continue" : "Skip for now"}
+        </Button>
       </InlineStack>
     </BlockStack>
   );
@@ -858,25 +651,18 @@ function Step7Complete({
 // Onboarding Wizard
 // ============================================================
 
-function OnboardingWizard({
+function LegacySetupFlow({
   initialStep,
-  initialGoals,
-  initialAttribution,
   onComplete,
   navigate,
 }: {
   initialStep: number;
-  initialGoals: string[];
-  initialAttribution: string[];
   onComplete: () => void;
   navigate: ReturnType<typeof useNavigate>;
 }) {
   const [currentStep, setCurrentStep] = useState(
     initialStep > 0 ? initialStep : 1
   );
-  const [selectedGoals, setSelectedGoals] = useState<string[]>(initialGoals);
-  const [selectedAttribution, setSelectedAttribution] =
-    useState<string[]>(initialAttribution);
   const fetcher = useFetcher();
   const [pendingNav, setPendingNav] = useState<string | null>(null);
   const prevFetcherState = useRef(fetcher.state);
@@ -887,19 +673,6 @@ function OnboardingWizard({
     const serverStep = initialStep > 0 ? initialStep : 1;
     setCurrentStep((prev) => Math.max(prev, serverStep));
   }, [initialStep]);
-
-  // Sync survey selections when loader data refreshes
-  const goalsKey = initialGoals.join(",");
-  useEffect(() => {
-    if (initialGoals.length > 0) setSelectedGoals(initialGoals);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [goalsKey]);
-
-  const attributionKey = initialAttribution.join(",");
-  useEffect(() => {
-    if (initialAttribution.length > 0) setSelectedAttribution(initialAttribution);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attributionKey]);
 
   // Navigate only after the fetcher transitions from non-idle back to idle
   // (i.e., after the save actually completes). This prevents navigating
@@ -949,47 +722,18 @@ function OnboardingWizard({
     [persistToServer]
   );
 
-  const handleNextFromGoals = () => {
-    setCurrentStep(3);
-    // Single request: save goals AND update step together (no race)
-    persistToServer({
-      intent: "saveSurveyAndStep",
-      goals: JSON.stringify(selectedGoals),
-      step: "3",
-    });
-  };
-
-  const handleNextFromAttribution = () => {
-    setCurrentStep(4);
-    // Single request: save attribution AND update step together (no race)
-    persistToServer({
-      intent: "saveSurveyAndStep",
-      attribution: JSON.stringify(selectedAttribution),
-      step: "4",
-    });
-  };
-
-  const handleSkipAttribution = () => {
-    goToStep(4);
-  };
-
-  const handleBookCall = () => {
-    if (typeof window !== "undefined") {
-      window.open(CONTACT_URL, "_blank", "noopener,noreferrer");
-    }
-    goToStep(5);
-  };
-
   const handleComplete = () => {
     persistToServer({
       intent: "completeOnboarding",
-      goals: JSON.stringify(selectedGoals),
-      attribution: JSON.stringify(selectedAttribution),
+      goals: JSON.stringify([]),
+      attribution: JSON.stringify([]),
     });
     onComplete();
   };
 
-  const progressPercentage = Math.round((currentStep / TOTAL_STEPS) * 100);
+  // DB steps 2-3 (deleted survey screens) alias to the welcome screen.
+  const visibleStep = currentStep <= 3 ? 1 : currentStep - 2;
+  const progressPercentage = Math.round((visibleStep / VISIBLE_STEPS) * 100);
 
   return (
     <div
@@ -1012,7 +756,7 @@ function OnboardingWizard({
             Welcome to Gleame
           </Text>
           <Text as="span" variant="bodySm" tone="subdued">
-            Step {currentStep} of {TOTAL_STEPS}
+            Step {visibleStep} of {VISIBLE_STEPS}
           </Text>
         </InlineStack>
 
@@ -1041,32 +785,12 @@ function OnboardingWizard({
             boxShadow: "0 1px 3px rgba(0, 0, 0, 0.08)",
           }}
         >
-          {currentStep === 1 && <Step1Welcome onNext={() => goToStep(2)} />}
-
-          {currentStep === 2 && (
-            <Step2Goals
-              selectedGoals={selectedGoals}
-              onGoalsChange={setSelectedGoals}
-              onNext={handleNextFromGoals}
-              onBack={() => goToStep(1)}
-            />
-          )}
-
-          {currentStep === 3 && (
-            <Step3Attribution
-              selectedAttribution={selectedAttribution}
-              onAttributionChange={setSelectedAttribution}
-              onNext={handleNextFromAttribution}
-              onBack={() => goToStep(2)}
-              onSkip={handleSkipAttribution}
-            />
-          )}
+          {currentStep <= 3 && <Step1Welcome onNext={() => goToStep(4)} />}
 
           {currentStep === 4 && (
             <Step4ConnectCatalog
               onNext={() => goToStep(5)}
-              onBookCall={handleBookCall}
-              onBack={() => goToStep(3)}
+              onBack={() => goToStep(1)}
             />
           )}
 
@@ -1469,10 +1193,8 @@ export default function Dashboard() {
 
   if (!onboardingCompleted) {
     return (
-      <OnboardingWizard
+      <LegacySetupFlow
         initialStep={onboarding.step}
-        initialGoals={onboarding.goals}
-        initialAttribution={onboarding.attribution}
         onComplete={() => setOnboardingCompleted(true)}
         navigate={navigate}
       />

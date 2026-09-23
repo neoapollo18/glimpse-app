@@ -13,7 +13,6 @@ import {
 import type { StudioLoaderData, StudioActionData } from "../../routes/studio";
 import type { DraftProblem } from "./draft-problems";
 import { isQuestionServable } from "../../lib/option-visibility";
-import { navigateParent } from "./navigate-parent";
 
 // The LIVE step (internal step id is still "publish"). With save-to-live
 // editing there is nothing to publish: config edits are already on the
@@ -125,11 +124,6 @@ export function PublishStep({
                   onClick={() => setLive(true)}
                 >
                   Turn on for shoppers
-                </Button>
-              )}
-              {surfaceOn && (
-                <Button variant="primary" onClick={() => navigateParent("/app")}>
-                  Finish setup
                 </Button>
               )}
               {questionCount > 0 && (

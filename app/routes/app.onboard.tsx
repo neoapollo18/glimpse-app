@@ -1,9 +1,7 @@
-// Overhaul install flow (Part 3): M1 Scope -> M2 Build -> M3 Reveal.
-//
-// The one-sentence goal: within 5 minutes of install a merchant sees a
-// finished, good-looking quiz in their own fonts and colors, built from
-// their catalog — and publishes in one more click. Exactly one question
-// (scope) before the build; goals/attribution move to after publish.
+// Overhaul install flow v2 (V2-SPEC Part 1.1): M1 Scope -> M2 Build ->
+// Quiz Studio. There is NO standalone Reveal screen anymore: when the
+// build finishes, the merchant lands in the Studio's Build tab, whose
+// first-run state IS the Reveal (banner + themed canvas, spec Part 2).
 //
 // Gated: only shops with overhaul_enabled (or OVERHAUL_ONBOARDING=true)
 // land here (app._index redirects); everyone else keeps the wizard.
@@ -11,12 +9,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
-import { useLoaderData } from "@remix-run/react";
-import jwt from "jsonwebtoken";
+import { useLoaderData, useNavigate } from "@remix-run/react";
 import { authenticate } from "../shopify.server";
 import { supabase } from "../lib/supabase.server";
 import { useCatalogSync } from "../lib/use-catalog-sync";
-import { TEMPLATE_IDS, TEMPLATES, type TemplateId } from "../lib/quiz-templates";
+import { TEMPLATES, type TemplateId } from "../lib/quiz-templates";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -29,26 +26,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const flagOn = process.env.OVERHAUL_ONBOARDING === "true" || shop.data.overhaul_enabled;
   if (!flagOn) return redirect("/app");
 
-  const secret = process.env.SHOPIFY_API_SECRET ?? "";
-  const previewToken = secret
-    ? jwt.sign({ shopId: shop.data.id, shopDomain: session.shop }, secret, { expiresIn: "2h" })
-    : "";
-
-  return json({
-    shopDomain: session.shop,
-    previewToken,
-    templates: TEMPLATE_IDS.map((id) => ({
-      id,
-      name: TEMPLATES[id].name,
-      ineligibleReason: TEMPLATES[id].ineligibleReason,
-      presets: TEMPLATES[id].presets.map((p) => ({
-        id: p.id,
-        label: p.label,
-        bg: p.tokens.colorBg,
-        accent: p.tokens.colorAccent,
-      })),
-    })),
-  });
+  return json({ shopDomain: session.shop });
 };
 
 // ---------------------------------------------------------------------
@@ -86,8 +64,9 @@ function fireEvent(event: string, properties: Record<string, unknown> = {}) {
 }
 
 export default function Onboard() {
-  const data = useLoaderData<typeof loader>();
-  const [screen, setScreen] = useState<"scope" | "build" | "reveal">("scope");
+  useLoaderData<typeof loader>();
+  const navigate = useNavigate();
+  const [screen, setScreen] = useState<"scope" | "build">("scope");
   const [chips, setChips] = useState<ScopeChip[] | null>(null);
   const [selected, setSelected] = useState(0);
   const [freeText, setFreeText] = useState("");
@@ -100,16 +79,6 @@ export default function Onboard() {
     STAGE_DEFS.map(([key, label]) => ({ key, label, detail: "", state: "pending" }))
   );
   const [buildError, setBuildError] = useState<string | null>(null);
-  const [assignment, setAssignment] = useState<{ template: TemplateId; chip: string } | null>(null);
-  const [activeTemplate, setActiveTemplate] = useState<TemplateId | null>(null);
-  const [activePreset, setActivePreset] = useState<string | null>(null);
-  const [switching, setSwitching] = useState(false);
-  const [publishState, setPublishState] = useState<{ busy: boolean; liveUrl: string | null; error: string | null }>({
-    busy: false,
-    liveUrl: null,
-    error: null,
-  });
-  const [previewNonce, setPreviewNonce] = useState(0);
   // Bridge the fetcher-driven sync hook into an awaitable for the staged
   // build sequence.
   const syncResolveRef = useRef<(() => void) | null>(null);
@@ -250,28 +219,24 @@ export default function Onboard() {
           t0
         );
 
-        // Stage 5 — template assignment.
+        // Stage 5 — template assignment. v2 default is T5 Clean (the
+        // universal fallback; spec Part 3), never the playful style.
         t0 = Date.now();
         setStage("styling", { state: "active" });
-        const tpl: TemplateId = profile?.templateAssignment?.template ?? "t2";
+        const tpl: TemplateId = profile?.templateAssignment?.template ?? "t5";
         await post("/app/api/quiz-template", { intent: "set", template: tpl });
-        setActiveTemplate(tpl);
-        setAssignment({
-          template: tpl,
-          chip: profile
-            ? `Matched to your theme · ${profile.confidence === "low" ? "neutral preset" : "your fonts & palette"}`
-            : "Styled with a neutral preset — tap to match your brand",
-        });
         await stageDone("styling", TEMPLATES[tpl].name, t0);
 
-        setScreen("reveal");
-        setPreviewNonce((n) => n + 1);
-        fireEvent("reveal_viewed", { template: tpl });
+        // No standalone Reveal (spec 1.1): the Studio Build tab's first-run
+        // state is the arrival screen. The studio lives in the dashboard's
+        // max-modal host, so route there with the open flag.
+        fireEvent("studio_opened", { source: "onboard_build" });
+        navigate("/app?open=studio");
       } catch (e) {
         setBuildError((e as Error).message);
       }
     },
-    [setStage, stageDone, sync]
+    [setStage, stageDone, sync, navigate]
   );
 
   const resolveFreeText = useCallback(async () => {
@@ -291,39 +256,6 @@ export default function Onboard() {
     };
     setFreeState({ resolving: false, result: chip, narrow: d.count < 5 });
   }, [freeText]);
-
-  const switchTemplate = useCallback(
-    async (tpl: TemplateId, preset?: string) => {
-      if (switching) return;
-      setSwitching(true);
-      const r = await post("/app/api/quiz-template", {
-        intent: "set",
-        template: tpl,
-        ...(preset ? { preset } : {}),
-      });
-      if (r.ok) {
-        setActiveTemplate(tpl);
-        if (preset) setActivePreset(preset);
-        setPreviewNonce((n) => n + 1);
-      }
-      setSwitching(false);
-    },
-    [switching]
-  );
-
-  const openStorePreview = useCallback(async () => {
-    const r = await post("/app/api/publish-quiz", { intent: "preview-link", draftId: "live" });
-    if (r.ok) {
-      fireEvent("store_preview_opened", {});
-      window.open(r.url, "_blank");
-    }
-  }, []);
-
-  const publish = useCallback(async () => {
-    setPublishState({ busy: true, liveUrl: null, error: null });
-    const r = await post("/app/api/publish-quiz", { intent: "publish" });
-    setPublishState({ busy: false, liveUrl: r.ok ? r.liveUrl : null, error: r.ok ? null : r.error });
-  }, []);
 
   // ------------------------------------------------------------------
   const S = styles;
@@ -434,77 +366,6 @@ export default function Onboard() {
         </div>
       )}
 
-      {screen === "reveal" && (
-        <div style={S.revealWrap}>
-          <div style={S.revealTop}>
-            <h1 style={{ ...S.h1, margin: 0, fontSize: 22 }}>Your quiz is ready. Here it is on your store.</h1>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button type="button" style={S.secondaryBtn} onClick={openStorePreview}>
-                Preview on my store
-              </button>
-              <button type="button" style={S.cta2} disabled={publishState.busy} onClick={publish}>
-                {publishState.busy ? "Publishing…" : "Publish"}
-              </button>
-            </div>
-          </div>
-          <div style={S.styleBar}>
-            {assignment && <span style={S.matchChip}>{assignment.chip}</span>}
-            {data.templates.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                style={{
-                  ...S.tplChip,
-                  ...(activeTemplate === t.id ? S.tplChipOn : {}),
-                }}
-                disabled={switching}
-                onClick={() => switchTemplate(t.id as TemplateId)}
-              >
-                {t.name}
-              </button>
-            ))}
-            <span style={{ width: 12 }} />
-            {activeTemplate &&
-              data.templates
-                .find((t) => t.id === activeTemplate)!
-                .presets.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    title={p.label}
-                    style={{
-                      ...S.swatch,
-                      background: `linear-gradient(135deg, ${p.bg} 60%, ${p.accent} 60%)`,
-                      outline: activePreset === p.id ? "2px solid #16161a" : "1px solid #d9d6d2",
-                    }}
-                    disabled={switching}
-                    onClick={() => switchTemplate(activeTemplate, p.id)}
-                  />
-                ))}
-          </div>
-          {publishState.liveUrl && (
-            <div style={S.successBar}>
-              Live at{" "}
-              <a href={publishState.liveUrl} target="_blank" rel="noreferrer">
-                {publishState.liveUrl.replace(/^https:\/\//, "")}
-              </a>{" "}
-              — added to your store.
-            </div>
-          )}
-          {publishState.error && <div style={S.errorCard}>{publishState.error}</div>}
-          <iframe
-            key={previewNonce}
-            title="Quiz preview"
-            style={S.previewFrame}
-            src={`/quiz-preview.html?token=${encodeURIComponent(data.previewToken)}&n=${previewNonce}`}
-          />
-          <p style={{ ...S.note, textAlign: "center" }}>
-            <a href="/app?open=studio" style={S.link} onClick={() => fireEvent("studio_opened", { source: "reveal" })}>
-              Edit in Quiz Studio
-            </a>
-          </p>
-        </div>
-      )}
     </div>
   );
 }
@@ -554,13 +415,4 @@ const styles: Record<string, React.CSSProperties> = {
   stageIcon: { width: 20, textAlign: "center", color: "#117a5b" },
   stageDetail: { color: "#6b6b74", fontWeight: 400, marginLeft: 6, fontSize: 13 },
   errorCard: { marginTop: 16, padding: 16, borderRadius: 12, background: "#fdf1f0", border: "1px solid #f2c6c2", fontSize: 14 },
-  revealWrap: { width: "100%", maxWidth: 1100, display: "flex", flexDirection: "column", gap: 14 },
-  revealTop: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" },
-  styleBar: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" },
-  matchChip: { fontSize: 12.5, padding: "6px 12px", borderRadius: 999, background: "#eef4f1", color: "#1d5c48", fontWeight: 600 },
-  tplChip: { fontSize: 13, padding: "7px 14px", borderRadius: 999, border: "1px solid #e3e0dc", background: "#fff", cursor: "pointer" },
-  tplChipOn: { borderColor: "#16161a", boxShadow: "0 0 0 1px #16161a", fontWeight: 700 },
-  swatch: { width: 26, height: 26, borderRadius: "50%", border: 0, cursor: "pointer" },
-  previewFrame: { width: "100%", height: "68vh", border: "1px solid #e3e0dc", borderRadius: 14, background: "#fff" },
-  successBar: { padding: "12px 16px", borderRadius: 10, background: "#eef7f0", border: "1px solid #bfe3c8", fontSize: 14 },
 };

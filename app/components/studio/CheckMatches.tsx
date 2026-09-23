@@ -7,7 +7,7 @@
 // notes" — present for power users, demanded of no one.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Banner, BlockStack, Button, Card, InlineStack, Select, Text } from "@shopify/polaris";
+import { Banner, BlockStack, Button, Card, InlineStack, Text } from "@shopify/polaris";
 import type { StudioLoaderData } from "../../routes/studio";
 import type { StudioFlow } from "./types";
 
@@ -124,26 +124,43 @@ export function CheckMatches({
           </Text>
           {questions.map((q: any) => {
             const axis = axisByKey.get(q.axisKey) as any;
-            const options = [
-              { label: "— not answered —", value: "" },
-              ...((axis?.values ?? []).map((v: any) => ({ label: v.label, value: v.value })) ?? []),
-            ];
             return (
-              <Select
-                key={q.axisKey}
-                label={q.prompt}
-                options={options}
-                value={criteria[q.axisKey] ?? ""}
-                disabled={chatBusy}
-                onChange={(v) =>
-                  setCriteria((prev) => {
-                    const next = { ...prev };
-                    if (v) next[q.axisKey] = v;
-                    else delete next[q.axisKey];
-                    return next;
-                  })
-                }
-              />
+              <BlockStack key={q.axisKey} gap="100">
+                <Text as="p" variant="bodySm" fontWeight="semibold">
+                  {q.prompt}
+                </Text>
+                <InlineStack gap="100" wrap>
+                  {(axis?.values ?? []).map((v: any) => {
+                    const on = criteria[q.axisKey] === v.value;
+                    return (
+                      <button
+                        key={v.value}
+                        type="button"
+                        disabled={chatBusy}
+                        onClick={() =>
+                          setCriteria((prev) => {
+                            const next = { ...prev };
+                            if (on) delete next[q.axisKey];
+                            else next[q.axisKey] = v.value;
+                            return next;
+                          })
+                        }
+                        style={{
+                          border: on ? "1px solid #1a1a1a" : "1px solid #E1E3E5",
+                          background: on ? "#F1F1F1" : "#fff",
+                          borderRadius: 999,
+                          padding: "4px 12px",
+                          fontSize: 12,
+                          fontWeight: on ? 600 : 400,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {v.label}
+                      </button>
+                    );
+                  })}
+                </InlineStack>
+              </BlockStack>
             );
           })}
           {questions.length === 0 && (
