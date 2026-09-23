@@ -1136,7 +1136,7 @@ function DashboardView({
         <Modal
           variant="max"
           open
-          src={`/studio?step=${studioStep}&navtoken=${navToken}`}
+          src={`/studio?tab=${studioStep}&navtoken=${navToken}`}
           onHide={closeStudio}
         >
           <TitleBar title="Quiz Studio" />

@@ -30,6 +30,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const template = String(form.get("template") ?? "");
   const presetRaw = form.get("preset");
   const preset = presetRaw === null ? undefined : String(presetRaw) || null;
+  // v2 event delta (spec Part 8): where the switch came from.
+  const sourceRaw = String(form.get("source") ?? "");
+  const source = ["overlay", "style_panel", "chat"].includes(sourceRaw) ? sourceRaw : "style_panel";
 
   if (!TEMPLATE_IDS.includes(template as TemplateId)) {
     return json({ ok: false, error: "Unknown template" }, { status: 400 });
@@ -69,6 +72,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     from: before.quiz_template,
     to: template,
     preset: preset ?? null,
+    source,
   });
 
   return json({ ok: true, template, preset: preset ?? before.quiz_preset });

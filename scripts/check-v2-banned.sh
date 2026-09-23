@@ -23,10 +23,13 @@ BANNED=(
 
 FAILED=0
 for pattern in "${BANNED[@]}"; do
+  # Pure comment lines are exempt: code is allowed to DOCUMENT a ban
+  # ("no free-text \"about your store\" surface feeds generation") without
+  # tripping it. Anything in live strings/JSX/identifiers still fails.
   hits=$(grep -rn --fixed-strings "$pattern" app extensions \
     --include='*.ts' --include='*.tsx' --include='*.js' --include='*.jsx' \
     --include='*.liquid' --include='*.json' --include='*.css' \
-    2>/dev/null || true)
+    2>/dev/null | grep -Ev '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*|\{\/\*)' || true)
   if [ -n "$hits" ]; then
     echo "BANNED (v2 spec 1.2): \"$pattern\""
     echo "$hits"

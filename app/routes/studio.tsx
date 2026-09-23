@@ -37,18 +37,31 @@ import { getGenStatus } from "../lib/gen-status.server";
 import { shopNeedsBilling } from "../lib/billing-gate.server";
 import { draftQuestionNotes, type NotesDraft } from "../lib/guidance-generator.server";
 import { GENERAL_GUIDANCE_KEY } from "../lib/quiz-guidance-shared";
+import { getBrandProfile } from "../lib/brand-profile.server";
+import { trackOverhaulEvent } from "../lib/overhaul-events.server";
+import {
+  TEMPLATES,
+  TEMPLATE_IDS,
+  findPreset,
+  resolveQuizTokens,
+  type TemplateId,
+} from "../lib/quiz-templates";
 
 import { StudioShell } from "../components/studio/StudioShell";
 import { StudioTopBar } from "../components/studio/StudioTopBar";
 import { SlideTree, slideIdForQuestion, buildScreens } from "../components/studio/SlideTree";
-import { PreviewCanvas } from "../components/studio/PreviewCanvas";
+import { PreviewCanvas, type CanvasTheme } from "../components/studio/PreviewCanvas";
 import { EditPanel } from "../components/studio/EditPanel";
 import { ChatPanel } from "../components/studio/ChatPanel";
 import { CheckMatches } from "../components/studio/CheckMatches";
-import { PublishStep } from "../components/studio/PublishStep";
+import { LiveTab, PublishSheet } from "../components/studio/PublishStep";
+import { TemplateOverlay } from "../components/studio/TemplateOverlay";
+import { ImagesRail } from "../components/studio/ImagesRail";
 import { FlowMap } from "../components/studio/FlowMap";
 import { draftProblems } from "../components/studio/draft-problems";
 import { navigateParent } from "../components/studio/navigate-parent";
+import { postStudioAction } from "../components/studio/studio-data";
+import type { StudioFlow } from "../components/studio/types";
 
 // ---------------------------------------------------------------------
 // Quiz Studio — the full-screen takeover editor (opened from the quiz hub
@@ -110,18 +123,36 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // version history (restorable from the Live step) BEFORE reading live.
   const legacy = await archiveLegacyDraft(shop.id).catch(() => ({ archived: false }));
 
-  const [liveLoaded, versions, shopRowRes, copilotSessionId, notes, counts, liveConfig] = await Promise.all([
-    captureLiveConfig(shop.id).catch((e) => {
-      console.error("[studio] live config load failed:", e.message);
-      return null;
-    }),
-    listVersions(shop.id).catch(() => []),
-    supabase.from("shops").select("*").eq("id", shop.id).single(),
-    getLatestSessionId(shop.id).catch(() => null),
-    getQuestionGuidance(shop.id),
-    getRecommendationCounts(shop.id).catch(() => null),
-    getChatAssistantConfig(shopDomain).catch(() => null),
-  ]);
+  const [liveLoaded, versions, shopRowRes, copilotSessionId, notes, counts, liveConfig, brandProfile, imageSlots] =
+    await Promise.all([
+      captureLiveConfig(shop.id).catch((e) => {
+        console.error("[studio] live config load failed:", e.message);
+        return null;
+      }),
+      listVersions(shop.id).catch(() => []),
+      supabase.from("shops").select("*").eq("id", shop.id).single(),
+      getLatestSessionId(shop.id).catch(() => null),
+      getQuestionGuidance(shop.id),
+      getRecommendationCounts(shop.id).catch(() => null),
+      getChatAssistantConfig(shopDomain).catch(() => null),
+      getBrandProfile(shopDomain).catch(() => null),
+      // Image slot assignments (V2-SPEC 4.4). Read directly and tolerantly:
+      // the column ships with the brand-library package, so a missing
+      // column must degrade to "no assignments", never a 500.
+      (async (): Promise<Record<string, string>> => {
+        try {
+          const r = await supabase
+            .from("chat_assistant_config")
+            .select("quiz_image_slots")
+            .eq("shop_domain", shopDomain)
+            .maybeSingle();
+          const v = (r.data as Record<string, unknown> | null)?.quiz_image_slots;
+          return v && typeof v === "object" ? (v as Record<string, string>) : {};
+        } catch {
+          return {};
+        }
+      })(),
+    ]);
   const shopRow = shopRowRes.data;
   const liveQuestionCount = counts?.questions ?? 0;
 
@@ -150,6 +181,56 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const surfaceMode = liveSurface?.assistant_mode;
   const quizSurfaceEnabled =
     surfaceEnabled && (surfaceMode == null || surfaceMode === "quiz" || surfaceMode === "both");
+
+  // ---- Themed-canvas + first-run banner data (V2-SPEC Part 2) ----
+  const template = typeof settings.quiz_template === "string" ? (settings.quiz_template as string) : null;
+  const preset = typeof settings.quiz_preset === "string" ? (settings.quiz_preset as string) : null;
+  const tokens = resolveQuizTokens(template, preset, brandProfile?.tokens ?? null);
+  const storeName = shopDomain
+    .replace(".myshopify.com", "")
+    .replace(/-/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+  const headingFont = tokens?.fontHeading ?? "inherit";
+  const fontWord = /serif/i.test(headingFont) && !/sans-serif/i.test(headingFont.split(",")[0])
+    ? "Serif headings"
+    : /rounded|nunito|quicksand/i.test(headingFont)
+      ? "Rounded headings"
+      : "Clean sans headings";
+  const paletteWord = ((): string => {
+    const hex = /^#([0-9a-f]{6})$/i.exec(tokens?.colorBg ?? "");
+    if (!hex) return "soft neutral palette";
+    const n = parseInt(hex[1], 16);
+    const r = (n >> 16) & 255;
+    const g = (n >> 8) & 255;
+    const b = n & 255;
+    const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+    if (lum > 0.96) return "clean white palette";
+    if (lum > 0.82) return r > b ? "warm ivory palette" : "cool porcelain palette";
+    if (lum < 0.25) return "deep noir palette";
+    return "soft neutral palette";
+  })();
+  const templateName = template && TEMPLATE_IDS.includes(template as TemplateId)
+    ? TEMPLATES[template as TemplateId].name
+    : null;
+  const studio = {
+    storeName,
+    logoUrl: brandProfile?.brand.logoUrl ?? null,
+    canvasBg: tokens?.colorBg ?? "#F6F6F7",
+    canvasInk: tokens?.colorText ?? "#1A1C1E",
+    headingFont,
+    template,
+    preset,
+    templateName,
+    presetLabel: preset ? findPreset(preset)?.label ?? null : null,
+    // Eligibility from the brand profile's assignment; absent profile =
+    // everything selectable (spec 2.4 default).
+    eligible: (brandProfile?.templateAssignment?.eligible as TemplateId[] | undefined) ?? [...TEMPLATE_IDS],
+    confidence: brandProfile?.confidence ?? null,
+    chips: [fontWord, paletteWord, templateName ? `${templateName} template` : null].filter(
+      (c): c is string => c !== null,
+    ),
+    imageSlots,
+  };
 
   // 2h: re-minted on every studio load, so only a tab left open past 2h
   // needs a reload for the preview iframe. Keeping it short limits how long
@@ -183,6 +264,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     copilotSessionId,
     liveQuestionCount,
     quizSurfaceEnabled,
+    studio,
     genStatus: getGenStatus(shop.id),
     catalog: {
       syncEnabled: (shopRow as any)?.catalog_sync_enabled === true,
@@ -523,6 +605,55 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
         return json({ ok: true, intent });
       }
+      case "set-image-slot": {
+        // Images rail (V2-SPEC 4.4-4.5): slot assignments live in the quiz
+        // settings row as quiz_image_slots {slotKey: url}. Written directly
+        // (the column ships with the brand-library package; a missing
+        // column returns a clear error instead of a half-save). Empty url
+        // clears the slot, which is how the Undo toast reverts.
+        const slotKey = String(formData.get("slotKey") ?? "");
+        const url = String(formData.get("url") ?? "");
+        const source = String(formData.get("source") ?? "library");
+        if (!/^[a-z0-9:_-]{1,120}$/i.test(slotKey)) {
+          return json({ ok: false, error: "Invalid image slot", intent }, { status: 400 });
+        }
+        if (url && !/^https?:\/\//.test(url)) {
+          return json({ ok: false, error: "Invalid image URL", intent }, { status: 400 });
+        }
+        const read = await supabase
+          .from("chat_assistant_config")
+          .select("quiz_image_slots")
+          .eq("shop_domain", shopDomain)
+          .maybeSingle();
+        if (read.error) {
+          return json({
+            ok: false,
+            error: "Your brand library is still being set up. Try again in a few minutes.",
+            intent,
+          });
+        }
+        const slots: Record<string, string> = {
+          ...(((read.data as Record<string, unknown> | null)?.quiz_image_slots as Record<string, string>) ?? {}),
+        };
+        if (url) slots[slotKey] = url;
+        else delete slots[slotKey];
+        const write = await supabase
+          .from("chat_assistant_config")
+          .upsert(
+            { shop_domain: shopDomain, quiz_image_slots: slots, updated_at: new Date().toISOString() },
+            { onConflict: "shop_domain" },
+          );
+        if (write.error) {
+          return json({ ok: false, error: `Saving the image failed: ${write.error.message}`, intent });
+        }
+        if (url) {
+          trackOverhaulEvent(shopDomain, "image_slot_changed", {
+            slot: slotKey,
+            source: source === "upload" ? "upload" : "library",
+          });
+        }
+        return json({ ok: true, intent });
+      }
       default:
         return json({ ok: false, error: "Unknown intent" }, { status: 400 });
     }
@@ -539,7 +670,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 // Client
 // ---------------------------------------------------------------------
 
-export type StudioStep = "build" | "logic" | "publish";
+// V2-SPEC 1.1 routes the studio as /studio/:quizId/build|matches|live.
+// DELIBERATE DEVIATION: this app's data model is one quiz per shop, so a
+// :quizId path param would be fake; the single /studio route carries a
+// ?tab=build|matches|live search param instead (legacy ?step= deep links
+// map onto it).
+export type StudioTab = "build" | "matches" | "live";
 export type StudioLoaderData = Exclude<
   ReturnType<typeof useLoaderData<typeof loader>>,
   { billingRequired: true }
@@ -649,22 +785,40 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
         intercom_user_jwt: data.intercomUserJwt || undefined,
         name: data.shopDomain,
         // The default bottom-right spot is the right rail's chat input —
-        // shift the launcher left of the 380px rail, onto the canvas.
-        horizontal_padding: 400,
+        // shift the launcher left of the rail, onto the canvas.
+        horizontal_padding: 340,
       });
     });
   }, [data.intercomAppId, data.intercomUserJwt, data.shopDomain]);
 
-  const step = ((): StudioStep => {
-    const s = params.get("step");
-    return s === "logic" || s === "publish" ? s : "build";
+  const tab = ((): StudioTab => {
+    const t = params.get("tab") ?? params.get("step");
+    if (t === "matches" || t === "logic") return "matches";
+    if (t === "live" || t === "publish") return "live";
+    return "build";
   })();
-  const setStep = useCallback(
-    (next: StudioStep) => {
+  const setTab = useCallback(
+    (next: StudioTab) => {
       editorFlushRef.current?.();
       setParams(
         (p) => {
-          p.set("step", next);
+          p.set("tab", next);
+          p.delete("step");
+          return p;
+        },
+        { replace: true },
+      );
+    },
+    [setParams],
+  );
+
+  const overlayOpen = params.get("overlay") === "templates";
+  const setOverlay = useCallback(
+    (open: boolean) => {
+      setParams(
+        (p) => {
+          if (open) p.set("overlay", "templates");
+          else p.delete("overlay");
           return p;
         },
         { replace: true },
@@ -676,7 +830,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
   const questions = data.draft?.flow.questions ?? [];
   const selectedSlide = ((): string => {
     const s = params.get("slide");
-    if (s === "intro" || s === "photo" || s === "results" || s === "theme") return s;
+    if (s === "intro" || s === "photo" || s === "results" || s === "theme" || s === "images" || s === "lead") return s;
     if (s?.startsWith("q:") && questions.some((q) => slideIdForQuestion(q.axisKey) === s)) return s;
     return questions.length > 0 ? slideIdForQuestion(questions[0].axisKey) : "intro";
   })();
@@ -729,7 +883,56 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
   }, [revalidator.state]);
   const [flashSlide, setFlashSlide] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const matchesIframeRef = useRef<HTMLIFrameElement | null>(null);
   const [previewNonce, setPreviewNonce] = useState(0);
+
+  // ---- V2 surfaces state ----
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [viewStoreBusy, setViewStoreBusy] = useState(false);
+  const [tplBusy, setTplBusy] = useState(false);
+  const [slotBusy, setSlotBusy] = useState(false);
+  // One toast slot for template switches and image-slot changes, with an
+  // optional Undo action (spec 2.4 / 4.5).
+  const [undoToast, setUndoToast] = useState<{ message: string; undo?: () => void } | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
+  const showUndoToast = useCallback((message: string, undo?: () => void) => {
+    setUndoToast({ message, undo });
+    if (toastTimerRef.current != null) window.clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = window.setTimeout(() => setUndoToast(null), 6000);
+  }, []);
+  // First-run banner (spec 2.2): dismissal persists per quiz. One quiz per
+  // shop, so localStorage keyed by shop domain is the quiz key.
+  const bannerKey = `gleame-reveal-banner:${data.shopDomain}`;
+  const [bannerVisible, setBannerVisible] = useState(false);
+  useEffect(() => {
+    try {
+      setBannerVisible(window.localStorage.getItem(bannerKey) !== "1");
+    } catch {
+      setBannerVisible(true);
+    }
+  }, [bannerKey]);
+  const playModeRef = useRef(false);
+  const playedRef = useRef(false);
+  // reveal_viewed once per quiz, on first render of the first-run state.
+  useEffect(() => {
+    if (tab !== "build" || !data.hasDraft || !bannerVisible) return;
+    const seenKey = `gleame-reveal-viewed:${data.shopDomain}`;
+    try {
+      if (window.localStorage.getItem(seenKey) === "1") return;
+      window.localStorage.setItem(seenKey, "1");
+    } catch {
+      /* still fire */
+    }
+    fireOverhaulEvent("reveal_viewed", { surface: "studio_build" });
+  }, [tab, data.hasDraft, bannerVisible, data.shopDomain]);
+
+  const canvasTheme: CanvasTheme = {
+    bg: data.studio.canvasBg,
+    ink: data.studio.canvasInk,
+    headingFont: data.studio.headingFont,
+    storeName: data.studio.storeName,
+    logoUrl: data.studio.logoUrl,
+  };
 
   // Step we last COMMANDED the preview to show. The widget echoes every
   // render as gleame-preview-at; while an expectation is pending we treat
@@ -745,7 +948,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
   const echoMuteUntilRef = useRef(0);
   const stepForSlide = useCallback(
     (slideId: string) => {
-      if (slideId === "intro" || slideId === "theme") return "intro";
+      if (slideId === "intro" || slideId === "theme" || slideId === "images") return "intro";
       if (slideId === "lead") return "lead";
       if (slideId === "photo") return "gate";
       if (slideId === "results") return "results";
@@ -813,15 +1016,25 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
 
   // Two-way sync: clicking through the quiz INSIDE the preview advances the
   // widget, which reports its step (gleame-preview-at) — follow it in the
-  // tree + editor so the settings always match what's on screen.
+  // tree + editor so the settings always match what's on screen. Scoped to
+  // the BUILD iframe: the Check-matches iframe echoes too, and its play
+  // path must never steal the rail selection.
   const selectedSlideRef = useRef(selectedSlide);
   selectedSlideRef.current = selectedSlide;
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       if (e.origin !== window.location.origin) return;
+      if (iframeRef.current && e.source !== iframeRef.current.contentWindow) return;
       const d = e.data as { type?: string; step?: string } | null;
       if (!d || d.type !== "gleame-preview-at") return;
       const step = String(d.step ?? "");
+
+      // Reveal instrumentation (spec 2.2): the banner's Play reached the
+      // results screen.
+      if (step === "results" && playModeRef.current && !playedRef.current) {
+        playedRef.current = true;
+        fireOverhaulEvent("reveal_quiz_played", {});
+      }
 
       // Pending expectation: this echo is an ack of our own goto (clear it)
       // or boot noise from an iframe (re)load (re-send the goto, bounded).
@@ -856,9 +1069,13 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
         if (q) slideId = slideIdForQuestion(q.axisKey);
       }
       if (!slideId) return;
-      // Theme maps its goto to the intro step — don't let an echo steal
-      // the Theme selection.
-      if (selectedSlideRef.current === "theme" && slideId === "intro") return;
+      // Theme/Images map their goto to the intro step — don't let an echo
+      // steal that selection.
+      if (
+        (selectedSlideRef.current === "theme" || selectedSlideRef.current === "images") &&
+        slideId === "intro"
+      )
+        return;
       // Grouped screens report their FIRST question; if the current
       // selection lives on that same screen, keep it (otherwise later
       // questions in a group were unselectable).
@@ -970,13 +1187,125 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
     [questions, submitTreeTool],
   );
 
+  // Quiz name = the quiz headline (one quiz per shop; see StudioTopBar).
+  const quizName = String((data.settings as Record<string, unknown>)?.quiz_headline ?? "") || "Your quiz";
+  const saveQuizName = useCallback(
+    (name: string) => {
+      submitTreeTool("update_copy", { fields: { quiz_headline: name } });
+    },
+    [submitTreeTool],
+  );
+
+  // "View on my store" (spec 2.3): mint the app-proxy preview link, open
+  // it in a new tab. The window opens synchronously so popup blockers
+  // don't eat it while the link is minted.
+  const viewStore = useCallback(async () => {
+    setViewStoreBusy(true);
+    const w = window.open("", "_blank");
+    try {
+      const fd = new FormData();
+      fd.append("intent", "preview-link");
+      fd.append("draftId", "live");
+      const res = await fetch("/app/api/publish-quiz", { method: "POST", body: fd });
+      const body = await res.json().catch(() => null);
+      if (body?.ok && body.url && w) {
+        w.location.href = body.url;
+        fireOverhaulEvent("store_preview_opened", {});
+      } else {
+        w?.close();
+        showUndoToast(body?.error ?? "Couldn't open the store preview");
+      }
+    } catch {
+      w?.close();
+      showUndoToast("Couldn't open the store preview");
+    } finally {
+      setViewStoreBusy(false);
+    }
+  }, [showUndoToast]);
+
+  // Template switching (spec 2.4): the overlay's Use-this-template CTA.
+  const applyTemplate = useCallback(async (template: string, preset: string | null, source: string) => {
+    const fd = new FormData();
+    fd.append("intent", "set");
+    fd.append("template", template);
+    fd.append("preset", preset ?? "");
+    fd.append("source", source);
+    const res = await fetch("/app/api/quiz-template", { method: "POST", body: fd });
+    return (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+  }, []);
+
+  const useTemplate = useCallback(
+    async (id: TemplateId) => {
+      setTplBusy(true);
+      const prior = { template: data.studio.template, preset: data.studio.preset };
+      const r = await applyTemplate(id, null, "overlay");
+      setTplBusy(false);
+      if (r?.ok) {
+        setOverlay(false);
+        revalidator.revalidate();
+        reloadPreview();
+        showUndoToast(
+          `Switched to ${TEMPLATES[id].name}`,
+          prior.template
+            ? () => {
+                void applyTemplate(prior.template!, prior.preset, "overlay").then((rr) => {
+                  if (rr?.ok) {
+                    revalidator.revalidate();
+                    reloadPreview();
+                  }
+                });
+              }
+            : undefined,
+        );
+      } else {
+        showUndoToast(r?.error ?? "Switching templates failed");
+      }
+    },
+    [applyTemplate, data.studio.template, data.studio.preset, revalidator, reloadPreview, setOverlay, showUndoToast],
+  );
+
+  // Image slot changes (spec 4.5): write, re-render, offer Undo.
+  const setImageSlot = useCallback(
+    async (slotKey: string, url: string, source: string, prevUrl: string | null) => {
+      setSlotBusy(true);
+      try {
+        const fd = new FormData();
+        fd.append("intent", "set-image-slot");
+        fd.append("slotKey", slotKey);
+        fd.append("url", url);
+        fd.append("source", source);
+        const res = await postStudioAction(fd);
+        const body = (await res.json().catch(() => null)) as StudioActionData | null;
+        if (body?.ok) {
+          revalidator.revalidate();
+          reloadPreview();
+          showUndoToast("Image updated", () => {
+            const fd2 = new FormData();
+            fd2.append("intent", "set-image-slot");
+            fd2.append("slotKey", slotKey);
+            fd2.append("url", prevUrl ?? "");
+            fd2.append("source", source);
+            void postStudioAction(fd2).then(() => {
+              revalidator.revalidate();
+              reloadPreview();
+            });
+          });
+        } else {
+          showUndoToast(body?.error ?? "Saving the image failed");
+        }
+      } finally {
+        setSlotBusy(false);
+      }
+    },
+    [revalidator, reloadPreview, showUndoToast],
+  );
+
   const problems = data.draft ? draftProblems(data.draft.flow) : [];
   const needsOnboarding = !data.hasDraft && data.liveQuestionCount === 0;
 
-  // Watch-mode landing: when a stream-cut generation finally writes the
-  // draft, the wizard unmounts via revalidation and onDone never runs —
-  // reload the stale "Nothing to preview yet" iframe and surface any
-  // recorded generation warnings here instead.
+  // Watch-mode landing: when generation (e.g. from /app/onboard) finally
+  // writes the quiz, reload the stale "Nothing to preview yet" iframe and
+  // surface any recorded generation warnings.
   const prevNeedsOnboardingRef = useRef(needsOnboarding);
   useEffect(() => {
     if (prevNeedsOnboardingRef.current && !needsOnboarding) {
@@ -987,21 +1316,38 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
     prevNeedsOnboardingRef.current = needsOnboarding;
   }, [needsOnboarding, reloadPreview, data.genStatus]);
 
+  const lowConfidence = data.studio.confidence === "low" || !data.studio.template;
+
   return (
     <AppProvider isEmbeddedApp apiKey={data.apiKey}>
       <StudioShell
         topBar={
           <StudioTopBar
-            step={step}
-            onStepChange={setStep}
+            tab={tab}
+            onTabChange={setTab}
+            quizName={quizName}
+            onQuizNameChange={saveQuizName}
             hasDraft={data.hasDraft}
             problemCount={problems.length}
             catalog={data.catalog}
-            onPublishClick={() => setStep("publish")}
+            onViewStore={() => void viewStore()}
+            viewStoreBusy={viewStoreBusy}
+            onPublishClick={() => setPublishOpen(true)}
           />
         }
         rail={
-          (
+          tab === "build" && selectedSlide === "images" && data.draft ? (
+            <ImagesRail
+              template={data.studio.template}
+              flow={data.draft.flow as unknown as StudioFlow}
+              imageSlots={(data.studio.imageSlots ?? {}) as Record<string, string>}
+              busy={slotBusy}
+              onBack={() =>
+                selectSlide(questions.length > 0 ? slideIdForQuestion(questions[0].axisKey) : "intro")
+              }
+              onSetSlot={(slotKey, url, source, prevUrl) => void setImageSlot(slotKey, url, source, prevUrl)}
+            />
+          ) : (
             <SlideTree
               error={treeError}
               onDismissError={() => setTreeError(null)}
@@ -1011,66 +1357,89 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
               onAdd={addQuestion}
               onMove={moveQuestion}
               onReorder={(axisKeysInOrder) => submitTreeTool("reorder_questions", { axisKeysInOrder })}
-              flowMapOpen={flowMapOpen && step === "build"}
+              flowMapOpen={flowMapOpen && tab === "build"}
               onToggleFlowMap={() => setFlowMapOpen((v) => !v)}
               flashSlide={flashSlide}
               disabled={chatBusy || treeFetcher.state !== "idle"}
-              readOnly={step === "publish"}
-              onReturnToBuild={step === "publish" ? () => setStep("build") : undefined}
+              readOnly={tab !== "build"}
+              onReturnToBuild={tab !== "build" ? () => setTab("build") : undefined}
             />
           )
         }
         canvas={
-          <>
-          {genNotice && step === "build" && (
-            <div style={{ padding: "12px 16px 0" }}>
-              <Banner tone="warning" title="Heads up from the quiz generator" onDismiss={() => setGenNotice(null)}>
-                {genNotice}
-              </Banner>
-            </div>
-          )}
-          {legacyNotice && step === "build" && (
-            <div style={{ padding: "12px 16px 0" }}>
-              <Banner tone="info" title="The studio now edits your live quiz directly" onDismiss={() => setLegacyNotice(false)}>
-                Changes save to your store as you make them (the quiz still only
-                shows to shoppers while it's turned on in the Live step). Your
-                old draft wasn't lost: it's in version history on the Live step,
-                one click to restore.
-              </Banner>
-            </div>
-          )}
-          {step === "logic" ? (
-            <CheckMatches data={data} chatBusy={chatBusy} />
-          ) : step === "publish" ? (
-            <PublishStep
+          tab === "matches" ? (
+            <CheckMatches
               data={data}
-              problems={problems}
-              onFix={(slideId) => {
-                setStep("build");
-                selectSlide(slideId);
-              }}
-            />
-          ) : flowMapOpen ? (
-            <FlowMap
-              flow={data.draft?.flow ?? null}
-              selectedSlide={selectedSlide}
-              onSelect={selectSlide}
-              onClose={() => setFlowMapOpen(false)}
-            />
-          ) : (
-            <PreviewCanvas
-              iframeRef={iframeRef}
+              chatBusy={chatBusy}
               previewToken={data.previewToken}
-              nonce={previewNonce}
-              onLoad={onPreviewLoad}
+              theme={canvasTheme}
+              iframeRef={matchesIframeRef}
             />
-          )}
-          </>
+          ) : tab === "live" ? (
+            <LiveTab data={data} onOpenPublish={() => setPublishOpen(true)} />
+          ) : (
+            <>
+              {genNotice && (
+                <div style={{ padding: "12px 16px 0" }}>
+                  <Banner tone="warning" title="Heads up from the quiz generator" onDismiss={() => setGenNotice(null)}>
+                    {genNotice}
+                  </Banner>
+                </div>
+              )}
+              {legacyNotice && (
+                <div style={{ padding: "12px 16px 0" }}>
+                  <Banner tone="info" title="The studio now edits your live quiz directly" onDismiss={() => setLegacyNotice(false)}>
+                    Changes save to your store as you make them (the quiz still only
+                    shows to shoppers while it's turned on in the Live tab). Your
+                    old draft wasn't lost: it's in version history on the Live tab,
+                    one click to restore.
+                  </Banner>
+                </div>
+              )}
+              {data.hasDraft && bannerVisible && (
+                <FirstRunBanner
+                  productCount={data.catalog.productCount}
+                  chips={data.studio.chips as string[]}
+                  lowConfidence={lowConfidence}
+                  presetLabel={(data.studio.presetLabel ?? data.studio.templateName) as string | null}
+                  onPlay={() => {
+                    playModeRef.current = true;
+                    selectSlide("intro");
+                  }}
+                  onStyle={() => selectSlide("theme")}
+                  onDismiss={() => {
+                    setBannerVisible(false);
+                    try {
+                      window.localStorage.setItem(bannerKey, "1");
+                    } catch {
+                      /* session-only dismissal */
+                    }
+                  }}
+                />
+              )}
+              {flowMapOpen ? (
+                <FlowMap
+                  flow={data.draft?.flow ?? null}
+                  selectedSlide={selectedSlide}
+                  onSelect={selectSlide}
+                  onClose={() => setFlowMapOpen(false)}
+                />
+              ) : (
+                <PreviewCanvas
+                  iframeRef={iframeRef}
+                  previewToken={data.previewToken}
+                  nonce={previewNonce}
+                  onLoad={onPreviewLoad}
+                  theme={canvasTheme}
+                />
+              )}
+            </>
+          )
         }
         panel={
           <EditPanel
             data={data}
-            step={step}
+            step={tab}
             selectedSlide={selectedSlide}
             chatEpoch={chatEpoch}
             chatBusy={chatBusy || postTurnLock}
@@ -1083,6 +1452,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
             // in the rail banner, which survives the switch.
             onSaveError={setTreeError}
             onSelectSlide={selectSlide}
+            onOpenTemplateOverlay={() => setOverlay(true)}
             onDeleteQuestion={(axisKey, fallbackSlide) => {
               // Hoisted here because the revalidation after a delete
               // unmounts the question editor: its own fetcher effect never
@@ -1135,8 +1505,75 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
             }
           />
         }
-        overlay={needsOnboarding ? <BlankState /> : null}
+        overlay={
+          needsOnboarding ? (
+            <BlankState />
+          ) : overlayOpen ? (
+            <TemplateOverlay
+              previewToken={data.previewToken}
+              currentTemplate={data.studio.template}
+              eligible={(data.studio.eligible ?? []) as TemplateId[]}
+              busy={tplBusy}
+              onUse={(id) => void useTemplate(id)}
+              onFixImages={() => {
+                setOverlay(false);
+                selectSlide("images");
+              }}
+              onClose={() => setOverlay(false)}
+            />
+          ) : null
+        }
       />
+      <PublishSheet
+        data={data}
+        problems={problems}
+        open={publishOpen}
+        onClose={() => setPublishOpen(false)}
+        onFix={(slideId) => {
+          setPublishOpen(false);
+          setTab("build");
+          selectSlide(slideId);
+        }}
+      />
+      {undoToast && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 16,
+            left: 16,
+            background: "#141519",
+            color: "#fff",
+            borderRadius: 10,
+            padding: "10px 14px",
+            fontSize: 12.5,
+            display: "flex",
+            gap: 14,
+            alignItems: "center",
+            zIndex: 70,
+            boxShadow: "0 8px 24px rgba(20,22,26,.25)",
+          }}
+        >
+          <span>{undoToast.message}</span>
+          {undoToast.undo && (
+            <button
+              onClick={() => {
+                undoToast.undo?.();
+                setUndoToast(null);
+              }}
+              style={{
+                border: 0,
+                background: "transparent",
+                color: "#9AA4FF",
+                fontWeight: 600,
+                cursor: "pointer",
+                fontSize: 12.5,
+              }}
+            >
+              Undo
+            </button>
+          )}
+        </div>
+      )}
       <Modal
         open={pendingDelete !== null}
         onClose={() => setPendingDelete(null)}
@@ -1175,4 +1612,94 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
       </Modal>
     </AppProvider>
   );
+}
+
+// ---------------------------------------------------------------------
+// First-run banner (V2-SPEC 2.2): one dismissible row between the top bar
+// and the canvas. Real detected chips, never invented copy.
+// ---------------------------------------------------------------------
+
+function FirstRunBanner({
+  productCount,
+  chips,
+  lowConfidence,
+  presetLabel,
+  onPlay,
+  onStyle,
+  onDismiss,
+}: {
+  productCount: number | null;
+  chips: string[];
+  lowConfidence: boolean;
+  presetLabel: string | null;
+  onPlay: () => void;
+  onStyle: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 14,
+        padding: "11px 16px",
+        background: "#F4F3FF",
+        borderBottom: "1px solid #E2E0F7",
+        fontSize: 13,
+        flexShrink: 0,
+      }}
+    >
+      <span style={{ width: 8, height: 8, borderRadius: 999, background: "#4A3AFF", flexShrink: 0 }} />
+      <div style={{ minWidth: 0 }}>
+        {lowConfidence ? (
+          <>
+            <strong>
+              Built from your {productCount ?? "synced"} products.
+            </strong>{" "}
+            <span style={{ color: "#6D7175" }}>
+              Styled with {presetLabel ?? "a neutral preset"}.{" "}
+              <button
+                onClick={onStyle}
+                style={{ border: 0, background: "none", padding: 0, color: "#4A3AFF", fontWeight: 600, cursor: "pointer", fontSize: 13 }}
+              >
+                Tap Style to match your brand.
+              </button>
+            </span>
+          </>
+        ) : (
+          <>
+            <strong>
+              Built from your {productCount ?? "synced"} products in your store's style.
+            </strong>{" "}
+            <span style={{ color: "#6D7175" }}>{chips.join(" · ")}.</span>{" "}
+            <span style={{ color: "#6D7175" }}>Nothing is live until you publish.</span>
+          </>
+        )}
+      </div>
+      <div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center", flexShrink: 0 }}>
+        <button
+          onClick={onPlay}
+          style={{ border: 0, background: "none", color: "#4A3AFF", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
+        >
+          Play the quiz
+        </button>
+        <button
+          onClick={onDismiss}
+          aria-label="Dismiss"
+          style={{ border: 0, background: "none", color: "#9A9EAB", fontSize: 15, cursor: "pointer" }}
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Fire an overhaul funnel event from the studio client (server-side sink
+ * whitelists the names). Fire-and-forget by design. */
+function fireOverhaulEvent(event: string, properties: Record<string, unknown> = {}) {
+  const fd = new FormData();
+  fd.append("event", event);
+  fd.append("properties", JSON.stringify(properties));
+  fetch("/app/api/overhaul-event", { method: "POST", body: fd }).catch(() => {});
 }

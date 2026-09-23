@@ -16,7 +16,9 @@ import type { StudioActionData } from "../../routes/studio";
 import { postStudioAction } from "./studio-data";
 import { TEMPLATE_IDS, TEMPLATES } from "../../lib/quiz-templates";
 
-// Overhaul templates (Part 5 Style panel): pure registry, safe client-side.
+// V2 Style panel: the template is chosen in the full-screen overlay (spec
+// 2.4), never from a radio row here. This panel keeps only the CURRENT
+// template's preset swatches plus the door into the overlay.
 const STYLE_TEMPLATES = TEMPLATE_IDS.map((id) => ({
   id,
   name: TEMPLATES[id].name,
@@ -821,10 +823,12 @@ export function ThemeEditor({
   settings,
   chatBusy,
   onPreviewUpdate,
+  onOpenTemplateOverlay,
 }: {
   settings: Record<string, unknown>;
   chatBusy: boolean;
   onPreviewUpdate: (p: { flow?: unknown; config?: unknown }) => void;
+  onOpenTemplateOverlay?: () => void;
 }) {
   const { schedule, saveState, error, clearError } = useSettingsAutosave(onPreviewUpdate);
   const [values, setValues] = useState<Record<string, string>>(() => ({
@@ -911,30 +915,18 @@ export function ThemeEditor({
           {error}
         </Banner>
       )}
-      <Text as="h4" variant="headingSm">
-        Template
-      </Text>
-      <InlineStack gap="200" wrap>
-        {STYLE_TEMPLATES.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            disabled={disabled}
-            onClick={() => pickTemplate(t.id)}
-            style={{
-              padding: "8px 14px",
-              borderRadius: 999,
-              border: tpl === t.id ? "1px solid #1a1a1e" : "1px solid #d9d6d2",
-              boxShadow: tpl === t.id ? "0 0 0 1px #1a1a1e" : "none",
-              background: "#fff",
-              fontWeight: tpl === t.id ? 700 : 500,
-              fontSize: 13,
-              cursor: "pointer",
-            }}
-          >
-            {t.name}
-          </button>
-        ))}
+      <InlineStack align="space-between" blockAlign="center">
+        <BlockStack gap="050">
+          <Text as="h4" variant="headingSm">
+            Template
+          </Text>
+          <Text as="p" variant="bodySm" tone="subdued">
+            {tpl ? STYLE_TEMPLATES.find((t) => t.id === tpl)?.name ?? tpl : "Classic Gleame look"}
+          </Text>
+        </BlockStack>
+        <Button size="slim" onClick={onOpenTemplateOverlay} disabled={disabled || !onOpenTemplateOverlay}>
+          Change template
+        </Button>
       </InlineStack>
       {tpl && (
         <InlineStack gap="200" blockAlign="center">
@@ -964,8 +956,8 @@ export function ThemeEditor({
       )}
       {!tpl && (
         <Text as="p" variant="bodySm" tone="subdued">
-          No template assigned yet — this quiz uses the classic Gleame look. Pick one above to
-          restyle it with your store's fonts and colors.
+          No template assigned yet: this quiz uses the classic Gleame look.
+          Choose a template to restyle it with your store's fonts and colors.
         </Text>
       )}
       <Text as="p" variant="bodySm" tone="subdued">

@@ -1,32 +1,118 @@
-import { useEffect, useRef, useState, type MutableRefObject } from "react";
+import { useRef, useState, type MutableRefObject } from "react";
 
-// The live preview: the REAL storefront quiz (gleame-quiz.js) fed by
-// /quiz-preview.html (draft-first), in a phone bezel or a desktop browser
-// frame. Scale-to-fit is measured in JS (ResizeObserver) — cq units inside
-// a transform string are not valid CSS and the browser silently dropped
-// the earlier attempt, letting the bezel overflow short canvases.
+// V2-SPEC 2.1: the quiz renders FULL-BLEED on the themed canvas. The
+// canvas background is the quiz's own background token, the top edge is a
+// 32px store-context strip (store logo/name, enough to read as "my store"
+// without faking a browser), and the Desktop/Mobile toggle floats at the
+// bottom-center. No white card, no browser chrome, no drop shadow.
 
 type Device = "mobile" | "desktop";
 
-const FRAMES: Record<Device, { width: number; height: number }> = {
-  mobile: { width: 390, height: 720 },
-  desktop: { width: 1100, height: 700 },
-};
+export interface CanvasTheme {
+  /** Resolved quiz background (brand/preset colorBg); the canvas bg. */
+  bg: string;
+  /** Resolved quiz ink for the store-context strip text. */
+  ink: string;
+  /** Heading font stack for the store name in the strip. */
+  headingFont: string;
+  storeName: string;
+  logoUrl: string | null;
+}
+
+export function StoreContextStrip({ theme }: { theme: CanvasTheme }) {
+  return (
+    <div
+      style={{
+        height: 32,
+        flexShrink: 0,
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        padding: "0 18px",
+        background: theme.bg,
+        borderBottom: "1px solid rgba(0,0,0,0.06)",
+      }}
+    >
+      {theme.logoUrl ? (
+        <img src={theme.logoUrl} alt="" style={{ maxHeight: 20, maxWidth: 120, display: "block" }} />
+      ) : (
+        <span
+          style={{
+            fontFamily: theme.headingFont,
+            fontSize: 13,
+            letterSpacing: "0.14em",
+            textTransform: "uppercase",
+            color: theme.ink,
+          }}
+        >
+          {theme.storeName}
+        </span>
+      )}
+    </div>
+  );
+}
+
+export function DeviceToggle({
+  device,
+  onChange,
+}: {
+  device: Device;
+  onChange: (d: Device) => void;
+}) {
+  return (
+    <div
+      style={{
+        position: "absolute",
+        bottom: 14,
+        left: "50%",
+        transform: "translateX(-50%)",
+        background: "#141519",
+        borderRadius: 999,
+        padding: 4,
+        display: "flex",
+        gap: 2,
+        boxShadow: "0 1px 2px rgba(20,22,26,.2), 0 8px 24px rgba(20,22,26,.18)",
+        zIndex: 5,
+      }}
+    >
+      {(["desktop", "mobile"] as const).map((d) => (
+        <button
+          key={d}
+          onClick={() => onChange(d)}
+          style={{
+            border: 0,
+            borderRadius: 999,
+            padding: "5px 13px",
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: "pointer",
+            background: device === d ? "#3A3D46" : "transparent",
+            color: device === d ? "#fff" : "#B9BCC7",
+          }}
+        >
+          {d === "desktop" ? "Desktop" : "Mobile"}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export function PreviewCanvas({
   iframeRef,
   previewToken,
   nonce,
   onLoad,
+  theme,
 }: {
   iframeRef: MutableRefObject<HTMLIFrameElement | null>;
   previewToken: string | null;
   nonce: number;
   onLoad?: () => void;
+  theme: CanvasTheme;
 }) {
   // Pin the token so routine revalidations never remount the iframe, but
   // adopt the freshest one on intentional reloads (nonce bumps) so a
-  // long-lived studio tab doesn't outlive the 12h JWT.
+  // long-lived studio tab doesn't outlive the JWT.
   const stableTokenRef = useRef(previewToken);
   const lastNonceRef = useRef(nonce);
   if (nonce !== lastNonceRef.current) {
@@ -34,20 +120,7 @@ export function PreviewCanvas({
     if (previewToken) stableTokenRef.current = previewToken;
   }
 
-  const [device, setDevice] = useState<Device>("mobile");
-  const stageRef = useRef<HTMLDivElement | null>(null);
-  const [stage, setStage] = useState({ width: 0, height: 0 });
-
-  useEffect(() => {
-    const el = stageRef.current;
-    if (!el) return;
-    const observer = new ResizeObserver((entries) => {
-      const rect = entries[0]?.contentRect;
-      if (rect) setStage({ width: rect.width, height: rect.height });
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
+  const [device, setDevice] = useState<Device>("desktop");
 
   if (!stableTokenRef.current) {
     return (
@@ -57,105 +130,48 @@ export function PreviewCanvas({
     );
   }
 
-  const frame = FRAMES[device];
   const isMobile = device === "mobile";
-  // Mobile: fixed bezel scaled to fit. Desktop: the frame FILLS the canvas
-  // (a real desktop viewport), no scaling — the quiz renders responsively
-  // at the actual width.
-  const scale =
-    isMobile && stage.width > 0
-      ? Math.min(1, (stage.height - 8) / (frame.height + 20), (stage.width - 16) / (frame.width + 20))
-      : 1;
 
   return (
     <div
       style={{
         flex: 1,
+        minHeight: 0,
         display: "flex",
         flexDirection: "column",
-        alignItems: "center",
-        padding: "16px 24px 24px",
-        minHeight: 0,
+        position: "relative",
+        background: theme.bg,
       }}
     >
+      <StoreContextStrip theme={theme} />
       <div
-        style={{
-          display: "flex",
-          gap: 4,
-          background: "#EBEBEB",
-          borderRadius: 999,
-          padding: 3,
-          marginBottom: 12,
-          flexShrink: 0,
-        }}
-      >
-        {(["mobile", "desktop"] as const).map((d) => (
-          <button
-            key={d}
-            onClick={() => setDevice(d)}
-            style={{
-              border: 0,
-              borderRadius: 999,
-              padding: "4px 14px",
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: "pointer",
-              background: device === d ? "#fff" : "transparent",
-              color: device === d ? "#202223" : "#6D7175",
-              boxShadow: device === d ? "0 1px 2px rgba(0,0,0,0.12)" : undefined,
-            }}
-          >
-            {d === "mobile" ? "Mobile" : "Desktop"}
-          </button>
-        ))}
-      </div>
-      <div style={{ fontSize: 11, color: "#8C9196", marginBottom: 10, flexShrink: 0 }}>
-        Previewing your draft. Publish to put changes on your storefront.
-      </div>
-      <div
-        ref={stageRef}
         style={{
           flex: 1,
           minHeight: 0,
           display: "flex",
-          alignItems: "center",
           justifyContent: "center",
-          width: "100%",
           overflow: "hidden",
         }}
       >
-        {/* Z0 (V2-SPEC 1.2): no white card, no fake browser chrome, no drop
-            shadow. The quiz renders directly on the canvas; S1 themes it. */}
-        <div
+        <iframe
+          key={nonce}
+          ref={iframeRef}
+          title="Quiz preview"
+          src={`/quiz-preview.html?token=${encodeURIComponent(stableTokenRef.current)}&v=${nonce}`}
+          onLoad={onLoad}
           style={{
-            width: isMobile ? frame.width : "100%",
-            height: isMobile ? undefined : "100%",
-            boxSizing: "border-box",
-            display: isMobile ? undefined : "flex",
-            flexDirection: isMobile ? undefined : "column",
-            overflow: "hidden",
-            transform: `scale(${scale})`,
-            transformOrigin: "center",
-            flexShrink: 0,
+            width: isMobile ? 390 : "100%",
+            height: "100%",
+            border: 0,
+            display: "block",
+            // Mobile keeps a whisper of separation from the themed canvas
+            // without reintroducing a device bezel.
+            boxShadow: isMobile ? "0 0 0 1px rgba(0,0,0,0.07)" : undefined,
+            background: theme.bg,
           }}
-        >
-          <iframe
-            key={nonce}
-            ref={iframeRef}
-            title="Quiz preview"
-            src={`/quiz-preview.html?token=${encodeURIComponent(stableTokenRef.current)}&v=${nonce}`}
-            onLoad={onLoad}
-            style={{
-              width: "100%",
-              height: isMobile ? frame.height : undefined,
-              flex: isMobile ? undefined : 1,
-              minHeight: 0,
-              border: 0,
-              display: "block",
-            }}
-          />
-        </div>
+        />
       </div>
+      <DeviceToggle device={device} onChange={setDevice} />
     </div>
   );
 }

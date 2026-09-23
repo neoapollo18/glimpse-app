@@ -5,11 +5,14 @@
  * with the shop's install_id and a jsonb payload. Fire-and-forget: an
  * analytics failure must never fail the flow that emitted it.
  *
- * Event names (spec Part 6, use exactly):
+ * Event names (v1 spec Part 6 plus V2-SPEC Part 8 deltas, use exactly):
  *   install_completed, scope_selected, generation_completed,
  *   template_assigned, reveal_viewed, reveal_quiz_played,
  *   template_switched, store_preview_opened, studio_opened,
- *   publish_completed, first_shopper_completion
+ *   publish_completed, first_shopper_completion,
+ *   matches_action {action: pin|exclude|boost},
+ *   image_slot_changed {slot, source: library|upload},
+ *   library_built {image_count, tagged_pct, ms}
  */
 
 import { supabase } from "./supabase.server";
@@ -25,7 +28,10 @@ export type OverhaulEvent =
   | "store_preview_opened"
   | "studio_opened"
   | "publish_completed"
-  | "first_shopper_completion";
+  | "first_shopper_completion"
+  | "matches_action"
+  | "image_slot_changed"
+  | "library_built";
 
 export function trackOverhaulEvent(
   shopDomain: string,

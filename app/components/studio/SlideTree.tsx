@@ -8,6 +8,7 @@ import {
   ArrowUpIcon,
   ArrowDownIcon,
   MergeIcon,
+  ImageIcon,
 } from "@shopify/polaris-icons";
 import type { StudioFlow } from "./types";
 import { answerLabel } from "./types";
@@ -307,7 +308,32 @@ export function SlideTree({
             Style
           </span>
         </div>
-        <div style={{ height: 6 }} aria-hidden />
+        {/* Images rail (V2-SPEC 4.4): every image slot the current template
+            uses, right under Style. */}
+        <div
+          role="button"
+          tabIndex={disabled ? -1 : 0}
+          className="studio-tree-row"
+          data-selected={selectedSlide === "images"}
+          style={{ opacity: disabled ? 0.6 : 1, pointerEvents: disabled ? "none" : undefined }}
+          onClick={() => onSelect("images")}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onSelect("images");
+            }
+          }}
+        >
+          <span style={{ width: 20, display: "inline-flex", justifyContent: "center", flexShrink: 0 }}>
+            <span style={{ width: 14, height: 14, display: "inline-flex" }}>
+              <Icon source={ImageIcon} tone="subdued" />
+            </span>
+          </span>
+          <span className="studio-rail-wide" style={{ fontWeight: 600 }}>
+            Images
+          </span>
+        </div>
+        <div className="studio-rail-wide" style={{ height: 1, background: "#E1E3E5", margin: "8px 6px" }} aria-hidden />
         {row("intro", "Intro", { icon: HomeIcon })}
 
         {screens.map((screen) => (

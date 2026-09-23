@@ -1,40 +1,56 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge, Button, Popover, Box, BlockStack, Text, ProgressBar } from "@shopify/polaris";
 import { useCatalogSync } from "../../lib/use-catalog-sync";
-import type { StudioStep } from "../../routes/studio";
+import type { StudioTab } from "../../routes/studio";
 
-// The third step keeps the internal id "publish" (URL param, step routing)
-// but is the LIVE step now: surface toggle + version history. Editing
-// saves to the store directly; there is no publish action anymore.
-const STEPS: Array<{ id: StudioStep; label: string }> = [
+// V2-SPEC 2.1 top bar (56px): inline-editable quiz name left; centered
+// segmented tabs Build / Check matches / Live; right side "View on my
+// store" (secondary) + "Publish" (primary, opens the publish sheet).
+
+const TABS: Array<{ id: StudioTab; label: string }> = [
   { id: "build", label: "Build" },
-  { id: "logic", label: "Check matches" },
-  { id: "publish", label: "Live" },
+  { id: "matches", label: "Check matches" },
+  { id: "live", label: "Live" },
 ];
 
 export function StudioTopBar({
-  step,
-  onStepChange,
+  tab,
+  onTabChange,
+  quizName,
+  onQuizNameChange,
   hasDraft,
   problemCount,
   catalog,
+  onViewStore,
+  viewStoreBusy,
   onPublishClick,
 }: {
-  step: StudioStep;
-  onStepChange: (s: StudioStep) => void;
+  tab: StudioTab;
+  onTabChange: (t: StudioTab) => void;
+  quizName: string;
+  onQuizNameChange: (name: string) => void;
   hasDraft: boolean;
   problemCount: number;
   catalog: { syncEnabled: boolean; cursor: string | null; productCount: number | null };
+  onViewStore: () => void;
+  viewStoreBusy: boolean;
   onPublishClick: () => void;
 }) {
   const [syncOpen, setSyncOpen] = useState(false);
   const sync = useCatalogSync();
+  // Local edit buffer so typing never round-trips through a revalidation;
+  // committed on blur/Enter. External changes (chat rename) re-seed it.
+  const [name, setName] = useState(quizName);
+  useEffect(() => setName(quizName), [quizName]);
+  const commit = () => {
+    const next = name.trim();
+    if (next && next !== quizName) onQuizNameChange(next);
+    else setName(quizName);
+  };
 
   return (
     <>
       <div className="studio-topbar-left">
-        {/* Rounded tile clips the square logo mark; sized to the badge row
-            so the two sit on one visual centerline. */}
         <span
           aria-hidden
           style={{
@@ -54,20 +70,43 @@ export function StudioTopBar({
             style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
           />
         </span>
-        <Badge tone="info">{hasDraft ? "Edits save to your store" : "No quiz yet"}</Badge>
+        {/* One quiz per shop, so the "quiz name" IS the quiz headline the
+            storefront shows; there is no separate name column. */}
+        <input
+          aria-label="Quiz name"
+          value={name}
+          disabled={!hasDraft}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+            if (e.key === "Escape") setName(quizName);
+          }}
+          style={{
+            border: "1px solid transparent",
+            borderRadius: 8,
+            padding: "5px 8px",
+            fontSize: 13.5,
+            fontWeight: 600,
+            minWidth: 0,
+            flex: 1,
+            background: "transparent",
+            color: "#202223",
+          }}
+          onFocus={(e) => (e.target.style.borderColor = "#C9CCCF")}
+          onBlurCapture={(e) => (e.target.style.borderColor = "transparent")}
+        />
         {problemCount > 0 && (
           <button
-            onClick={onPublishClick}
-            style={{ border: 0, background: "transparent", padding: 0, cursor: "pointer" }}
-            title="These questions are hidden from shoppers until fixed — see the Live step"
+            onClick={() => onTabChange("live")}
+            style={{ border: 0, background: "transparent", padding: 0, cursor: "pointer", flexShrink: 0 }}
+            title="These questions are hidden from shoppers until fixed. See the Live tab."
           >
-            <Badge tone="critical">Hidden from shoppers</Badge>
+            <Badge tone="critical">Hidden</Badge>
           </button>
         )}
         {/* A persisted cursor means a sync was interrupted mid-catalog:
-            syncEnabled and productCount are already set, but only a slice
-            of products is in the DB — keep the chip (and its Resume-sync
-            button) visible until the cursor clears. */}
+            keep the chip (and its Resume-sync button) until it clears. */}
         {(!catalog.syncEnabled || !catalog.productCount || catalog.cursor != null) && (
           <Popover
             active={syncOpen}
@@ -75,9 +114,9 @@ export function StudioTopBar({
             activator={
               <button
                 onClick={() => setSyncOpen((v) => !v)}
-                style={{ border: 0, background: "transparent", padding: 0, cursor: "pointer" }}
+                style={{ border: 0, background: "transparent", padding: 0, cursor: "pointer", flexShrink: 0 }}
               >
-                <Badge tone="attention">{catalog.cursor ? "Catalog sync incomplete" : "Catalog not synced"}</Badge>
+                <Badge tone="attention">{catalog.cursor ? "Sync incomplete" : "Catalog not synced"}</Badge>
               </button>
             }
           >
@@ -124,8 +163,6 @@ export function StudioTopBar({
         )}
       </div>
 
-      {/* Centered in the CANVAS column (same grid as the body), so the
-          stepper, device toggle, and preview share one visual axis. */}
       <div className="studio-topbar-center">
         <div
           style={{
@@ -136,22 +173,25 @@ export function StudioTopBar({
             padding: 4,
           }}
         >
-          {STEPS.map((s) => (
+          {TABS.map((t) => (
             <button
-              key={s.id}
+              key={t.id}
               className="studio-step-pill"
-              data-active={step === s.id}
-              onClick={() => onStepChange(s.id)}
+              data-active={tab === t.id}
+              onClick={() => onTabChange(t.id)}
             >
-              {s.label}
+              {t.label}
             </button>
           ))}
         </div>
       </div>
 
       <div className="studio-topbar-right">
+        <Button onClick={onViewStore} loading={viewStoreBusy} disabled={!hasDraft}>
+          View on my store
+        </Button>
         <Button variant="primary" onClick={onPublishClick}>
-          Live
+          Publish
         </Button>
       </div>
     </>

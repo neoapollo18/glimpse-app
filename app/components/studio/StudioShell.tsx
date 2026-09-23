@@ -6,8 +6,9 @@ import type { ReactNode } from "react";
 // overflow (rail scrolls, canvas decides per step, panel body scrolls).
 
 const SHELL_CSS = `
-  .studio-root { display: grid; grid-template-columns: 264px minmax(0, 1fr) 380px; grid-template-rows: 56px minmax(0, 1fr); height: 100dvh; overflow: hidden; background: #fff; font-size: 13px; }
-  .studio-topbar { grid-column: 1 / -1; display: grid; grid-template-columns: 264px minmax(0, 1fr) 380px; align-items: center; border-bottom: 1px solid #E1E3E5; background: #fff; z-index: 20; }
+  /* V2-SPEC 2.1: 56px topbar, 240px left rail, 320px right rail. */
+  .studio-root { display: grid; grid-template-columns: 240px minmax(0, 1fr) 320px; grid-template-rows: 56px minmax(0, 1fr); height: 100dvh; overflow: hidden; background: #fff; font-size: 13px; }
+  .studio-topbar { grid-column: 1 / -1; display: grid; grid-template-columns: 240px minmax(0, 1fr) 320px; align-items: center; border-bottom: 1px solid #E1E3E5; background: #fff; z-index: 20; }
   .studio-topbar-left { display: flex; align-items: center; gap: 10px; padding: 0 16px; min-width: 0; height: 100%; }
   .studio-topbar-left .Polaris-Badge { display: inline-flex; align-items: center; }
   .studio-topbar-center { display: flex; justify-content: center; align-items: center; min-width: 0; height: 100%; }
@@ -28,8 +29,8 @@ const SHELL_CSS = `
   .studio-panel-tabs { display: flex; border-bottom: 1px solid #E1E3E5; }
   .studio-panel-tab { flex: 1; border: 0; background: transparent; padding: 10px 0; font-size: 13px; font-weight: 600; color: #6D7175; cursor: pointer; border-bottom: 2px solid transparent; }
   .studio-panel-tab[data-active="true"] { color: #202223; border-bottom-color: #1a1a1a; }
-  @media (max-width: 1280px) { .studio-root, .studio-topbar { grid-template-columns: 264px minmax(0, 1fr) 340px; } }
-  @media (max-width: 1024px) { .studio-root, .studio-topbar { grid-template-columns: 48px minmax(0, 1fr) 340px; } .studio-rail .studio-rail-wide { display: none; } .studio-topbar-left { padding: 0 8px; overflow: hidden; } .studio-topbar-left > :not(:first-child) { display: none; } }
+  @media (max-width: 1280px) { .studio-root, .studio-topbar { grid-template-columns: 240px minmax(0, 1fr) 320px; } }
+  @media (max-width: 1024px) { .studio-root, .studio-topbar { grid-template-columns: 48px minmax(0, 1fr) 320px; } .studio-rail .studio-rail-wide { display: none; } .studio-topbar-left { padding: 0 8px; overflow: hidden; } .studio-topbar-left > :not(:first-child) { display: none; } }
 `;
 
 export function StudioShell({

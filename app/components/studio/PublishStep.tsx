@@ -6,6 +6,7 @@ import {
   BlockStack,
   Button,
   Card,
+  Checkbox,
   InlineStack,
   Modal,
   Text,
@@ -14,14 +15,15 @@ import type { StudioLoaderData, StudioActionData } from "../../routes/studio";
 import type { DraftProblem } from "./draft-problems";
 import { isQuestionServable } from "../../lib/option-visibility";
 
-// The LIVE step (internal step id is still "publish"). With save-to-live
-// editing there is nothing to publish: config edits are already on the
-// store. This screen owns the two deliberate actions left:
-//   1. the storefront surface toggle (intent=set-live), and
-//   2. restoring a version from history (intent=restore, writes live).
-// The checklist reframes draft-problems as "hidden from shoppers":
-// getRecommendationFlow filters incomplete questions out of the storefront,
-// so problems never block anything — they just don't serve.
+// V2-SPEC Part 7: the 3-panel Live tab collapses to
+//   1. PublishSheet — a slide-over reachable from the topbar Publish
+//      button on ANY tab: pre-publish checklist, placement (dedicated
+//      page default), add-to-menu checkbox (default on), one Publish
+//      action through the existing /app/api/publish-quiz mechanics, then
+//      a success state with the live URL.
+//   2. LiveTab — status header (Live/Off + URL + surface switch), version
+//      history as a simple restore list, and the placements settings
+//      link. Nothing else.
 
 const MODE_LABELS: Record<string, string> = {
   matrix: "Rules only",
@@ -29,37 +31,34 @@ const MODE_LABELS: Record<string, string> = {
   hybrid: "Rules + AI",
 };
 
-export function PublishStep({
+const THEME_EXT_UUID = "1013fc3f-b18d-aa39-07f6-10dfd57397a6749693b0";
+
+function themeEditorUrl(shopDomain: string): string {
+  const handle = shopDomain.replace(".myshopify.com", "");
+  return `https://admin.shopify.com/store/${handle}/themes/current/editor?template=page.gleame-quiz&addAppBlockId=${THEME_EXT_UUID}/gleame-quiz&target=newAppsSection`;
+}
+
+// ---------------------------------------------------------------------
+// Publish sheet (slide-over)
+// ---------------------------------------------------------------------
+
+export function PublishSheet({
   data,
   problems,
+  open,
+  onClose,
   onFix,
 }: {
   data: StudioLoaderData;
   problems: DraftProblem[];
+  open: boolean;
+  onClose: () => void;
   onFix: (slideId: string) => void;
 }) {
-  const fetcher = useFetcher<StudioActionData>();
+  const [addToMenu, setAddToMenu] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ liveUrl: string | null; error: string | null } | null>(null);
   const revalidator = useRevalidator();
-  const [confirmingRestore, setConfirmingRestore] = useState<string | null>(null);
-  const [confirmingStartOver, setConfirmingStartOver] = useState(false);
-  const processedRef = useRef<StudioActionData | null>(null);
-
-  useEffect(() => {
-    if (fetcher.state !== "idle" || !fetcher.data) return;
-    if (processedRef.current === fetcher.data) return;
-    processedRef.current = fetcher.data;
-    if (
-      fetcher.data.ok &&
-      (fetcher.data.intent === "set-live" || fetcher.data.intent === "restore" || fetcher.data.intent === "start-over")
-    ) {
-      setConfirmingRestore(null);
-      setConfirmingStartOver(false);
-      // These all change server state the loader owns.
-      revalidator.revalidate();
-    }
-    // Errors render in the card banner, which an open modal would cover.
-    if (fetcher.data && !fetcher.data.ok) setConfirmingStartOver(false);
-  }, [fetcher.state, fetcher.data, revalidator]);
 
   const flow = data.draft?.flow;
   const settings = (data.draft?.settings ?? {}) as Record<string, unknown>;
@@ -68,17 +67,204 @@ export function PublishStep({
   const mode = String(settings.recommendation_mode ?? "matrix");
   const hasGuidance = String(settings.ai_guidance ?? "").trim() !== "";
   const logicReady = ruleCount > 0 || (mode !== "matrix" && hasGuidance);
-  const surfaceOn = data.quizSurfaceEnabled !== false;
-  const toggling = fetcher.state !== "idle" && fetcher.formData?.get("intent") === "set-live";
-  // Same predicate the storefront serve filter uses (option-visibility.ts),
-  // so "currently showing" is exactly what serves.
   const servableCount = (flow?.questions ?? []).filter((q) =>
     isQuestionServable(q as Parameters<typeof isQuestionServable>[0]),
   ).length;
-  // Matrix mode with zero rules recommends from the generic fallback pool —
-  // the old publish gate blocked that state; the Live toggle is its new home
-  // (server-enforced in the set-live action; this mirrors it in the UI).
+
+  const publish = async () => {
+    setBusy(true);
+    setResult(null);
+    try {
+      const fd = new FormData();
+      fd.append("intent", "publish");
+      fd.append("addToMenu", String(addToMenu));
+      const res = await fetch("/app/api/publish-quiz", { method: "POST", body: fd });
+      const body = await res.json().catch(() => null);
+      if (body?.ok) {
+        setResult({ liveUrl: body.liveUrl ?? null, error: null });
+        revalidator.revalidate();
+      } else {
+        setResult({ liveUrl: null, error: body?.error ?? "Publishing failed" });
+      }
+    } catch (e) {
+      setResult({ liveUrl: null, error: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!open) return null;
+  return (
+    <>
+      {/* Scrim + sheet: a slide-over, deliberately NOT a modal card. */}
+      <div
+        onClick={onClose}
+        style={{ position: "fixed", inset: "56px 0 0 0", background: "rgba(20,22,26,0.35)", zIndex: 40 }}
+      />
+      <div
+        style={{
+          position: "fixed",
+          top: 56,
+          right: 0,
+          bottom: 0,
+          width: 400,
+          maxWidth: "90vw",
+          background: "#fff",
+          borderLeft: "1px solid #E1E3E5",
+          boxShadow: "-12px 0 32px rgba(20,22,26,0.12)",
+          zIndex: 41,
+          overflowY: "auto",
+          padding: 20,
+          boxSizing: "border-box",
+        }}
+      >
+        <BlockStack gap="400">
+          <InlineStack align="space-between" blockAlign="center">
+            <Text as="h2" variant="headingMd">
+              Publish your quiz
+            </Text>
+            <Button variant="tertiary" onClick={onClose} accessibilityLabel="Close">
+              ✕
+            </Button>
+          </InlineStack>
+
+          {result?.liveUrl ? (
+            <Card>
+              <BlockStack gap="200">
+                <Badge tone="success">Live</Badge>
+                <Text as="p" variant="bodyMd">
+                  Your quiz is on your store.
+                </Text>
+                <Button url={result.liveUrl} external variant="primary">
+                  Open the live page
+                </Button>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  {result.liveUrl.replace(/^https:\/\//, "")}
+                </Text>
+              </BlockStack>
+            </Card>
+          ) : (
+            <>
+              <Card>
+                <BlockStack gap="200">
+                  <Text as="h3" variant="headingSm">
+                    Before it goes live
+                  </Text>
+                  <ChecklistRow
+                    ok={questionCount > 0}
+                    label={questionCount > 0 ? "Quiz has questions" : "Quiz has no questions yet"}
+                  />
+                  {problems.length === 0 ? (
+                    <ChecklistRow ok label="Every question is complete and showing" />
+                  ) : (
+                    <>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Incomplete questions are automatically hidden from shoppers until you
+                        finish them ({servableCount} of {questionCount} currently showing):
+                      </Text>
+                      {problems.map((p, i) => (
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ color: "#B98900" }}>!</span>
+                          <span style={{ flex: 1, fontSize: 13 }}>{p.message}</span>
+                          <Button size="slim" onClick={() => onFix(p.slideId)}>
+                            Fix
+                          </Button>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                  <ChecklistRow
+                    ok={logicReady}
+                    warn={!logicReady}
+                    label={
+                      logicReady
+                        ? "Matching is set up"
+                        : "No matching set up yet. Shoppers still get results, but generic ones."
+                    }
+                  />
+                  <ChecklistRow
+                    ok={data.catalog.syncEnabled}
+                    warn={!data.catalog.syncEnabled}
+                    label={data.catalog.syncEnabled ? "Catalog is synced" : "Catalog isn't synced (top bar)"}
+                  />
+                </BlockStack>
+              </Card>
+
+              <Card>
+                <BlockStack gap="200">
+                  <Text as="h3" variant="headingSm">
+                    Placement
+                  </Text>
+                  <Text as="p" variant="bodySm">
+                    Dedicated page (recommended): Gleame creates a Find My Match page in your
+                    Online Store and turns the quiz on.
+                  </Text>
+                  <Checkbox
+                    label="Add to main menu"
+                    checked={addToMenu}
+                    onChange={setAddToMenu}
+                    helpText="Puts a Find My Match link in your store's main navigation."
+                  />
+                </BlockStack>
+              </Card>
+
+              {result?.error && <Banner tone="critical">{result.error}</Banner>}
+
+              <Button
+                variant="primary"
+                size="large"
+                fullWidth
+                loading={busy}
+                disabled={questionCount === 0}
+                onClick={publish}
+              >
+                Publish
+              </Button>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Nothing is visible to shoppers until you publish.
+              </Text>
+            </>
+          )}
+        </BlockStack>
+      </div>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------
+// Live tab (slim)
+// ---------------------------------------------------------------------
+
+export function LiveTab({
+  data,
+  onOpenPublish,
+}: {
+  data: StudioLoaderData;
+  onOpenPublish: () => void;
+}) {
+  const fetcher = useFetcher<StudioActionData>();
+  const revalidator = useRevalidator();
+  const [confirmingRestore, setConfirmingRestore] = useState<string | null>(null);
+  const processedRef = useRef<StudioActionData | null>(null);
+
+  useEffect(() => {
+    if (fetcher.state !== "idle" || !fetcher.data) return;
+    if (processedRef.current === fetcher.data) return;
+    processedRef.current = fetcher.data;
+    if (fetcher.data.ok && (fetcher.data.intent === "set-live" || fetcher.data.intent === "restore")) {
+      setConfirmingRestore(null);
+      revalidator.revalidate();
+    }
+  }, [fetcher.state, fetcher.data, revalidator]);
+
+  const settings = (data.draft?.settings ?? {}) as Record<string, unknown>;
+  const questionCount = data.draft?.flow.questions.length ?? 0;
+  const ruleCount = data.draft?.flow.rules.length ?? 0;
+  const mode = String(settings.recommendation_mode ?? "matrix");
+  const surfaceOn = data.quizSurfaceEnabled !== false;
+  const toggling = fetcher.state !== "idle" && fetcher.formData?.get("intent") === "set-live";
   const matrixWithoutRules = mode === "matrix" && ruleCount === 0;
+  const liveUrl = `https://${data.shopDomain}/pages/find-my-match`;
 
   const setLive = (enabled: boolean) => {
     const fd = new FormData();
@@ -90,31 +276,21 @@ export function PublishStep({
   return (
     <div style={{ flex: 1, overflowY: "auto" }}>
       <div style={{ maxWidth: 560, margin: "0 auto", padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+        {/* Status header */}
         <Card>
           <BlockStack gap="300">
             <InlineStack align="space-between" blockAlign="center">
-              <Text as="h3" variant="headingMd">
-                Storefront
-              </Text>
-              <Badge tone={surfaceOn ? "success" : "info"}>{surfaceOn ? "On" : "Off"}</Badge>
-            </InlineStack>
-            <Text as="p" variant="bodySm" tone="subdued">
-              Your edits save to {data.shopDomain} as you make them. Shoppers
-              see the quiz only while it's turned on here (and the Gleame Quiz
-              section is added to your theme).
-            </Text>
-            <Text as="p" variant="bodySm" tone="subdued">
-              {questionCount} {questionCount === 1 ? "question" : "questions"}
-              {ruleCount > 0 ? ` · ${ruleCount} ${ruleCount === 1 ? "rule" : "rules"}` : ""} ·{" "}
-              {MODE_LABELS[mode] ?? mode} matching
-            </Text>
-            {fetcher.data && !fetcher.data.ok && fetcher.data.error && (
-              <Banner tone="critical">{fetcher.data.error}</Banner>
-            )}
-            <InlineStack gap="200">
+              <InlineStack gap="200" blockAlign="center">
+                <Badge tone={surfaceOn ? "success" : "info"}>{surfaceOn ? "Live" : "Off"}</Badge>
+                {surfaceOn && (
+                  <a href={liveUrl} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: "#2C6ECB" }}>
+                    {liveUrl.replace(/^https:\/\//, "")}
+                  </a>
+                )}
+              </InlineStack>
               {surfaceOn ? (
                 <Button loading={toggling} onClick={() => setLive(false)}>
-                  Turn off for shoppers
+                  Turn off
                 </Button>
               ) : (
                 <Button
@@ -123,129 +299,54 @@ export function PublishStep({
                   disabled={questionCount === 0 || matrixWithoutRules}
                   onClick={() => setLive(true)}
                 >
-                  Turn on for shoppers
-                </Button>
-              )}
-              {questionCount > 0 && (
-                <Button
-                  tone="critical"
-                  variant="secondary"
-                  disabled={surfaceOn}
-                  onClick={() => setConfirmingStartOver(true)}
-                >
-                  Start over
+                  Turn on
                 </Button>
               )}
             </InlineStack>
-            {questionCount > 0 && surfaceOn && (
+            <Text as="p" variant="bodySm" tone="subdued">
+              Edits save to {data.shopDomain} as you make them; shoppers see the quiz only while
+              it's on. {questionCount} {questionCount === 1 ? "question" : "questions"}
+              {ruleCount > 0 ? ` · ${ruleCount} ${ruleCount === 1 ? "rule" : "rules"}` : ""} ·{" "}
+              {MODE_LABELS[mode] ?? mode} matching.
+            </Text>
+            {matrixWithoutRules && !surfaceOn && (
               <Text as="p" variant="bodySm" tone="subdued">
-                To start over, turn the quiz off for shoppers first.
+                Pin products to answer paths in Check matches before turning the quiz on.
               </Text>
             )}
-            <Modal
-              open={confirmingStartOver}
-              onClose={() => setConfirmingStartOver(false)}
-              title="Start over from scratch?"
-              primaryAction={{
-                content: "Start over",
-                destructive: true,
-                loading: fetcher.state !== "idle" && fetcher.formData?.get("intent") === "start-over",
-                onAction: () => {
-                  const fd = new FormData();
-                  fd.append("intent", "start-over");
-                  fetcher.submit(fd, { method: "POST", action: "/studio" });
-                },
-              }}
-              secondaryActions={[{ content: "Keep my quiz", onAction: () => setConfirmingStartOver(false) }]}
-            >
-              <Modal.Section>
-                <Text as="p">
-                  This clears every question and rule so you can generate or
-                  build a fresh quiz. Your current quiz is saved to version
-                  history first, so you can restore it any time. Styling and
-                  copy settings are kept.
-                </Text>
-              </Modal.Section>
-            </Modal>
-          </BlockStack>
-        </Card>
-
-        <Card>
-          <BlockStack gap="200">
-            <Text as="h3" variant="headingMd">
-              What shoppers see
-            </Text>
-            <ChecklistRow
-              ok={questionCount > 0}
-              label={questionCount > 0 ? "Quiz has questions" : "Quiz has no questions yet"}
-            />
-            {problems.length === 0 ? (
-              <ChecklistRow ok label="Every question is complete and showing" />
-            ) : (
-              <>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Incomplete questions are automatically hidden from shoppers
-                  until you finish them ({servableCount} of {questionCount}{" "}
-                  currently showing):
-                </Text>
-                {problems.map((p, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ color: "#B98900" }}>!</span>
-                    <span style={{ flex: 1, fontSize: 13 }}>{p.message}</span>
-                    <Button size="slim" onClick={() => onFix(p.slideId)}>
-                      Fix
-                    </Button>
-                  </div>
-                ))}
-              </>
+            {fetcher.data && !fetcher.data.ok && fetcher.data.error && (
+              <Banner tone="critical">{fetcher.data.error}</Banner>
             )}
-            <ChecklistRow
-              ok={logicReady}
-              warn={!logicReady}
-              label={
-                logicReady
-                  ? "Recommendation logic is set up"
-                  : "No recommendation logic yet. Shoppers still get results, but generic ones."
-              }
-            />
-            <ChecklistRow
-              ok={data.catalog.syncEnabled}
-              warn={!data.catalog.syncEnabled}
-              label={data.catalog.syncEnabled ? "Catalog is synced" : "Catalog isn't synced (top bar)"}
-            />
+            {!surfaceOn && (
+              <InlineStack gap="200">
+                <Button variant="plain" onClick={onOpenPublish}>
+                  Publish for the first time
+                </Button>
+              </InlineStack>
+            )}
           </BlockStack>
         </Card>
 
+        {/* Version history */}
         {data.versions.length > 0 && (
           <Card>
             <BlockStack gap="200">
               <Text as="h3" variant="headingMd">
                 Version history
               </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                A snapshot is saved automatically as you edit. Restoring makes
-                that version your quiz again (what's there now is snapshotted
-                first, so a restore is always reversible). The on/off switch
-                above isn't affected.
-              </Text>
               {data.versions
                 .filter((v: any) => v != null)
                 .map((v: any) => (
                   <InlineStack key={v.id} align="space-between" blockAlign="center">
-                    <InlineStack gap="200" blockAlign="center">
-                      <Badge tone={v.status === "published" ? "success" : "info"}>
-                        {v.status === "published" ? "Published (legacy)" : "Snapshot"}
-                      </Badge>
-                      <Text as="span" variant="bodySm">
-                        {v.label ||
-                          (v.createdBy === "ai"
-                            ? "Generated by Gleame"
-                            : v.createdBy === "system"
-                              ? "Auto-snapshot"
-                              : "Saved manually")}{" "}
-                        · {new Date(v.createdAt).toLocaleString()}
-                      </Text>
-                    </InlineStack>
+                    <Text as="span" variant="bodySm">
+                      {v.label ||
+                        (v.createdBy === "ai"
+                          ? "Generated by Gleame"
+                          : v.createdBy === "system"
+                            ? "Auto-snapshot"
+                            : "Saved manually")}{" "}
+                      · {new Date(v.createdAt).toLocaleString()}
+                    </Text>
                     <Button size="slim" onClick={() => setConfirmingRestore(v.id)}>
                       Restore
                     </Button>
@@ -270,16 +371,22 @@ export function PublishStep({
               >
                 <Modal.Section>
                   <Text as="p">
-                    This version replaces your current quiz configuration.
-                    Your current setup is snapshotted first, so you can restore
-                    it back from this list. If the quiz is turned on, shoppers
-                    see the restored version right away.
+                    This version replaces your current quiz configuration. Your current setup is
+                    snapshotted first, so a restore is always reversible. If the quiz is on,
+                    shoppers see the restored version right away.
                   </Text>
                 </Modal.Section>
               </Modal>
             </BlockStack>
           </Card>
         )}
+
+        {/* Placements settings link */}
+        <InlineStack gap="200">
+          <Button variant="plain" url={themeEditorUrl(data.shopDomain)} external>
+            Placement settings in the theme editor
+          </Button>
+        </InlineStack>
       </div>
     </div>
   );

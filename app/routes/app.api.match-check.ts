@@ -101,6 +101,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       why: Object.entries((r.criteria as Record<string, string>) ?? {}).map(
         ([k, val]) => `${k.replace(/_/g, " ")}: ${String(val).replace(/_/g, " ")}`
       ),
+      // Raw fired criteria so the client can render answer LABELS in the
+      // "Why: matched ..." line (v2 Check matches).
+      whyCriteria: (r.criteria as Record<string, string>) ?? {},
       ruleId: r.id,
     });
     if (matches.length >= Math.max(2, config.num_recommendations)) break;

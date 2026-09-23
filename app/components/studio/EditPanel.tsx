@@ -17,7 +17,7 @@ import {
   Divider,
 } from "@shopify/polaris";
 import { XSmallIcon } from "@shopify/polaris-icons";
-import type { StudioLoaderData, StudioStep, StudioActionData } from "../../routes/studio";
+import type { StudioLoaderData, StudioTab, StudioActionData } from "../../routes/studio";
 import { IntroEditor, LeadEditor, PhotoEditor, ResultsEditor, ThemeEditor } from "./SettingsEditors";
 import type { StudioFlow, StudioQuestion, StudioOption } from "./types";
 import { answerLabel } from "./types";
@@ -67,10 +67,11 @@ export function EditPanel({
   registerFlush,
   flushEditor,
   onSaveError,
+  onOpenTemplateOverlay,
   chat,
 }: {
   data: StudioLoaderData;
-  step: StudioStep;
+  step: StudioTab;
   selectedSlide: string;
   chatEpoch: number;
   chatBusy: boolean;
@@ -81,6 +82,7 @@ export function EditPanel({
   registerFlush?: (fn: (() => void) | null) => void;
   flushEditor?: () => void;
   onSaveError?: (message: string) => void;
+  onOpenTemplateOverlay?: () => void;
   chat: React.ReactNode;
 }) {
   const editHidden = step !== "build";
@@ -126,6 +128,7 @@ export function EditPanel({
             onPreviewReload={onPreviewReload}
             registerFlush={registerFlush}
             onSaveError={onSaveError}
+            onOpenTemplateOverlay={onOpenTemplateOverlay}
           />
         </div>
       )}
@@ -144,6 +147,7 @@ function EditBody({
   onPreviewReload,
   registerFlush,
   onSaveError,
+  onOpenTemplateOverlay,
 }: {
   data: StudioLoaderData;
   selectedSlide: string;
@@ -155,6 +159,7 @@ function EditBody({
   onPreviewReload: () => void;
   registerFlush?: (fn: (() => void) | null) => void;
   onSaveError?: (message: string) => void;
+  onOpenTemplateOverlay?: () => void;
 }) {
   const flow = data.draft?.flow as StudioFlow | undefined;
   if (!flow) {
@@ -187,7 +192,22 @@ function EditBody({
   }
   if (selectedSlide === "theme") {
     return (
-      <ThemeEditor key={`theme:${chatEpoch}`} settings={settings} chatBusy={chatBusy} onPreviewUpdate={onPreviewUpdate} />
+      <ThemeEditor
+        key={`theme:${chatEpoch}`}
+        settings={settings}
+        chatBusy={chatBusy}
+        onPreviewUpdate={onPreviewUpdate}
+        onOpenTemplateOverlay={onOpenTemplateOverlay}
+      />
+    );
+  }
+  if (selectedSlide === "images") {
+    return (
+      <Text as="p" tone="subdued">
+        Every image slot the current template uses is listed in the Images
+        rail on the left. Pick Change on a slot to swap it from your brand
+        library.
+      </Text>
     );
   }
   const question = flow.questions.find((q) => slideIdForQuestion(q.axisKey) === selectedSlide);
