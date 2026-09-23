@@ -67,15 +67,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         };
         library = await buildBrandLibrary(shopDomain, { admin: adminGraphql, timeBoxMs: 25_000 });
         const { trackOverhaulEvent } = await import("../lib/overhaul-events.server");
-        // "library_built" is a v2 event name not yet in the OverhaulEvent
-        // union (overhaul-events.server.ts is owned by another workstream);
-        // the tracker only uses the name as the analytics_events.event_type
-        // string, so the cast is runtime-safe.
-        trackOverhaulEvent(
-          shopDomain,
-          "library_built" as unknown as Parameters<typeof trackOverhaulEvent>[1],
-          { image_count: library.imageCount, tagged_pct: library.taggedPct, ms: library.ms },
-        );
+        trackOverhaulEvent(shopDomain, "library_built", {
+          image_count: library.imageCount,
+          tagged_pct: library.taggedPct,
+          ms: library.ms,
+        });
       } catch (err) {
         console.warn(`[catalog-sync] brand library build failed for ${shopDomain}:`, err);
       }

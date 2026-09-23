@@ -1,10 +1,15 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import {
+  supabase,
   findShopByDomain,
   shopHasValidAccess,
   getChatAssistantConfig,
 } from "../lib/supabase.server";
+import {
+  readTemplateContentFields,
+  type TemplateContentFields,
+} from "../lib/quiz-preview.server";
 import { getBrandProfile } from "../lib/brand-profile.server";
 import { resolveQuizTokens } from "../lib/quiz-templates";
 
@@ -57,6 +62,22 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     brandProfile?.tokens ?? null
   );
 
+  // v2 template content (spec Parts 3 / 5.6): trust lines, results prose,
+  // archetype copy, hero image, image slots. These live in the same
+  // chat_assistant_config row as every other quiz_ key but are not yet in
+  // the typed mapper, so template shops take one defensive raw read;
+  // absent columns simply resolve to null. Legacy shops (template null)
+  // never pay the read and never see the fields.
+  let tplContent: TemplateContentFields | null = null;
+  if (config.quiz_template) {
+    const { data: rawRow } = await supabase
+      .from("chat_assistant_config")
+      .select("*")
+      .eq("shop_domain", verifiedShop.shop_domain)
+      .maybeSingle();
+    tplContent = readTemplateContentFields(rawRow ?? {});
+  }
+
   const renderTokens = (s: string) =>
     s.replace(/\{assistant_name\}/g, config.assistant_name);
 
@@ -99,6 +120,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       // (per-question imagery lands with the generation pipeline).
       screenImageUrl:
         config.quiz_template === "t3" ? brandProfile?.brand?.coverImageUrl ?? null : null,
+      // v2 template content, present ONLY when a template is assigned.
+      // theme.heroImage feeds T1's sticky hero (Part 4 source priority
+      // lands upstream; merchants can override via quiz_hero_image);
+      // imageSlots is the Images-rail slot map (Part 4.4), passed through.
+      ...(tplContent
+        ? {
+            theme: { heroImage: tplContent.heroImage },
+            imageSlots: tplContent.imageSlots,
+          }
+        : {}),
       numRecommendations: config.num_recommendations,
       // Migration 069: false = never generate try-on images (hero
       // transform, "See on me", post-results upsell); the photo step and
@@ -156,6 +187,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         matchFootnote: config.quiz_match_footnote
           ? renderTokens(config.quiz_match_footnote)
           : null,
+        // v2 template results content (spec 5.6 / Part 3), only when a
+        // template is assigned: T2's computation-screen trust lines,
+        // T1's consultation prose template, T4's archetype reveal copy.
+        ...(tplContent
+          ? {
+              trustLines: tplContent.trustLines,
+              proseTemplate: tplContent.proseTemplate,
+              archetypeTitle: tplContent.archetypeTitle,
+              archetypeLine: tplContent.archetypeLine,
+            }
+          : {}),
       },
       upsell: {
         title: renderTokens(config.quiz_upsell_title),

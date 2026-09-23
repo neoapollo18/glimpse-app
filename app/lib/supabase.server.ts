@@ -3149,6 +3149,14 @@ export interface ChatAssistantConfig {
   // a template is assigned (Reveal or Studio Style panel).
   quiz_template: string | null;
   quiz_preset: string | null;
+  // ---- v2 template content (migration 076, docs/overhaul/V2-SPEC.md) ----
+  // All NULL for legacy shops; only read when quiz_template is set.
+  quiz_trust_lines: string[] | null;
+  quiz_results_prose: string | null;
+  quiz_archetype_title: string | null;
+  quiz_archetype_line: string | null;
+  quiz_hero_image: string | null;
+  quiz_image_slots: Record<string, string> | null;
   // ---- Lead capture step (migration 067) ----
   // Optional email/SMS capture screen between the last question and the
   // photo gate. Off by default; the step is always skippable for shoppers.
@@ -3354,6 +3362,12 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   quiz_match_footnote: null,
   quiz_template: null,
   quiz_preset: null,
+  quiz_trust_lines: null,
+  quiz_results_prose: null,
+  quiz_archetype_title: null,
+  quiz_archetype_line: null,
+  quiz_hero_image: null,
+  quiz_image_slots: null,
   quiz_multi_set_prompt: null,
   quiz_lead_enabled: false,
   quiz_lead_collect_phone: false,
@@ -3532,6 +3546,31 @@ function mapChatAssistantRow(data: any): ChatAssistantConfig {
         : CHAT_ASSISTANT_DEFAULTS.quiz_match_footnote,
     quiz_template: typeof data.quiz_template === 'string' ? data.quiz_template : null,
     quiz_preset: typeof data.quiz_preset === 'string' ? data.quiz_preset : null,
+    // v2 template content (migration 076): tolerate the columns not
+    // existing yet — undefined maps to null, same as legacy shops.
+    quiz_trust_lines: Array.isArray(data.quiz_trust_lines)
+      ? data.quiz_trust_lines.filter((l: unknown) => typeof l === 'string' && l.trim()).slice(0, 3)
+      : null,
+    quiz_results_prose:
+      typeof data.quiz_results_prose === 'string' && data.quiz_results_prose.trim()
+        ? data.quiz_results_prose
+        : null,
+    quiz_archetype_title:
+      typeof data.quiz_archetype_title === 'string' && data.quiz_archetype_title.trim()
+        ? data.quiz_archetype_title
+        : null,
+    quiz_archetype_line:
+      typeof data.quiz_archetype_line === 'string' && data.quiz_archetype_line.trim()
+        ? data.quiz_archetype_line
+        : null,
+    quiz_hero_image:
+      typeof data.quiz_hero_image === 'string' && /^https:\/\//.test(data.quiz_hero_image)
+        ? data.quiz_hero_image
+        : null,
+    quiz_image_slots:
+      data.quiz_image_slots && typeof data.quiz_image_slots === 'object' && !Array.isArray(data.quiz_image_slots)
+        ? data.quiz_image_slots
+        : null,
     quiz_multi_set_prompt:
       typeof data.quiz_multi_set_prompt === 'string' && data.quiz_multi_set_prompt.trim()
         ? data.quiz_multi_set_prompt

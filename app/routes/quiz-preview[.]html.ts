@@ -7,6 +7,7 @@ import {
   buildPreviewFlow,
   buildPreviewQuizConfig,
   buildPreviewSampleRecommend,
+  templateOverridesFromUrl,
 } from "../lib/quiz-preview.server";
 
 // Draft quiz preview document, rendered inside an iframe in the admin Quiz
@@ -65,7 +66,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const draft = await captureLiveConfig(payload.shopId);
 
   const [config, sample] = await Promise.all([
-    buildPreviewQuizConfig(payload.shopDomain, draft),
+    buildPreviewQuizConfig(
+      payload.shopDomain,
+      draft,
+      templateOverridesFromUrl(new URL(request.url))
+    ),
     buildPreviewSampleRecommend(payload.shopId, draft),
   ]);
   const { productJson, ...sampleRecommend } = sample;

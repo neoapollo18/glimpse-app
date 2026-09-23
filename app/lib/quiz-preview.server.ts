@@ -27,6 +27,80 @@ const SWATCH_HEX_RE = /^#[0-9a-fA-F]{3,8}$/;
 const hexOrNull = (v: unknown): string | null =>
   typeof v === "string" && SWATCH_HEX_RE.test(v) ? v : null;
 
+// ---- v2 template content fields (spec Parts 3 / 5.6 / 4.4) ----
+//
+// These ride in the same chat_assistant_config row as every other quiz_
+// key (settings keys: quiz_trust_lines, quiz_results_prose,
+// quiz_archetype_title, quiz_archetype_line, quiz_hero_image,
+// quiz_image_slots) but are NOT yet registered in the typed mapper
+// (ChatAssistantConfig / mapChatAssistantRow / CHAT_ASSISTANT_DEFAULTS in
+// supabase.server.ts) or the studio COPY_KEYS. Until those registrations
+// land, this reader pulls them defensively off a raw row or a draft
+// settings object: missing columns/keys resolve to null and the widget
+// omits the affected content. All fields are template-only and absent
+// for legacy shops.
+
+export interface TemplateContentFields {
+  /** Up to 3 verbatim-sourced trust lines for T2's computation screen. */
+  trustLines: string[];
+  /** T1 consultation prose; {answers}/{answer}/{top_match}/{second_match} tokens. */
+  proseTemplate: string | null;
+  /** T4 archetype reveal title, e.g. "You're a Dewy Dreamer". */
+  archetypeTitle: string | null;
+  /** T4 archetype one-liner under the title. */
+  archetypeLine: string | null;
+  /** T1 sticky hero image URL (https only). */
+  heroImage: string | null;
+  /** Images-rail slot map (Part 4.4), passed through opaquely. */
+  imageSlots: Record<string, unknown> | null;
+}
+
+const trimmedOrNull = (v: unknown): string | null =>
+  typeof v === "string" && v.trim() ? v : null;
+
+const httpsUrlOrNull = (v: unknown): string | null =>
+  typeof v === "string" && /^https:\/\//.test(v.trim()) ? v.trim() : null;
+
+export function readTemplateContentFields(source: Record<string, unknown>): TemplateContentFields {
+  const raw = source ?? {};
+  return {
+    trustLines: Array.isArray(raw.quiz_trust_lines)
+      ? (raw.quiz_trust_lines as unknown[])
+          .filter((t): t is string => typeof t === "string" && Boolean(t.trim()))
+          .slice(0, 3)
+      : [],
+    proseTemplate: trimmedOrNull(raw.quiz_results_prose),
+    archetypeTitle: trimmedOrNull(raw.quiz_archetype_title),
+    archetypeLine: trimmedOrNull(raw.quiz_archetype_line),
+    heroImage: httpsUrlOrNull(raw.quiz_hero_image),
+    imageSlots:
+      raw.quiz_image_slots && typeof raw.quiz_image_slots === "object" && !Array.isArray(raw.quiz_image_slots)
+        ? (raw.quiz_image_slots as Record<string, unknown>)
+        : null,
+  };
+}
+
+// ---- Preview template overrides (studio contract) ----
+//
+// The preview flow accepts &template=t1..t5&preset=<id> URL overrides;
+// the route feeding buildPreviewQuizConfig parses them with this helper
+// and passes the result as the third argument. Invalid values are
+// dropped, absent params leave the draft/live values untouched.
+
+export interface PreviewTemplateOverrides {
+  template?: string;
+  preset?: string;
+}
+
+export function templateOverridesFromUrl(url: URL): PreviewTemplateOverrides {
+  const overrides: PreviewTemplateOverrides = {};
+  const template = url.searchParams.get("template");
+  if (template && /^t[1-5]$/.test(template)) overrides.template = template;
+  const preset = url.searchParams.get("preset");
+  if (preset && /^[a-z0-9][a-z0-9-]{0,63}$/i.test(preset)) overrides.preset = preset;
+  return overrides;
+}
+
 // Mirrors mapDisplayMeta on the live read path: swatches end up inside
 // string-built style="" attributes in the widget, where escapeHtml alone
 // doesn't stop CSS injection — only strict hex may pass, even in previews
@@ -102,13 +176,39 @@ export function buildPreviewFlow(draft: QuizDraft) {
  * the quiz-config payload shape. enabled is FORCED true — previews always
  * render even when the live surface is off.
  */
-export async function buildPreviewQuizConfig(shopDomain: string, draft: QuizDraft) {
+export async function buildPreviewQuizConfig(
+  shopDomain: string,
+  draft: QuizDraft,
+  overrides?: PreviewTemplateOverrides
+) {
   const live = await getChatAssistantConfig(shopDomain);
   const config = { ...live, ...(draft.settings as Partial<ChatAssistantConfig>) } as ChatAssistantConfig;
+  // Studio contract: &template=t1..t5&preset=<id> URL overrides win over
+  // the draft/live values so the template overlay can render live
+  // previews without saving anything (parse with templateOverridesFromUrl).
+  if (overrides?.template) config.quiz_template = overrides.template;
+  if (overrides?.preset) config.quiz_preset = overrides.preset;
   const renderTokens = (s: string) => (s ?? "").replace(/\{assistant_name\}/g, config.assistant_name);
   const brandProfile = config.quiz_template
     ? await getBrandProfile(shopDomain).catch(() => null)
     : null;
+
+  // v2 template content: draft settings win over the live raw row, same
+  // precedence as every other settings key in the merge above. The typed
+  // mapper strips these (unregistered) keys from `live`, so template
+  // shops take one defensive raw read for the live values.
+  let tplContent: TemplateContentFields | null = null;
+  if (config.quiz_template) {
+    const { data: rawRow } = await supabase
+      .from("chat_assistant_config")
+      .select("*")
+      .eq("shop_domain", shopDomain)
+      .maybeSingle();
+    tplContent = readTemplateContentFields({
+      ...((rawRow ?? {}) as Record<string, unknown>),
+      ...((draft.settings ?? {}) as Record<string, unknown>),
+    });
+  }
 
   return {
     enabled: true,
@@ -138,6 +238,14 @@ export async function buildPreviewQuizConfig(shopDomain: string, draft: QuizDraf
     ),
     screenImageUrl:
       config.quiz_template === "t3" ? brandProfile?.brand?.coverImageUrl ?? null : null,
+    // v2 template content, mirroring the storefront endpoint exactly:
+    // present only when a template is assigned, absent for legacy shops.
+    ...(tplContent
+      ? {
+          theme: { heroImage: tplContent.heroImage },
+          imageSlots: tplContent.imageSlots,
+        }
+      : {}),
     numRecommendations: config.num_recommendations,
     // Migration 069. Previews never generate try-ons anyway (requestTryon
     // short-circuits in PREVIEW mode); carried for payload-shape parity.
@@ -181,6 +289,15 @@ export async function buildPreviewQuizConfig(shopDomain: string, draft: QuizDraf
       matchFootnote: config.quiz_match_footnote
         ? renderTokens(config.quiz_match_footnote)
         : null,
+      // v2 template results content (storefront-endpoint parity).
+      ...(tplContent
+        ? {
+            trustLines: tplContent.trustLines,
+            proseTemplate: tplContent.proseTemplate,
+            archetypeTitle: tplContent.archetypeTitle,
+            archetypeLine: tplContent.archetypeLine,
+          }
+        : {}),
     },
     upsell: {
       title: renderTokens(config.quiz_upsell_title),

@@ -438,6 +438,12 @@ const COPY_KEYS = new Set([
   "quiz_match_footnote",
   // Overhaul template system (migration 072) — values validated below.
   "quiz_template", "quiz_preset",
+  // v2 template content strings (migration 076). quiz_trust_lines and
+  // quiz_image_slots are array/object shaped with dedicated write paths
+  // (generator / set-image-slot intent) — NOT copy fields, String()
+  // coercion would mangle them.
+  "quiz_results_prose", "quiz_archetype_title", "quiz_archetype_line",
+  "quiz_hero_image",
 ]);
 
 // Copy keys that are booleans on the live config row — String() coercion
