@@ -28,12 +28,13 @@ type AdminGraphql = {
 };
 
 // Shopify Admin GraphQL cost budget is 1,000 points per query. With this
-// field set the requested cost is ~3 + P*(5 + V): variant nodes cost 1 (no
-// nested image — variant imagery is deliberately not synced), product nodes
-// ~5 + variant connection. P=8, V=100 => ~845 points. Do NOT raise these
-// without redoing the math; the old 50x100 shape cost ~10,000 points and
-// Shopify rejected every request outright.
-const PAGE_SIZE = 8;
+// field set the requested cost is ~3 + P*(5 + 2V): variant nodes cost 2
+// (1 node + 1 nested image object — variant imagery IS synced since the
+// v2 brand-library work), product nodes ~5 + variant connection. P=4,
+// V=100 => ~823 points. Do NOT raise these without redoing the math; the
+// old 50x100 shape cost ~10,000 points and Shopify rejected every request
+// outright.
+const PAGE_SIZE = 4;
 const VARIANTS_PER_PRODUCT = 100;
 
 const PRODUCTS_PAGE_QUERY = `#graphql
@@ -73,6 +74,9 @@ const PRODUCTS_PAGE_QUERY = `#graphql
                 title
                 sku
                 price
+                image {
+                  url
+                }
               }
             }
           }
@@ -104,6 +108,7 @@ interface SyncedVariant {
   title: string;
   sku: string | null;
   price: number | null;
+  imageUrl: string | null;
 }
 
 function parsePrice(value: unknown): number | null {
@@ -211,6 +216,7 @@ export async function syncCatalogPage(
       title: v.title,
       sku: v.sku || null,
       price: parsePrice(v.price),
+      imageUrl: v.image?.url ?? null,
     })),
   }));
 
@@ -338,6 +344,7 @@ async function upsertCatalogProducts(
         variant_title: v.title,
         sku: v.sku,
         price: v.price,
+        image_url: v.imageUrl,
         status: "active",
         synced_at: now,
       });
@@ -400,6 +407,10 @@ async function upsertCatalogProducts(
  * Webhook payloads (products/create, products/update) arrive in REST shape
  * with numeric ids; convert to the GID format stored in our tables. Variant
  * lists from webhooks are treated as complete only when present.
+ *
+ * Variant images: REST payloads carry variant.image_id referencing an entry
+ * in the top-level images array — resolve image_id -> images[].src so
+ * product_variants.image_url stays fresh between full syncs.
  */
 export async function syncSingleProduct(
   shopDomain: string,
@@ -412,13 +423,21 @@ export async function syncSingleProduct(
     product_type?: string;
     tags?: string;
     image?: { src?: string } | null;
-    variants?: Array<{ id: number; title?: string; sku?: string; price?: string }>;
+    images?: Array<{ id?: number | string; src?: string }>;
+    variants?: Array<{ id: number; title?: string; sku?: string; price?: string; image_id?: number | string | null }>;
   },
 ): Promise<{ ok: boolean; errors: string[] }> {
   // Webhook payload freshness: treat it as fetched "now" for the sweep guard.
   const fetchedAt = Date.now();
   const shop = await findShopByDomain(shopDomain);
   if (!shop) return { ok: false, errors: [`unknown shop ${shopDomain}`] };
+
+  // image_id (number or string, Shopify is inconsistent across API
+  // versions) -> src, keyed as strings so both shapes resolve.
+  const imageSrcById = new Map<string, string>();
+  for (const img of payload.images ?? []) {
+    if (img?.id != null && img.src) imageSrcById.set(String(img.id), img.src);
+  }
 
   const hasVariants = Array.isArray(payload.variants) && payload.variants.length > 0;
   const product: SyncedProduct = {
@@ -440,6 +459,7 @@ export async function syncSingleProduct(
       title: v.title ?? "",
       sku: v.sku || null,
       price: parsePrice(v.price),
+      imageUrl: v.image_id != null ? imageSrcById.get(String(v.image_id)) ?? null : null,
     })),
   };
 

@@ -69,6 +69,10 @@ export interface BrandProfile {
   category: string | null;
   tone: "playful" | "neutral" | "refined" | null;
   templateAssignment: TemplateAssignment;
+  /** Verbatim brand statements only (v2 Part 4/G): the Brand API slogan
+   * and a guarantee/shipping line lifted verbatim from homepage copy.
+   * Never paraphrased, never invented — fewer is fine. */
+  trustStatements: string[];
 }
 
 /** Minimal admin GraphQL caller: (query, variables?) => data. Callers wrap
@@ -480,22 +484,52 @@ interface CatalogExtract {
   collections: string[];
   imageCoverage: number | null;
   category: string | null;
+  /** Average catalog price in cents (considered-purchase signal, v2). */
+  avgPriceCents: number | null;
+  /** Average variant option (facet) count per variant, from " / "-joined
+   * variant titles ("Red / Small" = 2). "Default Title" counts as 1. */
+  avgOptionCount: number | null;
 }
 
 async function extractFromCatalog(shopId: string): Promise<CatalogExtract> {
   const { data, count } = await supabase
     .from("products")
-    .select("product_type, image_url", { count: "exact" })
+    .select("id, product_type, image_url, price", { count: "exact" })
     .eq("shop_id", shopId)
     .neq("status", "deleted")
     .limit(1000);
   const rows = data ?? [];
   const typeCounts = new Map<string, number>();
   let withImage = 0;
+  const prices: number[] = [];
   for (const r of rows) {
     const t = (r.product_type ?? "").trim();
     if (t) typeCounts.set(t, (typeCounts.get(t) ?? 0) + 1);
     if (r.image_url) withImage++;
+    const price = typeof r.price === "number" ? r.price : parseFloat(String(r.price ?? ""));
+    if (Number.isFinite(price) && price > 0) prices.push(price);
+  }
+  const avgPriceCents = prices.length
+    ? Math.round((prices.reduce((a, b) => a + b, 0) / prices.length) * 100)
+    : null;
+
+  // Variant option counts from a bounded sample of variant titles.
+  let avgOptionCount: number | null = null;
+  const sampleIds = rows.map((r) => r.id).filter(Boolean).slice(0, 150);
+  if (sampleIds.length) {
+    const { data: variantSample } = await supabase
+      .from("product_variants")
+      .select("variant_title")
+      .in("product_id", sampleIds)
+      .neq("status", "deleted")
+      .limit(1000);
+    const segCounts = (variantSample ?? [])
+      .map((v) => String(v.variant_title ?? "").trim())
+      .filter(Boolean)
+      .map((title) => title.split("/").length);
+    if (segCounts.length) {
+      avgOptionCount = segCounts.reduce((a, b) => a + b, 0) / segCounts.length;
+    }
   }
   const types = [...typeCounts.entries()].sort((a, b) => b[1] - a[1]).map(([t]) => t);
   const top = types[0] ?? null;
@@ -514,7 +548,31 @@ async function extractFromCatalog(shopId: string): Promise<CatalogExtract> {
     collections: [], // collections are not synced yet (C1 adds them)
     imageCoverage: rows.length ? withImage / rows.length : null,
     category,
+    avgPriceCents,
+    avgOptionCount,
   };
+}
+
+// ---------------------------------------------------------------------
+// Trust statements (verbatim only — spec forbids invented copy)
+// ---------------------------------------------------------------------
+
+const GUARANTEE_RE =
+  /\b((?:free (?:standard |worldwide |express |us )?(?:shipping|returns?)|\d+[- ]day (?:returns?|money[- ]back guarantee|guarantee|trial)|money[- ]back guarantee|satisfaction guaranteed?|lifetime (?:warranty|guarantee)|\d+[- ]year warranty)[^.!?]{0,60})/i;
+
+/** Verbatim-only extraction: the Brand API slogan plus one guarantee /
+ * shipping line found word-for-word in the homepage copy (when trivially
+ * extractable). Anything not verbatim is simply omitted. */
+export function extractTrustStatements(slogan: string | null, homepageCopy: string): string[] {
+  const out: string[] = [];
+  const s = slogan?.trim();
+  if (s) out.push(s);
+  const m = GUARANTEE_RE.exec(homepageCopy);
+  if (m) {
+    const line = m[1].trim().replace(/\s+/g, " ");
+    if (line && !out.includes(line)) out.push(line);
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------
@@ -638,15 +696,46 @@ export async function extractBrandProfile(
 
   const tone = classifyTone(homepage?.copySample ?? "", homepage?.avgSaturation ?? null, radiusButton);
 
+  // v2 signal source: the brand library (Part 4.1). Lazy import + settle:
+  // a missing brand_library table (migration 075 pending) or any stats
+  // failure degrades to the v1 signals, never throws.
+  const stats = await import("./brand-library.server")
+    .then((lib) => lib.libraryStats(shopDomain))
+    .catch(() => null);
+  // Distinguish "library built" from "not built yet": an unbuilt (or
+  // missing-table) library reports all-zero/null stats, and writing those
+  // zeros into the optional signals would wrongly fail T1/T3 gates for
+  // stores whose v1 fallbacks pass. Only trust stats that show content.
+  const libraryBuilt = Boolean(
+    stats && (stats.heroImageCount > 0 || stats.lifestyleImageCount > 0 || stats.bannerCoverage !== null)
+  );
+
+  // Per-answer coverage: variant image coverage (the true per-answer
+  // proxy, populated since the v2 variant-image sync fix) when known,
+  // else the v1 product-image coverage.
+  const variantCoverage = stats?.variantImageCoverage ?? null;
+  const imagePerAnswerCoverage =
+    variantCoverage !== null && catalog.imageCoverage !== null
+      ? Math.max(variantCoverage, catalog.imageCoverage)
+      : variantCoverage ?? catalog.imageCoverage;
+
   const signals: TemplateSignals = {
     serifHeading: Boolean(theme?.headingFont?.serif || homepage?.headingSerif || /serif/i.test(fontHeading) && !/sans-serif/i.test(fontHeading)),
     roundedHeading: Boolean(theme?.headingFont?.rounded || homepage?.headingRounded),
     avgSaturation: homepage?.avgSaturation ?? null,
     imageryDensity: homepage?.imageryDensity ?? null,
-    lifestyleImageCount: (homepage?.lifestyleImageCount ?? 0) + (brand?.coverImageUrl ? 1 : 0),
-    imagePerAnswerCoverage: catalog.imageCoverage,
+    lifestyleImageCount: Math.max(
+      (homepage?.lifestyleImageCount ?? 0) + (brand?.coverImageUrl ? 1 : 0),
+      libraryBuilt ? stats!.lifestyleImageCount : 0
+    ),
+    imagePerAnswerCoverage,
     buttonRadius: radiusButton,
     category: catalog.category,
+    // v2 optional signals — only set when the library has real content.
+    ...(libraryBuilt ? { heroImageCount: stats!.heroImageCount } : {}),
+    ...(libraryBuilt ? { bannerCoverage: stats!.bannerCoverage } : {}),
+    avgPriceCents: catalog.avgPriceCents,
+    avgOptionCount: catalog.avgOptionCount,
   };
   const templateAssignment = selectTemplate(signals);
 
@@ -688,6 +777,7 @@ export async function extractBrandProfile(
     category: catalog.category,
     tone,
     templateAssignment,
+    trustStatements: extractTrustStatements(brand?.slogan ?? null, homepage?.copySample ?? ""),
   };
 
   const up = await supabase.from("brand_profiles").upsert(

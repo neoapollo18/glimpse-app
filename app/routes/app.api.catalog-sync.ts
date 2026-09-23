@@ -50,6 +50,37 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (page.errors.length) {
       console.warn(`[catalog-sync] ${shopDomain} page warnings:`, page.errors.slice(0, 5).join("; "));
     }
+
+    // Full sync complete -> build the brand library (V2-SPEC Part 4.1).
+    // Awaited but time-boxed; a library failure never fails the sync.
+    let library: { imageCount: number; taggedPct: number; ms: number } | undefined;
+    if (page.nextCursor === null) {
+      try {
+        const { buildBrandLibrary } = await import("../lib/brand-library.server");
+        const adminGraphql = async (query: string, variables?: Record<string, unknown>) => {
+          const res = await admin.graphql(query, variables ? { variables } : undefined);
+          const body = (await res.json()) as { data?: any; errors?: Array<{ message?: string }> };
+          if (body.errors?.length) {
+            throw new Error(`brand-library graphql: ${body.errors[0]?.message ?? "error"}`);
+          }
+          return body.data;
+        };
+        library = await buildBrandLibrary(shopDomain, { admin: adminGraphql, timeBoxMs: 25_000 });
+        const { trackOverhaulEvent } = await import("../lib/overhaul-events.server");
+        // "library_built" is a v2 event name not yet in the OverhaulEvent
+        // union (overhaul-events.server.ts is owned by another workstream);
+        // the tracker only uses the name as the analytics_events.event_type
+        // string, so the cast is runtime-safe.
+        trackOverhaulEvent(
+          shopDomain,
+          "library_built" as unknown as Parameters<typeof trackOverhaulEvent>[1],
+          { image_count: library.imageCount, tagged_pct: library.taggedPct, ms: library.ms },
+        );
+      } catch (err) {
+        console.warn(`[catalog-sync] brand library build failed for ${shopDomain}:`, err);
+      }
+    }
+
     return json({
       ok: true,
       warning: page.errors.length ? page.errors.slice(0, 3).join("; ") : undefined,
@@ -57,6 +88,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       nextCursor: page.nextCursor,
       synced: page.synced,
       total: page.total,
+      library,
     });
   } catch (err) {
     console.error("[catalog-sync] failed:", err);
