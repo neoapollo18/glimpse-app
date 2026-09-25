@@ -319,6 +319,8 @@ export async function buildPreviewQuizConfig(
       buttonLabel: config.quiz_lead_button_label,
       skipLabel: config.quiz_lead_skip_label,
       consentText: renderTokens(config.quiz_lead_consent_text),
+      discountCode: config.quiz_lead_discount_code,
+      discountMessage: renderTokens(config.quiz_lead_discount_message),
     },
   };
 }

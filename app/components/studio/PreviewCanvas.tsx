@@ -1,4 +1,4 @@
-import { useRef, useState, type MutableRefObject } from "react";
+import { useLayoutEffect, useRef, useState, type MutableRefObject } from "react";
 
 // V2-SPEC 2.1: the quiz renders FULL-BLEED on the themed canvas. The
 // canvas background is the quiz's own background token, the top edge is a
@@ -7,6 +7,12 @@ import { useRef, useState, type MutableRefObject } from "react";
 // bottom-center. No white card, no browser chrome, no drop shadow.
 
 type Device = "mobile" | "desktop";
+
+// Desktop preview renders the page at a real desktop viewport width and
+// scales it down to fit the canvas. Without this the iframe inherits the
+// canvas's own (much narrower) width, media queries resolve tablet-ish,
+// and the preview reads "zoomed in" compared to a real desktop.
+const DESKTOP_VIEWPORT_WIDTH = 1280;
 
 export interface CanvasTheme {
   /** Resolved quiz background (brand/preset colorBg); the canvas bg. */
@@ -122,6 +128,18 @@ export function PreviewCanvas({
 
   const [device, setDevice] = useState<Device>("desktop");
 
+  const frameHostRef = useRef<HTMLDivElement | null>(null);
+  const [hostSize, setHostSize] = useState<{ w: number; h: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = frameHostRef.current;
+    if (!el) return;
+    const measure = () => setHostSize({ w: el.clientWidth, h: el.clientHeight });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   if (!stableTokenRef.current) {
     return (
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -131,6 +149,12 @@ export function PreviewCanvas({
   }
 
   const isMobile = device === "mobile";
+  // Canvas narrower than a real desktop → render at desktop width, scale to fit.
+  const desktopScale =
+    !isMobile && hostSize && hostSize.w > 0 && hostSize.w < DESKTOP_VIEWPORT_WIDTH
+      ? hostSize.w / DESKTOP_VIEWPORT_WIDTH
+      : 1;
+  const scaledDesktop = desktopScale < 1 && hostSize;
 
   return (
     <div
@@ -145,12 +169,14 @@ export function PreviewCanvas({
     >
       <StoreContextStrip theme={theme} />
       <div
+        ref={frameHostRef}
         style={{
           flex: 1,
           minHeight: 0,
           display: "flex",
           justifyContent: "center",
           overflow: "hidden",
+          position: "relative",
         }}
       >
         <iframe
@@ -159,16 +185,31 @@ export function PreviewCanvas({
           title="Quiz preview"
           src={`/quiz-preview.html?token=${encodeURIComponent(stableTokenRef.current)}&v=${nonce}`}
           onLoad={onLoad}
-          style={{
-            width: isMobile ? 390 : "100%",
-            height: "100%",
-            border: 0,
-            display: "block",
-            // Mobile keeps a whisper of separation from the themed canvas
-            // without reintroducing a device bezel.
-            boxShadow: isMobile ? "0 0 0 1px rgba(0,0,0,0.07)" : undefined,
-            background: theme.bg,
-          }}
+          style={
+            scaledDesktop
+              ? {
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: DESKTOP_VIEWPORT_WIDTH,
+                  height: hostSize!.h / desktopScale,
+                  transform: `scale(${desktopScale})`,
+                  transformOrigin: "top left",
+                  border: 0,
+                  display: "block",
+                  background: theme.bg,
+                }
+              : {
+                  width: isMobile ? 390 : "100%",
+                  height: "100%",
+                  border: 0,
+                  display: "block",
+                  // Mobile keeps a whisper of separation from the themed canvas
+                  // without reintroducing a device bezel.
+                  boxShadow: isMobile ? "0 0 0 1px rgba(0,0,0,0.07)" : undefined,
+                  background: theme.bg,
+                }
+          }
         />
       </div>
       <DeviceToggle device={device} onChange={setDevice} />

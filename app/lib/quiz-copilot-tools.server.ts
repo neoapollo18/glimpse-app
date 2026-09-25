@@ -432,6 +432,8 @@ const COPY_KEYS = new Set([
   "quiz_lead_enabled", "quiz_lead_collect_phone",
   "quiz_lead_headline", "quiz_lead_body", "quiz_lead_button_label",
   "quiz_lead_skip_label", "quiz_lead_consent_text",
+  // Lead discount reveal (migration 077)
+  "quiz_lead_discount_code", "quiz_lead_discount_message",
   // Results "add all" bundle button (migrations 070/071)
   "quiz_bundle_enabled", "quiz_bundle_label", "quiz_bundle_size",
   // Per-card note under every results match (migration 074)

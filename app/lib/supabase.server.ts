@@ -532,6 +532,7 @@ export async function recordOrder(
     totalPrice?: number;
     currency?: string;
     customerId?: string;
+    customerEmail?: string;
     createdAt?: string;
     journey?: OrderJourneyData;
   }
@@ -554,6 +555,7 @@ export async function recordOrder(
         total_price: orderData.totalPrice || null,
         currency: orderData.currency || 'USD',
         customer_id: orderData.customerId || null,
+        customer_email: orderData.customerEmail || null,
         shopify_created_at: orderData.createdAt || new Date().toISOString(),
         first_touch_source: j?.firstTouchSource ?? null,
         first_touch_source_type: j?.firstTouchSourceType ?? null,
@@ -631,6 +633,61 @@ export async function getConversionStats(shopDomain: string, daysBack: number = 
     };
   } catch (error) {
     console.error('Error in getConversionStats:', error);
+    return null;
+  }
+}
+
+export interface QuizAttributionStats {
+  quizFinisherSessions: number;
+  quizFinisherConverted: number;
+  quizPurchaseRate: number;
+  quizAttributedOrders: number;
+  quizAttributedRevenue: number;
+  leadsTotal: number;
+  leadsConverted60d: number;
+  leadPurchaseRate: number;
+  leadAttributedRevenue: number;
+}
+
+/**
+ * Quiz → purchase attribution (migration 078): same-session quiz-finisher
+ * conversion via cart_token, and email-lead conversion within 60 days via
+ * widget_orders.customer_email. Returns null when the RPC isn't deployed
+ * yet so the dashboard can hide the section instead of rendering zeros.
+ */
+export async function getQuizAttribution(
+  shopDomain: string,
+  daysBack: number = 30,
+): Promise<QuizAttributionStats | null> {
+  try {
+    const shop = await findShopByDomain(shopDomain);
+    if (!shop) return null;
+
+    const { data, error } = await supabase.rpc('get_quiz_attribution', {
+      p_shop_id: shop.id,
+      p_days_back: daysBack,
+    });
+
+    if (error) {
+      console.error('Error getting quiz attribution:', error);
+      return null;
+    }
+
+    const stats = Array.isArray(data) ? data[0] : data;
+    if (!stats) return null;
+    return {
+      quizFinisherSessions: Number(stats.quiz_finisher_sessions || 0),
+      quizFinisherConverted: Number(stats.quiz_finisher_converted || 0),
+      quizPurchaseRate: Number(stats.quiz_purchase_rate || 0),
+      quizAttributedOrders: Number(stats.quiz_attributed_orders || 0),
+      quizAttributedRevenue: Number(stats.quiz_attributed_revenue || 0),
+      leadsTotal: Number(stats.leads_total || 0),
+      leadsConverted60d: Number(stats.leads_converted_60d || 0),
+      leadPurchaseRate: Number(stats.lead_purchase_rate || 0),
+      leadAttributedRevenue: Number(stats.lead_attributed_revenue || 0),
+    };
+  } catch (error) {
+    console.error('Error in getQuizAttribution:', error);
     return null;
   }
 }
@@ -1352,6 +1409,36 @@ export async function redactQuizLeadsForCustomer(
     return { ok: true, deleted };
   } catch (error) {
     return { ok: false, deleted: 0, error: (error as Error).message };
+  }
+}
+
+/**
+ * GDPR customers/redact: strip the buyer email (migration 078) from any
+ * order rows matching this customer for the shop. The order rows themselves
+ * stay — they're the merchant's sales records — only the PII column goes.
+ */
+export async function redactOrderEmailsForCustomer(
+  shopDomain: string,
+  email: string | null
+): Promise<{ ok: boolean; redacted: number; error?: string }> {
+  try {
+    const shop = await findShopByDomain(shopDomain);
+    if (!shop || !email) return { ok: true, redacted: 0 };
+    const { error, count } = await supabase
+      .from('widget_orders')
+      .update({ customer_email: null }, { count: 'exact' })
+      .eq('shop_id', shop.id)
+      .eq('customer_email', email.toLowerCase());
+    if (error) {
+      // Missing column = migration 078 not run yet = nothing stored to redact.
+      if (/customer_email/.test(error.message) && /column/i.test(error.message)) {
+        return { ok: true, redacted: 0 };
+      }
+      return { ok: false, redacted: 0, error: error.message };
+    }
+    return { ok: true, redacted: count ?? 0 };
+  } catch (error) {
+    return { ok: false, redacted: 0, error: (error as Error).message };
   }
 }
 
@@ -3167,6 +3254,10 @@ export interface ChatAssistantConfig {
   quiz_lead_button_label: string;
   quiz_lead_skip_label: string;
   quiz_lead_consent_text: string;
+  // Discount reveal (migration 077): a merchant-created Shopify discount
+  // code revealed after the lead submits, auto-applied via /discount/{code}.
+  quiz_lead_discount_code: string | null;
+  quiz_lead_discount_message: string;
   // Shop-wide FALLBACK transformation prompt for quantity >= 2 try-ons
   // (migration 052, repurposed by migration 053): used INSTEAD of the base
   // prompt only when neither the variant nor the product defines its own
@@ -3376,6 +3467,8 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   quiz_lead_button_label: 'Save my results',
   quiz_lead_skip_label: 'Skip for now',
   quiz_lead_consent_text: 'By continuing you agree to receive marketing messages. Unsubscribe anytime.',
+  quiz_lead_discount_code: null,
+  quiz_lead_discount_message: 'Here’s your code — we’ve applied it to your checkout automatically.',
 };
 
 // Defensive parse of the quiz_shade_fallbacks jsonb: keep only
@@ -3582,6 +3675,12 @@ function mapChatAssistantRow(data: any): ChatAssistantConfig {
     quiz_lead_button_label: data.quiz_lead_button_label ?? CHAT_ASSISTANT_DEFAULTS.quiz_lead_button_label,
     quiz_lead_skip_label: data.quiz_lead_skip_label ?? CHAT_ASSISTANT_DEFAULTS.quiz_lead_skip_label,
     quiz_lead_consent_text: data.quiz_lead_consent_text ?? CHAT_ASSISTANT_DEFAULTS.quiz_lead_consent_text,
+    quiz_lead_discount_code:
+      typeof data.quiz_lead_discount_code === 'string' && data.quiz_lead_discount_code.trim()
+        ? data.quiz_lead_discount_code.trim()
+        : null,
+    quiz_lead_discount_message:
+      data.quiz_lead_discount_message ?? CHAT_ASSISTANT_DEFAULTS.quiz_lead_discount_message,
     // A stray mode value degrades to the legacy matrix engine rather than
     // accidentally turning LLM calls on for a shop.
     recommendation_mode: (['matrix', 'ai', 'hybrid'] as const).includes(data.recommendation_mode)

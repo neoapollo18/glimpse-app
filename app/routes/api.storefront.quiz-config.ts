@@ -224,6 +224,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         buttonLabel: config.quiz_lead_button_label,
         skipLabel: config.quiz_lead_skip_label,
         consentText: renderTokens(config.quiz_lead_consent_text),
+        // Discount reveal (migration 077): shown after submit and applied
+        // to checkout by the widget via /discount/{code}.
+        discountCode: config.quiz_lead_discount_code,
+        discountMessage: renderTokens(config.quiz_lead_discount_message),
       },
     },
     {

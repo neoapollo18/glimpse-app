@@ -23,7 +23,7 @@ import {
 } from "@shopify/polaris-icons";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { getAnalytics, getConversionStats, getTopTrafficSources, getAssistantEngagement, getQuizEngagement, getQuizLeadStats, shopHasTryOnConfig, type TrafficSourceStat, type AssistantEngagement, type AssistantFunnelCounts, type QuizEngagement, type QuizFunnelCounts, type QuizLeadStats } from "../lib/supabase.server";
+import { getAnalytics, getConversionStats, getTopTrafficSources, getAssistantEngagement, getQuizAttribution, getQuizEngagement, getQuizLeadStats, shopHasTryOnConfig, type TrafficSourceStat, type AssistantEngagement, type AssistantFunnelCounts, type QuizAttributionStats, type QuizEngagement, type QuizFunnelCounts, type QuizLeadStats } from "../lib/supabase.server";
 import { useState, useCallback } from "react";
 
 interface WidgetBreakdown {
@@ -111,12 +111,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // (backend vto_enabled override, else auto-detected from configured
   // products). Everyone else gets a quiz-only page — and we skip the
   // legacy queries entirely.
-  const [showLegacy, quiz7Days, quiz30Days, leads7Days, leads30Days] = await Promise.all([
+  const [showLegacy, quiz7Days, quiz30Days, leads7Days, leads30Days, quizAttr7Days, quizAttr30Days] = await Promise.all([
     shopHasTryOnConfig(session.shop),
     getQuizEngagement(session.shop, 7),
     getQuizEngagement(session.shop, 30),
     getQuizLeadStats(session.shop, 7),
     getQuizLeadStats(session.shop, 30),
+    getQuizAttribution(session.shop, 7),
+    getQuizAttribution(session.shop, 30),
   ]);
 
   let analytics7Days: Awaited<ReturnType<typeof getAnalytics>> = null;
@@ -222,6 +224,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     quiz30: quiz30Days ?? EMPTY_QUIZ,
     leads7: leads7Days,
     leads30: leads30Days,
+    quizAttr7: quizAttr7Days,
+    quizAttr30: quizAttr30Days,
     analytics7: safeAnalytics7,
     analytics30: safeAnalytics30,
     attribution7,
@@ -233,7 +237,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export default function Analytics() {
-  const { showLegacy, quiz7, quiz30, leads7, leads30, analytics7, analytics30, attribution7, attribution30, assistant7, assistant30, productImages } = useLoaderData<typeof loader>();
+  const { showLegacy, quiz7, quiz30, leads7, leads30, quizAttr7, quizAttr30, analytics7, analytics30, attribution7, attribution30, assistant7, assistant30, productImages } = useLoaderData<typeof loader>();
   const [timeRange, setTimeRange] = useState("30");
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
 
@@ -307,6 +311,10 @@ export default function Analytics() {
   const quizFunnel = buildQuizFunnel(quiz);
   const quizMobileFunnel = buildQuizFunnel(quiz.byDevice.mobile);
   const quizDesktopFunnel = buildQuizFunnel(quiz.byDevice.desktop);
+
+  // Quiz → purchase attribution (migration 078). Null until the RPC is
+  // deployed; the section hides itself rather than showing zeros.
+  const quizAttr: QuizAttributionStats | null = timeRange === "7" ? quizAttr7 : quizAttr30;
 
   // Quiz leads (email capture step). Rows are capped server-side at 500
   // newest per window; `count` is the accurate head-count total.
@@ -612,6 +620,61 @@ export default function Analytics() {
             </BlockStack>
           )}
         </BlockStack>
+
+        {/* Quiz → purchases (migration 078): did quiz finishers buy, and did
+            email leads buy within 60 days. Hidden until the RPC is deployed
+            and there's quiz activity to attribute. */}
+        {quizAttr && hasQuizData && (
+          <BlockStack gap="300">
+            <InlineStack gap="200" blockAlign="center">
+              <Text as="h2" variant="headingMd">Quiz → purchases</Text>
+              <Badge tone="success">Revenue</Badge>
+            </InlineStack>
+            <InlineGrid columns={{ xs: 1, sm: 3 }} gap="400">
+              <Card padding="400">
+                <BlockStack gap="200">
+                  <Text as="span" variant="bodySm" tone="subdued">Quiz finishers who bought</Text>
+                  <Text as="p" variant="headingXl" fontWeight="bold">
+                    {quizAttr.quizPurchaseRate.toFixed(1)}%
+                  </Text>
+                  <Text as="span" variant="bodySm" tone="subdued">
+                    {quizAttr.quizFinisherConverted.toLocaleString()} of {quizAttr.quizFinisherSessions.toLocaleString()} carts that reached results placed an order
+                  </Text>
+                </BlockStack>
+              </Card>
+              <Card padding="400">
+                <BlockStack gap="200">
+                  <Text as="span" variant="bodySm" tone="subdued">Quiz-attributed revenue</Text>
+                  <Text as="p" variant="headingXl" fontWeight="bold">
+                    ${quizAttr.quizAttributedRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </Text>
+                  <Text as="span" variant="bodySm" tone="subdued">
+                    from {quizAttr.quizAttributedOrders.toLocaleString()} {quizAttr.quizAttributedOrders === 1 ? "order" : "orders"} in carts that finished the quiz
+                  </Text>
+                </BlockStack>
+              </Card>
+              <Card padding="400">
+                <BlockStack gap="200">
+                  <Text as="span" variant="bodySm" tone="subdued">Email leads who bought (60 days)</Text>
+                  <Text as="p" variant="headingXl" fontWeight="bold">
+                    {quizAttr.leadsConverted60d.toLocaleString()}
+                    {quizAttr.leadsTotal > 0 && (
+                      <Text as="span" variant="bodyMd" tone="subdued"> · {quizAttr.leadPurchaseRate.toFixed(1)}%</Text>
+                    )}
+                  </Text>
+                  <Text as="span" variant="bodySm" tone="subdued">
+                    of {quizAttr.leadsTotal.toLocaleString()} {quizAttr.leadsTotal === 1 ? "lead" : "leads"} captured in this window
+                    {quizAttr.leadAttributedRevenue > 0 &&
+                      ` · $${quizAttr.leadAttributedRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })} revenue`}
+                  </Text>
+                </BlockStack>
+              </Card>
+            </InlineGrid>
+            <Text as="span" variant="bodySm" tone="subdued">
+              Finisher conversion is same-cart attribution (quiz results and the order share a cart). Lead conversion matches the lead's email to the order email within 60 days of submitting, so it also catches shoppers who came back later. Order emails are recorded from the day this feature deployed onward.
+            </Text>
+          </BlockStack>
+        )}
 
         {/* Quiz leads — email/SMS captured by the quiz's lead step. Hidden
             for legacy try-on shops with no quiz activity: the empty-state

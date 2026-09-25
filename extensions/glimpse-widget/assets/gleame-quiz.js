@@ -980,9 +980,12 @@
     draft = {};
     var landing = config.landing || {};
     // Centered landing variant (quiz_intro_layout, migration 049). Default
-    // stays the split two-column layout.
+    // stays the split two-column layout — but only when there is imagery
+    // for the visual column; otherwise the 7fr/5fr grid strands the copy
+    // beside an empty track, so fall back to the centered layout.
+    var hasIntroVisual = Boolean(landing.beforeImageUrl || landing.afterImageUrl);
     var screen = el('div', 'gq-intro' +
-      (config.introLayout === 'centered' ? ' gq-intro--centered' : ''));
+      (config.introLayout === 'centered' || !hasIntroVisual ? ' gq-intro--centered' : ''));
 
     var main = el('div', 'gq-intro-main');
     var copy = el('div', 'gq-intro-copy');
@@ -1047,7 +1050,7 @@
     main.appendChild(copy);
 
     // Before/after visual (desktop side panel).
-    if (landing.beforeImageUrl || landing.afterImageUrl) {
+    if (hasIntroVisual) {
       var visual = el('div', 'gq-intro-visual');
       var frames = el('div', 'gq-ba-frames');
       if (landing.beforeImageUrl) {
@@ -1727,6 +1730,46 @@
     });
   }
 
+  // Auto-apply a merchant discount code to the shopper's checkout. Shopify
+  // sets the discount cookie on any storefront hit to /discount/{code}; a
+  // same-origin fetch is enough — no navigation, no visible redirect. Best
+  // effort: a failure only means the shopper types the code manually.
+  function applyDiscountCode(code) {
+    if (PREVIEW || !code) return;
+    try {
+      fetch('/discount/' + encodeURIComponent(code), { credentials: 'same-origin' })
+        .catch(function() {});
+    } catch (e) { /* fetch unavailable — code still shown on screen */ }
+  }
+
+  // Post-submit reveal: the discount code, a copy affordance, and an
+  // explicit Continue (the surprise moment deserves a beat; auto-advancing
+  // would flash the code away before the shopper reads it).
+  function buildLeadReveal(lead) {
+    var wrap = el('div', 'gq-lead-reveal');
+    wrap.appendChild(el('p', 'gq-question-helper gq-lead-reveal-msg',
+      escapeHtml(lead.discountMessage || 'Here’s your code — we’ve applied it to your checkout automatically.')));
+    var codeRow = el('div', 'gq-lead-code');
+    codeRow.appendChild(el('span', 'gq-lead-code-text', escapeHtml(lead.discountCode)));
+    var copyBtn = el('button', 'gq-lead-code-copy', 'Copy');
+    copyBtn.type = 'button';
+    copyBtn.onclick = function() {
+      try {
+        navigator.clipboard.writeText(lead.discountCode).then(function() {
+          copyBtn.textContent = 'Copied';
+          setTimeout(function() { copyBtn.textContent = 'Copy'; }, 2000);
+        }).catch(function() { /* permission denied — the code is on screen */ });
+      } catch (e) { /* clipboard unavailable — the code is on screen */ }
+    };
+    codeRow.appendChild(copyBtn);
+    wrap.appendChild(codeRow);
+    var cont = el('button', 'gq-add-btn gq-lead-continue', 'Continue →');
+    cont.type = 'button';
+    cont.onclick = function() { leaveLead(); };
+    wrap.appendChild(cont);
+    return wrap;
+  }
+
   // Submit AND skip both land here: the step is once per session, then the
   // flow continues exactly where advanceFrom would have gone (the gate).
   function leaveLead() {
@@ -1836,7 +1879,25 @@
       submitLead(email, phone)
         .then(function() {
           trackEvent('quiz_lead_submitted');
-          leaveLead();
+          // Discount reveal (migration 077): swap the form for the code
+          // instead of advancing. Without a code, straight on to the gate.
+          if (!lead.discountCode) {
+            leaveLead();
+            return;
+          }
+          applyDiscountCode(lead.discountCode);
+          if (state.screen !== 'lead') {
+            // Shopper navigated away mid-submit: the lead is captured and
+            // the code applied — mark the step spent exactly like
+            // leaveLead's slow-submit path, or it would re-appear.
+            state.leadDone = true;
+            saveState();
+            return;
+          }
+          trackEvent('quiz_lead_discount_shown');
+          form.style.display = 'none';
+          skip.style.display = 'none';
+          body.appendChild(buildLeadReveal(lead));
         })
         .catch(function(error) {
           submitBtn.disabled = false;

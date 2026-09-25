@@ -37,6 +37,10 @@ export function billingTermsText(): string {
   const paid = SESSION_TIERS.filter((t) => (t.price ?? 0) > 0)
     .map((t) => `$${t.price}/mo for ${t.visitors}`)
     .join("; ");
+  // All-free tier table (2026-09): nothing is ever posted to the usage line.
+  if (!paid) {
+    return `Gleame is currently free at every traffic tier — nothing is charged. The $${USAGE_CAP_USD}/mo cap is the most this subscription could ever bill if paid tiers return.`;
+  }
   return `Charged monthly by store traffic (average monthly sessions over the last 90 days): free under 2,500 sessions; ${paid}. Never more than $${USAGE_CAP_USD}/mo.`;
 }
 

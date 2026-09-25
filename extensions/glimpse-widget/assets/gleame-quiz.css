@@ -45,7 +45,7 @@
 
   display: block;
   background: var(--gq-bg);
-  padding: var(--gq-pad-top, 48px) 20px var(--gq-pad-bottom, 64px);
+  padding: var(--gq-pad-top, 24px) 20px var(--gq-pad-bottom, 64px);
   font-family: var(--gq-font-body);
   color: var(--gq-ink);
   -webkit-font-smoothing: antialiased;
@@ -439,6 +439,10 @@
  * OPTION VARIANTS
  * ===================================================================== */
 #gleame-quiz-root .gq-option-block { display: flex; flex-direction: column; gap: var(--gq-space-3); }
+/* Breathing room between the question text and the answer cards. Sibling
+   margins collapse in the block-flow step body, so a question with helper
+   text keeps the helper's 32px while a bare title gets 24px instead of 8. */
+#gleame-quiz-root .gq-step-body > .gq-option-block { margin-top: var(--gq-space-5); }
 
 /* Shared option-card base */
 #gleame-quiz-root .gq-option {
@@ -1540,6 +1544,53 @@
   margin-left: auto;
   margin-right: auto;
 }
+
+/* Discount reveal after lead submit (migration 077) */
+#gleame-quiz-root .gq-lead-reveal {
+  max-width: 440px;
+  margin: var(--gq-space-6) auto 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gq-space-4);
+  text-align: center;
+}
+#gleame-quiz-root .gq-lead-reveal-msg { margin: 0; }
+#gleame-quiz-root .gq-lead-code {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gq-space-3);
+  padding: 14px 16px;
+  background: var(--gq-tint);
+  border: 1.5px dashed var(--gq-accent-line);
+  border-radius: var(--gq-radius-btn);
+}
+#gleame-quiz-root .gq-lead-code-text {
+  font-family: var(--gq-font-body);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--gq-ink);
+  user-select: all;
+  -webkit-user-select: all;
+}
+#gleame-quiz-root .gq-lead-code-copy {
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  flex: none;
+  margin: 0;
+  padding: 7px 14px;
+  background: var(--gq-card-bg, #ffffff);
+  border: 1px solid var(--gq-line);
+  border-radius: 999px;
+  font-family: var(--gq-font-body);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gq-ink);
+  transition: border-color 160ms ease;
+}
+#gleame-quiz-root .gq-lead-code-copy:hover { border-color: var(--gq-accent); }
 
 
 /* =======================================================================

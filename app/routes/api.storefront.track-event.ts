@@ -83,6 +83,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       'quiz_lead_view',
       'quiz_lead_submitted',
       'quiz_lead_skipped',
+      // Discount reveal after lead submit (migration 077).
+      'quiz_lead_discount_shown',
     ];
     const isAssistantEvent = allowedAssistantEvents.includes(eventType);
 

@@ -3,6 +3,7 @@ import { authenticate } from "../shopify.server";
 import {
   deleteShopData,
   findQuizLeadsForCustomer,
+  redactOrderEmailsForCustomer,
   redactQuizLeadsForCustomer,
 } from "../lib/supabase.server";
 
@@ -19,6 +20,8 @@ import {
  *   captured only when the shopper opts in via the quiz's lead step.
  *   Covered below for customer data_request/redact; shop-level deletion
  *   cascades from the shops row (deleteShopData).
+ * - Buyer email on order rows (migration 078): joins purchases to quiz
+ *   leads for attribution. Redacted (nulled) on customers/redact.
  * - NO customer photos (processed in memory only, never persisted)
  */
 
@@ -101,9 +104,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           data?.customer?.email ?? null,
           data?.customer?.phone ?? null
         );
+        // Buyer email on order rows (migration 078) is PII too — strip it.
+        const orderResult = await redactOrderEmailsForCustomer(
+          shop,
+          data?.customer?.email ?? null
+        );
+        if (!orderResult.ok) {
+          console.error(`[GDPR] Order email redact failed:`, orderResult.error);
+          return new Response("Redact failed", { status: 500 });
+        }
         if (result.ok) {
           console.log(
-            `[GDPR] Response: deleted ${result.deleted} quiz lead record(s) for customer ${data?.customer?.id}`
+            `[GDPR] Response: deleted ${result.deleted} quiz lead record(s), redacted ${orderResult.redacted} order email(s) for customer ${data?.customer?.id}`
           );
         } else {
           // 500 so Shopify retries — acknowledging a redact we failed to

@@ -21,7 +21,9 @@ interface OrderPayload {
   cart_token: string | null;
   total_price: string;
   currency: string;
-  customer?: { id: number };
+  email?: string | null;
+  contact_email?: string | null;
+  customer?: { id: number; email?: string | null };
   created_at: string;
 }
 
@@ -217,6 +219,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       journey = await fetchStoredJourney(shop, String(order.id));
     }
 
+    // Buyer email (migration 078): joins to quiz_leads.email for lead →
+    // purchase attribution. Payload exposes it in up to three places
+    // depending on checkout type; first non-empty wins.
+    const customerEmail =
+      (order.email || order.contact_email || order.customer?.email || '').trim().toLowerCase() ||
+      undefined;
+
     const result = await recordOrder(shop, {
       shopifyOrderId: String(order.id),
       cartToken: order.cart_token || undefined,
@@ -224,6 +233,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       totalPrice: parseFloat(order.total_price) || 0,
       currency: order.currency || 'USD',
       customerId: order.customer?.id ? String(order.customer.id) : undefined,
+      customerEmail,
       createdAt: order.created_at,
       journey: journey ?? undefined,
     });

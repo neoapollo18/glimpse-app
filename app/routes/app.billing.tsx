@@ -256,6 +256,22 @@ export default function BillingPage() {
               </Text>
             </BlockStack>
           </Card>
+        ) : SESSION_TIERS.every((t) => (t.price ?? 0) === 0) ? (
+          // All-free pricing (2026-09): nothing to approve, nothing charged.
+          <Card>
+            <BlockStack gap="300">
+              <InlineStack gap="200" blockAlign="center">
+                <Text as="h2" variant="headingMd">Gleame is free</Text>
+                <Badge tone="success">Free</Badge>
+              </InlineStack>
+              <Text as="p" variant="bodyMd">
+                Every Gleame feature is included at no charge, whatever your
+                store's traffic. There's nothing to approve and nothing will
+                be billed. If pricing ever changes, you'll review and approve
+                it on Shopify's billing page before anything is charged.
+              </Text>
+            </BlockStack>
+          </Card>
         ) : (
           <Card>
             <BlockStack gap="400">

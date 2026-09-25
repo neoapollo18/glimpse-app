@@ -577,6 +577,8 @@ export function LeadEditor({
     quiz_lead_button_label: str(settings, "quiz_lead_button_label"),
     quiz_lead_skip_label: str(settings, "quiz_lead_skip_label"),
     quiz_lead_consent_text: str(settings, "quiz_lead_consent_text"),
+    quiz_lead_discount_code: str(settings, "quiz_lead_discount_code"),
+    quiz_lead_discount_message: str(settings, "quiz_lead_discount_message"),
   }));
   const [enabled, setEnabled] = useState<boolean>(settings.quiz_lead_enabled === true);
   const [collectPhone, setCollectPhone] = useState<boolean>(settings.quiz_lead_collect_phone === true);
@@ -630,6 +632,23 @@ export function LeadEditor({
         disabled={disabled}
         multiline={2}
         helpText="Small print under the button. Make sure it matches your marketing consent obligations."
+      />
+      <CopyField
+        label="Discount code (optional)"
+        fieldKey="quiz_lead_discount_code"
+        values={values}
+        setValue={setValue}
+        disabled={disabled}
+        helpText="An existing Shopify discount code. After a shopper submits their email, the quiz reveals this code and applies it to their checkout automatically. Create the code in Shopify first — Gleame doesn't create discounts."
+      />
+      <CopyField
+        label="Discount reveal message"
+        fieldKey="quiz_lead_discount_message"
+        values={values}
+        setValue={setValue}
+        disabled={disabled || !values.quiz_lead_discount_code.trim()}
+        multiline={2}
+        helpText="Shown above the revealed code."
       />
     </BlockStack>
   );
