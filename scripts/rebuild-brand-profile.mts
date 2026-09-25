@@ -1,8 +1,14 @@
 // One-off: re-extract the brand profile (and thus template eligibility)
 // after the brand library has been (re)built.
 // Run: npx tsx scripts/rebuild-brand-profile.mts <shop-domain>
+//
+// CAUTION (2026-09-25 incident): this UPSERTS brand_profiles, which feeds
+// the storefront's template tokens and completed the serving pipeline for
+// a shop with a stale quiz_template — flipping its live quiz rendering.
+// Check chat_assistant_config.quiz_template and the QUIZ_TEMPLATES_LIVE
+// flag before running against a live merchant.
 
-import { PrismaClient } from "@prisma/client";
+import { offlineAdminGraphql } from "./offline-admin.mts";
 
 const shopDomain = process.argv[2];
 if (!shopDomain) {
@@ -10,34 +16,7 @@ if (!shopDomain) {
   process.exit(1);
 }
 
-const prisma = new PrismaClient();
-const session = await prisma.session.findFirst({
-  where: { shop: shopDomain, isOnline: false },
-});
-await prisma.$disconnect();
-if (!session?.accessToken) {
-  console.error(`No offline session token for ${shopDomain}`);
-  process.exit(1);
-}
-
-const API_VERSION = "2025-01";
-const admin = async (query: string, variables?: Record<string, unknown>) => {
-  const res = await fetch(`https://${shopDomain}/admin/api/${API_VERSION}/graphql.json`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Shopify-Access-Token": session.accessToken!,
-    },
-    body: JSON.stringify({ query, variables: variables ?? {} }),
-  });
-  if (!res.ok) throw new Error(`Admin API ${res.status}: ${await res.text()}`);
-  const body = (await res.json()) as { data?: unknown; errors?: Array<{ message?: string }> };
-  if (body.errors?.length) {
-    throw new Error(`brand-profile graphql: ${body.errors[0]?.message ?? "error"}`);
-  }
-  return body.data;
-};
-
+const admin = await offlineAdminGraphql(shopDomain);
 const { extractBrandProfile } = await import("../app/lib/brand-profile.server");
 const profile = await extractBrandProfile(shopDomain, admin);
 console.log("template:", profile.templateAssignment.template);

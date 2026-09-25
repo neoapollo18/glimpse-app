@@ -983,9 +983,12 @@
     // stays the split two-column layout — but only when there is imagery
     // for the visual column; otherwise the 7fr/5fr grid strands the copy
     // beside an empty track, so fall back to the centered layout.
+    // --solo marks the FALLBACK case (no imagery) so styling/telemetry can
+    // tell it apart from a merchant's explicit centered choice.
     var hasIntroVisual = Boolean(landing.beforeImageUrl || landing.afterImageUrl);
     var screen = el('div', 'gq-intro' +
-      (config.introLayout === 'centered' || !hasIntroVisual ? ' gq-intro--centered' : ''));
+      (config.introLayout === 'centered' ? ' gq-intro--centered'
+        : !hasIntroVisual ? ' gq-intro--centered gq-intro--solo' : ''));
 
     var main = el('div', 'gq-intro-main');
     var copy = el('div', 'gq-intro-copy');
@@ -1877,27 +1880,30 @@
       submitBtn.disabled = true;
       submitBtn.textContent = 'Saving…';
       submitLead(email, phone)
-        .then(function() {
+        .then(function(response) {
           trackEvent('quiz_lead_submitted');
           // Discount reveal (migration 077): swap the form for the code
-          // instead of advancing. Without a code, straight on to the gate.
-          if (!lead.discountCode) {
+          // instead of advancing. The code arrives in the submit RESPONSE
+          // (server only discloses it after a stored lead); the config
+          // fallback covers the deploy-skew window where the extension is
+          // newer than the app server.
+          var code = (response && response.discountCode) || lead.discountCode;
+          var message = (response && response.discountMessage) || lead.discountMessage;
+          if (!code) {
             leaveLead();
             return;
           }
-          applyDiscountCode(lead.discountCode);
-          if (state.screen !== 'lead') {
-            // Shopper navigated away mid-submit: the lead is captured and
-            // the code applied — mark the step spent exactly like
-            // leaveLead's slow-submit path, or it would re-appear.
-            state.leadDone = true;
-            saveState();
-            return;
-          }
+          applyDiscountCode(code);
+          // The step is spent the moment the lead is stored — persist that
+          // NOW, not on Continue, or a reload while the code is on screen
+          // re-renders the empty email form and asks again.
+          state.leadDone = true;
+          saveState();
+          if (state.screen !== 'lead') return; // navigated away mid-submit
           trackEvent('quiz_lead_discount_shown');
           form.style.display = 'none';
           skip.style.display = 'none';
-          body.appendChild(buildLeadReveal(lead));
+          body.appendChild(buildLeadReveal({ discountCode: code, discountMessage: message }));
         })
         .catch(function(error) {
           submitBtn.disabled = false;
@@ -2203,7 +2209,10 @@
         state.matrixApplied = Boolean(data && data.matrixApplied);
         state.partial = Boolean(data && data.partial);
         state.screen = 'results';
-        t2ComputeDone = false; // fresh results arrival re-arms T2's computation screen
+        // Fresh results arrival re-arms T2's computation screen. Lives on
+        // state (persisted) so a reload of already-computed results does
+        // NOT replay the 2.8s interstitial.
+        state.t2ComputeDone = false;
         saveState();
         pushStep();
         trackEvent('quiz_results_shown');
@@ -2363,7 +2372,6 @@
   }
 
   function renderResults() {
-    postPreviewMsg({ type: 'gleame:screen', screen: 'results' });
     var results = config.results || {};
     var matches = Array.isArray(state.matches) ? state.matches : [];
     // Try-on generation off (migration 069): cards keep product images, no
@@ -2397,8 +2405,11 @@
       restart.onclick = restartQuiz;
       none.appendChild(restart);
       screen.appendChild(none);
+      // Deliberately NO results-reached signal here: a zero-match dead end
+      // must not read as a successful play-through to the Studio.
       return screen;
     }
+    postPreviewMsg({ type: 'gleame:screen', screen: 'results' });
 
     var head = el('div', 'gq-results-head');
     head.appendChild(el('h2', 'gq-headline gq-results-headline', renderAccent(renderName(headline))));
@@ -3019,7 +3030,7 @@
     photoFile = null;
     tryonCache = {};
     tryonCount = 0;
-    t2ComputeDone = false;
+    state.t2ComputeDone = false;
     // leadDone must survive a mid-restart reload too — persist the reset
     // state instead of clearing when there's a lead flag to keep.
     if (state.leadDone) saveState();
@@ -3055,7 +3066,8 @@
   }
 
   // T2's required results-computation screen runs once per results arrival.
-  var t2ComputeDone = false;
+  // Lives on state (persisted): a reload of computed results must not
+  // replay the interstitial.
 
   // Word-form kicker for T1 ("Question two"); digits past twelve.
   var TPL_NUM_WORDS = ['one', 'two', 'three', 'four', 'five', 'six', 'seven',
@@ -3487,12 +3499,12 @@
 
     // T2's required computation screen, once per results arrival
     // (spec Part 3 T2: 2.5 to 4s, hard cap 4s, never fake-infinite).
-    if (tpl.id === 't2' && !t2ComputeDone && matches.length > 0) {
-      t2ComputeDone = true;
+    if (tpl.id === 't2' && !state.t2ComputeDone && matches.length > 0) {
+      state.t2ComputeDone = true;
+      saveState();
       return tplComputingScreen(results);
     }
 
-    postPreviewMsg({ type: 'gleame:screen', screen: 'results' });
     var screen = el('div', 'gq-results gq-tpl-results gq-tpl-results--' + tpl.id);
 
     if (matches.length === 0) {
@@ -3503,8 +3515,11 @@
       restart0.onclick = restartQuiz;
       none.appendChild(restart0);
       screen.appendChild(none);
+      // Deliberately NO results-reached signal here: a zero-match dead end
+      // must not read as a successful play-through to the Studio.
       return screen;
     }
+    postPreviewMsg({ type: 'gleame:screen', screen: 'results' });
 
     if (state.shadeNoMatch) {
       var referral = el('div', 'gq-shade-referral');
@@ -3586,11 +3601,15 @@
     var top = matches[0] ? matches[0].productName : '';
     var second = matches[1] ? matches[1].productName : '';
     if (results.proseTemplate) {
+      // Function replacements: product names and answer labels are raw
+      // merchant/catalog strings — "Gloss $& Go" via a string replacement
+      // would re-inject the matched token ($&, $', $` are metacharacters).
+      var sub = function(v) { return function() { return v; }; };
       return results.proseTemplate
-        .replace(/\{answers\}/g, labels.join(', '))
-        .replace(/\{answer\}/g, labels[0] || '')
-        .replace(/\{top_match\}/g, top)
-        .replace(/\{second_match\}/g, second);
+        .replace(/\{answers\}/g, sub(labels.join(', ')))
+        .replace(/\{answer\}/g, sub(labels[0] || ''))
+        .replace(/\{top_match\}/g, sub(top))
+        .replace(/\{second_match\}/g, sub(second));
     }
     var told = labels.length > 0
       ? 'You told us ' + labels.join(', ').toLowerCase() + '.'
@@ -3856,13 +3875,6 @@
     // machinery (buildBundleRow), one Add all plus individual adds.
     var kit = matches.slice(0, 3);
     if (ctx.definitive && kit.length >= 2) {
-      bundlePicker = {
-        size: kit.length,
-        sel: kit.map(function(_, i) { return i; }),
-        pickable: false,
-        refreshers: [],
-        onChange: null,
-      };
       var kitWrap = el('div', 'gq-t4r-kit');
       kitWrap.appendChild(el('h4', 'gq-t4r-kit-title', 'Your kit'));
       var row = el('div', 'gq-t4r-kit-row');
@@ -3879,7 +3891,19 @@
         tplHydrateCard(p2, m, price2, false, false);
       });
       kitWrap.appendChild(row);
-      kitWrap.appendChild(buildBundleRow(kit, results));
+      // Add-all strip: same merchant opt-in gate as the legacy renderer
+      // (quiz_bundle_enabled). The kit DISPLAY is part of T4's design;
+      // the bundle button and its stored label copy are not.
+      if (results.bundleEnabled) {
+        bundlePicker = {
+          size: kit.length,
+          sel: kit.map(function(_, i) { return i; }),
+          pickable: false,
+          refreshers: [],
+          onChange: null,
+        };
+        kitWrap.appendChild(buildBundleRow(kit, results));
+      }
       wrap.appendChild(kitWrap);
     }
     screen.appendChild(wrap);
@@ -4006,7 +4030,7 @@
       state.screen = 'results';
       // Editor jumps land on the results themselves; T2's computation
       // interstitial still shows when the preview is played through.
-      t2ComputeDone = true;
+      state.t2ComputeDone = true;
     } else {
       var n = parseInt(String(step).replace(/^q/, ''), 10);
       if (!isFinite(n)) return;

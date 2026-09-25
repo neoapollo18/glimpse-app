@@ -155,6 +155,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ error: "Could not save — please try again." }, { status: 500, headers: CORS_HEADERS });
   }
 
+  // Discount reveal (migration 077): the code is disclosed ONLY here, after
+  // a stored lead — never in the public cached quiz-config GET, where any
+  // scraper could read it without giving an email.
+  if (config.quiz_lead_discount_code) {
+    return json(
+      {
+        success: true,
+        discountCode: config.quiz_lead_discount_code,
+        discountMessage: config.quiz_lead_discount_message.replace(
+          /\{assistant_name\}/g,
+          config.assistant_name
+        ),
+      },
+      { headers: CORS_HEADERS }
+    );
+  }
+
   return json({ success: true }, { headers: CORS_HEADERS });
 };
 

@@ -1,6 +1,7 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import {
+  countOrderEmailsForCustomer,
   deleteShopData,
   findQuizLeadsForCustomer,
   redactOrderEmailsForCustomer,
@@ -60,9 +61,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     switch (topic) {
       case "CUSTOMERS_DATA_REQUEST":
       case "customers/data_request": {
-        // Customer requested their data. The only customer-identifiable data
-        // Glimpse stores is quiz leads (email/phone + quiz answers, opt-in).
-        // Photos are processed in memory only; analytics are aggregate.
+        // Customer requested their data. Customer-identifiable data Glimpse
+        // stores: quiz leads (email/phone + quiz answers, opt-in) and buyer
+        // emails on order rows (migration 078). Photos are processed in
+        // memory only; analytics are aggregate.
         const data = payload as CustomerDataRequestPayload;
         console.log(`[GDPR] Customer data request:`, {
           shop,
@@ -71,11 +73,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           ordersRequested: data?.orders_requested?.length || 0,
         });
 
-        const leads = await findQuizLeadsForCustomer(
-          shop,
-          data?.customer?.email ?? null,
-          data?.customer?.phone ?? null
-        );
+        const [leads, orderEmailCount] = await Promise.all([
+          findQuizLeadsForCustomer(
+            shop,
+            data?.customer?.email ?? null,
+            data?.customer?.phone ?? null
+          ),
+          countOrderEmailsForCustomer(shop, data?.customer?.email ?? null),
+        ]);
         // Compliance audit trail. The merchant fulfills the request to the
         // customer; this records exactly what Glimpse holds for them.
         // (Contact values themselves stay out of the logs.)
@@ -83,7 +88,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           `[GDPR] Response: ${leads.length} quiz lead record(s) stored for customer ${data?.customer?.id}` +
             (leads.length > 0
               ? ` — fields: email/phone, quiz answer snapshot, device type, captured-at (row ids: ${leads.map((l) => l.id).join(', ')})`
-              : '')
+              : '') +
+            `; ${orderEmailCount} order record(s) holding the customer's email (widget_orders.customer_email)`
         );
         break;
       }
@@ -99,16 +105,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           ordersToRedact: data?.orders_to_redact?.length || 0,
         });
 
-        const result = await redactQuizLeadsForCustomer(
-          shop,
-          data?.customer?.email ?? null,
-          data?.customer?.phone ?? null
-        );
-        // Buyer email on order rows (migration 078) is PII too — strip it.
-        const orderResult = await redactOrderEmailsForCustomer(
-          shop,
-          data?.customer?.email ?? null
-        );
+        // Independent tables; run in parallel (GDPR webhooks have a tight
+        // response budget and each helper does its own shop lookup).
+        const [result, orderResult] = await Promise.all([
+          redactQuizLeadsForCustomer(
+            shop,
+            data?.customer?.email ?? null,
+            data?.customer?.phone ?? null
+          ),
+          // Buyer email on order rows (migration 078) is PII too — strip it.
+          redactOrderEmailsForCustomer(shop, data?.customer?.email ?? null),
+        ]);
         if (!orderResult.ok) {
           console.error(`[GDPR] Order email redact failed:`, orderResult.error);
           return new Response("Redact failed", { status: 500 });

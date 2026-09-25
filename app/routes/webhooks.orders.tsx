@@ -1,6 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
-import { findShopByDomain, recordOrder, supabase, type OrderJourneyData } from "../lib/supabase.server";
+import { findShopByDomain, normalizeEmail, recordOrder, supabase, type OrderJourneyData } from "../lib/supabase.server";
 
 // Webhooks only accept POST - return 405 for GET requests
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -223,7 +223,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // purchase attribution. Payload exposes it in up to three places
     // depending on checkout type; first non-empty wins.
     const customerEmail =
-      (order.email || order.contact_email || order.customer?.email || '').trim().toLowerCase() ||
+      normalizeEmail(order.email || order.contact_email || order.customer?.email || '') ||
       undefined;
 
     const result = await recordOrder(shop, {

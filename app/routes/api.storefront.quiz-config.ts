@@ -1,7 +1,6 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import {
-  supabase,
   findShopByDomain,
   shopHasValidAccess,
   getChatAssistantConfig,
@@ -50,14 +49,32 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const config = await getChatAssistantConfig(verifiedShop.shop_domain);
 
-  // Overhaul template system (migration 072): only assigned shops pay the
-  // brand-profile read; quiz_template NULL = legacy rendering, brandTokens
-  // absent, nothing changes.
-  const brandProfile = config.quiz_template
+  // Overhaul template system (migration 072): quiz_template NULL = legacy
+  // rendering, brandTokens absent, nothing changes.
+  //
+  // Post-incident hardening (2026-09-25). quiz_template doubled as both
+  // "merchant chose a template" and "v2 is live", so stale column values
+  // flipped real storefronts to structural templates at deploy time. Two
+  // gates now sit between the column and a shopper:
+  //   1. QUIZ_TEMPLATES_LIVE env kill switch — until it's "true", every
+  //      shop serves legacy regardless of the column.
+  //   2. Serve-time eligibility — selection-time validation goes stale as
+  //      imagery changes, and writers other than the template endpoint
+  //      exist. An ineligible/unknown template degrades to t5 (renders
+  //      with zero imagery), never to a broken layout.
+  const templatesLive = process.env.QUIZ_TEMPLATES_LIVE === "true";
+  let servedTemplate = templatesLive ? config.quiz_template : null;
+  const brandProfile = servedTemplate
     ? await getBrandProfile(verifiedShop.shop_domain).catch(() => null)
     : null;
+  if (servedTemplate && servedTemplate !== "t5") {
+    const eligible = brandProfile?.templateAssignment?.eligible;
+    if (!Array.isArray(eligible) || !eligible.includes(servedTemplate as never)) {
+      servedTemplate = "t5";
+    }
+  }
   const brandTokens = resolveQuizTokens(
-    config.quiz_template,
+    servedTemplate,
     config.quiz_preset,
     brandProfile?.tokens ?? null
   );
@@ -68,15 +85,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // the typed mapper, so template shops take one defensive raw read;
   // absent columns simply resolve to null. Legacy shops (template null)
   // never pay the read and never see the fields.
-  let tplContent: TemplateContentFields | null = null;
-  if (config.quiz_template) {
-    const { data: rawRow } = await supabase
-      .from("chat_assistant_config")
-      .select("*")
-      .eq("shop_domain", verifiedShop.shop_domain)
-      .maybeSingle();
-    tplContent = readTemplateContentFields(rawRow ?? {});
-  }
+  // The mapper has carried these fields since the same commit that added
+  // them; the row from getChatAssistantConfig is already complete, so no
+  // second read. (readTemplateContentFields accepts the mapped row: the
+  // field names are identical.)
+  const tplContent: TemplateContentFields | null = servedTemplate
+    ? readTemplateContentFields(config as unknown as Record<string, unknown>)
+    : null;
 
   const renderTokens = (s: string) =>
     s.replace(/\{assistant_name\}/g, config.assistant_name);
@@ -96,7 +111,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       // Null radius/fonts = widget defaults / runtime theme inheritance.
       // Template shops skip the global-accent fallback: accent_color has a
       // house default that would stomp the extracted brand accent.
-      accentColor: config.quiz_accent_color || (config.quiz_template ? null : config.accent_color),
+      accentColor: config.quiz_accent_color || (servedTemplate ? null : config.accent_color),
       buttonRadius: config.quiz_button_radius,
       headingFontOverride: config.quiz_heading_font_override,
       bodyFontOverride: config.quiz_body_font_override,
@@ -114,12 +129,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       // Overhaul templates (Contract 2/3): template id sets the widget's
       // root layout class; brandTokens map onto the --gq-* vars before the
       // merchant overrides above. Both absent for legacy shops.
-      template: config.quiz_template,
+      template: servedTemplate,
       brandTokens,
       // T3's immersive backdrop: the Brand API cover image in v1
       // (per-question imagery lands with the generation pipeline).
       screenImageUrl:
-        config.quiz_template === "t3" ? brandProfile?.brand?.coverImageUrl ?? null : null,
+        servedTemplate === "t3" ? brandProfile?.brand?.coverImageUrl ?? null : null,
       // v2 template content, present ONLY when a template is assigned.
       // theme.heroImage feeds T1's sticky hero (Part 4 source priority
       // lands upstream; merchants can override via quiz_hero_image);
@@ -224,10 +239,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         buttonLabel: config.quiz_lead_button_label,
         skipLabel: config.quiz_lead_skip_label,
         consentText: renderTokens(config.quiz_lead_consent_text),
-        // Discount reveal (migration 077): shown after submit and applied
-        // to checkout by the widget via /discount/{code}.
-        discountCode: config.quiz_lead_discount_code,
-        discountMessage: renderTokens(config.quiz_lead_discount_message),
+        // The discount code is deliberately NOT served here: this response
+        // is public, CORS *, and cached — a scrapeable code would gut the
+        // email-for-code trade. The quiz-lead POST returns it after a
+        // stored submit instead.
       },
     },
     {

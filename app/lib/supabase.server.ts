@@ -1320,6 +1320,15 @@ export async function getQuizLeadStats(
 }
 
 /**
+ * One canonical email form for every write AND every match. The write
+ * paths (orders webhook, quiz-lead endpoint) and the GDPR lookups MUST
+ * agree, or a redact/data_request silently matches zero rows.
+ */
+export function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+/**
  * GDPR customers/data_request: every stored lead matching the customer's
  * email or phone for this shop.
  */
@@ -1340,7 +1349,7 @@ export async function findQuizLeadsForCustomer(
           .from('quiz_leads')
           .select('id, email, phone, quiz_answers, device_type, created_at')
           .eq('shop_id', shop.id)
-          .eq('email', email.toLowerCase())
+          .eq('email', normalizeEmail(email))
       );
     }
     if (phone) {
@@ -1393,7 +1402,7 @@ export async function redactQuizLeadsForCustomer(
         .from('quiz_leads')
         .delete({ count: 'exact' })
         .eq('shop_id', shop.id)
-        .eq('email', email.toLowerCase());
+        .eq('email', normalizeEmail(email));
       if (error) return { ok: false, deleted, error: error.message };
       deleted += count ?? 0;
     }
@@ -1412,10 +1421,50 @@ export async function redactQuizLeadsForCustomer(
   }
 }
 
+// Missing-COLUMN feature detection by structured code, mirroring
+// isMissingTableError in brand-library.server.ts: 42703 is Postgres
+// undefined_column, PGRST204 is PostgREST's schema-cache miss for a column.
+// Never classify by message text — an RLS denial or constraint error whose
+// message happens to mention the column must NOT read as "nothing stored".
+function isMissingColumnError(error: { code?: string } | null): boolean {
+  return error?.code === '42703' || error?.code === 'PGRST204';
+}
+
+/**
+ * GDPR customers/data_request: how many order rows hold this customer's
+ * email (migration 078). Disclosure counterpart of redactOrderEmailsForCustomer.
+ */
+export async function countOrderEmailsForCustomer(
+  shopDomain: string,
+  email: string | null
+): Promise<number> {
+  try {
+    const shop = await findShopByDomain(shopDomain);
+    if (!shop || !email) return 0;
+    const { count, error } = await supabase
+      .from('widget_orders')
+      .select('id', { count: 'exact', head: true })
+      .eq('shop_id', shop.id)
+      .eq('customer_email', normalizeEmail(email));
+    if (error) {
+      if (!isMissingColumnError(error)) {
+        console.error('countOrderEmailsForCustomer error:', error);
+      }
+      return 0;
+    }
+    return count ?? 0;
+  } catch (error) {
+    console.error('Error in countOrderEmailsForCustomer:', error);
+    return 0;
+  }
+}
+
 /**
  * GDPR customers/redact: strip the buyer email (migration 078) from any
  * order rows matching this customer for the shop. The order rows themselves
  * stay — they're the merchant's sales records — only the PII column goes.
+ * Also stamps email_redacted_at (migration 079); a DB trigger keeps the
+ * column NULL from then on, so a webhook redelivery can't resurrect it.
  */
 export async function redactOrderEmailsForCustomer(
   shopDomain: string,
@@ -1424,15 +1473,26 @@ export async function redactOrderEmailsForCustomer(
   try {
     const shop = await findShopByDomain(shopDomain);
     if (!shop || !email) return { ok: true, redacted: 0 };
+    const stamp = { customer_email: null, email_redacted_at: new Date().toISOString() };
     const { error, count } = await supabase
       .from('widget_orders')
-      .update({ customer_email: null }, { count: 'exact' })
+      .update(stamp, { count: 'exact' })
       .eq('shop_id', shop.id)
-      .eq('customer_email', email.toLowerCase());
+      .eq('customer_email', normalizeEmail(email));
     if (error) {
-      // Missing column = migration 078 not run yet = nothing stored to redact.
-      if (/customer_email/.test(error.message) && /column/i.test(error.message)) {
-        return { ok: true, redacted: 0 };
+      // 079 not run yet: retry without the stamp column; 078 not run
+      // either means there's nothing stored to redact.
+      if (isMissingColumnError(error)) {
+        const retry = await supabase
+          .from('widget_orders')
+          .update({ customer_email: null }, { count: 'exact' })
+          .eq('shop_id', shop.id)
+          .eq('customer_email', normalizeEmail(email));
+        if (retry.error) {
+          if (isMissingColumnError(retry.error)) return { ok: true, redacted: 0 };
+          return { ok: false, redacted: 0, error: retry.error.message };
+        }
+        return { ok: true, redacted: retry.count ?? 0 };
       }
       return { ok: false, redacted: 0, error: error.message };
     }

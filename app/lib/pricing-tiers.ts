@@ -29,3 +29,11 @@ export const SESSION_TIERS: SessionTier[] = [
   { name: 'Launch', min: 5001, max: 25000, price: 0, visitors: '5k-25k sessions' },
   { name: 'Growth', min: 25001, max: Infinity, price: 0, visitors: '25k+ sessions' },
 ];
+
+/**
+ * THE single free-mode predicate. Every surface that words pricing (billing
+ * page branches, Shopify approval terms) must branch on this name — two
+ * sites deriving "is the app free" independently is how copy and the
+ * approved terms drift apart when prices return.
+ */
+export const ALL_TIERS_FREE = SESSION_TIERS.every((t) => (t.price ?? 0) === 0);

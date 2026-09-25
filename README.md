@@ -90,16 +90,18 @@ INTERCOM_APP_ID=your_intercom_id
 
 ## Pricing Tiers
 
-Pricing is automatically determined based on monthly Shopify Analytics sessions:
+**Gleame is currently free at every tier** (2026-09: all tier prices are $0 in
+`app/lib/pricing-tiers.ts`, the single source of truth — the billing gate,
+usage-charge cron, billing page, and Shopify approval terms all derive from
+it). The session-tier structure remains in place for when paid pricing
+returns:
 
 | Tier | Sessions/Month | Price |
 |------|----------------|-------|
-| Starter | 0 - 5,000 | $30/mo |
-| Launch | 5,001 - 25,000 | $149/mo |
-| Growth | 25,001 - 75,000 | $399/mo |
-| Scale | 75,001 - 200,000 | $799/mo |
-| Premium | 200,001 - 500,000 | $1,499/mo |
-| Enterprise | 500,001+ | Custom |
+| Free | 0 - 2,500 | $0 |
+| Starter | 2,501 - 5,000 | $0 (was $30/mo) |
+| Launch | 5,001 - 25,000 | $0 (was $149/mo) |
+| Growth | 25,001+ | $0 (was $399/mo) |
 
 ## Local Development
 

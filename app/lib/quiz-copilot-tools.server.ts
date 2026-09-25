@@ -438,8 +438,10 @@ const COPY_KEYS = new Set([
   "quiz_bundle_enabled", "quiz_bundle_label", "quiz_bundle_size",
   // Per-card note under every results match (migration 074)
   "quiz_match_footnote",
-  // Overhaul template system (migration 072) — values validated below.
-  "quiz_template", "quiz_preset",
+  // quiz_template/quiz_preset are deliberately NOT copy keys: template
+  // switches must go through app.api.quiz-template, the only path that
+  // enforces isTemplateEligible and emits template_switched telemetry.
+  // (Post-incident 2026-09-25: this was a silent live-flip bypass.)
   // v2 template content strings (migration 076). quiz_trust_lines and
   // quiz_image_slots are array/object shaped with dedicated write paths
   // (generator / set-image-slot intent) — NOT copy fields, String()
@@ -488,9 +490,6 @@ export function applyUpdateCopy(draft: DraftShape, input: any, _catalog: Catalog
         return { ok: false, error: `${k} must be a whole number >= 0 (got ${JSON.stringify(v)})` };
       }
       continue;
-    }
-    if (k === "quiz_template" && !/^t[1-5]$/.test(String(v))) {
-      return { ok: false, error: `quiz_template must be t1-t5 (got ${JSON.stringify(v)})` };
     }
     if (Array.isArray(v)) {
       if (v.some((s) => typeof s !== "string" && typeof s !== "number")) {

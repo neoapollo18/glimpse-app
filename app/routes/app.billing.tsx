@@ -15,7 +15,7 @@ import {
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { SESSION_TIERS } from "../lib/pricing-tiers";
+import { ALL_TIERS_FREE, SESSION_TIERS } from "../lib/pricing-tiers";
 import {
   adminGraphql,
   billingTermsText,
@@ -194,11 +194,19 @@ export default function BillingPage() {
                 You're on a fixed plan at ${sub?.recurringPriceUsd ?? 0}/month
                 {sub?.name ? ` ("${sub.name}")` : ""}. It keeps working as is.
               </Text>
-              <Text as="p" variant="bodyMd">
-                Our new traffic-based pricing adjusts your charge to your
-                store's actual sessions each month (free under 2,500, capped
-                at $399) — one approval, no plan changes ever again.
-              </Text>
+              {ALL_TIERS_FREE ? (
+                <Text as="p" variant="bodyMd">
+                  Gleame is now free at every traffic tier. Switching stops
+                  this fixed charge — one approval, and you won't be billed
+                  again unless pricing returns (you'd approve that first).
+                </Text>
+              ) : (
+                <Text as="p" variant="bodyMd">
+                  Our new traffic-based pricing adjusts your charge to your
+                  store's actual sessions each month (free under 2,500, capped
+                  at $399) — one approval, no plan changes ever again.
+                </Text>
+              )}
               <InlineStack gap="300" blockAlign="center">
                 <Button
                   variant="primary"
@@ -209,7 +217,7 @@ export default function BillingPage() {
                     submit(fd, { method: "POST" });
                   }}
                 >
-                  Switch to traffic-based pricing
+                  {ALL_TIERS_FREE ? "Switch to the free plan" : "Switch to traffic-based pricing"}
                 </Button>
                 <Text as="span" variant="bodySm" tone="subdued">
                   Approving the new plan replaces this one automatically.
@@ -225,11 +233,20 @@ export default function BillingPage() {
                 <Badge tone="success">Active</Badge>
                 {sub?.test && <Badge tone="info">Test mode</Badge>}
               </InlineStack>
-              <Text as="p" variant="bodyMd">
-                You're on Gleame's usage-based plan: your monthly charge
-                follows your store's traffic automatically, and you never pay
-                more than $399/month.
-              </Text>
+              {ALL_TIERS_FREE ? (
+                <Text as="p" variant="bodyMd">
+                  You're on Gleame's usage-based plan — and every tier is
+                  currently $0, so nothing is charged. If pricing returns,
+                  your charge follows your store's traffic and never exceeds
+                  $399/month.
+                </Text>
+              ) : (
+                <Text as="p" variant="bodyMd">
+                  You're on Gleame's usage-based plan: your monthly charge
+                  follows your store's traffic automatically, and you never pay
+                  more than $399/month.
+                </Text>
+              )}
               <InlineStack gap="600">
                 <BlockStack gap="050">
                   <Text as="span" variant="bodySm" tone="subdued">Current tier</Text>
@@ -256,7 +273,7 @@ export default function BillingPage() {
               </Text>
             </BlockStack>
           </Card>
-        ) : SESSION_TIERS.every((t) => (t.price ?? 0) === 0) ? (
+        ) : ALL_TIERS_FREE ? (
           // All-free pricing (2026-09): nothing to approve, nothing charged.
           <Card>
             <BlockStack gap="300">

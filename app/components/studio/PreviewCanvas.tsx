@@ -185,31 +185,28 @@ export function PreviewCanvas({
           title="Quiz preview"
           src={`/quiz-preview.html?token=${encodeURIComponent(stableTokenRef.current)}&v=${nonce}`}
           onLoad={onLoad}
-          style={
-            scaledDesktop
+          style={{
+            border: 0,
+            display: "block",
+            background: theme.bg,
+            ...(scaledDesktop
               ? {
-                  position: "absolute",
+                  position: "absolute" as const,
                   top: 0,
                   left: 0,
                   width: DESKTOP_VIEWPORT_WIDTH,
                   height: hostSize!.h / desktopScale,
                   transform: `scale(${desktopScale})`,
                   transformOrigin: "top left",
-                  border: 0,
-                  display: "block",
-                  background: theme.bg,
                 }
               : {
                   width: isMobile ? 390 : "100%",
                   height: "100%",
-                  border: 0,
-                  display: "block",
                   // Mobile keeps a whisper of separation from the themed canvas
                   // without reintroducing a device bezel.
                   boxShadow: isMobile ? "0 0 0 1px rgba(0,0,0,0.07)" : undefined,
-                  background: theme.bg,
-                }
-          }
+                }),
+          }}
         />
       </div>
       <DeviceToggle device={device} onChange={setDevice} />

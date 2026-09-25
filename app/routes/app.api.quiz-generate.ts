@@ -132,7 +132,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         });
         if (result.ok) {
           recordGenOutcome(shop.id, genToken, { warnings: result.warnings });
-          send({ type: "result", summary: result.summary, warnings: result.warnings });
+          // degradedTo: the validator's imagery floor demoted the assigned
+          // template (already saved to the live row, e.g. t5). Onboard's
+          // styling stage must not re-set the original assignment over it.
+          send({ type: "result", summary: result.summary, warnings: result.warnings, degradedTo: result.degradedTo ?? null });
         } else {
           recordGenOutcome(shop.id, genToken, { error: result.error, warnings: result.warnings });
           send({ type: "error", error: result.error, warnings: result.warnings });

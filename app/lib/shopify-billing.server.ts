@@ -12,7 +12,7 @@
 // Free tier (<2.5k sessions) posts nothing. Grandfathered shops never
 // subscribe. Tier table lives in pricing-tiers.ts (shared with the UI).
 
-import { SESSION_TIERS, type SessionTier } from "./pricing-tiers";
+import { ALL_TIERS_FREE, SESSION_TIERS, type SessionTier } from "./pricing-tiers";
 
 export const USAGE_CAP_USD = 399;
 
@@ -34,13 +34,15 @@ export function tierForSessions(sessions: number): TierMatch {
 export function billingTermsText(): string {
   // Shown to the merchant on Shopify's approval page. Keep it exact and
   // short — this is the contract for what the usage line may charge.
+  // All-free tier table (2026-09): nothing is ever posted to the usage line.
+  // Branches on the shared predicate — the billing page words pricing off
+  // the same constant, so the approved terms and the UI can't drift apart.
+  if (ALL_TIERS_FREE) {
+    return `Gleame is currently free at every traffic tier — nothing is charged. The $${USAGE_CAP_USD}/mo cap is the most this subscription could ever bill if paid tiers return, and any return of paid pricing would be announced before charges resume.`;
+  }
   const paid = SESSION_TIERS.filter((t) => (t.price ?? 0) > 0)
     .map((t) => `$${t.price}/mo for ${t.visitors}`)
     .join("; ");
-  // All-free tier table (2026-09): nothing is ever posted to the usage line.
-  if (!paid) {
-    return `Gleame is currently free at every traffic tier — nothing is charged. The $${USAGE_CAP_USD}/mo cap is the most this subscription could ever bill if paid tiers return.`;
-  }
   return `Charged monthly by store traffic (average monthly sessions over the last 90 days): free under 2,500 sessions; ${paid}. Never more than $${USAGE_CAP_USD}/mo.`;
 }
 

@@ -193,22 +193,16 @@ export async function buildPreviewQuizConfig(
     ? await getBrandProfile(shopDomain).catch(() => null)
     : null;
 
-  // v2 template content: draft settings win over the live raw row, same
+  // v2 template content: draft settings win over the live values, same
   // precedence as every other settings key in the merge above. The typed
-  // mapper strips these (unregistered) keys from `live`, so template
-  // shops take one defensive raw read for the live values.
-  let tplContent: TemplateContentFields | null = null;
-  if (config.quiz_template) {
-    const { data: rawRow } = await supabase
-      .from("chat_assistant_config")
-      .select("*")
-      .eq("shop_domain", shopDomain)
-      .maybeSingle();
-    tplContent = readTemplateContentFields({
-      ...((rawRow ?? {}) as Record<string, unknown>),
-      ...((draft.settings ?? {}) as Record<string, unknown>),
-    });
-  }
+  // mapper has carried these fields since the commit that added them, so
+  // the already-loaded config supplies the live side — no second read.
+  const tplContent: TemplateContentFields | null = config.quiz_template
+    ? readTemplateContentFields({
+        ...(config as unknown as Record<string, unknown>),
+        ...((draft.settings ?? {}) as Record<string, unknown>),
+      })
+    : null;
 
   return {
     enabled: true,

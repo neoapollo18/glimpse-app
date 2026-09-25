@@ -178,6 +178,7 @@ export default function Onboard() {
         }
         let matchingStarted = false;
         let genSummary: any = null;
+        let genDegradedTo: string | null = null;
         let genError: string | null = null;
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
@@ -203,7 +204,10 @@ export default function Onboard() {
               t0 = Date.now();
               setStage("matching", { state: "active" });
             }
-            if (evt.type === "result") genSummary = evt.summary;
+            if (evt.type === "result") {
+              genSummary = evt.summary;
+              genDegradedTo = typeof evt.degradedTo === "string" ? evt.degradedTo : null;
+            }
             if (evt.type === "error") genError = evt.error;
           }
         }
@@ -221,9 +225,15 @@ export default function Onboard() {
 
         // Stage 5 — template assignment. v2 default is T5 Clean (the
         // universal fallback; spec Part 3), never the playful style.
+        // The generator's imagery validator may have DEGRADED the assigned
+        // template (saved t5 to the live row); re-setting the original
+        // assignment here would reverse that, so the degrade wins.
         t0 = Date.now();
         setStage("styling", { state: "active" });
-        const tpl: TemplateId = profile?.templateAssignment?.template ?? "t5";
+        const tpl: TemplateId =
+          (genDegradedTo as TemplateId | null) ??
+          profile?.templateAssignment?.template ??
+          "t5";
         await post("/app/api/quiz-template", { intent: "set", template: tpl });
         await stageDone("styling", TEMPLATES[tpl].name, t0);
 
