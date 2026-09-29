@@ -1,7 +1,9 @@
 // Shared chunked catalog-sync driver for every surface that runs it (the
-// dashboard onboarding step, the Quiz Studio wizard, and its top-bar chip).
-// Each completed page immediately submits the next cursor to the
-// /app/api/catalog-sync resource route until the catalog is fully synced.
+// onboarding scope screen, which starts it automatically, and the Studio
+// top-bar chip). Each completed page immediately submits the next cursor
+// to the /app/api/catalog-sync resource route until the catalog is fully
+// synced; the last page also builds the brand library (v3 spec 4.6) and
+// reports its summary here.
 
 import { useFetcher } from "@remix-run/react";
 import { useEffect, useRef, useState } from "react";
@@ -18,6 +20,9 @@ export interface CatalogSyncResponse {
   nextCursor?: string | null;
   synced?: number;
   total?: number | null;
+  // Present on the final page only: the brand-library build summary
+  // (absent when the build failed - the sync itself still succeeded).
+  library?: { imageCount: number; taggedPct: number; ms: number };
 }
 
 export function useCatalogSync(options: { onComplete?: () => void } = {}) {
@@ -26,6 +31,7 @@ export function useCatalogSync(options: { onComplete?: () => void } = {}) {
   const [syncDone, setSyncDone] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncWarnings, setSyncWarnings] = useState<string[]>([]);
+  const [library, setLibrary] = useState<CatalogSyncResponse["library"] | null>(null);
   const doneSoFar = useRef(0);
   const onCompleteRef = useRef(options.onComplete);
   onCompleteRef.current = options.onComplete;
@@ -42,6 +48,7 @@ export function useCatalogSync(options: { onComplete?: () => void } = {}) {
     setSyncError(null);
     setSyncWarnings([]);
     setSyncDone(false);
+    setLibrary(null);
     setProgress({ done: 0, total: null });
     submitPage(resumeCursor);
   };
@@ -67,6 +74,7 @@ export function useCatalogSync(options: { onComplete?: () => void } = {}) {
       submitPage(data.nextCursor);
     } else {
       setProgress(null);
+      setLibrary(data.library ?? null);
       setSyncDone(true);
       onCompleteRef.current?.();
     }
@@ -79,6 +87,7 @@ export function useCatalogSync(options: { onComplete?: () => void } = {}) {
     syncDone,
     syncError,
     syncWarnings,
+    library,
     syncedCount: doneSoFar.current,
     busy: fetcher.state !== "idle" || progress !== null,
   };

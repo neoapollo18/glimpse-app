@@ -23,6 +23,7 @@
 // caller already runs inside withShopSaveLock (studio actions, copilot tool
 // application, generator save). Taking it here too would deadlock.
 
+import { phasesPartitionFlow } from "./quiz-templates";
 import {
   supabase,
   saveRecommendationConfig,
@@ -424,6 +425,24 @@ export async function saveLiveQuizConfig(
         error: `Questions saved, but copy/design settings failed: ${(e as Error).message}. Your previous config is in version history.`,
         warning,
       };
+    }
+  }
+
+  // v3 Match phases: a structural edit (add / remove / reorder) leaves the
+  // generator-written quiz_phases describing a flow that no longer exists.
+  // Clear them when they no longer partition the saved question order; the
+  // widget then renders the plain segmented header. Isolated write: an
+  // un-run migration 080 or any failure here is a warning, never a lost
+  // save.
+  const livePhases = (liveSettings as Record<string, unknown>).quiz_phases;
+  if (livePhases != null) {
+    const order = config.flow.questions.map((q) => q.axisKey);
+    if (!phasesPartitionFlow(livePhases, order)) {
+      try {
+        await saveChatAssistantConfig(shopDomain, { quiz_phases: null });
+      } catch (e) {
+        console.warn(`quiz-live: could not clear stale quiz_phases for ${shopDomain}: ${(e as Error).message}`);
+      }
     }
   }
 

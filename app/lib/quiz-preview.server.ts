@@ -20,8 +20,8 @@ import {
 } from "./supabase.server";
 import { isLiveProduct, isLiveVariant } from "./quiz-config-schema.server";
 import type { QuizDraft } from "./quiz-draft.server";
-import { getBrandProfile } from "./brand-profile.server";
-import { resolveQuizTokens } from "./quiz-templates";
+import { getBrandProfile, lookFromProfile } from "./brand-profile.server";
+import { defaultEmailPlacement, isLookId, isTemplateId, resolveQuizTokens } from "./quiz-templates";
 
 const SWATCH_HEX_RE = /^#[0-9a-fA-F]{3,8}$/;
 const hexOrNull = (v: unknown): string | null =>
@@ -89,15 +89,27 @@ export function readTemplateContentFields(source: Record<string, unknown>): Temp
 
 export interface PreviewTemplateOverrides {
   template?: string;
-  preset?: string;
+  /** v3: Look override (editorial|minimal|bold). */
+  look?: string;
+  /** v3: boot the widget on this screen (intro | q1..qN | results). Not a
+   * config field — the preview route passes it to the widget as
+   * PREVIEW.overrides.step. */
+  step?: string;
+  /** v3 screenshot suite (spec 8.2): `library=empty` renders the quiz as
+   * if no image had resolved — every slot unresolved — so the Studio
+   * placeholder widget and the storefront collapse rules can be captured. */
+  library?: "empty";
 }
 
 export function templateOverridesFromUrl(url: URL): PreviewTemplateOverrides {
   const overrides: PreviewTemplateOverrides = {};
   const template = url.searchParams.get("template");
   if (template && /^t[1-5]$/.test(template)) overrides.template = template;
-  const preset = url.searchParams.get("preset");
-  if (preset && /^[a-z0-9][a-z0-9-]{0,63}$/i.test(preset)) overrides.preset = preset;
+  const look = url.searchParams.get("look");
+  if (isLookId(look)) overrides.look = look;
+  const step = url.searchParams.get("step");
+  if (step && /^(intro|results|lead|gate|q[1-9][0-9]?)$/.test(step)) overrides.step = step;
+  if (url.searchParams.get("library") === "empty") overrides.library = "empty";
   return overrides;
 }
 
@@ -108,7 +120,14 @@ export function templateOverridesFromUrl(url: URL): PreviewTemplateOverrides {
 function sanitizeDisplayMeta(raw: unknown) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const meta = raw as Record<string, unknown>;
+  const emoji =
+    typeof meta.emoji === "string" &&
+    meta.emoji.trim().length <= 16 &&
+    /^(?:\p{Extended_Pictographic}|\p{Emoji_Component}|\u200d|\ufe0f)+$/u.test(meta.emoji.trim())
+      ? meta.emoji.trim()
+      : undefined;
   return {
+    emoji,
     sublabel: typeof meta.sublabel === "string" ? meta.sublabel : undefined,
     tag: typeof meta.tag === "string" ? meta.tag : undefined,
     meterLabel: typeof meta.meterLabel === "string" ? meta.meterLabel : undefined,
@@ -187,10 +206,15 @@ export async function buildPreviewQuizConfig(
   // the draft/live values so the template overlay can render live
   // previews without saving anything (parse with templateOverridesFromUrl).
   if (overrides?.template) config.quiz_template = overrides.template;
-  if (overrides?.preset) config.quiz_preset = overrides.preset;
+  if (isLookId(overrides?.look)) config.quiz_look = overrides!.look as ChatAssistantConfig["quiz_look"];
   const renderTokens = (s: string) => (s ?? "").replace(/\{assistant_name\}/g, config.assistant_name);
   const brandProfile = config.quiz_template
     ? await getBrandProfile(shopDomain).catch(() => null)
+    : null;
+  // v3 (V3-CONTRACTS §2/§6), storefront-endpoint parity.
+  const look = config.quiz_template ? config.quiz_look ?? lookFromProfile(brandProfile) : null;
+  const emailPlacement = isTemplateId(config.quiz_template)
+    ? config.quiz_email_placement ?? defaultEmailPlacement(config.quiz_template)
     : null;
 
   // v2 template content: draft settings win over the live values, same
@@ -225,19 +249,17 @@ export async function buildPreviewQuizConfig(
     // Overhaul templates (Contract 2/3): same shape as the storefront
     // endpoint so the studio canvas and the published page can't diverge.
     template: config.quiz_template,
-    brandTokens: resolveQuizTokens(
-      config.quiz_template,
-      config.quiz_preset,
-      brandProfile?.tokens ?? null
-    ),
-    screenImageUrl:
-      config.quiz_template === "t3" ? brandProfile?.brand?.coverImageUrl ?? null : null,
-    // v2 template content, mirroring the storefront endpoint exactly:
+    brandTokens: resolveQuizTokens(config.quiz_template, look, brandProfile?.tokens ?? null),
+    screenImageUrl: null,
+    // v3 template payload, mirroring the storefront endpoint exactly:
     // present only when a template is assigned, absent for legacy shops.
     ...(tplContent
       ? {
+          look,
+          emailPlacement,
+          phases: config.quiz_phases ?? [],
           theme: { heroImage: tplContent.heroImage },
-          imageSlots: tplContent.imageSlots,
+          imageSlots: tplContent.imageSlots ?? {},
         }
       : {}),
     numRecommendations: config.num_recommendations,
@@ -255,6 +277,13 @@ export async function buildPreviewQuizConfig(
       visualCaption: renderTokens(config.quiz_visual_caption),
       altAudienceLabel: config.quiz_alt_audience_label,
       altAudienceUrl: config.quiz_alt_audience_url,
+      ...(tplContent
+        ? {
+            founder: config.quiz_founder,
+            rating: null,
+            benefitChips: config.quiz_trust_items,
+          }
+        : {}),
     },
     gate: {
       // Migration 068. The widget ignores this in PREVIEW mode so the
@@ -313,6 +342,7 @@ export async function buildPreviewQuizConfig(
       buttonLabel: config.quiz_lead_button_label,
       skipLabel: config.quiz_lead_skip_label,
       consentText: renderTokens(config.quiz_lead_consent_text),
+      ...(tplContent ? { hasDiscount: Boolean(config.quiz_lead_discount_code) } : {}),
       discountCode: config.quiz_lead_discount_code,
       discountMessage: renderTokens(config.quiz_lead_discount_message),
     },

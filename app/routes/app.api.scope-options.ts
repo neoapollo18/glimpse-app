@@ -1,4 +1,7 @@
-// Scope-screen data (Overhaul Part 3 / C1 — the ONLY pre-build question).
+// Scope-screen data (v3 Part 6.1 "Confirm scope" — the ONLY pre-build
+// screen). GET also returns the card's three rows: product/collection
+// counts, the detected store type → template, and the theme line
+// (heading font + palette word, each OMITTED when not real) → Look.
 //
 // GET: chip derivation per spec §Screen 1 —
 //   1. "Everything I sell (N)" — always first, always default.
@@ -16,7 +19,25 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
-import { supabase } from "../lib/supabase.server";
+import { shopNeedsBilling } from "../lib/billing-gate.server";
+import { getChatAssistantConfig, supabase } from "../lib/supabase.server";
+import { getBrandProfile, templateSignalsFromProfile } from "../lib/brand-profile.server";
+import {
+  TEMPLATE_IDS,
+  TEMPLATES,
+  LOOKS,
+  describeStoreType,
+  isTemplateEligible,
+  isLookId,
+  isTemplateId,
+  type LookId,
+  type TemplateId,
+} from "../lib/quiz-templates";
+import {
+  extractedColorsFromProfile,
+  headingFontFromProfile,
+  paletteWordFor,
+} from "../lib/generation-report.server";
 
 interface ScopeChip {
   kind: "all" | "collection" | "type" | "tag";
@@ -28,7 +49,7 @@ interface ScopeChip {
 
 const COLLECTIONS_QUERY = `#graphql
   query GleameScopeCollections {
-    collections(first: 20, sortKey: UPDATED_AT, reverse: true) {
+    collections(first: 50, sortKey: UPDATED_AT, reverse: true) {
       nodes {
         id
         title
@@ -51,6 +72,9 @@ async function loadProducts(shopId: string) {
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
+  if (await shopNeedsBilling(session.shop, session.accessToken ?? "")) {
+    return json({ ok: false, error: "Your Gleame subscription isn't active. Visit Billing to continue." }, { status: 402 });
+  }
   const shop = await supabase
     .from("shops")
     .select("id")
@@ -75,11 +99,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   );
 
   // Collections (live fetch; tolerate failure — chips degrade to types).
+  // collectionCount = collections holding >= 1 synced product; 0 when the
+  // fetch failed (= unknown, and the card says just "N products").
   let collectionChips: ScopeChip[] = [];
+  let collectionCount = 0;
   try {
     const res = await admin.graphql(COLLECTIONS_QUERY);
     const body = (await res.json()) as any;
     const nodes = body?.data?.collections?.nodes ?? [];
+    collectionCount = nodes.filter((c: any) =>
+      (c.products?.nodes ?? []).some((p: any) => byShopifyNumericId.has(String(p.id).split("/").pop())),
+    ).length;
     collectionChips = nodes
       .map((c: any) => {
         const ids = (c.products?.nodes ?? [])
@@ -150,12 +180,68 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
+  // Store type → template, theme → Look (v3 spec 6.1). Every value is
+  // real or absent: no profile → no store-type line, no theme words.
+  const [profile, config] = await Promise.all([
+    getBrandProfile(session.shop).catch(() => null),
+    getChatAssistantConfig(session.shop).catch(() => null),
+  ]);
+  const assignment = profile?.templateAssignment ?? null;
+  const signals = profile ? templateSignalsFromProfile(profile) : null;
+  const eligible: TemplateId[] = signals
+    ? TEMPLATE_IDS.filter((id) => id === "t5" || isTemplateEligible(id, signals))
+    : ["t5"];
+  const assignedTemplate: TemplateId = assignment && isTemplateId(assignment.template) ? assignment.template : "t5";
+  const persisted = config?.quiz_template ?? null;
+  const template: TemplateId =
+    isTemplateId(persisted) && eligible.includes(persisted) ? persisted : assignedTemplate;
+  const persistedLook = config?.quiz_look ?? null;
+  const look: LookId = isLookId(persistedLook) ? persistedLook : (profile?.look ?? "minimal");
+  const headingFont = headingFontFromProfile(profile);
+  const colors = extractedColorsFromProfile(profile);
+  const paletteWord = paletteWordFor(colors, {
+    bg: profile?.tokens?.colorBg ?? null,
+    accent: profile?.tokens?.colorAccent ?? null,
+  });
+
   // < 5 products: the client skips the screen entirely (scope=everything).
-  return json({ ok: true, total, skipScreen: total < 5, chips });
+  return json({
+    ok: true,
+    total,
+    skipScreen: total < 5,
+    chips,
+    productCount: total,
+    collectionCount,
+    storeType: assignment ? describeStoreType(assignment, profile?.category ?? null) : null,
+    template,
+    templateSource: template === persisted && persisted !== assignedTemplate ? "merchant" : "assigned",
+    look,
+    lookSource: isLookId(persistedLook) ? "merchant" : profile ? "brand" : "default",
+    eligible,
+    templates: TEMPLATE_IDS.map((id) => ({
+      id,
+      name: TEMPLATES[id].name,
+      shopperQuestion: TEMPLATES[id].shopperQuestion,
+      questionRangeLabel: TEMPLATES[id].questionRangeLabel,
+      ineligibleReason: TEMPLATES[id].ineligibleReason,
+    })),
+    looks: (Object.keys(LOOKS) as LookId[]).map((id) => ({ id, name: LOOKS[id].name, tagline: LOOKS[id].tagline })),
+    theme: {
+      fontName: headingFont.name,
+      fontConfidence: headingFont.confidence,
+      colorCount: colors.length,
+      paletteWord,
+      accentColor: profile?.sources?.colorAccent?.source !== "preset" ? profile?.tokens?.colorAccent ?? null : null,
+    },
+    hasProfile: Boolean(profile),
+  });
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
+  if (await shopNeedsBilling(session.shop, session.accessToken ?? "")) {
+    return json({ ok: false, error: "Your Gleame subscription isn't active. Visit Billing to continue." }, { status: 402 });
+  }
   const form = await request.formData();
   if (form.get("intent") !== "resolve-freetext") {
     return json({ ok: false, error: "Unknown intent" }, { status: 400 });

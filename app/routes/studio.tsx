@@ -4,7 +4,7 @@ import { useFetcher, useLoaderData, useRevalidator, useRouteError, useSearchPara
 import { boundary } from "@shopify/shopify-app-remix/server";
 import { AppProvider } from "@shopify/shopify-app-remix/react";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
-import { Banner, Button, Modal, Text } from "@shopify/polaris";
+import { Banner, Button, Modal, Spinner, Text } from "@shopify/polaris";
 import { useCallback, useEffect, useRef, useState } from "react";
 import jwt from "jsonwebtoken";
 
@@ -37,15 +37,27 @@ import { getGenStatus } from "../lib/gen-status.server";
 import { shopNeedsBilling } from "../lib/billing-gate.server";
 import { draftQuestionNotes, type NotesDraft } from "../lib/guidance-generator.server";
 import { GENERAL_GUIDANCE_KEY } from "../lib/quiz-guidance-shared";
-import { getBrandProfile } from "../lib/brand-profile.server";
+import { getBrandProfile, type BrandProfile } from "../lib/brand-profile.server";
+import { getLibraryStatus } from "../lib/brand-library.server";
 import { trackOverhaulEvent } from "../lib/overhaul-events.server";
 import {
+  LOOKS,
   TEMPLATES,
   TEMPLATE_IDS,
-  findPreset,
+  declareSlots,
+  defaultEmailPlacement,
+  isLookId,
+  isTemplateId,
   resolveQuizTokens,
+  type BrandTokens,
+  type EmailPlacement,
+  type LookId,
+  type SlotDecl,
   type TemplateId,
 } from "../lib/quiz-templates";
+import { arrivalBannerChips, FALLBACK_HINT, type ArrivalBanner } from "../lib/arrival-banner";
+import { parseGenerationReport } from "../lib/generation-report.server";
+import type { CatalogProduct } from "../lib/quiz-config-schema.server";
 
 import { StudioShell } from "../components/studio/StudioShell";
 import { StudioTopBar } from "../components/studio/StudioTopBar";
@@ -55,13 +67,21 @@ import { EditPanel } from "../components/studio/EditPanel";
 import { ChatPanel } from "../components/studio/ChatPanel";
 import { CheckMatches } from "../components/studio/CheckMatches";
 import { LiveTab, PublishSheet } from "../components/studio/PublishStep";
-import { TemplateOverlay } from "../components/studio/TemplateOverlay";
+import { TemplateGallery } from "../components/studio/TemplateGallery";
 import { ImagesRail } from "../components/studio/ImagesRail";
 import { FlowMap } from "../components/studio/FlowMap";
 import { draftProblems } from "../components/studio/draft-problems";
 import { navigateParent } from "../components/studio/navigate-parent";
 import { postStudioAction } from "../components/studio/studio-data";
-import type { StudioFlow } from "../components/studio/types";
+import {
+  STUDIO_COLOR_KEYS,
+  isSlotUnresolved,
+  type StudioColorKey,
+  type StudioColorSource,
+  type StudioFlow,
+  type StudioLibraryStatus,
+  type StudioSlot,
+} from "../components/studio/types";
 
 // ---------------------------------------------------------------------
 // Quiz Studio — the full-screen takeover editor (opened from the quiz hub
@@ -104,6 +124,94 @@ export function ErrorBoundary() {
   return boundary.error(useRouteError());
 }
 
+// ---------------------------------------------------------------------
+// v3 loader helpers (V3-CONTRACTS §7). Pure over already-loaded data so
+// the loader stays one read of chat_assistant_config per revalidation.
+// ---------------------------------------------------------------------
+
+/** Which brand token each Style-panel color key renders from. */
+const COLOR_TOKEN: Record<StudioColorKey, keyof BrandTokens> = {
+  quiz_accent_color: "colorAccent",
+  quiz_ink_color: "colorText",
+  quiz_card_bg_color: "colorSurface",
+  quiz_line_color: "colorBorder",
+  quiz_cta_color: "colorAccent",
+};
+
+function colorSourcesFor(
+  settings: Record<string, unknown>,
+  tokens: BrandTokens,
+  profile: BrandProfile | null,
+): Record<StudioColorKey, StudioColorSource> {
+  const out = {} as Record<StudioColorKey, StudioColorSource>;
+  for (const key of STUDIO_COLOR_KEYS) {
+    const token = COLOR_TOKEN[key];
+    const src = profile?.sources?.[token]?.source;
+    const fallback: StudioColorSource["fallback"] = {
+      value: String(tokens[token] ?? ""),
+      source: src === "theme" || src === "brand_api" || src === "homepage" ? "theme" : "preset",
+    };
+    const override = settings[key];
+    const merchant = typeof override === "string" && /^#[0-9a-fA-F]{6}$/.test(override) ? override : null;
+    out[key] = merchant
+      ? { value: merchant, source: "merchant", fallback }
+      : { value: fallback.value, source: fallback.source, fallback };
+  }
+  return out;
+}
+
+/** Resolve every declared slot the way the widget will (contract §5):
+ * merchant assignment → the answer's own image → library auto pick →
+ * unresolved. `catalog` only names the product behind an answer image. */
+function resolveSlots(
+  decls: SlotDecl[],
+  flow: StudioFlow | null,
+  opts: {
+    imageSlots: Record<string, string>;
+    heroImage: string | null;
+    brandCover: string | null;
+    founderPortrait: string | null;
+    catalog: CatalogProduct[] | null;
+  },
+): StudioSlot[] {
+  const imageByOptionKey = new Map<string, string | null>();
+  for (const q of flow?.questions ?? []) {
+    for (const o of q.options) imageByOptionKey.set(`answer:${q.axisKey}:${o.axisValueValue}`, o.imageUrl ?? null);
+  }
+  const titleByImage = new Map<string, string>();
+  for (const p of opts.catalog ?? []) {
+    if (p.imageUrl && p.name) titleByImage.set(p.imageUrl, p.name);
+    for (const v of p.variants ?? []) {
+      if (v.imageUrl && !titleByImage.has(v.imageUrl)) {
+        titleByImage.set(v.imageUrl, v.title && p.name ? `${p.name} / ${v.title}` : p.name || v.title || "");
+      }
+    }
+  }
+  const unresolved = { url: null, source: null, sourceLabel: "Not found yet" } as const;
+  return decls.map((d) => {
+    const merchant = opts.imageSlots[d.key];
+    if (merchant) return { ...d, url: merchant, source: "merchant", sourceLabel: "From your brand library" };
+    if (d.key.startsWith("answer:")) {
+      const url = imageByOptionKey.get(d.key) ?? null;
+      if (!url) return { ...d, ...unresolved };
+      const title = titleByImage.get(url);
+      return { ...d, url, source: "answer", sourceLabel: title ? `Product image · ${title}` : "Product image (auto)" };
+    }
+    if (d.key === "hero") {
+      const url = opts.heroImage ?? opts.brandCover;
+      return url ? { ...d, url, source: "library", sourceLabel: "From your homepage" } : { ...d, ...unresolved };
+    }
+    if (d.key === "founder") {
+      const url = opts.founderPortrait;
+      return url ? { ...d, url, source: "library", sourceLabel: "From your brand profile" } : { ...d, ...unresolved };
+    }
+    if (d.key === "results") {
+      return { ...d, url: null, source: "auto", sourceLabel: d.autoSource ?? "Product images (auto)" };
+    }
+    return { ...d, ...unresolved };
+  });
+}
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopDomain = session.shop;
@@ -123,7 +231,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // version history (restorable from the Live step) BEFORE reading live.
   const legacy = await archiveLegacyDraft(shop.id).catch(() => ({ archived: false }));
 
-  const [liveLoaded, versions, shopRowRes, copilotSessionId, notes, counts, liveConfig, brandProfile, imageSlots] =
+  const emptyLibrary: StudioLibraryStatus = { status: null, error: null, imageCount: 0, indexedAt: null };
+  const [liveLoaded, versions, shopRowRes, copilotSessionId, notes, counts, liveConfig, brandProfile, library] =
     await Promise.all([
       captureLiveConfig(shop.id).catch((e) => {
         console.error("[studio] live config load failed:", e.message);
@@ -134,27 +243,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       getLatestSessionId(shop.id).catch(() => null),
       getQuestionGuidance(shop.id),
       getRecommendationCounts(shop.id).catch(() => null),
+      // THE fresh read of chat_assistant_config for this revalidation: the
+      // template, look, slots and report all derive from it (B0: no cached
+      // draft capture feeds the Style panel or the banner).
       getChatAssistantConfig(shopDomain).catch(() => null),
       getBrandProfile(shopDomain).catch(() => null),
-      // Image slot assignments (V2-SPEC 4.4). Read directly and tolerantly:
-      // the column ships with the brand-library package, so a missing
-      // column must degrade to "no assignments", never a 500.
-      (async (): Promise<Record<string, string>> => {
-        try {
-          const r = await supabase
-            .from("chat_assistant_config")
-            .select("quiz_image_slots")
-            .eq("shop_domain", shopDomain)
-            .maybeSingle();
-          const v = (r.data as Record<string, unknown> | null)?.quiz_image_slots;
-          return v && typeof v === "object" ? (v as Record<string, string>) : {};
-        } catch {
-          return {};
-        }
-      })(),
+      // Library index status (V3-CONTRACTS §9); a missing column reads as
+      // "never attempted", never a 500.
+      getLibraryStatus(shopDomain).catch((): StudioLibraryStatus => emptyLibrary),
     ]);
   const shopRow = shopRowRes.data;
   const liveQuestionCount = counts?.questions ?? 0;
+  // Image slot assignments (spec 4.4): the typed mapper tolerates a missing
+  // column (null → no assignments).
+  const imageSlots: Record<string, string> = liveConfig?.quiz_image_slots ?? {};
 
   // `draft` now IS the live config (see naming note above). A shop with no
   // quiz yet gets null so the onboarding wizard shows.
@@ -182,53 +284,73 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const quizSurfaceEnabled =
     surfaceEnabled && (surfaceMode == null || surfaceMode === "quiz" || surfaceMode === "both");
 
-  // ---- Themed-canvas + first-run banner data (V2-SPEC Part 2) ----
-  const template = typeof settings.quiz_template === "string" ? (settings.quiz_template as string) : null;
-  const preset = typeof settings.quiz_preset === "string" ? (settings.quiz_preset as string) : null;
-  const tokens = resolveQuizTokens(template, preset, brandProfile?.tokens ?? null);
+  // ---- Themed canvas + v3 Studio contract (V3-CONTRACTS §7) ----
+  // Single source of truth for the template/look: the live row read above.
+  // NULL template = legacy rendering; every v3 surface gates on it.
+  const template: TemplateId | null = isTemplateId(liveConfig?.quiz_template) ? liveConfig.quiz_template : null;
+  const look: LookId = isLookId(liveConfig?.quiz_look)
+    ? liveConfig.quiz_look
+    : isLookId(brandProfile?.look)
+      ? brandProfile.look
+      : "minimal";
+  const lookSource: "merchant" | "brand" | "default" = isLookId(liveConfig?.quiz_look)
+    ? "merchant"
+    : isLookId(brandProfile?.look)
+      ? "brand"
+      : "default";
+  const tokens = resolveQuizTokens(template, look, brandProfile?.tokens ?? null);
   const storeName = shopDomain
     .replace(".myshopify.com", "")
     .replace(/-/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
   const headingFont = tokens?.fontHeading ?? "inherit";
-  const fontWord = /serif/i.test(headingFont) && !/sans-serif/i.test(headingFont.split(",")[0])
-    ? "Serif headings"
-    : /rounded|nunito|quicksand/i.test(headingFont)
-      ? "Rounded headings"
-      : "Clean sans headings";
-  const paletteWord = ((): string => {
-    const hex = /^#([0-9a-f]{6})$/i.exec(tokens?.colorBg ?? "");
-    if (!hex) return "soft neutral palette";
-    const n = parseInt(hex[1], 16);
-    const r = (n >> 16) & 255;
-    const g = (n >> 8) & 255;
-    const b = n & 255;
-    const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-    if (lum > 0.96) return "clean white palette";
-    if (lum > 0.82) return r > b ? "warm ivory palette" : "cool porcelain palette";
-    if (lum < 0.25) return "deep noir palette";
-    return "soft neutral palette";
-  })();
-  const templateName = template && TEMPLATE_IDS.includes(template as TemplateId)
-    ? TEMPLATES[template as TemplateId].name
+
+  const emailPlacement: EmailPlacement | null = template
+    ? liveConfig?.quiz_email_placement ?? defaultEmailPlacement(template)
     : null;
+  const templatesLive = process.env.QUIZ_TEMPLATES_LIVE === "true";
+  const report = parseGenerationReport(liveConfig?.quiz_generation_report ?? null);
+
+  // Image slots (spec 4.3/4.4): declared by the registry for THIS quiz,
+  // resolved the way the widget resolves them. The catalog read (cached
+  // per shop) only names the product behind an answer image.
+  const slotFlow = (draft?.flow ?? null) as unknown as StudioFlow | null;
+  const decls = template
+    ? declareSlots(template, { questions: slotFlow?.questions ?? [] }, { hasFounder: Boolean(liveConfig?.quiz_founder), look })
+    : [];
+  const catalogForTitles =
+    decls.some((d) => d.key.startsWith("answer:")) ? await loadCatalogForShop(shop.id).catch(() => null) : null;
+  const slots = resolveSlots(decls, slotFlow, {
+    imageSlots,
+    heroImage: liveConfig?.quiz_hero_image ?? null,
+    brandCover: brandProfile?.brand.coverImageUrl ?? null,
+    founderPortrait: liveConfig?.quiz_founder?.portraitUrl ?? null,
+    catalog: catalogForTitles,
+  });
+
+  // Eligibility from the brand profile's assignment; absent profile =
+  // everything selectable (spec 2.4 default). Clean is always eligible.
+  const eligibleRaw = (brandProfile?.templateAssignment?.eligible as TemplateId[] | undefined) ?? [...TEMPLATE_IDS];
+  const eligible = eligibleRaw.includes("t5") ? eligibleRaw : [...eligibleRaw, "t5" as TemplateId];
+
   const studio = {
     storeName,
     logoUrl: brandProfile?.brand.logoUrl ?? null,
     canvasBg: tokens?.colorBg ?? "#F6F6F7",
     canvasInk: tokens?.colorText ?? "#1A1C1E",
+    canvasBorder: tokens?.colorBorder ?? "#C9CCCF",
     headingFont,
     template,
-    preset,
-    templateName,
-    presetLabel: preset ? findPreset(preset)?.label ?? null : null,
-    // Eligibility from the brand profile's assignment; absent profile =
-    // everything selectable (spec 2.4 default).
-    eligible: (brandProfile?.templateAssignment?.eligible as TemplateId[] | undefined) ?? [...TEMPLATE_IDS],
+    look,
+    lookSource,
+    emailPlacement,
+    templatesLive,
+    report,
+    slots,
+    library,
+    colorSources: colorSourcesFor(settings, tokens ?? brandProfile?.tokens ?? LOOKS.minimal.tokens, brandProfile),
+    eligible,
     confidence: brandProfile?.confidence ?? null,
-    chips: [fontWord, paletteWord, templateName ? `${templateName} template` : null].filter(
-      (c): c is string => c !== null,
-    ),
     imageSlots,
   };
 
@@ -394,67 +516,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           previewConfig,
         });
       }
-      case "start-blank-draft": {
-        // "Start from scratch" in the wizard: one untitled question with two
-        // blank answers, ready to edit. Built directly (drafts are lazily
-        // validated; the applier's revalidation would reject blank prompts)
-        // and guarded so a stale tab can't blank an existing draft.
-        // The wizard's accent color is applied HERE: revalidation unmounts
-        // the wizard before its fetcher settles, so a client-side follow-up
-        // apply never ran.
-        const rawAccent = String(formData.get("accentColor") ?? "");
-        const accentColor = /^#[0-9a-fA-F]{6}$/.test(rawAccent) ? rawAccent : null;
-        const result = await withShopSaveLock(shop.id, async () => {
-          const existing = await captureLiveConfig(shop.id);
-          if (existing.flow.questions.length > 0) {
-            return { ok: true as const }; // already have content; nothing to do
-          }
-          const blank: QuizDraft = {
-            flow: {
-              axes: [
-                {
-                  key: "question_1",
-                  label: "Question 1",
-                  source: "user_question",
-                  position: 0,
-                  values: [
-                    { value: "option_1", label: "Option 1", position: 0 },
-                    { value: "option_2", label: "Option 2", position: 1 },
-                  ],
-                },
-              ],
-              questions: [
-                {
-                  axisKey: "question_1",
-                  prompt: "",
-                  helperText: null,
-                  multiSelect: false,
-                  maxSelections: null,
-                  screenGroup: null,
-                  showIf: null,
-                  optionStyle: null,
-                  options: [
-                    { label: "", axisValueValue: "option_1", botResponse: null, position: 0 },
-                    { label: "", axisValueValue: "option_2", botResponse: null, position: 1 },
-                  ],
-                },
-              ],
-              rules: [],
-            },
-            settings: {
-              ...(existing.settings ?? {}),
-              ...(accentColor ? { quiz_accent_color: accentColor } : {}),
-              // NOT enabled here: with save-to-live editing the surface
-              // toggle is an explicit action on the Live step, never a
-              // side effect of starting to build.
-            },
-          };
-          const saved = await saveLiveQuizConfig(shop.id, blank, { preWriteConfig: existing });
-          if (!saved.ok) return { ok: false as const, error: saved.error ?? "Save failed" };
-          return { ok: true as const };
-        });
-        return json({ ...result, intent });
-      }
+      // NOTE (V3-SPEC 6.2/8.1): there is no "start with a blank question"
+      // intent anymore. Generation is blocking; a shop without a quiz is
+      // routed to /app/onboarding/scope by the client, never seeded here.
       case "set-live": {
         // The Live step's surface toggle: the one deliberate action left
         // from the publish era. Config edits are already on the site.
@@ -727,46 +791,76 @@ function BillingRequired({ apiKey }: { apiKey: string }) {
   );
 }
 
-// Z0 (V2-SPEC Part 1.2): the free-text "tell us more" wizard is deleted.
-// A shop with no quiz gets this minimal blank state; generated quizzes come
-// from the /app/onboard flow, which consumes machine-derived inputs only.
-function BlankState() {
-  const fetcher = useFetcher<StudioActionData>();
+// V3-SPEC 6.2/6.3: generation is blocking. A shop with no quiz either
+// sees the explicit failure state (generation recorded an error) or is
+// sent back to /app/onboarding/scope. A blank Studio is not a fallback.
+function GenerationFailed({ shopDomain, error }: { shopDomain: string; error: string }) {
+  const getHelp = () => {
+    const text = `Hi! My quiz didn't build on ${shopDomain}. The error was: ${error}`;
+    import("@intercom/messenger-js-sdk")
+      .then((m) => m.showNewMessage(text))
+      .catch(() => {
+        window.open(`mailto:support@gleame.ai?subject=${encodeURIComponent("Quiz build failed")}&body=${encodeURIComponent(text)}`, "_blank");
+      });
+  };
   return (
-    <div
-      style={{
-        maxWidth: 480,
-        margin: "0 auto",
-        padding: "96px 24px",
-        textAlign: "center",
-        display: "flex",
-        flexDirection: "column",
-        gap: 16,
-      }}
-    >
-      <Text as="h2" variant="headingLg">
-        No quiz here yet
-      </Text>
-      <Text as="p" tone="subdued">
-        Start with a blank question and build by hand. Once a question exists,
-        the Chat tab can rewrite, restyle, and extend the quiz for you.
-      </Text>
-      <div>
-        <Button
-          variant="primary"
-          loading={fetcher.state !== "idle"}
-          onClick={() => {
-            const fd = new FormData();
-            fd.append("intent", "start-blank-draft");
-            fetcher.submit(fd, { method: "POST", action: "/studio" });
+    <div style={{ display: "grid", placeItems: "center", minHeight: "100%", padding: 24, background: "#F6F6F7" }}>
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 520,
+          background: "#fff",
+          border: "1px solid #E1E3E5",
+          borderRadius: 14,
+          padding: 28,
+          display: "flex",
+          flexDirection: "column",
+          gap: 14,
+        }}
+      >
+        <Text as="h2" variant="headingLg">
+          We couldn't build your quiz
+        </Text>
+        <Text as="p" tone="subdued">
+          Your catalog and theme are saved, so trying again picks up where it stopped.
+        </Text>
+        <div
+          style={{
+            fontSize: 12.5,
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+            background: "#FFF4F4",
+            border: "1px solid #F5C6C6",
+            color: "#8E1F1F",
+            borderRadius: 8,
+            padding: "10px 12px",
+            wordBreak: "break-word",
           }}
         >
-          Start with a blank question
+          {error}
+        </div>
+        <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+          <Button variant="primary" onClick={() => navigateParent("/app/onboarding/build?retry=1")}>
+            Try again
+          </Button>
+          <Button onClick={getHelp}>Get help</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RoutingToScope() {
+  return (
+    <div style={{ display: "grid", placeItems: "center", minHeight: "100%", padding: 24, background: "#F6F6F7" }}>
+      <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}>
+        <Spinner size="small" />
+        <Text as="p" tone="subdued">
+          Your quiz hasn't been built yet. Taking you to setup…
+        </Text>
+        <Button variant="plain" onClick={() => navigateParent("/app/onboarding/scope")}>
+          Open setup
         </Button>
       </div>
-      {fetcher.data && !fetcher.data.ok && fetcher.data.error && (
-        <Banner tone="critical">{fetcher.data.error}</Banner>
-      )}
     </div>
   );
 }
@@ -890,7 +984,11 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
   const [publishOpen, setPublishOpen] = useState(false);
   const [viewStoreBusy, setViewStoreBusy] = useState(false);
   const [tplBusy, setTplBusy] = useState(false);
+  const [lookBusy, setLookBusy] = useState(false);
   const [slotBusy, setSlotBusy] = useState(false);
+  // A dashed slot clicked on the canvas (widget `gleame:pick-slot`): the
+  // Images rail opens its picker for this key, then clears it.
+  const [pendingPickSlot, setPendingPickSlot] = useState<string | null>(null);
   // One toast slot for template switches and image-slot changes, with an
   // optional Undo action (spec 2.4 / 4.5).
   const [undoToast, setUndoToast] = useState<{ message: string; undo?: () => void } | null>(null);
@@ -933,6 +1031,9 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
     storeName: data.studio.storeName,
     logoUrl: data.studio.logoUrl,
   };
+  // Spec 6.4: a template quiz cannot reach the storefront while the flag
+  // is off. Legacy shops are never gated by it.
+  const previewOnly = Boolean(data.studio.template) && !data.studio.templatesLive;
 
   // Step we last COMMANDED the preview to show. The widget echoes every
   // render as gleame-preview-at; while an expectation is pending we treat
@@ -1025,8 +1126,18 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
     const onMessage = (e: MessageEvent) => {
       if (e.origin !== window.location.origin) return;
       if (iframeRef.current && e.source !== iframeRef.current.contentWindow) return;
-      const d = e.data as { type?: string; step?: string } | null;
-      if (!d || d.type !== "gleame-preview-at") return;
+      const d = e.data as { type?: string; step?: string; slotKey?: string; kind?: string } | null;
+      if (!d) return;
+      // Spec 4.2/4.5: a dashed image slot clicked on the canvas opens the
+      // Images rail with the picker on that slot, pre-filtered to its kind.
+      if (d.type === "gleame:pick-slot") {
+        const slotKey = String(d.slotKey ?? "");
+        if (!/^[a-z0-9:_-]{1,120}$/i.test(slotKey)) return;
+        setPendingPickSlot(slotKey);
+        if (selectedSlideRef.current !== "images") setSelectedSlide("images");
+        return;
+      }
+      if (d.type !== "gleame-preview-at") return;
       const step = String(d.step ?? "");
 
       // Reveal instrumentation (spec 2.2): the banner's Play reached the
@@ -1223,36 +1334,43 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
     }
   }, [showUndoToast]);
 
-  // Template switching (spec 2.4): the overlay's Use-this-template CTA.
-  const applyTemplate = useCallback(async (template: string, preset: string | null, source: string) => {
-    const fd = new FormData();
-    fd.append("intent", "set");
-    fd.append("template", template);
-    fd.append("preset", preset ?? "");
-    fd.append("source", source);
-    const res = await fetch("/app/api/quiz-template", { method: "POST", body: fd });
-    return (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
-  }, []);
+  // Template / Look switching (V3-CONTRACTS §7): the ONLY write path for
+  // quiz_template and quiz_look from the Studio. After success the loader
+  // is revalidated (fresh read of the live row) and the preview reloads,
+  // so the Style panel, the banner and the canvas all agree (B0).
+  const setTemplateApi = useCallback(
+    async (input: { template?: TemplateId | null; look?: LookId | null; source: "gallery" | "style_panel" }) => {
+      const fd = new FormData();
+      fd.append("intent", "set");
+      if (input.template) fd.append("template", input.template);
+      if (input.look) fd.append("look", input.look);
+      fd.append("source", input.source);
+      const res = await fetch("/app/api/quiz-template", { method: "POST", body: fd });
+      return (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+    },
+    [],
+  );
+  const refreshAfterSwitch = useCallback(() => {
+    revalidator.revalidate();
+    reloadPreview();
+  }, [revalidator, reloadPreview]);
 
-  const useTemplate = useCallback(
-    async (id: TemplateId) => {
+  const applyGalleryTemplate = useCallback(
+    async (id: TemplateId, look: LookId | null) => {
       setTplBusy(true);
-      const prior = { template: data.studio.template, preset: data.studio.preset };
-      const r = await applyTemplate(id, null, "overlay");
+      const prior = { template: data.studio.template, look: data.studio.look };
+      const r = await setTemplateApi({ template: id, look, source: "gallery" });
       setTplBusy(false);
       if (r?.ok) {
         setOverlay(false);
-        revalidator.revalidate();
-        reloadPreview();
+        refreshAfterSwitch();
+        const lookNote = look ? ` · ${LOOKS[look].name} look` : "";
         showUndoToast(
-          `Switched to ${TEMPLATES[id].name}`,
+          `Switched to ${TEMPLATES[id].name}${lookNote}`,
           prior.template
             ? () => {
-                void applyTemplate(prior.template!, prior.preset, "overlay").then((rr) => {
-                  if (rr?.ok) {
-                    revalidator.revalidate();
-                    reloadPreview();
-                  }
+                void setTemplateApi({ template: prior.template, look: prior.look, source: "gallery" }).then((rr) => {
+                  if (rr?.ok) refreshAfterSwitch();
                 });
               }
             : undefined,
@@ -1261,8 +1379,74 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
         showUndoToast(r?.error ?? "Switching templates failed");
       }
     },
-    [applyTemplate, data.studio.template, data.studio.preset, revalidator, reloadPreview, setOverlay, showUndoToast],
+    [setTemplateApi, data.studio.template, data.studio.look, refreshAfterSwitch, setOverlay, showUndoToast],
   );
+
+  // Gallery "Keep": the current template stays; only a changed Look applies.
+  const keepTemplate = useCallback(
+    async (look: LookId | null) => {
+      if (!look) {
+        setOverlay(false);
+        return;
+      }
+      setTplBusy(true);
+      const prior = data.studio.look;
+      const r = await setTemplateApi({ look, source: "gallery" });
+      setTplBusy(false);
+      setOverlay(false);
+      if (r?.ok) {
+        refreshAfterSwitch();
+        showUndoToast(`Switched to the ${LOOKS[look].name} look`, () => {
+          void setTemplateApi({ look: prior, source: "gallery" }).then((rr) => {
+            if (rr?.ok) refreshAfterSwitch();
+          });
+        });
+      } else {
+        showUndoToast(r?.error ?? "Switching looks failed");
+      }
+    },
+    [setTemplateApi, data.studio.look, refreshAfterSwitch, setOverlay, showUndoToast],
+  );
+
+  // Style panel Look select (source style_panel → look_switched).
+  const changeLook = useCallback(
+    async (look: LookId) => {
+      if (look === data.studio.look) return;
+      setLookBusy(true);
+      const prior = data.studio.look;
+      const r = await setTemplateApi({ look, source: "style_panel" });
+      setLookBusy(false);
+      if (r?.ok) {
+        refreshAfterSwitch();
+        showUndoToast(`${LOOKS[look].name} look applied`, () => {
+          void setTemplateApi({ look: prior, source: "style_panel" }).then((rr) => {
+            if (rr?.ok) refreshAfterSwitch();
+          });
+        });
+      } else {
+        showUndoToast(r?.error ?? "Changing the look failed");
+        refreshAfterSwitch(); // re-seed the select from the live value
+      }
+    },
+    [setTemplateApi, data.studio.look, refreshAfterSwitch, showUndoToast],
+  );
+
+  // Images rail retry (spec 4.6): re-run library indexing, then re-read.
+  const retryLibraryIndex = useCallback(async () => {
+    try {
+      const fd = new FormData();
+      fd.append("intent", "reindex");
+      const res = await fetch("/app/api/brand-library", { method: "POST", body: fd });
+      const body = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+      if (!res.ok || body?.ok === false) {
+        showUndoToast(body?.error ?? "Couldn't restart indexing. Try again in a minute.");
+      }
+    } catch {
+      showUndoToast("Couldn't restart indexing. Check your connection and try again.");
+    } finally {
+      revalidator.revalidate();
+    }
+  }, [revalidator, showUndoToast]);
 
   // Image slot changes (spec 4.5): write, re-render, offer Undo.
   const setImageSlot = useCallback(
@@ -1302,10 +1486,11 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
 
   const problems = data.draft ? draftProblems(data.draft.flow) : [];
   const needsOnboarding = !data.hasDraft && data.liveQuestionCount === 0;
+  const generationError = needsOnboarding ? data.genStatus?.error ?? null : null;
 
-  // Watch-mode landing: when generation (e.g. from /app/onboard) finally
-  // writes the quiz, reload the stale "Nothing to preview yet" iframe and
-  // surface any recorded generation warnings.
+  // Watch-mode landing: when generation (from /app/onboarding/build)
+  // finally writes the quiz, reload the stale "Nothing to preview yet"
+  // iframe and surface any recorded generation warnings.
   const prevNeedsOnboardingRef = useRef(needsOnboarding);
   useEffect(() => {
     if (prevNeedsOnboardingRef.current && !needsOnboarding) {
@@ -1316,7 +1501,23 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
     prevNeedsOnboardingRef.current = needsOnboarding;
   }, [needsOnboarding, reloadPreview, data.genStatus]);
 
-  const lowConfidence = data.studio.confidence === "low" || !data.studio.template;
+  // Spec 6.2: the Studio is unreachable without a built quiz. No error on
+  // record → back to the scope screen (the failure card handles the rest).
+  useEffect(() => {
+    if (needsOnboarding && !generationError) navigateParent("/app/onboarding/scope");
+  }, [needsOnboarding, generationError]);
+
+  // Arrival banner (spec 6.5): assembled ONLY from the generation report.
+  const banner: ArrivalBanner = arrivalBannerChips(data.studio.report, data.studio.template, data.studio.look);
+
+  // Images rail attention (contract §7): a required slot is unresolved, or
+  // indexing failed. Optional slots never light the dot.
+  const imagesAttention = ((): string | null => {
+    if (data.studio.library.status === "failed") return "We couldn't read your store's images yet";
+    const missing = (data.studio.slots as StudioSlot[]).filter((s) => !s.optional && isSlotUnresolved(s)).length;
+    if (missing > 0) return `${missing} image${missing === 1 ? "" : "s"} still to choose`;
+    return null;
+  })();
 
   return (
     <AppProvider isEmbeddedApp apiKey={data.apiKey}>
@@ -1333,19 +1534,23 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
             onViewStore={() => void viewStore()}
             viewStoreBusy={viewStoreBusy}
             onPublishClick={() => setPublishOpen(true)}
+            previewOnly={previewOnly}
           />
         }
         rail={
-          tab === "build" && selectedSlide === "images" && data.draft ? (
+          tab === "build" && selectedSlide === "images" && data.draft && data.studio.template ? (
             <ImagesRail
-              template={data.studio.template}
-              flow={data.draft.flow as unknown as StudioFlow}
-              imageSlots={(data.studio.imageSlots ?? {}) as Record<string, string>}
+              slots={data.studio.slots as StudioSlot[]}
+              library={data.studio.library}
+              theme={{ bg: data.studio.canvasBg, border: data.studio.canvasBorder, ink: data.studio.canvasInk }}
               busy={slotBusy}
+              autoOpenSlotKey={pendingPickSlot}
+              onAutoOpenConsumed={() => setPendingPickSlot(null)}
               onBack={() =>
                 selectSlide(questions.length > 0 ? slideIdForQuestion(questions[0].axisKey) : "intro")
               }
               onSetSlot={(slotKey, url, source, prevUrl) => void setImageSlot(slotKey, url, source, prevUrl)}
+              onRetryIndex={retryLibraryIndex}
             />
           ) : (
             <SlideTree
@@ -1363,6 +1568,9 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
               disabled={chatBusy || treeFetcher.state !== "idle"}
               readOnly={tab !== "build"}
               onReturnToBuild={tab !== "build" ? () => setTab("build") : undefined}
+              hasTemplate={Boolean(data.studio.template)}
+              onOpenGallery={tab === "build" ? () => setOverlay(true) : undefined}
+              imagesAttention={imagesAttention}
             />
           )
         }
@@ -1398,10 +1606,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
               )}
               {data.hasDraft && bannerVisible && (
                 <FirstRunBanner
-                  productCount={data.catalog.productCount}
-                  chips={data.studio.chips as string[]}
-                  lowConfidence={lowConfidence}
-                  presetLabel={(data.studio.presetLabel ?? data.studio.templateName) as string | null}
+                  banner={banner}
                   onPlay={() => {
                     playModeRef.current = true;
                     selectSlide("intro");
@@ -1452,7 +1657,9 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
             // in the rail banner, which survives the switch.
             onSaveError={setTreeError}
             onSelectSlide={selectSlide}
-            onOpenTemplateOverlay={() => setOverlay(true)}
+            onOpenGallery={data.studio.template ? () => setOverlay(true) : undefined}
+            onChangeLook={data.studio.template ? (look) => void changeLook(look) : undefined}
+            lookBusy={lookBusy}
             onDeleteQuestion={(axisKey, fallbackSlide) => {
               // Hoisted here because the revalidation after a delete
               // unmounts the question editor: its own fetcher effect never
@@ -1507,14 +1714,21 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
         }
         overlay={
           needsOnboarding ? (
-            <BlankState />
-          ) : overlayOpen ? (
-            <TemplateOverlay
+            generationError ? (
+              <GenerationFailed shopDomain={data.shopDomain} error={generationError} />
+            ) : (
+              <RoutingToScope />
+            )
+          ) : overlayOpen && data.studio.template ? (
+            <TemplateGallery
               previewToken={data.previewToken}
               currentTemplate={data.studio.template}
+              currentLook={data.studio.look}
               eligible={(data.studio.eligible ?? []) as TemplateId[]}
+              flow={(data.draft?.flow as unknown as StudioFlow | undefined) ?? null}
               busy={tplBusy}
-              onUse={(id) => void useTemplate(id)}
+              onUse={(id, look) => void applyGalleryTemplate(id, look)}
+              onKeep={(look) => void keepTemplate(look)}
               onFixImages={() => {
                 setOverlay(false);
                 selectSlide("images");
@@ -1615,23 +1829,18 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
 }
 
 // ---------------------------------------------------------------------
-// First-run banner (V2-SPEC 2.2): one dismissible row between the top bar
-// and the canvas. Real detected chips, never invented copy.
+// Arrival banner (V3-SPEC 6.5): one dismissible row between the top bar
+// and the canvas, assembled ONLY from the generation report via
+// arrivalBannerChips. A chip renders only when its value is real.
 // ---------------------------------------------------------------------
 
 function FirstRunBanner({
-  productCount,
-  chips,
-  lowConfidence,
-  presetLabel,
+  banner,
   onPlay,
   onStyle,
   onDismiss,
 }: {
-  productCount: number | null;
-  chips: string[];
-  lowConfidence: boolean;
-  presetLabel: string | null;
+  banner: ArrivalBanner;
   onPlay: () => void;
   onStyle: () => void;
   onDismiss: () => void;
@@ -1651,27 +1860,17 @@ function FirstRunBanner({
     >
       <span style={{ width: 8, height: 8, borderRadius: 999, background: "#4A3AFF", flexShrink: 0 }} />
       <div style={{ minWidth: 0 }}>
-        {lowConfidence ? (
-          <>
-            <strong>
-              Built from your {productCount ?? "synced"} products.
-            </strong>{" "}
-            <span style={{ color: "#6D7175" }}>
-              Styled with {presetLabel ?? "a neutral preset"}.{" "}
-              <button
-                onClick={onStyle}
-                style={{ border: 0, background: "none", padding: 0, color: "#4A3AFF", fontWeight: 600, cursor: "pointer", fontSize: 13 }}
-              >
-                Tap Style to match your brand.
-              </button>
-            </span>
-          </>
+        <strong>{banner.lead}</strong>{" "}
+        {banner.fallback ? (
+          <button
+            onClick={onStyle}
+            style={{ border: 0, background: "none", padding: 0, color: "#4A3AFF", fontWeight: 600, cursor: "pointer", fontSize: 13 }}
+          >
+            {FALLBACK_HINT}
+          </button>
         ) : (
           <>
-            <strong>
-              Built from your {productCount ?? "synced"} products in your store's style.
-            </strong>{" "}
-            <span style={{ color: "#6D7175" }}>{chips.join(" · ")}.</span>{" "}
+            {banner.chips.length > 0 && <span style={{ color: "#6D7175" }}>{banner.chips.join(" · ")}.</span>}{" "}
             <span style={{ color: "#6D7175" }}>Nothing is live until you publish.</span>
           </>
         )}

@@ -1,0 +1,371 @@
+// Onboarding screen 2 of 3 — Building (V3-SPEC Part 6.1–6.3, contract §10).
+//
+// Five REAL, sequential steps. The list advances ONLY on the generator's
+// SSE `step` events, each carrying the real number for that step (catalog
+// · theme · questions · paths · images). No fake progress bars. 120 s
+// client budget (the server keeps heartbeating) → the failure state:
+// `We couldn't build your quiz` + the completed steps ticked + the failed
+// step marked, `Try again` (catalog + profile are cached, so steps 1–2
+// complete instantly), `Get help` (Intercom, prefilled). Success → the
+// Studio's existing arrival mechanism (/app?open=studio).
+//
+// Generation itself keeps every guard: it refuses to overwrite a quiz with
+// real content and never turns the storefront surface on.
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { LoaderFunctionArgs } from "@remix-run/node";
+import { json, redirect } from "@remix-run/node";
+import { useLoaderData, useNavigate, useSearchParams } from "@remix-run/react";
+import { BlockStack, Button, Card, InlineStack, Page, Spinner, Text } from "@shopify/polaris";
+import { authenticate } from "../shopify.server";
+import { getRecommendationCounts, supabase } from "../lib/supabase.server";
+import { EVERYTHING_CHIP, readScopeHandoff } from "../lib/onboarding-scope";
+
+/** `/app?open=studio` with the embedded-admin params (host/shop/embedded)
+ * carried over, so App Bridge doesn't re-bootstrap the frame. */
+function studioUrl(request: Request): string {
+  const params = new URL(request.url).searchParams;
+  params.delete("retry");
+  params.set("open", "studio");
+  return `/app?${params.toString()}`;
+}
+
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const { session } = await authenticate.admin(request);
+  const shop = await supabase.from("shops").select("id").eq("shop_domain", session.shop).single();
+  if (shop.error || !shop.data) throw new Response("Shop not found", { status: 404 });
+  // A quiz already exists (including one a previous run finished after the
+  // client gave up): generation would refuse anyway - go straight to it.
+  const counts = await getRecommendationCounts(shop.data.id).catch(() => null);
+  if ((counts?.questions ?? 0) > 0) return redirect(studioUrl(request));
+  return json({ shopDomain: session.shop });
+};
+
+// ---------------------------------------------------------------------
+// Client
+// ---------------------------------------------------------------------
+
+type StepKey = "catalog" | "theme" | "questions" | "paths" | "images";
+const STEP_ORDER: StepKey[] = ["catalog", "theme", "questions", "paths", "images"];
+const STEP_LABELS: Record<StepKey, string> = {
+  catalog: "Reading your catalog",
+  theme: "Matching your theme",
+  questions: "Writing questions",
+  paths: "Checking every product has a path",
+  images: "Placing your images",
+};
+// Lower-case, past-progressive form for "It stopped while {step}."
+const STEP_WHILE: Record<StepKey, string> = {
+  catalog: "reading your catalog",
+  theme: "matching your theme",
+  questions: "writing questions",
+  paths: "checking every product has a path",
+  images: "placing your images",
+};
+
+type StepState = "todo" | "now" | "done" | "failed";
+interface StepRow {
+  key: StepKey;
+  state: StepState;
+  detail: string;
+}
+
+const CLIENT_TIMEOUT_MS = 120_000;
+
+const freshSteps = (): StepRow[] => STEP_ORDER.map((key) => ({ key, state: "todo", detail: "" }));
+
+function post(url: string, fields: Record<string, string>): Promise<any> {
+  const fd = new FormData();
+  for (const [k, v] of Object.entries(fields)) fd.append(k, v);
+  return fetch(url, { method: "POST", body: fd }).then((r) => r.json());
+}
+
+function fireEvent(event: string, properties: Record<string, unknown> = {}) {
+  void post("/app/api/overhaul-event", { event, properties: JSON.stringify(properties) }).catch(() => {});
+}
+
+export default function OnboardingBuild() {
+  const { shopDomain } = useLoaderData<typeof loader>();
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
+
+  const [steps, setSteps] = useState<StepRow[]>(freshSteps);
+  const [failure, setFailure] = useState<{ step: StepKey; reason: string } | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+  // Run token: a superseded run (unmount, StrictMode re-mount, retry) must
+  // neither paint its outcome nor report a failure.
+  const runId = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const run = useCallback(async () => {
+    abortRef.current?.abort();
+    const myRun = ++runId.current;
+    const live = () => runId.current === myRun;
+    const patch = (key: StepKey, p: Partial<StepRow>) => {
+      if (!live()) return;
+      setSteps((prev) => prev.map((s) => (s.key === key ? { ...s, ...p } : s)));
+    };
+    setFailure(null);
+    setSteps(freshSteps());
+    setElapsed(0);
+
+    const handoff = readScopeHandoff();
+    const chip = handoff?.chip ?? EVERYTHING_CHIP;
+    let active: StepKey = "catalog";
+    patch("catalog", { state: "now" });
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, CLIENT_TIMEOUT_MS);
+
+    const fail = (step: StepKey, reason: string) => {
+      if (!live()) return;
+      patch(step, { state: "failed", detail: reason });
+      setFailure({ step, reason });
+      fireEvent("generation_failed", { step, reason: reason.slice(0, 300), source: "onboarding_build" });
+    };
+
+    try {
+      const fd = new FormData();
+      fd.append("quizLength", "standard");
+      fd.append("modePreference", "auto");
+      fd.append("scopeKind", chip.kind);
+      fd.append("scopeLabel", chip.label);
+      fd.append("scopeProductIds", JSON.stringify(chip.productIds));
+      fd.append("collectionCount", String(handoff?.collectionCount ?? 0));
+      if (handoff?.accentColor) fd.append("accentColor", handoff.accentColor);
+
+      const res = await fetch("/app/api/quiz-generate", { method: "POST", body: fd, signal: controller.signal });
+      if (!res.ok || !res.body) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? `Generation failed (${res.status})`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let done = false;
+      let genError: string | null = null;
+      while (!done) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        buf += decoder.decode(chunk.value, { stream: true });
+        const events = buf.split("\n\n");
+        buf = events.pop() ?? "";
+        for (const raw of events) {
+          const line = raw.split("\n").find((l) => l.startsWith("data:"));
+          if (!line) continue;
+          let evt: any;
+          try {
+            evt = JSON.parse(line.slice(5));
+          } catch {
+            continue;
+          }
+          if (evt.type === "step" && STEP_ORDER.includes(evt.key)) {
+            const key = evt.key as StepKey;
+            patch(key, { state: "done", detail: String(evt.detail ?? "") });
+            const next = STEP_ORDER[STEP_ORDER.indexOf(key) + 1];
+            if (next) {
+              active = next;
+              patch(next, { state: "now" });
+            }
+          } else if (evt.type === "result") {
+            done = true;
+          } else if (evt.type === "error") {
+            genError = String(evt.error ?? "Generation failed");
+            done = true;
+          }
+        }
+      }
+      clearTimeout(timer);
+      if (!live()) return;
+      if (genError) {
+        // A quiz landed after all (e.g. an earlier run finished server-side
+        // after this client gave up): the Studio is the right place.
+        if (/already has a quiz/i.test(genError)) {
+          navigate("/app?open=studio");
+          return;
+        }
+        throw new Error(genError);
+      }
+      if (!done) throw new Error("The connection closed before the quiz was saved");
+
+      fireEvent("studio_opened", { source: "onboarding_build" });
+      navigate("/app?open=studio");
+    } catch (e) {
+      clearTimeout(timer);
+      // Superseded (unmounted or restarted): stay silent.
+      if (!live()) return;
+      const reason = timedOut
+        ? "timed out after 2 minutes"
+        : (e as Error).name === "AbortError"
+          ? "the connection was interrupted"
+          : (e as Error).message || "something went wrong";
+      fail(active, reason);
+    } finally {
+      if (live()) abortRef.current = null;
+    }
+  }, [navigate]);
+
+  // "Try again" (spec 6.3): the server deliberately finishes a paid run
+  // after the client's 120 s abort, so first ask whether a quiz landed or a
+  // run is still alive - and only then start a fresh run. Never two paid
+  // generations for one merchant click.
+  const retry = useCallback(async () => {
+    const myRun = ++runId.current;
+    abortRef.current?.abort();
+    setFailure(null);
+    setSteps(() => {
+      const rows = freshSteps();
+      rows[0] = { ...rows[0], state: "now", detail: "Checking on your last build…" };
+      return rows;
+    });
+    const status = async (): Promise<{ questions: number; running: boolean } | null> => {
+      try {
+        const r = await fetch("/app/api/quiz-generate?intent=status").then((x) => x.json());
+        return r?.ok ? { questions: Number(r.questions) || 0, running: Boolean(r.running) } : null;
+      } catch {
+        return null;
+      }
+    };
+    let st = await status();
+    // A run is still going: wait for it (≤ 90 s) rather than racing it.
+    for (let i = 0; st?.running && i < 18 && runId.current === myRun; i++) {
+      await new Promise((r) => setTimeout(r, 5000));
+      st = await status();
+    }
+    if (runId.current !== myRun) return;
+    if (st && st.questions > 0) {
+      fireEvent("studio_opened", { source: "onboarding_build" });
+      navigate("/app?open=studio");
+      return;
+    }
+    void run();
+  }, [navigate, run]);
+
+  // Mount (and ?retry=1) run immediately; unmount invalidates + aborts the
+  // in-flight run so it can't report a failure for a screen that is gone.
+  useEffect(() => {
+    const ids = runId;
+    const aborts = abortRef;
+    void run();
+    return () => {
+      ids.current++;
+      aborts.current?.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.get("retry")]);
+
+  // Honest motion: a real elapsed counter next to the active step.
+  useEffect(() => {
+    if (failure) return;
+    const t = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [failure]);
+
+  const getHelp = () => {
+    const step = failure ? STEP_WHILE[failure.step] : "building";
+    const text = `Hi — my quiz build on ${shopDomain} stopped while ${step}${failure ? ` (${failure.reason})` : ""}. Can you take a look?`;
+    import("@intercom/messenger-js-sdk")
+      .then((m) => m.showNewMessage(text))
+      .catch(() => {
+        const w = window as unknown as { Intercom?: (cmd: string, arg?: string) => void };
+        if (typeof w.Intercom === "function") w.Intercom("showNewMessage", text);
+        else window.open(`mailto:support@gleame.ai?subject=${encodeURIComponent("Quiz build failed")}&body=${encodeURIComponent(text)}`);
+      });
+  };
+
+  const visible = failure
+    ? steps.slice(0, STEP_ORDER.indexOf(failure.step) + 1)
+    : steps;
+
+  return (
+    <Page narrowWidth>
+      <style>{BUILD_CSS}</style>
+      <div className="gq-ob">
+        <Card padding="600">
+          <BlockStack gap="600">
+            <BlockStack gap="200">
+              <Text as="h1" variant="headingXl">
+                {failure ? "We couldn't build your quiz" : "Building your quiz"}
+              </Text>
+              <Text as="p" tone="subdued">
+                {failure ? (
+                  <>
+                    It stopped while <strong>{STEP_WHILE[failure.step]}</strong>. Your catalog and theme are saved,
+                    so trying again picks up from there.
+                  </>
+                ) : (
+                  "Each step finishes with a real number."
+                )}
+              </Text>
+            </BlockStack>
+
+            <ol className={`gq-ob-steps${failure ? " is-failed" : ""}`}>
+              {visible.map((s) => (
+                <li key={s.key} className={`gq-ob-step is-${s.state}`}>
+                  <span className="gq-ob-st" aria-hidden>
+                    {s.state === "done" && <CheckGlyph />}
+                    {s.state === "now" && <Spinner size="small" accessibilityLabel="" />}
+                    {s.state === "failed" && "!"}
+                  </span>
+                  <span className="gq-ob-label">{STEP_LABELS[s.key]}</span>
+                  <span className="gq-ob-detail">
+                    {s.state === "done" || s.state === "failed"
+                      ? s.detail
+                      : s.state === "now" && elapsed >= 3
+                        ? `${elapsed}s`
+                        : ""}
+                  </span>
+                </li>
+              ))}
+            </ol>
+
+            {failure ? (
+              <InlineStack gap="300">
+                <Button variant="primary" onClick={() => void retry()}>
+                  Try again
+                </Button>
+                <Button onClick={getHelp}>Get help</Button>
+              </InlineStack>
+            ) : (
+              <Text as="p" variant="bodySm" tone="subdued">
+                About a minute. Nothing goes live until you turn it on.
+              </Text>
+            )}
+          </BlockStack>
+        </Card>
+      </div>
+    </Page>
+  );
+}
+
+function CheckGlyph() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+      <path d="M2.5 6.5l2.3 2.3L9.5 3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+const BUILD_CSS = `
+  .gq-ob { padding-top: 48px; padding-bottom: 48px; }
+  .gq-ob-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+  .gq-ob-step { display: grid; grid-template-columns: 26px 1fr auto; align-items: center; column-gap: 12px; padding: 13px 0; border-top: 1px solid var(--p-color-border-secondary, #e3e3e3); font-size: 14px; color: var(--p-color-text, #303030); transition: color 220ms ease; }
+  .gq-ob-step:last-child { border-bottom: 1px solid var(--p-color-border-secondary, #e3e3e3); }
+  .gq-ob-step.is-todo { color: var(--p-color-text-secondary, #8a8a8a); }
+  .gq-ob-step.is-now .gq-ob-label { font-weight: 600; }
+  .gq-ob-st { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; border: 1.5px solid var(--p-color-border, #c9c9c9); font-size: 12px; font-weight: 700; color: var(--p-color-text-secondary, #8a8a8a); }
+  .gq-ob-step.is-done .gq-ob-st { border-color: var(--p-color-bg-fill-success, #29845a); background: var(--p-color-bg-fill-success, #29845a); color: #fff; }
+  .gq-ob-step.is-now .gq-ob-st { border-color: transparent; }
+  .gq-ob-step.is-failed { color: var(--p-color-text-critical, #b3261e); }
+  .gq-ob-step.is-failed .gq-ob-st { border-color: var(--p-color-text-critical, #b3261e); color: var(--p-color-text-critical, #b3261e); }
+  .gq-ob-detail { font-size: 13px; color: var(--p-color-text-secondary, #616161); font-variant-numeric: tabular-nums; animation: gq-ob-in 220ms ease; }
+  .gq-ob-step.is-failed .gq-ob-detail { color: var(--p-color-text-critical, #b3261e); }
+  @keyframes gq-ob-in { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .gq-ob-detail { animation: none; } }
+`;

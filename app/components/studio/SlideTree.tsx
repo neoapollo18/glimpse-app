@@ -9,6 +9,7 @@ import {
   ArrowDownIcon,
   MergeIcon,
   ImageIcon,
+  LayoutColumns3Icon,
 } from "@shopify/polaris-icons";
 import type { StudioFlow } from "./types";
 import { answerLabel } from "./types";
@@ -99,6 +100,44 @@ function NumberChip({
   );
 }
 
+function RailHeader({ children }: { children: string }) {
+  return (
+    <div
+      className="studio-rail-wide"
+      style={{
+        padding: "10px 8px 4px",
+        fontSize: 11,
+        fontWeight: 600,
+        letterSpacing: "0.06em",
+        textTransform: "uppercase",
+        color: "#8A8F98",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** Amber attention dot: an Images slot needs a choice, or indexing failed. */
+function AttentionDot({ message }: { message: string }) {
+  return (
+    <Tooltip content={message}>
+      <span
+        aria-label={message}
+        style={{
+          width: 8,
+          height: 8,
+          borderRadius: "50%",
+          background: "#E3A008",
+          boxShadow: "0 0 0 2px #FFF4D6",
+          flexShrink: 0,
+          marginLeft: "auto",
+        }}
+      />
+    </Tooltip>
+  );
+}
+
 export function SlideTree({
   error,
   onDismissError,
@@ -114,6 +153,9 @@ export function SlideTree({
   disabled,
   readOnly,
   onReturnToBuild,
+  hasTemplate,
+  onOpenGallery,
+  imagesAttention,
 }: {
   error?: string | null;
   onDismissError?: () => void;
@@ -129,6 +171,12 @@ export function SlideTree({
   disabled?: boolean;
   readOnly?: boolean;
   onReturnToBuild?: () => void;
+  /** v3: Templates + Images are template-shop surfaces (V3-CONTRACTS §0);
+   * legacy shops (quiz_template null) keep the rail they have today. */
+  hasTemplate?: boolean;
+  onOpenGallery?: () => void;
+  /** Reason text when the Images item should carry the amber dot. */
+  imagesAttention?: string | null;
 }) {
   const questions = flow?.questions ?? [];
   // Drag-to-reorder: question rows only. dragQi = the question being
@@ -279,9 +327,12 @@ export function SlideTree({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
-      <div style={{ padding: 8, display: "flex", flexDirection: "column", gap: 2, flex: 1 }}>
-        {/* Style at the TOP of the rail (Overhaul Part 5): theming is the
-            first thing a merchant reacts to, not a bottom-of-list chore. */}
+      <div style={{ padding: "0 8px 8px", display: "flex", flexDirection: "column", gap: 2, flex: 1 }}>
+        {/* Rail order (V3-CONTRACTS §7): Design → Style, Templates, Images;
+            Screens → Intro, Q1…QN, Email capture, Results, + Add question.
+            Style at the top: theming is the first thing a merchant reacts
+            to, not a bottom-of-list chore. */}
+        <RailHeader>Design</RailHeader>
         <div
           role="button"
           tabIndex={disabled ? -1 : 0}
@@ -308,32 +359,57 @@ export function SlideTree({
             Style
           </span>
         </div>
-        {/* Images rail (V2-SPEC 4.4): every image slot the current template
-            uses, right under Style. */}
-        <div
-          role="button"
-          tabIndex={disabled ? -1 : 0}
-          className="studio-tree-row"
-          data-selected={selectedSlide === "images"}
-          style={{ opacity: disabled ? 0.6 : 1, pointerEvents: disabled ? "none" : undefined }}
-          onClick={() => onSelect("images")}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              onSelect("images");
-            }
-          }}
-        >
-          <span style={{ width: 20, display: "inline-flex", justifyContent: "center", flexShrink: 0 }}>
-            <span style={{ width: 14, height: 14, display: "inline-flex" }}>
-              <Icon source={ImageIcon} tone="subdued" />
+        {hasTemplate && onOpenGallery && (
+          <div
+            role="button"
+            tabIndex={disabled ? -1 : 0}
+            className="studio-tree-row"
+            style={{ opacity: disabled ? 0.6 : 1, pointerEvents: disabled ? "none" : undefined }}
+            onClick={onOpenGallery}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onOpenGallery();
+              }
+            }}
+          >
+            <span style={{ width: 20, display: "inline-flex", justifyContent: "center", flexShrink: 0 }}>
+              <span style={{ width: 14, height: 14, display: "inline-flex" }}>
+                <Icon source={LayoutColumns3Icon} tone="subdued" />
+              </span>
             </span>
-          </span>
-          <span className="studio-rail-wide" style={{ fontWeight: 600 }}>
-            Images
-          </span>
-        </div>
-        <div className="studio-rail-wide" style={{ height: 1, background: "#E1E3E5", margin: "8px 6px" }} aria-hidden />
+            <span className="studio-rail-wide" style={{ fontWeight: 600 }}>
+              Templates
+            </span>
+          </div>
+        )}
+        {hasTemplate && (
+          <div
+            role="button"
+            tabIndex={disabled ? -1 : 0}
+            className="studio-tree-row"
+            data-selected={selectedSlide === "images"}
+            style={{ opacity: disabled ? 0.6 : 1, pointerEvents: disabled ? "none" : undefined }}
+            onClick={() => onSelect("images")}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onSelect("images");
+              }
+            }}
+          >
+            <span style={{ width: 20, display: "inline-flex", justifyContent: "center", flexShrink: 0 }}>
+              <span style={{ width: 14, height: 14, display: "inline-flex" }}>
+                <Icon source={ImageIcon} tone="subdued" />
+              </span>
+            </span>
+            <span className="studio-rail-wide" style={{ fontWeight: 600 }}>
+              Images
+            </span>
+            {imagesAttention && <AttentionDot message={imagesAttention} />}
+          </div>
+        )}
+        <RailHeader>Screens</RailHeader>
         {row("intro", "Intro", { icon: HomeIcon })}
 
         {screens.map((screen) => (

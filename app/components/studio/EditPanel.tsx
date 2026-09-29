@@ -23,6 +23,7 @@ import type { StudioFlow, StudioQuestion, StudioOption } from "./types";
 import { answerLabel } from "./types";
 import { slideIdForQuestion } from "./SlideTree";
 import { postStudioAction } from "./studio-data";
+import { defaultEmailPlacement, type LookId } from "../../lib/quiz-templates";
 
 // Right panel: Edit | Chat tabs. Edit renders the contextual editor for the
 // selected slide; every manual edit goes through the SAME appliers the AI
@@ -67,7 +68,9 @@ export function EditPanel({
   registerFlush,
   flushEditor,
   onSaveError,
-  onOpenTemplateOverlay,
+  onOpenGallery,
+  onChangeLook,
+  lookBusy,
   chat,
 }: {
   data: StudioLoaderData;
@@ -82,7 +85,9 @@ export function EditPanel({
   registerFlush?: (fn: (() => void) | null) => void;
   flushEditor?: () => void;
   onSaveError?: (message: string) => void;
-  onOpenTemplateOverlay?: () => void;
+  onOpenGallery?: () => void;
+  onChangeLook?: (look: LookId) => void;
+  lookBusy?: boolean;
   chat: React.ReactNode;
 }) {
   const editHidden = step !== "build";
@@ -128,7 +133,9 @@ export function EditPanel({
             onPreviewReload={onPreviewReload}
             registerFlush={registerFlush}
             onSaveError={onSaveError}
-            onOpenTemplateOverlay={onOpenTemplateOverlay}
+            onOpenGallery={onOpenGallery}
+            onChangeLook={onChangeLook}
+            lookBusy={lookBusy}
           />
         </div>
       )}
@@ -147,7 +154,9 @@ function EditBody({
   onPreviewReload,
   registerFlush,
   onSaveError,
-  onOpenTemplateOverlay,
+  onOpenGallery,
+  onChangeLook,
+  lookBusy,
 }: {
   data: StudioLoaderData;
   selectedSlide: string;
@@ -159,7 +168,9 @@ function EditBody({
   onPreviewReload: () => void;
   registerFlush?: (fn: (() => void) | null) => void;
   onSaveError?: (message: string) => void;
-  onOpenTemplateOverlay?: () => void;
+  onOpenGallery?: () => void;
+  onChangeLook?: (look: LookId) => void;
+  lookBusy?: boolean;
 }) {
   const flow = data.draft?.flow as StudioFlow | undefined;
   if (!flow) {
@@ -177,7 +188,14 @@ function EditBody({
   }
   if (selectedSlide === "lead") {
     return (
-      <LeadEditor key={`lead:${chatEpoch}`} settings={settings} chatBusy={chatBusy} onPreviewUpdate={onPreviewUpdate} />
+      <LeadEditor
+        key={`lead:${chatEpoch}`}
+        settings={settings}
+        chatBusy={chatBusy}
+        onPreviewUpdate={onPreviewUpdate}
+        template={data.studio.template}
+        emailPlacementDefault={data.studio.template ? defaultEmailPlacement(data.studio.template) : null}
+      />
     );
   }
   if (selectedSlide === "photo") {
@@ -197,16 +215,22 @@ function EditBody({
         settings={settings}
         chatBusy={chatBusy}
         onPreviewUpdate={onPreviewUpdate}
-        onOpenTemplateOverlay={onOpenTemplateOverlay}
+        template={data.studio.template}
+        look={data.studio.look}
+        lookSource={data.studio.lookSource}
+        lookBusy={lookBusy}
+        colorSources={data.studio.colorSources}
+        onChangeLook={onChangeLook}
+        onOpenGallery={onOpenGallery}
       />
     );
   }
   if (selectedSlide === "images") {
     return (
       <Text as="p" tone="subdued">
-        Every image slot the current template uses is listed in the Images
-        rail on the left. Pick Change on a slot to swap it from your brand
-        library.
+        Every image this template uses is listed in the Images rail on the
+        left, unresolved first. Choose or Change a slot to pick from your
+        brand library, or click any dashed image on the canvas.
       </Text>
     );
   }

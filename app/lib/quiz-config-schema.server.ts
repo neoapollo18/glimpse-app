@@ -180,6 +180,13 @@ export const GeneratedQuizConfigSchema = z.object({
   wildcard: z
     .object({ label: z.string(), productIds: z.array(z.string()) })
     .nullish(),
+  // v3 Match phases (spec 3 / T1): the model groups questions into 2-3
+  // named, contiguous phases. Optional - the generator validates the
+  // partition (generation-report resolvePhases) and falls back to a
+  // deterministic chunking; other templates ignore it.
+  phases: z
+    .array(z.object({ label: z.string(), axisKeys: z.array(z.string()) }))
+    .nullish(),
 });
 
 export type GeneratedQuizConfig = z.infer<typeof GeneratedQuizConfigSchema>;
@@ -721,7 +728,9 @@ export function validateGeneratedConfig(
       );
     }
 
-    // 5.2c: imagery floor per the assigned template's imagery model.
+    // 5.2c: imagery floor per the assigned template's imagery model
+    // (v3 registry: t1 Match per-answer, t2 Consult per-question, t3/t5
+    // none, t4 Discover cutout - read from TEMPLATES, never literals).
     // NEVER a hard failure (publishing is never blocked by imagery): misses
     // are reported for the repair round, then degrade the template to T5.
     const model = floorTemplate?.imageryModel ?? null;
@@ -729,20 +738,13 @@ export function validateGeneratedConfig(
     const lifestyleRoles = new Set(["lifestyle", "banner", "hero"]);
     const failures: string[] = [];
     if (model === "per-answer") {
-      const failingQuestions = new Set<string>();
       for (const a of answerRefs) {
         const resolved = a.imageUrl ?? imageryMap?.[a.key]?.url ?? catalogImageForProducts(a.ids, catalog);
-        if (!resolved) {
-          failures.push(`Answer "${a.label}" (${a.key}) has no resolvable image`);
-          failingQuestions.add(a.axisKey);
-        }
+        if (!resolved) failures.push(`Answer "${a.label}" (${a.key}) has no resolvable image`);
       }
-      // T2 tolerates T5-style bars on at most ONE question (spec Part 3);
-      // beyond that, or past the 20% answer-coverage gate, degrade.
-      if (
-        failures.length > 0 &&
-        (failingQuestions.size > 1 || failures.length / Math.max(1, answerRefs.length) > 0.2)
-      ) {
+      // Match gate (v3 spec 4.3): >= 80% of answers must resolve to a
+      // variant/swatch image; past the 20% miss share, degrade to Clean.
+      if (failures.length > 0 && failures.length / Math.max(1, answerRefs.length) > 0.2) {
         degradedTo = "t5";
       }
     } else if (model === "per-question") {
@@ -766,7 +768,9 @@ export function validateGeneratedConfig(
           failures.push(`Question "${q.axisKey}" has no lifestyle/banner image candidate`);
         }
       }
-      // T3 gate: banner/lifestyle coverage for >= 80% of questions.
+      // Consult gate (v3 spec 4.3): >= 1 lifestyle/banner image per visual
+      // question for >= 80% of them (every generated question is a
+      // lifestyle-card candidate at this point).
       if (failing / Math.max(1, config.questions.length) > 0.2) degradedTo = "t5";
     } else if (model === "hero") {
       let hit = false;

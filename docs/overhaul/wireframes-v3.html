@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><!-- frame-runtime --><script>window.__FRAME_PREAMBLE={"v":1,"capabilities":{"artifact":"artifact.BHD03YiG.js","assets":"assets.DOAjpBS9.js","comments":"comments.DrhK3r8W.js","db":"db.zFlAA4qL.js","downloads":"downloads.axDW2QAi.js","embed":"embed.DcZf-TSv.js","endpoints":"endpoints.BPfoKaE1.js","files":"files.IkpCjcgM.js","mcp":"mcp.kl0G36TA.js","network":"network.B5UA9Su4.js","permissions":"permissions.CEAme3h0.js","room":"room.Dy3vHyq9.js","sample":"sample.DLMoX3Ob.js","self":"artifact.BHD03YiG.js","user":"user.CB0zJsP2.js"},"transforms":"_transforms.DqV5HAj2.js","comments":"_comments.DUaNQZcg.js","translate":"_translate.DqxC5ek1.js","ldx":"_ldx.B4FSryPi.js"}                                                                                                                                                                                                                                                                                                          </script><script>(function(){"use strict";function fr(t){return t==="cookie"||t==="query"?t:void 0}function dr(t){return typeof t=="number"&&Number.isSafeInteger(t)&&t>0?t:void 0}var $n=3e5;function hr(t,e){try{const r=t("navigation")[0],n=[r.responseStart,r.redirectEnd-r.redirectStart,r.domContentLoadedEventStart,e(),r.connectEnd-r.domainLookupStart,r.responseStart-r.requestStart];r.requestStart>0||(n.length=4);for(let a=0;a<n.length;a++)if(n[a]>=0&&n[a]<=3e5)n[a]=n[a]|0;else{if(a<4)return;n.length=4}return n}catch{return}}var pr=["light","dark","system"],mr=/^[A-Za-z0-9_-]{1,64}$/,Mt=/^[a-zA-Z_:][a-zA-Z0-9_:.-]{0,127}$/,vr=new Set(["class","hidden","value","checked","style","title","alt","placeholder","lang","dir","role","tabindex","disabled","readonly","contenteditable","open","colspan","rowspan"]);function _r(t){const e=t.toLowerCase();return e.startsWith("data-")||e.startsWith("aria-")||vr.has(e)}var Nt="data-ldx-props";function yr(t,e){if(e.toLowerCase()===Nt)return!0;const r=t.getAttribute(Nt);if(r===null)return!1;try{const n=JSON.parse(r);if(n===null||typeof n!="object"||Array.isArray(n))return!0;const a=e.toLowerCase();return Object.keys(n).some(s=>s.toLowerCase()===a)}catch{return!0}}var Vn="http://www.w3.org/1999/xhtml",gr="http://www.w3.org/2000/svg",wr=new Set(["script","style","iframe","noscript","noframes","noembed","xmp","plaintext","template","title","textarea","object","embed"]),br=new Set(["script","style"]);function Er(t){const e=t.localName.toLowerCase();return t.namespaceURI==="http://www.w3.org/1999/xhtml"?!wr.has(e):t.namespaceURI===gr?!br.has(e):!1}function ot(t,e){return t===e||(t===160||t===32)&&(e===160||e===32)}function Sr(t,e){const r=t.length,n=e.length;let a=0;for(;a<r&&a<n&&ot(t.charCodeAt(a),e.charCodeAt(a));)a++;let s=0;for(;s<r-a&&s<n-a&&ot(t.charCodeAt(r-1-s),e.charCodeAt(n-1-s));)s++;return{p:a,s}}function Ar(t,e){const r=t.firstChild;if(t.childNodes.length!==1||r===null||r.nodeType!==Node.TEXT_NODE){t.textContent=e;return}const n=r.data,a=n.length,s=e.length,{p:l,s:u}=Sr(n,e);l===a&&u===0&&a===s||r.replaceData(l,a-l-u,e.slice(l,s-u));const R=r.data,b=t.ownerDocument.getSelection?.()??null,E=b!==null&&b.rangeCount>0&&(b.anchorNode===r||b.focusNode===r)?{anchor:b.anchorNode,anchorOffset:b.anchorOffset,focus:b.focusNode,focusOffset:b.focusOffset}:null;let m=-1,S=-1;for(let y=0;y<R.length&&y<e.length;y++){const L=R.charCodeAt(y),H=e.charCodeAt(y);L!==H&&ot(L,H)&&(m<0&&(m=y),S=y)}const T=m>=0;if(T&&r.replaceData(m,S-m+1,e.slice(m,S+1)),T&&E!==null&&E.anchor!==null&&E.focus!==null)try{b.setBaseAndExtent(E.anchor,E.anchorOffset,E.focus,E.focusOffset)}catch{}}var kr=new Set(["html","head","body","frameset"]);function Rr(t){return t.namespaceURI==="http://www.w3.org/1999/xhtml"&&kr.has(t.localName)}function Tr(t){if(t===null||typeof t!="object")return!1;const e=t;if(typeof e.target!="string"||!mr.test(e.target)||e.text!==void 0&&typeof e.text!="string")return!1;if(e.attrsSet!==void 0){if(e.attrsSet===null||typeof e.attrsSet!="object")return!1;for(const[r,n]of Object.entries(e.attrsSet))if(!Mt.test(r)||typeof n!="string")return!1}if(e.attrsRemoved!==void 0){if(!Array.isArray(e.attrsRemoved))return!1;for(const r of e.attrsRemoved)if(typeof r!="string"||!Mt.test(r))return!1}return!0}function Lr(t,e){if(t===null||typeof t!="object")return!1;const{seq:r,elements:n}=t;if(typeof r!="number"||!Number.isSafeInteger(r)||!Array.isArray(n)||n.length===0||n.length>64)return!1;for(let a=0;a<n.length;a++)if(!e(n[a]))return!1;return!0}function Or(t){return t===null||typeof t!="object"?!1:Lr(t.__frame_patch,Tr)}function Pr(t){if(t===null||typeof t!="object")return!1;const e=t.__frame_init;return e!==null&&typeof e=="object"}function Mr(t){return t!==null&&typeof t=="object"&&t.__frame_size_poke===!0}function Nr(t){if(t===null||typeof t!="object")return!1;const e=t.__frame_host_visible;return e!==null&&typeof e=="object"&&typeof e.visible=="boolean"}function Cr(t){if(t===null||typeof t!="object")return!1;const e=t.__frame_theme;if(e===null||typeof e!="object")return!1;const r=e.theme;return typeof r=="string"&&pr.includes(r)}var jr=["ok","empty","snapshot_error","snapshot_timeout","unclonable","oversize","unavailable","restore_error","withheld"],Fr=["TypeError","RangeError","ReferenceError","SyntaxError","DataCloneError","QuotaExceededError","AbortError","TimeoutError","SecurityError","Error","other"];function Ir(t){return typeof t=="string"&&Fr.includes(t)?t:"other"}var xr=Object.freeze({until:null,now:!1}),Dr="__claude_hot",Hr="__claude_hot_in",qr=/^__claude_hot(?:_in)?(?::|$)/,Ct=/^[0-9a-z]{1,32}$/,at=t=>t===void 0?Dr:"__claude_hot:"+t,Le=t=>t===void 0?Hr:"__claude_hot_in:"+t;function Br(t,e){const r=[];for(let n=0;n<t.length;n++){const a=t.key(n);a!==null&&a!==e&&qr.test(a)&&r.push(a)}for(const n of r)t.removeItem(n)}function Ur(t){let e=null;try{e=D(JSON.parse(t)?.hot)}catch{return null}return e===null||typeof e.k!="string"||!Ct.test(e.k)?null:ue(e.g)?{k:e.k,g:e.g}:{k:e.k}}var Wn=262144,Kr=3e3,Gr=5e3,jt=/^[a-z0-9._:-]{1,64}$/,zr=["none","hot-restart","hard-reload"],$r=["asset","doc","added","removed"],Vr=1500,Wr=/^[0-9a-f]{64}$/;function D(t){return t!==null&&typeof t=="object"?t:null}function ue(t){return typeof t=="number"&&Number.isInteger(t)&&t>=0&&t<2**31}function Ft(t){return t===void 0||typeof t=="number"&&Number.isFinite(t)}function Xr(t){return t===void 0||typeof t=="string"&&jt.test(t)}function It(t){const e=D(t);return e!==null&&(e.until===null||typeof e.until=="number"&&Number.isFinite(e.until))&&typeof e.now=="boolean"}function st(t){const e=D(t);return e!==null&&typeof e.ver=="string"&&e.ver.length<=128&&Ft(e.seq)&&typeof e.handoff=="string"&&jr.includes(e.handoff)&&Xr(e.note)}function xt(t){const e=D(t);return e!==null&&ue(e.gen)&&(e.phase==="final"||e.phase==="pending")&&(e.from===null||st(e.from))}function Yr(t){const e=D(t);return e!==null&&e.kv===1&&ue(e.gen)&&st(e.from)&&Object.hasOwn(e,"data")}function Jr(t){const e=D(t);return e!==null&&e.__frame_hot_snapshot===!0&&ue(e.gen)&&typeof e.timeoutMs=="number"&&e.timeoutMs>=0&&e.timeoutMs<=6e4&&(e.handoff===void 0||typeof e.handoff=="boolean")&&(e.deadline===void 0||It(e.deadline))&&Ft(e.seq)&&(e.note===void 0||typeof e.note=="string")&&(e.key===void 0||typeof e.key=="string")}function Zr(t){const e=D(t);return e!==null&&e.__frame_hot_start===!0&&ue(e.gen)&&st(e.from)}function Qr(t){return typeof t=="string"&&t.length>=1&&t.length<=128}function Dt(t){return D(t)!==null&&!Array.isArray(t)}function en(t){const e=D(t);return e!==null&&e.__frame_cap_grant===!0&&typeof e.cap=="string"&&Qr(e.ver)&&(e.grant===void 0||Dt(e.grant))&&(e.budgets===void 0||Dt(e.budgets)&&Object.values(e.budgets).every(Number.isFinite))&&(e.brokerGen===void 0||ue(e.brokerGen))}function tn(t){const e=D(t);return e!==null&&e.__frame_cap_rewired===!0&&(e.caps===void 0||Array.isArray(e.caps)&&e.caps.every(r=>typeof r=="string"))&&(e.brokerGen===void 0||ue(e.brokerGen))}function Ht(t){const e=D(t);return e!==null&&typeof e.ver=="string"&&e.ver.length<=128&&Number.isFinite(e.seq)}function qt(t){if(t==null||typeof t=="string")return!0;const e=D(t);return e!==null&&typeof e.doc=="string"&&typeof e.profile=="string"}function rn(t){const e=D(t);return e!==null&&typeof e.path=="string"&&$r.includes(e.kind)&&qt(e.from)&&qt(e.to)}function nn(t){return t===null?null:Object.freeze(t.filter(rn))}function on(t){const e=D(t);return e!==null&&e.__frame_hot_update===!0&&Number.isFinite(e.id)&&Ht(e.from)&&Ht(e.to)&&(e.changed===null||Array.isArray(e.changed))&&zr.includes(e.required)&&It(e.deadline)&&typeof e.verdictTimeoutMs=="number"&&e.verdictTimeoutMs>=0&&e.verdictTimeoutMs<=6e4&&(e.preflight===void 0||typeof e.preflight=="string"&&Wr.test(e.preflight))}var fe=/^[\w.-]+\.js$/;function an(t,e,r){return r?"inert":typeof e=="string"&&fe.test(e)?t?[e]:"inert":t?"inert":"framed"}var Bt=Object.freeze({[Symbol("claude.hot.restart")]:!0});function Ut(t,e){let r;try{r=t??sessionStorage}catch{return null}const n=at(e?.k),a=Le(e?.k);let s=null;try{s=r.getItem(n)}catch{}try{r.removeItem(n)}catch{}try{Br(r,a)}catch{}let l=null;if(s!==null&&!(e!==null&&e.g===void 0))try{const u=JSON.parse(s);Yr(u)&&(e===null||u.gen===e.g)&&(l=u)}catch{}if(l===null)try{r.removeItem(a)}catch{}return l}function Kt(){const t=/^\/_f\/([^/]{1,128})\//.exec(location.pathname);return t?t[1]:""}var sn=/^[^/\\?#]{1,128}$/,Gt=t=>sn.test(t)&&t!=="."&&t!=="..";function zt(t,e,r){const n=new URL(t),a="/_f/"+e+"/";if(!e||!n.pathname.startsWith(a)||!Gt(r))return null;const s=n.search.slice(1).split("&").filter(l=>!/^__frame_t(?:=|$)/.test(l)).join("&");return n.origin+"/_f/"+r+"/"+n.pathname.slice(a.length)+(s?"?"+s:"")+n.hash}var $e="{}";function Oe(t){if(!t)return null;const e={ver:t.ver,handoff:t.handoff};return t.seq!==void 0&&(e.seq=t.seq),t.note!==void 0&&(e.note=t.note),e}function $t(t,e){return t!==null&&t.note===void 0&&e?.note!==void 0?{...t,note:e.note}:t}function Vt(t){const e=t?.k;return e!==null&&typeof e=="object"?e:void 0}function ln(t,e,r,n=null){const a=setTimeout,s=clearTimeout,l=queueMicrotask,u=performance.now.bind(performance),R=new TextEncoder;let b=null,E=null;try{b=history,E=b.replaceState.bind(b)}catch{}const m=(...o)=>{try{console.warn(...o)}catch{}};let S=Kt(),T=null;try{T=sessionStorage}catch{}const y={storage:T,fetch:typeof fetch=="function"?fetch.bind(globalThis):null,entry:location.origin+location.pathname+location.search,ver:S,key:n?.k};let L=n?.k;const H=typeof requestAnimationFrame=="function"?requestAnimationFrame:o=>a(()=>o(u()),16);let h=e?.data??{},v=Oe(e?.from),M=e?.gen??0,q=e!==null,ee=!1,ne=!1,K=null,he=!1;const we=new AbortController;let je=null,I=null,be=null,Fe=!1,ce=()=>{};const oe=new Promise(o=>{ce=o});let pe=!1,Ie=!1,c=!1,_,p=null,C=!1,j=!1,B=!1,$=!1,V=!1,te=!1;const xe=o=>{for(const f of[at(o),Le(o)])try{T?.removeItem(f)}catch{}},x=(o,f)=>{try{f!==null&&r.post(o,f)}catch{}},Ze=()=>V||=B&&(I===null||$),X=()=>{const o={__frame_hot:!0,ready:I!==null,accept:be!==null,demand:!0};te=!V,te&&(o.booting=!0),pe&&(o.readData=!0),c&&(o.threw=!0),p?.assess&&(o.preflight=!0),x(o,K)};let De=!1,He=!1,G=!1,qe=!1;const Be=()=>{De||!he||G||(De=!0,x({__frame_reveal_hold:!0},"*"))},Ue=()=>new Promise(o=>{let f,d=0;const A=F=>{if(f===void 0)f=F;else if(F!==f||++d>=8){o();return}try{H(A)}catch{o()}};try{H(A)}catch{o()}}),Ke=()=>{G=!0,x({__frame_reveal_ready:!0},"*")},Ee=o=>{He||(He=!0,o.then(f=>{if(f===!1)return;let d=null;try{d=p?.settle?.()??null}catch{}return(d===null?Ue():new Promise(A=>{a(A,50),Promise.resolve(d).then(A,A)}).then(Ue)).then(Ke)}))},wt=()=>{if(qe||!G)return;qe=!0;const o=()=>{try{p?.afterReveal?.()}catch{}};o(),Ue().then(()=>{o(),Ke()})},Se=(o=!1)=>{if(Fe||I===null||!q||!ne)return;Fe=!0;const f=I,d=h;l(()=>{let A;try{A=f(d)}catch(U){throw ce(!1),U}let F=!1;try{F=typeof A?.then=="function"}catch{}if(!F){ce(!0);return}Promise.resolve(A).then(()=>ce(!0),U=>{ce(!1),l(()=>{throw U})})}),Ee(o?oe:r.dcl.then(()=>oe))},Y=o=>typeof o=="string"&&jt.test(o)?o:void 0,me=o=>{const f={__frame_hot_restart:!0},d=Y(o?.note);d!==void 0&&(f.note=d),o?.required==="hard-reload"&&(f.required="hard-reload"),x(f,K)},Ge=Object.freeze({get data(){return ne||(Ie=!0),!q&&!pe&&(pe=!0,ne&&X()),h},get from(){return v},get gen(){return M},signal:we.signal,snapshot(o){typeof o=="function"&&(je=o)},ready(o){typeof o!="function"||I!==null||(I=o,Be(),X(),ee&&x({__frame_hot_ready:!0,gen:M},K),Se())},accept(o){typeof o=="function"&&(be=o,X())},restart(o){const f={note:o?.note,required:o?.required};if(ne){me(f);return}const d=_;_={note:Y(d?.note)??f.note,required:d?.required==="hard-reload"||f.required==="hard-reload"?"hard-reload":void 0}}});let ve=null,i=()=>{};const w=new Promise(o=>{i=o});let g=null;const O=()=>g??=r.dcl.then(()=>{let o=!1;try{o=ve!==null&&ve.expect()}catch{}if(!o)return;const f=ve.maxMs;return new Promise(d=>{w.then(d),a(d,f)})}),J=()=>{if(!C||j||p===null)return;j=!0;const o=p;O().then(()=>{try{G||o.afterStart(Vt(e),!1)}catch{}})},Z=o=>{e!==null&&Ie&&(pe=!0),h={},v=null,M=0;try{T?.removeItem(Le(n?.k))}catch{}e!==null&&!o&&Ee(r.dcl.then(()=>I!==null?oe:void 0))},_e=()=>{C=!0,Ee(O().then(()=>I!==null?oe:void 0)),J()};try{addEventListener("error",()=>{c||I!==null||(c=!0,X())})}catch{}const lr=()=>{a(()=>{!V&&Ze()&&te&&X()},0)};try{B=document.readyState==="complete",B||addEventListener("load",()=>{B=!0,lr()},{once:!0})}catch{B=!0}Ze(),oe.then(()=>{$=!0,lr()});let ye=-1,bt,Et,ze=!0,St=!1,At,Qe=null;const kt=o=>{const f=Qe===null;Qe=ze&&o[0]!=="withheld"?o:["withheld",o[1],$e];let d=o[0];if(ze&&d!=="withheld"){const F={ver:S,handoff:d};bt!==void 0&&(F.seq=bt),Et!==void 0&&(F.note=Et);try{if(T===null)throw new Error("no storage");T.setItem(at(L),'{"kv":1,"gen":'+ye+',"from":'+JSON.stringify(F)+(At!==void 0?',"k":'+JSON.stringify(At):"")+',"data":'+(d==="ok"?o[2]:$e)+"}")}catch{d="unavailable"}}else{d="withheld",xe(L);try{p?.release?.()}catch{}}const A={__frame_hot_snapshotted:!0,gen:ye,handoff:d,bytes:o[1]};o[3]!==void 0&&(A.errName=o[3]),x(A,K),f&&(d==="snapshot_error"||d==="unclonable"||d==="oversize")&&m("claude.hot: snapshot",d,o[3])},Ae=o=>{try{return Ir(o?.name)}catch{return"other"}},ke=(o,f,d=0)=>kt(f===void 0?[o,d,$e]:[o,d,$e,Ae(f)]),Bn=o=>{if(o.gen<=ye)return;const f=ye>=0;if(ye=o.gen,bt=o.seq,Et=Y(o.note),typeof o.key=="string"&&Ct.test(o.key)&&o.key!==L&&(xe(L),L=o.key),ze&&=o.handoff!==!1,f){Qe!==null?kt(Qe):St&&x({__frame_hot_held:!0,gen:ye},K);return}we.abort();const d=Object.freeze({handoff:ze,timeoutMs:o.timeoutMs,deadline:o.deadline??xr}),A=je,F=()=>{if(ze)try{At=p?.capture()}catch{}if(A===null){ke("empty");return}let P=!1;const z=a(()=>{P||(P=!0,ke("snapshot_timeout"))},Math.max(0,d.timeoutMs));Promise.resolve().then(()=>A(d)).then(Re=>{if(P)return;P=!0,s(z);let ae;try{ae=JSON.stringify(Re)}catch(Rt){ke("unclonable",Rt);return}if(typeof ae!="string"){ke("unclonable");return}let se=ae.length;try{se=R.encode(ae).length}catch{}if(se>262144){ke("oversize",void 0,se);return}kt(["ok",se,ae])},Re=>{P||(P=!0,s(z),ke("snapshot_error",Re))})};let U=null;try{U=p?.holdForIme()??null}catch{}if(U===null)F();else{St=!0,x({__frame_hot_held:!0,gen:ye},K);const P=()=>{St=!1,F()};U.then(P,P)}},Un=o=>{if(!ee||q||I===null||o.gen!==M)return;let f=null;try{f=Ut(T,n&&{k:n.k,g:o.gen})}catch{}if(f!==null&&f.gen!==o.gen){f=null;try{T?.removeItem(Le(n?.k))}catch{}}h=f?.data??{},v=$t(Oe(f?.from??o.from),Oe(o.from)),f!==null&&(M=f.gen),q=!0,ee=!1;const d=Vt(f);oe.then(A=>{try{A&&p?.afterStart(d,!0)}catch{}}),Se(!0)};let et=0;const Kn=o=>{const f=be;if(f===null||o.id<=et)return;et=o.id;const d=p?.assess;if(o.preflight===void 0||d===void 0){cr(o,f);return}let A=!1;const F=z=>{A||(A=!0,s(P),o.id===et&&cr(o,f,z))},U=()=>F(d.timeout(o)),P=a(U,Vr+100);d.run(o,window).then(F,U)},cr=(o,f,d)=>{let A,F=!1,U=!1,P,z,Re=null;const ae=k=>{if(U)return!1;if(P!==void 0&&P!==k)return m(`claude.hot: u.${k}() ignored - u.${P}() was called first`),!1;const re=P===void 0;return P=k,re},se=k=>{P="restart",m(`claude.hot: ${k} - restarting`)},Rt=()=>{if(!ae("adopt")||o.id!==et)return;const k=o.to.ver;if(tt.required!=="none"){se(`u.adopt() needs required 'none', it is '${tt.required}'`);return}if(!Gt(k)){se("u.adopt() cannot address this version");return}if(!S||k===S)return;const re=S,Q=y.entry;let rt="",Lt,Te=null,nt;try{rt=location.href,Lt=b.state,Te=zt(rt,re,k),Te!==null&&(E(Lt,"",Te),location.pathname.startsWith("/_f/"+k+"/")?Te=location.href:nt="navigate event canceled")}catch(Pt){nt=Ae(Pt)}if(nt!==void 0){z="adopt_failed",se(`adopt_failed ${nt}; URL not changed`);return}Te===null?(z="adopt_skipped",m(`claude.hot: adopt_skipped - page already left /_f/${re}/; URL not changed, update still applied`)):z="adopted",S=y.ver=k;try{y.entry=zt(Q,re,k)??Q}catch{}const Ot=Te;Re=()=>{if(S===k){if(Ot!==null)try{if(location.href!==Ot)m("claude.hot: adopt_revert_skipped - update not applied; URL left where the page navigated");else{if(E(Lt,"",rt),location.href!==rt){m("claude.hot: adopt_revert_failed navigate event canceled - URL still at the new version");return}z="adopt_reverted",m("claude.hot: adopt_reverted - adopt() was called but the handler threw; URL restored")}}catch(Pt){m(`claude.hot: adopt_revert_failed ${Ae(Pt)} - URL still at the new version`);return}S=y.ver=re,y.entry=Q,Ot===null&&(z=void 0)}}},tt=Object.freeze({from:{ver:o.from.ver,seq:o.from.seq},to:{ver:o.to.ver,seq:o.to.seq},changed:nn(o.changed),required:o.required,deadline:o.deadline,adopt:Rt,defer(){return ae("defer")&&tt.deadline.now&&se("u.defer() past the deadline"),Bt},restart(k){return ae("restart"),P==="restart"&&!U&&(A??=Y(k?.note),F||=k?.required==="hard-reload"),Bt},...d?.update}),Gn=(k,re)=>{U=!0,k==="threw"?(Re?.(),A??=Ae(re).toLowerCase()):P===void 0&&m(k==="timeout"?"claude.hot: accept handler did not answer in time - restarting":"claude.hot: accept handler settled without defer/restart/adopt - restarting");const Q={__frame_hot_verdict:!0,id:o.id};Q.verdict=k==="threw"||P===void 0||P==="restart"?"restart":P==="adopt"?"applied":"deferred",Q.verdict==="restart"&&(F&&(Q.required="hard-reload"),A!==void 0&&(Q.note=A)),z!==void 0&&(Q.verdict==="applied"||z!=="adopted")&&(Q.adopt=z),x(Object.assign(Q,d?.verdict),K)};let ur=!1;const Tt=(k,re)=>ur?!1:(ur=!0,s(zn),Gn(k,re),!0),zn=a(()=>Tt("timeout"),o.verdictTimeoutMs);Promise.resolve().then(()=>f(tt)).then(()=>Tt("settled"),k=>{!Tt("threw",k)&&P==="adopt"&&me({note:Ae(k).toLowerCase()}),m("claude.hot: accept",Ae(k))})};try{t.hot===void 0&&Object.defineProperty(t,"hot",{value:Ge,writable:!1,configurable:!1,enumerable:!1})}catch{}return{hot:Ge,boot:y,afterConnect(){he=!0,(e!==null||I!==null)&&Be()},onInit(o,f){K=f,ne=!0;const d=xt(o)?o:null;d?.phase==="final"&&e!==null&&e.gen===d.gen?(q=!0,v=$t(v,Oe(d.from)),_e()):(ee=d?.phase==="pending",Z(ee),q=!ee,M=d?.gen??0,v=Oe(d?.from)),X(),te&&a(()=>{V||(V=!0,X())},Gr),ee&&I!==null&&x({__frame_hot_ready:!0,gen:M},f),_!==void 0&&(me(_),_=void 0),Se()},onNoInit(){ne=!0,Z(!1),q=!0,Se()},onShell(o){return o?.__frame_revealed===!0?(wt(),!1):Jr(o)?(Bn(o),!0):Zr(o)?(Un(o),!0):on(o)?(Kn(o),!0):!1},attachExtras(o){p=o,J(),o.assess&&X()},inSlot:()=>Le(L),hydration(o,f){ve??={expect:o,maxMs:f}},hydrated(){i()},carried(){return q?h:{}},presented:()=>G}}var Xn="frame_ldx_runtime",cn="frame_ldx_build",Yn="script#an-form",un=256;function Wt(t,e,r){for(const n of t)r(n)&&t.delete(n);t.size>=un&&!t.has(e)&&t.delete(t.values().next().value),t.add(e)}function Pe(t,e,r,n){try{const a=t[e];if(typeof a!="function")return;t[e]=function(...s){if(n){let u;try{u=n(this)}catch{}if(u!==void 0)return u}const l=a.apply(this,s);try{r?.(this)}catch{}return l}}catch{}}var it;function fn(){if(it)return it;const t={media:new Set,contexts:new Set,gate:null,onStart:null,onStop:null};it=t;const e=l=>t.gate?.(l),r=l=>{t.onStop?.(l)},n=window.HTMLMediaElement?.prototype;n&&(Pe(n,"play",l=>{Wt(t.media,l,u=>u.paused),t.onStart?.(l)},e),Pe(n,"pause",r));const a=window.AudioContext,s=window.AudioNode?.prototype;return a&&s&&(Pe(s,"connect",l=>{const u=l.context;u instanceof a&&(Wt(t.contexts,u,R=>R.state==="closed"),t.onStart?.(u))}),Pe(a.prototype,"resume",void 0,e),Pe(a.prototype,"suspend",r)),t}function dn(t){let e=window;for(let r=0;e.parent&&e.parent!==e&&r<8;r++)if(e=e.parent,t(e))return!0;return!1}function hn(){let t=null;const e=()=>t??parent,r=n=>t?n===t:dn(a=>a===n);return{post(n,a){if(t){e().postMessage(n,a);return}let s=parent;for(let l=0;l<8&&(s.postMessage(n,a),!(!s.parent||s.parent===s));l++)s=s.parent},on(n){const a=s=>{const l=s.source;r(l)&&n(s.data,s.origin,s.isTrusted,()=>{t??=l})};return addEventListener("message",a),()=>removeEventListener("message",a)},port:n=>({post(a,s){if(s?.activation){e().postMessage(a,{targetOrigin:n,includeUserActivation:!0});return}if(s?.transfer){e().postMessage(a,n,s.transfer);return}e().postMessage(a,n)},on(a,s){const l=u=>{r(u.source)&&u.origin===n&&a(u.data,u)};return addEventListener("message",l,s),()=>removeEventListener("message",l,s)}})}}function pn(){const t={post:()=>{},on:()=>()=>{}};return{...t,port:()=>t}}var mn=500,vn=2e4,_n="data-token-reads",yn="data-frame-refused-watch",gn="data-frame-unsupported",wn=/(?:^|\s)stylesheet(?:\s|$)/i;function bn(t,e){let r="";if(t instanceof HTMLScriptElement?r=t.src:t instanceof HTMLLinkElement&&wn.test(t.rel)&&(r=t.href),!r)return null;try{const n=new URL(r);return n.origin===location.origin&&n.pathname.startsWith(e)?n.origin+n.pathname:null}catch{return null}}function En(t,e,r){if(!t||e!=="query")return;const n="/_f/"+t+"/";document.documentElement.setAttribute(yn,"");const a=location.href,s=fetch,l=setTimeout,u={method:"HEAD",cache:"no-store",credentials:"same-origin"},R=y=>y.ok||y.status===304;let b=!1,E=!1;const m=()=>removeEventListener("error",T,!0),S=async y=>{const L=await s(y,u);if(R(L))E=!0;else if(L.status===403){const H=await s(a,u);if(R(H)){const h=(await s(y,u)).status;h===403?(E=!0,document.documentElement.setAttribute(gn,""),r()):h<500&&(E=!0)}else H.status>=400&&H.status<500&&(E=!0)}},T=y=>{if(E||b)return;if(document.documentElement.hasAttribute(_n)){E=!0,m();return}const L=bn(y.target,n);L&&(b=!0,l(()=>{S(L).catch(()=>{}).finally(()=>{b=!1,E&&m()})},mn))};addEventListener("error",T,!0),addEventListener("load",m,{once:!0}),l(m,vn)}var lt="__frame_scroll",Sn=150,An=310,kn=160,Rn=3e4;function Tn(){let t=0,e=!1,r=!1,n=!1,a=0,s=null;const l=h=>{try{sessionStorage.setItem(lt,JSON.stringify({y:h}))}catch{}},u=()=>{if(clearTimeout(t),s===null)return;const h=s;s=null,l(h)},R=()=>{if(e){e=!1;return}r=!0,s=scrollY,clearTimeout(t),t=setTimeout(u,Sn)};try{addEventListener("scroll",R,{passive:!0}),addEventListener("pagehide",u)}catch{}const b=()=>{let h;try{h=sessionStorage.getItem(lt)}catch{return null}if(h===null)return null;let v;try{v=JSON.parse(h)}catch{v=null}const M=v?.y;if(!(typeof M=="number"&&Number.isFinite(M)&&M>=0)){try{sessionStorage.removeItem(lt)}catch{}return null}return M};let E=!1;const m=h=>{try{const v=scrollY;scrollTo({top:h,left:0,behavior:"instant"}),a=h,n=!0,clearTimeout(t),s=null,l(h);const M=scrollY;M!==v&&(e=!0),M!==h&&!E&&(E=!0,addEventListener("load",()=>{try{if(scrollY===M){const q=b();m(q!==null?q:a)}}catch{}},{once:!0}))}catch{}},S=()=>{try{return!!location.hash}catch{return!0}};let T=!1;const y=()=>{try{if(T||innerWidth>An||innerHeight>kn)return;T=!0;const h=Date.now(),v=()=>{try{removeEventListener("resize",v)}catch{}if(Date.now()-h>Rn||r||S())return;const M=b();m(M!==null?M:a)};addEventListener("resize",v)}catch{}};let L=!1,H=!1;return{restore(){if(L||(L=!0,S()))return;const h=b();h!==null&&(m(h),y())},promoted(){if(H||(H=!0,S()))return;const h=b();h!==null?(m(h),y()):n&&m(a)}}}function Ln(t,e,r,n){let a=null;try{a=window.trustedTypes?.createPolicy("frame-runtime",{createScriptURL:R=>R})??null}catch{}const s=window.Worker,l=s?.prototype,u=Object.freeze({Worker:s,workerOn:l?.addEventListener,workerPost:l?.postMessage,workerTerminate:l?.terminate,fetch:window.fetch.bind(window),preventDefault:Event.prototype.preventDefault,now:Date.now,policy:a,origins:e});r(t).then(R=>R?.bootTopLevel?R.bootTopLevel(u,n):n.settle()).catch(()=>n.settle())}var Jn="modulepreload",Zn=function(t){return"/"+t},Qn={},On=function(e,r,n){let a=Promise.resolve();function s(l){const u=new Event("vite:preloadError",{cancelable:!0});if(u.payload=l,window.dispatchEvent(u),!u.defaultPrevented)throw l}return a.then(l=>{for(const u of l||[])u.status==="rejected"&&s(u.reason);return e().catch(s)})},Pn=window===top,Xt=Object.getOwnPropertyDescriptor(window,"claude"),Ve=an(Pn,window.__FRAME_PREAMBLE?.topLevel,Xt?.writable===!1),ct=typeof Ve=="object"&&Ve[0],N=ct?pn():hn();(function(){const t=Object.defineProperty,e=globalThis,r=["RTCPeerConnection","webkitRTCPeerConnection","RTCDataChannel","RTCIceCandidate","RTCSessionDescription","RTCRtpSender","RTCRtpReceiver"];let n=0;for(let a=0;a<r.length;a++){const s=r[a];try{t(e,s,{value:void 0,writable:!1,configurable:!1})}catch{try{delete e[s]}catch{}try{t(e,s,{value:void 0,writable:!1,configurable:!0})}catch{}}typeof e[s]=="function"&&n++}if(n&&Ve==="framed")try{N.post({__frame_rtc_lockdown_failed:n},"*")}catch{}})();var Yt=1e4,Mn=2e3,ut=2e3,ft=Object.freeze([...window.__FRAME_PREAMBLE?.origins??["https://claude.ai","https://preview.claude.ai"]]);function Jt(t){for(const e of ft)if(e.endsWith(":*"))try{const r=new URL(t);if(`${r.protocol}//${r.hostname}:*`===e)return!0}catch{}else if(t===e)return!0;return!1}var Me=Object.freeze({...window.__FRAME_PREAMBLE?.capabilities}),Ne=window.__FRAME_PREAMBLE?.transforms,dt=window.__FRAME_PREAMBLE?.comments,ht=window.__FRAME_PREAMBLE?.translate,de=window.__FRAME_PREAMBLE?.ldx,We=fr(window.__FRAME_PREAMBLE?.cred),Zt=(()=>{try{const[t]=performance.getEntriesByType("navigation"),e=t?.serverTiming?.find(r=>r.name==="frame-cred-exp");return e!==void 0&&/^\d{1,15}$/.test(e.description)?dr(Number(e.description)):void 0}catch{return}})();function Qt(t){return On(()=>import("/_runtime/"+t),void 0)}var Ce=new Set,er=setTimeout,Nn=fetch,Cn=AbortController,jn=800+800*Math.random(),Fn=3e3,Xe=null,tr=new Map;function In(t,e){let r=tr.get(t);return r||tr.set(t,r=xn(t,e)),r}function xn(t,e){if(Xe?.has(t))return Promise.resolve("csp");if(navigator.onLine===!1)return Promise.resolve("offline");const r=new Cn;let n=!1;return er(()=>{n=!0,r.abort()},Fn),Nn("/_runtime/"+t,{signal:r.signal}).then(a=>(r.abort(),a.ok?/javascript/i.test(a.headers.get("content-type")??"")?e instanceof Error&&/:\d+:\d+\)?$/m.test(e.stack??"")?"eval":"served":"mime":"http"),()=>n?"timeout":Xe?.has(t)?"csp":"net")}function ie(t){if(!Xe){const e=Xe=new Set;try{document.addEventListener("securitypolicyviolation",r=>{const n=/\/_runtime\/([^/?#]+)/.exec(r.blockedURI);n&&r.disposition!=="report"&&e.add(n[1])})}catch{}}return Qt(t).catch(()=>new Promise(e=>er(e,jn)).then(()=>Qt(t+"?r=1")).then(e=>(e!==void 0&&Ce.add(t),e)))}function rr(t,e,r){return{contract:t.contract,changes:new Set(t.changes??[]),flags:new Set(t.flags??[]),capabilities:t.capabilities??{},capBudgets:t.capBudgets??{},brokerGen:t.brokerGen,transforms:new Map,shellOrigin:e,shell:r,mount:gt,hooks:Ye,pipe:()=>({wrap:(n,a)=>(...s)=>{try{return a(...s)}catch(l){return Promise.reject(l)}}})}}var ge=null,W=null;function nr(t,e,r){try{Object.defineProperty(t,e,{value:r,writable:!1,configurable:!1,enumerable:!0})}catch{try{Object.defineProperty(t,e,{value:r,writable:!1,configurable:!0,enumerable:!0})}catch{}}}var pt=!1,Ye={editBefore:null,edit:null};function Dn(t,e,r=!1){const n=[];let a;if(r)try{Ye.editBefore?.(t)}catch{}for(const s of t.elements){const l=document.querySelector(`[data-id="${s.target}"]`);if(!l){a=s.target;break}if([...Object.keys(s.attrsSet??{}),...s.attrsRemoved??[]].some(u=>!_r(u)||yr(l,u))){a=s.target;break}if(s.text!==void 0&&(!Er(l)||Rr(l))){a=s.target;break}for(const[u,R]of Object.entries(s.attrsSet??{}))if(!ar(l,u)){try{l.setAttribute(u,R)}catch{}or(l,u,R)}for(const u of s.attrsRemoved??[])ar(l,u)||(l.removeAttribute(u),or(l,u,null));typeof s.text=="string"&&Ar(l,s.text),n.push(s.target)}if(r)try{Ye.edit?.(t.seq,n,a)}catch{}if(a!==void 0){N.post({__frame_patch_miss:{seq:t.seq}},e);return}try{document.dispatchEvent(new CustomEvent("claude:edit",{detail:{seq:t.seq,targets:n}}))}catch{}}function or(t,e,r){if(!(t instanceof HTMLInputElement))return;const n=e.toLowerCase();n==="checked"?t.checked=r!==null:n==="value"&&t.type!=="file"&&(t.value=r??"")}function ar(t,e){const r=e.toLowerCase(),n=t;return r==="data-id"||(r==="value"||r==="checked")&&(n.__artifactSecret===!0||/^(password|hidden|file)$/.test(n.type??"")||/(^|\s)(cc-|one-time-code|current-password|new-password)/i.test(`${t.getAttribute("autocomplete")??""} ${n.autocomplete??""}`))}function sr(t){const e=document.documentElement;t==="light"||t==="dark"?(e.dataset.theme=t,e.style.colorScheme=t,pt=!0):pt&&(delete e.dataset.theme,e.style.colorScheme="",pt=!1)}var le=new Map,mt=null;function vt(){let t;const e={u:new Promise(r=>{t=r}),r:r=>{e.done=!0,t(r)},done:!1,nulled:!1};return e}function Je(t,e){t.nulled=!0,t.ver=e,t.r(null)}function _t(t,e){for(const[r,n]of le)n.done||(e&&n.asked?e(r,n):Je(n,t))}function Hn(){for(const t of le.values())if(t.asked&&!t.done)return!0;return!1}var qn=Object.freeze(Object.assign(Object.create(null),{call:Function.prototype.call,apply:Function.prototype.apply,bind:Function.prototype.bind})),yt=!1,gt=(t,e)=>{let r=le.get(t);if(r?.nulled&&yt)r=vt(),le.set(t,r);else if(!r||r.done){r?.nulled&&W&&N.post({__frame_cap_telemetry:{kind:"cap-load-error",cap:t,phase:"install"}},W);return}const n=typeof e=="function"?Object.setPrototypeOf(e,qn):Object.assign(Object.create(null),e);typeof n.then=="function"&&delete n.then,r.want=void 0,r.r(Object.freeze(n))};function ir(){const t=Xt?.value??{};nr(window,"claude",t);for(const e of Object.keys(Me)){if(t[e]!==void 0){nr(t,e,t[e]);continue}le.set(e,vt())}if(t.use===void 0){const e=r=>{if(typeof r!="string"||!Object.hasOwn(Me,r))return Promise.resolve(null);let n=le.get(r);return n?(mt&&(n.nulled||n.want!==void 0)&&(n=mt(r,n)),n.asked=!0,n.u):Promise.resolve(t[r]??null)};try{Object.defineProperty(t,"use",{value:e,writable:!0,configurable:!0,enumerable:!1})}catch{}}return t}if(Ve==="framed"){let t;const e=Ne&&fe.test(Ne)?ie(Ne).catch(c=>{t={f:Ne,e:c}}):Promise.resolve(void 0),r=c=>{if(c.type==="auxclick"&&c.button!==1)return;const _=c.target,p=_&&_.closest?_.closest("a[href],area[href]"):null;if(!p)return;const C=p.getAttribute("href");if(!C)return;let j;try{j=new URL(C,document.baseURI)}catch{return}if((j.protocol==="http:"||j.protocol==="https:")&&j.origin!==location.origin){c.preventDefault();const B=(p.getAttribute("target")??"").toLowerCase(),$=c.type==="auxclick"||c.metaKey||c.ctrlKey||c.shiftKey||c.altKey||!["","_self","_top","_parent"].includes(B);N.post({__frame_nav:!0,url:j.href,newTab:$},"*")}};addEventListener("click",r,!0),addEventListener("auxclick",r,!0);const n={},a=c=>{c.isTrusted&&(n.pointer=!0)},s=c=>{c.isTrusted&&(n.click=!0)};addEventListener("pointermove",a,{capture:!0,passive:!0}),addEventListener("click",s,{capture:!0,passive:!0});const l={cb:null};addEventListener("keydown",c=>l.cb?.(c),!0);const u={cb:null};addEventListener("keydown",c=>u.cb?.(c));const R=fn();e.then(c=>c?.installEscapeForward?.(l,_=>{W&&N.post(_,W)})),e.then(c=>{try{c?.installFocusKeep?.()}catch{}}),e.then(c=>{if(!c?.wireNav)return;const _=N.port("*");c.wireNav(_),removeEventListener("click",r,!0),removeEventListener("auxclick",r,!0),removeEventListener("pointermove",a,!0),removeEventListener("click",s,!0),c.wireEngagement?.(n,_,R)});let b=null,E=!1;try{b=Tn()}catch{}const m=document.readyState==="loading"?new Promise(c=>document.addEventListener("DOMContentLoaded",()=>c(),{once:!0})):Promise.resolve();let S="dcl",T=!1;m.then(()=>{T=!0});let y=null,L=null;try{L=Ur(window.name),y=Ut(null,L)}catch{}const H=ir();let h=null;try{h=ln(H,y,{post:(c,_)=>N.post(c,_),dcl:m},L)}catch{}e.then(c=>{try{h&&c?.installHotExtras?.(h)}catch{}});let v=null;const M=()=>Array.isArray(v?.flags)&&v.flags.includes("frame_ldx_runtime")&&!!de&&fe.test(de)&&document.querySelector("script#an-form")!==null;try{h?.hydration(M,Kr)}catch{}let q=null,ee=0;const ne=N.on((c,_,p,C)=>{Jt(_)&&Pr(c)&&(C(),v=c.__frame_init,W=_,ne(),clearTimeout(ee),q?.())});if(We){const c=Zt===void 0?{__frame_cred:We}:{__frame_cred:We,exp:Zt};for(const _ of ft)try{_.endsWith(":*")||N.post(c,_)}catch{}}N.post({__frame_connect:!0},"*");try{h?.afterConnect()}catch{}const K=setTimeout,he=clearTimeout;let we=()=>NaN,je=()=>[];try{we=performance.now.bind(performance),je=performance.getEntriesByType.bind(performance)}catch{}let I=0;const be=()=>{try{N.post({__frame_alive:!0},"*")}catch{}I=K(be,Mn)},Fe=()=>he(I);be(),addEventListener("load",Fe,{once:!0});const ce=new Promise(c=>{q=c,ee=setTimeout(()=>{ne(),c()},Yt)}),oe=new WeakSet;addEventListener("error",c=>{c.target&&oe.add(c.target)},!0);try{En(Kt(),We,()=>{e.then(c=>{try{c?.drawRefusedNotice?.()}catch{}})})}catch{}const pe=()=>{let c=[];try{c=[...document.querySelectorAll("link[rel~=stylesheet]:not([rel~=alternate])")].filter(p=>!p.sheet&&!p.disabled&&!oe.has(p)&&p.getAttribute("href")&&URL.canParse(p.href)&&(!p.media||matchMedia(p.media).matches))}catch{}let _=c.length;return _===0?Promise.resolve():new Promise(p=>{try{const C=ut-we();C>0&&T&&(S="sheets");const j=K(p,C>0?C<ut?C:ut:0),B=()=>{--_===0&&(he(j),p())};for(const $ of c)$.addEventListener("load",B,{once:!0}),$.addEventListener("error",B,{once:!0})}catch{p()}})};m.then(()=>{try{E||b?.restore()}catch{}}),Promise.all([ce,m,e]).then(([,,c])=>{if(v?.hostOverlays!==!0||!W)return;let _=!1;try{_=c?.declaresCover?.()===!0}catch{}N.post({__frame_layout:{cover:_}},W)});const Ie={cb:null};N.on((c,_)=>{if(Jt(_)&&Mr(c)){try{b?.promoted()}catch{}Ie.cb?.()}}),ce.then(async()=>{if(!v||!W){_t();try{h?.onNoInit()}catch{}return}if(sr(v.theme),v.hostVisible===!1&&e.then(i=>i?.applyHostVisible?.(!1,R)),v.hostKeys!==void 0){const i=W,w=v.hostKeys;e.then(g=>g?.installHostKeyForward?.(u,w,O=>N.post(O,i)))}try{h?.onInit(v.hot,W)}catch{}let c;const _=()=>{try{!c&&de&&M()&&(c=ie(de),c.then(i=>i?.prefetch?.()).catch(()=>{}))}catch{}};_(),m.then(_);const p=W,C=N.port(p),j=(i,w)=>N.post({__frame_cap_telemetry:{kind:"cap-load-error",cap:i,phase:w}},p),B=(i,w,g)=>{new Promise(O=>O(In(w,g))).then(O=>j(i,O),()=>j(i))},$=i=>N.post({__frame_cap_recovered:{cap:i}},p);let V=v.brokerGen;const te=()=>h?.boot.ver??"",xe=te(),x=(i,w)=>{const g=te();he(w.t),w.want=g,w.t=K(()=>{w.done||Je(w,g)},Yt),N.post({__frame_cap_want:!0,cap:i,ver:g},p)},Ze=(i,w)=>{const g=le.get(i.cap),O=Me[i.cap];if(!w||!g||g.done||g.want!==i.ver||!fe.test(O))return;if(he(g.t),g.want=void 0,V=i.brokerGen??V,i.ver!==te()){x(i.cap,g);return}if(!i.grant||i.cap==="network"){Je(g,i.ver);return}const J=ge,Z=ge={...J,capabilities:{...J.capabilities,[i.cap]:i.grant},capBudgets:{...J.capBudgets,[i.cap]:{...J.capBudgets[i.cap],...i.budgets}}};ie(O).then(_e=>{Ce.has(O)&&$(i.cap),Z.brokerGen=V,yt=!0;try{_e?.install?.(Z)}catch{j(i.cap,"install")}finally{yt=!1}},_e=>B(i.cap,O,_e)).then(()=>{g.done||Je(g,i.ver)})};let X=!1,De=!1;N.on((i,w,g)=>{if(w!==p)return;try{if(h?.onShell(i))return}catch{}if(Cr(i)&&sr(i.__frame_theme.theme),en(i)&&Ze(i,g),g&&tn(i)&&(V=i.brokerGen??V),Nr(i)){const Z=i.__frame_host_visible.visible;e.then(_e=>_e?.applyHostVisible?.(Z,R))}Or(i)&&Dn(i.__frame_patch,p,g);const O=i?.__fc_mode;O&&typeof O=="object"&&!X&&dt&&fe.test(dt)&&(X=!0,ie(dt).then(Z=>Z.install?.(p,O.on===!0,C)).catch(()=>{}));const J=i?.__ft_cmd;J&&typeof J=="object"&&!De&&ht&&fe.test(ht)&&(De=!0,ie(ht).then(Z=>Z.install?.(p,J,C)).catch(()=>{}))});const He=Object.keys(v.capabilities??{}).filter(i=>Object.hasOwn(Me,i)).map(i=>[i,Me[i]]).filter(i=>typeof i[1]=="string"&&fe.test(i[1])),G=p;let qe=!1,Be=()=>{};const Ue=new Promise(i=>{Be=()=>{qe=!0,i()}}),Ke=()=>(qe||(S="caps"),Ue),Ee=y!==null||xt(v.hot)||v.hostVisible===!1||v.hostOverlays===!0;T&&(S="init");const wt=m.then(()=>Ee?Ke():new Promise(i=>K(i,0))).then(pe).then(()=>{let i=!0;try{i=Ee||Hn()}catch{}return i?Ke():void 0}).then(()=>{Fe();const i=hr(je,we);N.post(i?{__frame_ready:!0,nav:i,gate:S}:{__frame_ready:!0,gate:S},G),e.then(w=>{w?.installSizeReporter?.(G,Ie,C),w?.installPaintReporter?.(C)})}),Se=await Promise.allSettled(He.map(([,i])=>ie(i))),Y=await e;if(Y?.buildBoot||(t?B("_transforms",t.f,t.e):j("_transforms")),Y?.buildBoot)try{ge=Y.buildBoot(v,Y.TRANSFORMS??{},{shellOrigin:G,mount:gt,hooks:Ye,shell:C},i=>N.post({__frame_cap_telemetry:i},G))}catch{j("_transforms","install"),ge=rr(v,G,C)}else ge=rr(v,G,C);Y?.buildBoot&&Ce.has(Ne??"")&&$("_transforms");const me=ge;me.brokerGen=V,Se.forEach((i,w)=>{const[g,O]=He[w];if(i.status!=="fulfilled"){B(g,O,i.reason);return}Ce.has(O)&&$(g);try{i.value?.install?.(me)}catch{j(g,"install")}});const Ge=v.capWants===!0;Ge&&(mt=(i,w)=>{const g=te();if(!g)return w;if(!w.nulled)return w.want!==g&&x(i,w),w;if(g===w.ver)return w;const O=vt();return le.set(i,O),x(i,O),O}),_t(xe,Ge&&te()!==xe?x:void 0);try{Y?.watchFirstScreen?.(v,pe,()=>{E=!0,N.post({__frame_first_screen:!0},G)})}catch{}Be(),await wt;let ve=!1;try{ve=M()}catch{}de&&ve?(c??ie(de)).then(i=>i?.boot?.({shellOrigin:p,build:me.flags.has(cn),hot:h?.hot??null,carried:h?.carried(),presented:()=>h?.presented()??!0})).catch(()=>!1).then(i=>{h?.hydrated(),i!==!0?j("_ldx"):Ce.has(de)&&$("_ldx")}):h?.hydrated()})}else ct&&(ir(),Ln(ct,ft,ie,{settle:_t,mount:gt}))})();</script><!-- /frame-runtime -->
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gleame v3 — Reference Wireframes (Copy)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Cormorant+Garamond:wght@400;500;600&family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+ --ink:#1a1c1e;--sub:#6b7075;--line:#e3e5e8;--bg:#f6f6f7;--panel:#fff;--brand:#4a3aff;--ok:#1a7f4e;--warn:#9a6700;--amber:#d99a1e;
+ --shadow:0 1px 2px rgba(20,22,26,.06),0 8px 24px rgba(20,22,26,.08)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
+button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+table{border-collapse:collapse}
+
+/* shell */
+.shell-header{position:sticky;top:0;z-index:60;background:#141519;color:#fff;padding:10px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.shell-header .logo{font-weight:700;letter-spacing:-.02em;white-space:nowrap}.shell-header .logo span{color:#9aa4ff}
+.shell-nav{display:flex;gap:3px;flex-wrap:wrap}
+.shell-nav button{padding:6px 11px;border-radius:8px;color:#c8cbd4;font-size:13px;font-weight:500}
+.shell-nav button:hover{background:rgba(255,255,255,.08);color:#fff}
+.shell-nav button.on{background:#fff;color:#141519;font-weight:600}
+.shell-nav .sep{width:1px;background:#3a3d46;margin:4px 4px}
+.shell-note{margin-left:auto;font-size:11.5px;color:#8b8f9c;max-width:360px;line-height:1.4;display:flex;gap:8px;align-items:flex-start}
+.screen{display:none}.screen.on{display:block}
+.spec-note{max-width:1280px;margin:14px auto 0;padding:0 20px;font-size:13px;color:var(--sub);line-height:1.5}
+.spec-note b{color:var(--ink)}.spec-note code{background:#eceef1;padding:1px 5px;border-radius:4px;font-size:12px}
+.section-title{max-width:1280px;margin:26px auto 8px;padding:0 20px;font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--sub);text-transform:uppercase}
+.frame{max-width:1280px;margin:0 auto 12px;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:var(--shadow);position:relative}
+.frame.narrow{max-width:900px}
+.frame.mobile{max-width:390px;margin:0 20px 12px;display:inline-block;vertical-align:top}
+.mobile-row{max-width:1280px;margin:0 auto;padding:0 0 30px}
+.callout{max-width:1280px;margin:8px auto 24px;padding:12px 16px;background:#fff8e6;border:1px solid #f0dca0;border-radius:10px;font-size:13px;line-height:1.5;color:#5a4300}
+.callout b{color:#3d2e00}
+
+/* ===== IMAGE SLOT WIDGET (spec 4.2) ===== */
+.slot{position:relative;background:var(--tbg-surface,#f1f1ee);border:1.5px dashed var(--tbg-line,#c9c9c2);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:var(--tbg-ink,#333);overflow:hidden;flex:none}
+.slot::before{content:"";width:20px;height:20px;background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23777' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='3'/><circle cx='9' cy='9' r='2'/><path d='M21 15l-5-5L5 21'/></svg>") center/contain no-repeat;opacity:.7}
+.slot::after{content:"Image · " attr(data-kind);font-family:Inter,sans-serif;font-size:11px;opacity:.55;text-align:center;padding:0 8px;letter-spacing:.01em}
+.slot.sm::after{display:none}
+.slot.sm::before{width:16px;height:16px}
+.slot.round{border-radius:99px}
+.slot.r8{border-radius:8px}.slot.r12{border-radius:12px}.slot.r16{border-radius:16px}
+.slot.resolved{border-style:solid;border-color:transparent}
+.slot.resolved::before,.slot.resolved::after{display:none}
+
+/* ===== ADMIN CHROME ===== */
+.topbar{display:flex;align-items:center;gap:14px;height:56px;padding:0 16px;border-bottom:1px solid var(--line);background:#fff}
+.quiz-name{font-weight:600;font-size:14.5px;display:flex;align-items:center;gap:8px}
+.chip{font-size:11px;font-weight:600;border-radius:99px;padding:3px 9px}
+.chip.grey{background:#eef0f2;color:var(--sub)}.chip.red{background:#fde8ea;color:#b3261e}.chip.green{background:#e8f5ee;color:var(--ok)}.chip.amber{background:#fff4d6;color:#8a5a00}
+.tabs{display:flex;background:var(--bg);border-radius:9px;padding:3px;margin:0 auto}
+.tabs button{padding:6px 16px;border-radius:7px;font-size:13.5px;font-weight:500;color:var(--sub)}
+.tabs button.on{background:#fff;color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.btn{border-radius:9px;font-size:13.5px;font-weight:600;padding:8px 15px;display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.btn.primary{background:var(--ink);color:#fff}.btn.secondary{background:#fff;border:1px solid var(--line)}.btn.ghost{color:var(--brand)}.btn.lg{padding:12px 22px;font-size:15px;border-radius:10px}
+.studio-body{display:grid;grid-template-columns:236px 1fr 316px;min-height:620px}
+.rail{border-right:1px solid var(--line);padding:12px 10px;background:#fcfcfd}
+.rail h4{font-size:11px;font-weight:600;color:var(--sub);letter-spacing:.06em;text-transform:uppercase;padding:6px 10px 4px}
+.rail .item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;font-size:13.5px;color:#3c4045;margin-bottom:1px}
+.rail .item.on{background:#ecebff;color:var(--brand);font-weight:600}
+.rail .ic{width:17px;height:17px;border-radius:5px;background:#dfe1e5;flex:none;display:grid;place-items:center;font-size:10px;color:#7b7f86}
+.rail .item.on .ic{background:#d8d5ff;color:var(--brand)}
+.rail .divider{height:1px;background:var(--line);margin:10px 6px}
+.rail .item .dot{width:7px;height:7px;border-radius:99px;background:var(--amber);margin-left:auto}
+.editrail{border-left:1px solid var(--line);background:#fcfcfd;padding:16px;font-size:13px}
+.editrail h4{font-size:12.5px;font-weight:600;margin-bottom:10px}
+.field{margin-bottom:12px}.field label{display:block;font-size:11.5px;color:var(--sub);margin-bottom:5px;font-weight:500}
+.field .val{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:#fff;font-size:13px;display:flex;align-items:center;gap:8px}
+.field .val .sw{width:16px;height:16px;border-radius:4px;flex:none}
+.banner{display:flex;align-items:center;gap:14px;padding:11px 16px;background:#f4f3ff;border-bottom:1px solid #e2e0f7;font-size:13px}
+.banner .dot{width:8px;height:8px;border-radius:99px;background:var(--brand);flex:none}
+.banner .chips{color:var(--sub)}.banner .actions{margin-left:auto;display:flex;gap:12px;align-items:center}
+.banner .play{color:var(--brand);font-weight:600}.banner .x{color:#9a9eab}
+.canvas-wrap{position:relative;background:#eceef0;display:flex;flex-direction:column;overflow:hidden}
+.store-strip{height:32px;background:var(--tbg,#fff);border-bottom:1px solid rgba(0,0,0,.06);display:flex;align-items:center;padding:0 20px;gap:18px;flex:none}
+.store-strip .slogo{font-size:13px;letter-spacing:.14em;font-weight:600;color:var(--tink,#111)}
+.canvas{flex:1;overflow:auto;background:var(--tbg,#fff)}
+.device-toggle{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);background:#141519;color:#fff;border-radius:99px;padding:4px;display:flex;gap:2px;box-shadow:var(--shadow)}
+.device-toggle button{padding:5px 13px;border-radius:99px;font-size:12px;color:#b9bcc7}.device-toggle button.on{background:#3a3d46;color:#fff}
+
+/* onboarding */
+.ob{min-height:480px;display:grid;place-items:center;padding:40px;background:#f6f6f7}
+.ob-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:32px;width:100%;max-width:560px;box-shadow:var(--shadow)}
+.ob-card h2{font-size:22px;font-weight:700;letter-spacing:-.01em;margin-bottom:6px}
+.ob-card p{font-size:14px;color:var(--sub);line-height:1.5}
+.ob-row{display:flex;align-items:center;gap:12px;padding:14px 0;border-top:1px solid var(--line);font-size:14px}
+.ob-row .ic{width:30px;height:30px;border-radius:8px;background:#f1f2f4;display:grid;place-items:center;font-size:14px;flex:none}
+.ob-row .chg{margin-left:auto;color:var(--brand);font-weight:600;font-size:13px}
+.ob-steps{list-style:none;margin:18px 0 6px}
+.ob-steps li{display:flex;gap:12px;align-items:center;padding:9px 0;font-size:14px}
+.ob-steps .st{width:20px;height:20px;border-radius:99px;flex:none;display:grid;place-items:center;font-size:11px;font-weight:700}
+.ob-steps .done .st{background:var(--ok);color:#fff}.ob-steps .now .st{border:2px solid var(--brand);position:relative}
+.ob-steps .now .st::after{content:"";width:8px;height:8px;border-radius:99px;background:var(--brand)}
+.ob-steps .todo{color:#a3a7ae}.ob-steps .todo .st{border:1.5px solid var(--line)}
+.ob-steps small{color:var(--sub);font-size:12.5px;margin-left:auto}
+.ob-err{border-color:#f3c7c2;background:#fff7f6}
+
+/* gallery */
+.gal-head{display:flex;align-items:center;padding:18px 24px;border-bottom:1px solid var(--line);gap:20px}
+.gal-head h2{font-size:17px;font-weight:700}.gal-head p{font-size:13px;color:var(--sub);margin-top:2px}
+.looks{display:flex;gap:6px;margin-left:auto;background:var(--bg);border-radius:99px;padding:3px}
+.looks button{padding:5px 14px;border-radius:99px;font-size:12.5px;font-weight:600;color:var(--sub)}.looks button.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.1)}
+.gal-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;padding:22px}
+.gcard{border:1px solid var(--line);border-radius:13px;overflow:hidden;position:relative}
+.gcard.current{border:2px solid var(--brand)}
+.gcard .strip{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;padding:10px;background:#f1f2f4;border-bottom:1px solid var(--line)}
+.gcard .mini{background:#fff;border:1px solid var(--line);border-radius:6px;height:150px;overflow:hidden;position:relative}
+.gcard .mini .lbl{position:absolute;bottom:4px;left:6px;font-size:9px;color:var(--sub);font-weight:600;letter-spacing:.04em}
+.gcard .mini .scaled{transform:scale(.36);transform-origin:top left;width:278%;pointer-events:none}
+.gcard .meta{display:flex;gap:14px;padding:13px 16px;align-items:center}
+.gcard .meta h3{font-size:14.5px;font-weight:700}.gcard .meta .q{font-size:12.5px;color:var(--ink);margin-top:2px;font-style:italic}.gcard .meta p{font-size:12px;color:var(--sub);margin-top:2px}
+.gcard .meta .use{margin-left:auto;flex:none}
+.gcard .curchip{position:absolute;top:10px;left:10px;z-index:2;background:var(--brand);color:#fff;font-size:11px;font-weight:700;border-radius:99px;padding:4px 10px}
+.gcard.dim .strip{opacity:.4}
+.gcard .reason{position:absolute;top:10px;left:10px;z-index:2;background:#fff;border:1px solid var(--line);color:var(--warn);font-size:11px;font-weight:600;border-radius:99px;padding:4px 10px;box-shadow:var(--shadow)}
+
+/* images rail */
+.img-panel{border-right:1px solid var(--line);background:#fcfcfd;padding:14px;font-size:13px}
+.img-panel h4{font-size:12.5px;font-weight:700}.img-panel .sub{font-size:12px;color:var(--sub);margin:3px 0 12px}
+.img-panel h5{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--sub);margin:12px 0 6px}
+.srow{display:flex;gap:10px;align-items:center;padding:8px;border:1px solid var(--line);border-radius:10px;margin-bottom:7px;background:#fff}
+.srow .th{width:46px;height:46px;border-radius:7px;flex:none}
+.srow h6{font-size:12.5px;font-weight:600}.srow .src{font-size:11px;color:var(--sub);margin-top:1px}
+.srow .chg{margin-left:auto;font-size:12px;font-weight:600;color:var(--brand)}
+.srow .adot{width:7px;height:7px;border-radius:99px;background:var(--amber);flex:none}
+.anat{padding:24px;display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start}
+.anat h4{font-size:13px;font-weight:700;margin-bottom:8px}
+.anat ul{font-size:13px;line-height:1.55;color:#3c4045;padding-left:18px}
+.anat .demo{display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap}
+
+/* ===== SHARED QUIZ PRIMITIVES ===== */
+.q{min-height:520px;padding:44px 6% 56px;color:var(--tink)}
+.q-wrap{margin:0 auto}
+.kicker{font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--tacc);margin-bottom:12px}
+.help{font-size:14px;opacity:.65;margin-bottom:28px}
+.cta{display:inline-flex;align-items:center;justify-content:center;background:var(--tink);color:#fff;border-radius:var(--trad,10px);padding:14px 28px;font-weight:600;font-size:14px;letter-spacing:.04em;text-transform:uppercase}
+.back{font-size:13px;opacity:.6}
+.email{max-width:460px;margin:0 auto;text-align:center}
+.email h3{font-size:24px;font-weight:600;margin-bottom:6px;letter-spacing:-.01em}
+.email p{font-size:14px;opacity:.65;margin-bottom:22px}
+.email .in{border:1px solid var(--tline);border-radius:var(--trad,10px);padding:13px 16px;font-size:14px;text-align:left;opacity:.6;margin-bottom:10px;background:#fff}
+.email .consent{font-size:11.5px;opacity:.5;margin-top:12px}
+.email .skip{font-size:13px;opacity:.6;margin-top:16px;text-decoration:underline}
+.codebox{border:1.5px dashed var(--tacc);border-radius:var(--trad,10px);padding:16px 20px;display:flex;align-items:center;gap:16px;justify-content:center;margin:14px auto;max-width:340px;background:#fff}
+.codebox b{font-size:20px;letter-spacing:.12em;font-family:ui-monospace,Menlo,monospace}
+.codebox span{font-size:12px;font-weight:600;color:var(--tacc);border:1px solid var(--tacc);border-radius:6px;padding:4px 10px}
+.applied{font-size:13px;color:var(--ok);font-weight:600;margin-top:6px}
+.loading{min-height:380px;display:grid;place-items:center;text-align:center;padding:40px;color:var(--tink)}
+.loading .ring{width:52px;height:52px;border-radius:99px;border:3px solid var(--tline);border-top-color:var(--tacc);margin:0 auto 24px;animation:spin 1.2s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading h3{font-size:21px;font-weight:600;margin-bottom:8px}.loading p{font-size:14px;opacity:.65;max-width:380px;margin:0 auto}
+.loading .rot{font-size:12.5px;opacity:.5;margin-top:18px}
+
+/* ===== T1 MATCH · Tint Beauty ===== */
+.t1{--tbg:#fff;--tink:#191517;--tacc:#B04A5A;--tline:#e9dfe1;--trad:8px;--tbg-surface:#faf5f6;--tbg-line:#d9c7cb;background:var(--tbg)}
+.t1 .q-wrap{max-width:880px}
+.t1-top{display:flex;align-items:center;justify-content:space-between;font-size:12.5px;margin-bottom:6px}
+.t1-top .brand{font-weight:800;letter-spacing:.12em;font-size:15px}
+.phases{display:grid;grid-template-columns:1fr 1fr 1fr;gap:3px;margin-bottom:38px}
+.phases div{height:26px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;display:grid;place-items:center;background:#eeeae9;color:#9a9294;position:relative;overflow:hidden}
+.phases div.on{color:var(--tink);background:#f6e3e6}
+.phases div.on i{position:absolute;left:0;top:0;bottom:0;background:#e6b7bf;z-index:-1}
+.phases div.on{isolation:isolate}
+.t1-q{font-size:clamp(26px,2.6vw,34px);font-weight:600;letter-spacing:-.015em;text-align:center;margin-bottom:6px}
+.t1 .help{text-align:center}
+.tagrow{max-width:560px;margin:0 auto 10px;border:1.5px solid var(--tink);border-radius:4px;padding:14px 18px;display:flex;gap:16px;align-items:center;background:#fff;cursor:pointer}
+.tagrow .ic{width:18px;text-align:center;opacity:.8;font-size:15px}
+.tagrow b{font-size:12.5px;letter-spacing:.06em;text-transform:uppercase;min-width:64px}
+.tagrow span{font-size:15px}
+.tagrow.sel{background:#faf0f2;border-color:var(--tacc)}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;max-width:760px;margin:0 auto}
+.tiles.three{grid-template-columns:repeat(3,1fr);max-width:600px}
+.tile{cursor:pointer;border:2px solid transparent;border-radius:12px;padding:4px;transition:transform .12s}
+.tile .slot{aspect-ratio:1;border-radius:9px}
+.tile figcaption{text-align:center;font-size:13.5px;font-weight:600;padding:8px 2px 2px}
+.tile figcaption small{display:block;font-weight:400;opacity:.6;font-size:11.5px}
+.tile.sel{border-color:var(--tacc);transform:scale(1.02)}
+.tip{text-align:center;font-size:13px;opacity:.65;margin-top:22px}
+/* T1 intro (type B hero) */
+.t1-intro{text-align:center;max-width:620px;margin:0 auto}
+.t1-intro .slot{width:340px;height:220px;margin:0 auto 26px;border-radius:6px}
+.t1-intro h1{font-family:'Cormorant Garamond',serif;font-weight:500;font-size:40px;letter-spacing:-.01em;margin-bottom:8px}
+.t1-intro p{font-size:14.5px;opacity:.7;margin-bottom:24px}
+/* T1 results */
+.t1r{display:grid;grid-template-columns:72px 1fr 1fr;gap:22px;max-width:980px;margin:0 auto;align-items:start}
+.t1r .thumbs{display:grid;gap:8px}.t1r .thumbs .slot{aspect-ratio:1;border-radius:4px}
+.t1r .main .slot{aspect-ratio:1;border-radius:6px}
+.t1r h4{font-size:13px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px}
+.t1r .echo li{list-style:none;display:flex;gap:10px;font-size:14px;padding:5px 0;align-items:center}
+.t1r .echo li::before{content:"✓";width:20px;height:20px;border-radius:99px;border:1.5px solid var(--tink);display:grid;place-items:center;font-size:11px;flex:none}
+.t1r .echo b{text-transform:uppercase;font-size:12px;letter-spacing:.05em}
+.t1r .sizes{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0 18px}
+.t1r .sizes div{border:1.5px solid var(--tink);border-radius:4px;padding:10px;text-align:center;font-size:12.5px;font-weight:700}
+.t1r .sizes div.on{background:var(--tink);color:#fff}
+.t1r .shade{border:1.5px solid var(--tink);border-radius:4px;padding:12px 14px;display:flex;gap:12px;align-items:center;margin-bottom:16px}
+.t1r .shade .slot{width:44px;height:44px;border-radius:4px}
+.t1r .shade b{font-size:13px;letter-spacing:.04em}.t1r .shade small{display:block;font-size:12px;opacity:.65}
+.t1r .why{font-size:13.5px;line-height:1.55;opacity:.85;margin-bottom:16px}
+.t1-alts{display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:980px;margin:28px auto 0}
+.t1-alts .a{display:flex;gap:12px;align-items:center;border:1px solid var(--tline);border-radius:10px;padding:10px}
+.t1-alts .slot{width:60px;height:60px;border-radius:8px}
+.t1-alts h5{font-size:13.5px;font-weight:600}.t1-alts small{font-size:12px;opacity:.6}
+
+/* ===== T2 CONSULT · Fernwood Sleep ===== */
+.t2{--tbg:#FAFAF7;--tink:#23262B;--tacc:#2E5E4E;--tline:#dfe2dc;--trad:12px;--tbg-surface:#eef1ea;--tbg-line:#b9c3b3;background:var(--tbg);font-family:Inter,sans-serif}
+.t2 .q-wrap{max-width:960px}
+.t2 h1,.t2 h2,.t2 .t2-q{font-family:Fraunces,serif;font-weight:600;letter-spacing:-.01em}
+.t2-meta{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;opacity:.7;margin-bottom:10px}
+.t2-bar{height:3px;background:var(--tline);border-radius:99px;margin-bottom:26px}.t2-bar i{display:block;height:100%;width:43%;background:var(--tacc);border-radius:99px}
+.t2-q{font-size:clamp(26px,2.8vw,36px);margin-bottom:6px}
+.lett{max-width:640px;margin:0 auto 10px;border:1px solid var(--tline);border-radius:12px;padding:15px 18px;display:flex;gap:14px;align-items:center;background:#fff;font-size:15px;cursor:pointer}
+.lett i{width:28px;height:28px;border-radius:99px;background:var(--tacc);color:#fff;font-style:normal;font-weight:700;font-size:12px;display:grid;place-items:center;flex:none}
+.lett.sel{border:1.5px solid var(--tacc);background:#f1f5f0}
+.lcards{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.lcard{border:1px solid var(--tline);border-radius:12px;overflow:hidden;background:#fff;position:relative;cursor:pointer}
+.lcard .slot{aspect-ratio:3/2;border:none;border-bottom:1.5px dashed var(--tbg-line);border-radius:0}
+.lcard .tx{padding:13px 15px}.lcard h4{font-size:15.5px;font-weight:600;margin-bottom:3px}.lcard p{font-size:13px;opacity:.65}
+.lcard.sel{border:1.5px solid var(--tacc)}
+.lcard.sel::after{content:"✓";position:absolute;top:10px;right:10px;width:22px;height:22px;border-radius:99px;background:var(--tacc);color:#fff;font-size:12px;display:grid;place-items:center}
+/* T2 intro (type C landing + hook) */
+.land{display:grid;grid-template-columns:1.1fr 1fr;gap:40px;align-items:center;max-width:1040px;margin:0 auto}
+.land .rating{display:inline-flex;gap:8px;align-items:center;font-size:12px;border:1px solid var(--tline);border-radius:99px;padding:5px 12px;background:#fff;margin-bottom:18px}
+.land h1{font-size:clamp(30px,3.4vw,44px);line-height:1.1;margin-bottom:12px}
+.land p{font-size:15px;opacity:.7;margin-bottom:18px;line-height:1.5}
+.land .benefits{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:22px}
+.land .benefits span{font-size:12.5px;background:#eef1ea;border-radius:99px;padding:6px 12px;font-weight:500}
+.land .ctarow{display:flex;gap:16px;align-items:center}.land .ctarow small{font-size:12px;opacity:.6;max-width:150px;line-height:1.4}
+.prev{background:#fff;border:1px solid var(--tline);border-radius:16px;padding:20px;box-shadow:0 12px 40px rgba(46,94,78,.12);position:relative}
+.prev .pl{position:absolute;top:-12px;left:18px;background:var(--tacc);color:#fff;font-size:10px;font-weight:700;letter-spacing:.1em;border-radius:99px;padding:5px 11px}
+.prev .badge{position:absolute;top:-22px;right:-22px;width:88px;height:88px;border-radius:99px;background:var(--tacc);color:#fff;display:grid;place-items:center;text-align:center;font-size:10px;line-height:1.2;font-weight:700;letter-spacing:.06em;box-shadow:var(--shadow)}
+.prev .badge b{display:block;font-size:20px}
+.prev .pbar{display:flex;gap:4px;margin:10px 0 12px}.prev .pbar i{height:4px;flex:1;background:var(--tline);border-radius:99px}.prev .pbar i.f{background:var(--tacc)}
+.prev .pq{font-size:15px;font-weight:600;margin-bottom:10px;font-family:Fraunces,serif}
+.prev .po{border:1px solid var(--tline);border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:7px;display:flex;gap:10px;align-items:center}
+.prev .po i{width:20px;height:20px;border-radius:99px;background:var(--tacc);color:#fff;font-style:normal;font-size:10px;display:grid;place-items:center;font-weight:700}
+.prev .po.sel{border-color:var(--tacc);background:#f1f5f0}
+/* T2 results */
+.t2r .recap{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 26px}.t2r .recap span{font-size:12.5px;background:#fff;border:1px solid var(--tline);border-radius:99px;padding:5px 12px}
+.pick{display:grid;grid-template-columns:280px 1fr;gap:26px;background:#fff;border:1px solid var(--tline);border-radius:14px;padding:22px;margin-bottom:24px}
+.pick .slot{aspect-ratio:4/3;border-radius:10px}
+.pick .lbl{font-size:11.5px;font-weight:700;color:var(--tacc);letter-spacing:.08em;margin-bottom:5px}
+.pick h3{font-family:Fraunces,serif;font-size:24px;font-weight:600}.pick .price{font-size:14px;opacity:.65;margin:3px 0 12px}
+.pick ul{list-style:none;font-size:13.5px;line-height:1.5}.pick li{padding-left:20px;position:relative;margin-bottom:7px}.pick li::before{content:"→";position:absolute;left:0;color:var(--tacc)}
+.cmp{width:100%;background:#fff;border:1px solid var(--tline);border-radius:12px;overflow:hidden;font-size:13px}
+.cmp th,.cmp td{padding:11px 14px;text-align:left;border-bottom:1px solid #eef0ec}
+.cmp th{font-size:11.5px;opacity:.7;font-weight:600;background:#f4f5f2}.cmp td:first-child{opacity:.7}.cmp .p{color:var(--tacc);font-weight:600}
+.cmp .th-img{display:flex;gap:8px;align-items:center}.cmp .th-img .slot{width:32px;height:32px;border-radius:6px}
+
+/* ===== T3 ROUTINE · Aria Skincare ===== */
+.t3{--tbg:#fff;--tink:#16181b;--tacc:#2F5AA8;--tline:#e4e6ea;--trad:8px;--tbg-surface:#f1f4f8;--tbg-line:#b8c4d6;background:var(--tbg)}
+.t3 .q-wrap{max-width:640px;text-align:center}
+.t3 h1,.t3 .t3-q{font-family:'Cormorant Garamond',serif;font-weight:500;letter-spacing:-.005em}
+.t3-q{font-size:clamp(26px,2.8vw,36px);margin-bottom:6px}
+.t3-sub{font-size:14.5px;opacity:.65;margin-bottom:26px}
+.t3-bar{display:block;max-width:320px;margin:0 auto 10px;border:1px solid #c9ced6;border-radius:8px;padding:13px 16px;font-size:15px;background:#fff;cursor:pointer}
+.t3-bar.sel{background:#f1f4f8;border:1.5px solid var(--tink)}
+.t3-grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:480px;margin:0 auto}
+.t3-grid2 .t3-bar{max-width:none;margin:0}
+.t3-name{max-width:380px;margin:0 auto;border:1px solid #c9ced6;border-radius:99px;padding:14px 20px;font-size:15px;opacity:.55;background:#fff;margin-bottom:22px}
+.t3 .cta{border-radius:6px;padding:14px 32px}.t3 .cta.off{background:#c9ced6}
+.t3 .skip{display:block;margin-top:16px;font-size:14px;font-weight:600}
+.icotiles{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;max-width:720px;margin:0 auto}
+.icotile{border:1.5px solid var(--tink);border-radius:8px;padding:24px 16px;text-align:center;cursor:pointer;background:#fff}
+.icotile .slot{width:96px;height:64px;margin:0 auto 16px;border-radius:8px}
+.icotile b{font-size:16px;font-weight:600}
+.icotile.sel{border-color:var(--tacc);box-shadow:0 0 0 3px #e3ebf7}
+/* T3 intro (type D founder) */
+.founder{text-align:center;max-width:520px;margin:0 auto}
+.founder .brand{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:600;margin-bottom:34px}
+.founder .slot{width:160px;height:160px;margin:0 auto 26px}
+.founder h1{font-size:32px;margin-bottom:8px}.founder p{font-size:14.5px;opacity:.7;margin-bottom:28px}
+/* T3 results */
+.t3r{max-width:760px;margin:0 auto;text-align:center;padding-bottom:90px}
+.t3r h2{font-family:'Cormorant Garamond',serif;font-weight:500;font-size:38px;letter-spacing:-.01em;margin-bottom:6px}
+.t3r .for{font-size:12px;letter-spacing:.1em;text-transform:uppercase;opacity:.65;margin-bottom:8px}
+.t3r .concern{display:inline-flex;font-size:12px;border:1px solid var(--tink);border-radius:99px;padding:5px 12px;font-weight:600;margin-bottom:22px}
+.t3r .whyblk{background:#f5f6f8;border-radius:14px;padding:18px 24px;max-width:520px;margin:0 auto 28px;font-size:13.5px;line-height:1.55}
+.t3r .whyblk b{display:block;font-size:14px;margin-bottom:6px}
+.regimen{background:#f1f3f6;border-radius:18px;padding:28px 30px;text-align:left}
+.regimen .rh{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+.regimen .rh h3{font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:500}
+.regimen .rh .tot{background:var(--tink);color:#fff;border-radius:99px;padding:6px 14px;font-size:13px;font-weight:700}
+.regimen .grp{font-size:12.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;opacity:.7;margin:14px 0 8px;display:flex;gap:8px;align-items:center}
+.step{display:flex;gap:14px;align-items:center;background:#fff;border-radius:12px;padding:12px 14px;margin-bottom:8px}
+.step .slot{width:60px;height:60px;border-radius:8px}
+.step h5{font-size:14.5px;font-weight:600}.step small{font-size:12.5px;opacity:.65;display:block}
+.step .pr{margin-left:auto;font-size:13.5px;font-weight:600}
+.sticky{position:absolute;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--tline);padding:14px 24px;display:flex;align-items:center;justify-content:center;gap:24px;box-shadow:0 -8px 24px rgba(0,0,0,.06)}
+.sticky .tot{font-size:15px}.sticky .tot b{font-weight:700}.sticky .tot s{opacity:.5;margin-left:6px}
+
+/* ===== T4 DISCOVER · GlowPop ===== */
+.t4{--tbg:#FFF6EA;--tink:#2A2118;--tacc:#FF5C8A;--tline:#f0dcc4;--trad:18px;--tbg-surface:#fff1df;--tbg-line:#e6b98c;background:var(--tbg);font-family:Nunito,Inter,sans-serif}
+.t4 .q-wrap{max-width:720px;text-align:center}
+.t4-prog{display:flex;gap:6px;max-width:340px;margin:0 auto 34px}.t4-prog i{height:8px;flex:1;border-radius:99px;background:#f4dfc9}.t4-prog i.f{background:var(--tacc)}
+.t4-q{font-size:clamp(28px,3vw,38px);font-weight:800;letter-spacing:-.02em;margin-bottom:6px}
+.t4 .help{font-weight:600}
+.chunk{display:grid;grid-template-columns:1fr 1fr;gap:14px;text-align:left}
+.chunk div{background:#fff;border-radius:18px;padding:16px 18px;font-weight:700;font-size:16px;display:flex;gap:12px;align-items:center;box-shadow:0 2px 0 #f0dcc4;cursor:pointer}
+.chunk .e{font-size:22px}.chunk .slot{width:56px;height:56px;border-radius:12px}
+.chunk div.sel{background:var(--tacc);color:#fff;transform:scale(1.03);box-shadow:0 3px 0 #d13e6c}
+.t4 .cta{border-radius:16px;font-weight:800;text-transform:none;letter-spacing:0;font-size:16px}
+.t4-intro h1{font-size:46px;font-weight:800;letter-spacing:-.03em;line-height:1.05;margin:20px 0 10px}
+.t4-intro .slot{width:100%;max-width:560px;aspect-ratio:16/9;margin:0 auto;border-radius:24px}
+.t4-intro p{font-size:16px;font-weight:600;opacity:.65;margin-bottom:24px}
+.t4r .arch{font-size:12px;font-weight:800;letter-spacing:.14em;color:var(--tacc);margin-bottom:8px}
+.t4r h2{font-size:40px;font-weight:800;letter-spacing:-.02em;margin-bottom:8px}
+.t4r .line{font-size:15.5px;font-weight:600;opacity:.65;margin-bottom:30px}
+.t4-hero{background:#fff;border-radius:22px;padding:20px;max-width:400px;margin:0 auto 28px;box-shadow:0 3px 0 #f0dcc4}
+.t4-hero .slot{aspect-ratio:4/3;border-radius:14px;margin-bottom:14px}
+.t4-hero h3{font-size:20px;font-weight:800}.t4-hero .price{font-size:14px;opacity:.65;font-weight:700;margin:2px 0 12px}
+.kit{max-width:560px;margin:0 auto}.kit h4{font-size:16px;font-weight:800;margin-bottom:14px}
+.kit .row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+.kit .m{background:#fff;border-radius:16px;padding:12px;box-shadow:0 2px 0 #f0dcc4}.kit .m .slot{aspect-ratio:1;border-radius:10px;margin-bottom:8px}
+.kit h5{font-size:13px;font-weight:800}.kit small{font-size:12px;opacity:.65;font-weight:700}
+.kit .addall{border:2.5px solid var(--tink);border-radius:14px;padding:11px 22px;font-weight:800;font-size:14.5px}
+
+/* ===== T5 CLEAN · Northline ===== */
+.t5{--tbg:#fff;--tink:#16181b;--tacc:#C8552D;--tline:#e4e6ea;--trad:10px;--tbg-surface:#f3f3f2;--tbg-line:#cfcfca;background:var(--tbg)}
+.t5 .q-wrap{max-width:640px}
+.t5-meta{display:flex;align-items:center;gap:12px;margin-bottom:34px}.t5-meta .bar{flex:1;height:2px;background:var(--tline)}.t5-meta .bar i{display:block;height:100%;width:60%;background:var(--tacc)}.t5-meta span{font-size:12px;opacity:.6}
+.t5-q{font-size:clamp(24px,2.4vw,31px);font-weight:600;letter-spacing:-.015em;margin-bottom:6px}
+.bar5{border:1px solid var(--tline);border-radius:10px;padding:15px 17px;font-size:15px;margin-bottom:10px;cursor:pointer}
+.bar5.sel{border:1.5px solid var(--tacc);background:#fbf5f2}
+.t5-intro{text-align:center;max-width:560px;margin:0 auto;padding-top:20px}
+.t5-intro h1{font-size:36px;font-weight:600;letter-spacing:-.02em;margin-bottom:8px}
+.t5-intro p{font-size:15px;opacity:.65;margin-bottom:24px}
+.t5-intro .trust{display:flex;gap:18px;justify-content:center;margin-top:34px;font-size:12.5px;opacity:.65;flex-wrap:wrap}
+.t5r{max-width:720px;margin:0 auto}
+.t5r h2{font-size:27px;font-weight:600;letter-spacing:-.015em;margin-bottom:6px}.t5r>p{font-size:14px;opacity:.65;margin-bottom:26px}
+.grid5{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.card5{border:1px solid var(--tline);border-radius:12px;padding:14px}
+.card5 .slot{aspect-ratio:4/3;border-radius:8px;margin-bottom:12px}
+.card5 h4{font-size:15px;font-weight:600}.card5 .price{font-size:13px;opacity:.65;margin:2px 0 8px}.card5 .why{font-size:13px;opacity:.8;line-height:1.45;margin-bottom:12px}
+.card5 .add{border:1px solid var(--tink);border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;width:100%}
+
+/* ===== LOOKS demo ===== */
+.look-ed{--tbg:#F5F2EB;--tink:#211E19;--tacc:#3E4A3D;--tline:rgba(33,30,25,.16);--tbg-surface:#ebe6da;--tbg-line:#b8b09c;background:var(--tbg);color:var(--tink);display:grid;grid-template-columns:44% 56%;min-height:440px}
+.look-ed .slot{border-radius:0;border:none;border-right:1.5px dashed var(--tbg-line)}
+.look-ed .rt{padding:56px 8%;max-width:560px}
+.look-ed .kicker{font-size:11.5px;letter-spacing:.16em;color:var(--tacc);margin-bottom:16px;text-transform:none}
+.look-ed h2{font-family:'Cormorant Garamond',serif;font-weight:500;font-size:34px;line-height:1.14;margin-bottom:26px}
+.look-ed .row{display:flex;justify-content:space-between;align-items:center;padding:16px 2px;border-bottom:1px solid var(--tline);font-family:'Cormorant Garamond',serif;font-size:20px}
+.look-ed .row:first-of-type{border-top:1px solid var(--tline)}
+.look-ed .row .slot{width:44px;height:44px;border-radius:2px;border:1.5px dashed var(--tbg-line)}
+.look-ed .row.sel{border-left:2px solid var(--tacc);padding-left:14px;color:var(--tacc)}
+.look-min{--tbg:#fff;--tink:#16181b;--tacc:#2F5AA8;--tline:#e4e6ea;--tbg-surface:#f1f3f5;--tbg-line:#c3c8cf;background:#fff;color:var(--tink);padding:44px 8%;min-height:440px}
+.look-min h2{font-size:28px;font-weight:600;letter-spacing:-.015em;margin-bottom:24px;text-align:center}
+.look-min .g{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;max-width:600px;margin:0 auto}
+.look-min .g .slot{aspect-ratio:1;border-radius:8px}.look-min .g figcaption{text-align:center;font-size:13px;padding-top:6px;font-weight:500}
+.look-min .g figure.sel .slot{border:2px solid var(--tacc);border-style:solid}
+.look-bold{--tbg:#FFF6EA;--tink:#2A2118;--tacc:#FF5C8A;--tline:#f0dcc4;--tbg-surface:#fff1df;--tbg-line:#e6b98c;background:var(--tbg);color:var(--tink);padding:44px 8%;min-height:440px;font-family:Nunito,sans-serif}
+.look-bold h2{font-size:32px;font-weight:800;letter-spacing:-.02em;margin-bottom:24px;text-align:center}
+.look-bold .g{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;max-width:640px;margin:0 auto}
+.look-bold .g figure{background:#fff;border-radius:20px;padding:10px;box-shadow:0 2px 0 #f0dcc4}
+.look-bold .g .slot{aspect-ratio:1;border-radius:14px}.look-bold .g figcaption{text-align:center;font-size:14px;font-weight:800;padding-top:8px}
+.look-bold .g figure.sel{background:var(--tacc);color:#fff}
+
+@media (max-width:1024px){.studio-body{grid-template-columns:200px 1fr}.editrail{display:none}.gal-grid,.lcards,.chunk,.grid5,.t1-alts{grid-template-columns:1fr}.tiles{grid-template-columns:repeat(2,1fr)}.land,.pick,.t1r{grid-template-columns:1fr}.look-ed{grid-template-columns:1fr}.look-ed .slot{min-height:180px}}
+</style>
+</head>
+<body>
+<header class="shell-header">
+  <div class="logo">Gleame <span>v3 wireframes</span></div>
+  <nav class="shell-nav" id="nav">
+    <button data-s="s-ob" class="on">0 · Onboarding</button>
+    <button data-s="s-arrive">1 · Studio arrival</button>
+    <button data-s="s-gal">2 · Template gallery</button>
+    <button data-s="s-slots">3 · Image slots</button>
+    <span class="sep"></span>
+    <button data-s="s-t1">T1 Match</button>
+    <button data-s="s-t2">T2 Consult</button>
+    <button data-s="s-t3">T3 Routine</button>
+    <button data-s="s-t4">T4 Discover</button>
+    <button data-s="s-t5">T5 Clean</button>
+    <span class="sep"></span>
+    <button data-s="s-looks">Looks</button>
+  </nav>
+  <div class="shell-note">Dashed boxes are <b style="color:#fff">image slots</b> (spec 4.2): they render in Studio whenever an image belongs there, resolved or not. Never on the storefront.</div>
+</header>
+
+<!-- ================= 0 · ONBOARDING ================= -->
+<section class="screen on" id="s-ob">
+<p class="spec-note"><b>Spec Part 6.</b> Three screens, no wizard. Sync and library indexing already ran on install. Generation is blocking — there is no blank-quiz arrival. The third possible outcome is an explicit failure screen.</p>
+<div class="section-title">Screen 1 · Confirm scope</div>
+<div class="frame"><div class="ob"><div class="ob-card">
+  <h2>Ready to build your quiz</h2>
+  <p>We read your store. Check this looks right, then we'll write the whole quiz from your catalog.</p>
+  <div style="margin-top:22px">
+    <div class="ob-row"><span class="ic">🛍</span><div><b>75 products</b> in <b>6 collections</b></div><button class="chg">Change scope</button></div>
+    <div class="ob-row"><span class="ic">◐</span><div>Looks like a <b>shade-based beauty store</b> → Match template</div><button class="chg">Change</button></div>
+    <div class="ob-row"><span class="ic">Aa</span><div>Theme uses <b>Fraunces</b> headings · <b>warm neutral</b> palette → Minimal look</div><button class="chg">Change</button></div>
+  </div>
+  <div style="margin-top:22px;display:flex;align-items:center;gap:14px"><button class="btn primary lg">Build my quiz</button><span style="font-size:12.5px;color:var(--sub)">About 60 seconds · nothing goes live</span></div>
+</div></div></div>
+
+<div class="section-title">Screen 2 · Building (real steps, advance only on completion)</div>
+<div class="frame"><div class="ob"><div class="ob-card">
+  <h2>Building your quiz</h2>
+  <p>Each step finishes with a real number. No fake progress bars.</p>
+  <ul class="ob-steps">
+    <li class="done"><span class="st">✓</span>Reading your catalog<small>75 products · 6 collections</small></li>
+    <li class="done"><span class="st">✓</span>Matching your theme<small>Fraunces · 3 colors</small></li>
+    <li class="done"><span class="st">✓</span>Writing questions<small>6 questions across 2 phases</small></li>
+    <li class="now"><span class="st"></span>Checking every product has a path<small>68 / 75</small></li>
+    <li class="todo"><span class="st"></span>Placing your images</li>
+  </ul>
+</div></div></div>
+
+<div class="section-title">Screen 2b · Failure state (replaces "No quiz here yet")</div>
+<div class="frame"><div class="ob"><div class="ob-card ob-err">
+  <h2>We couldn't build your quiz</h2>
+  <p>It stopped while <b>writing questions</b>. Your catalog and theme are saved — try again picks up from there.</p>
+  <ul class="ob-steps">
+    <li class="done"><span class="st">✓</span>Reading your catalog<small>75 products</small></li>
+    <li class="done"><span class="st">✓</span>Matching your theme<small>Fraunces · 3 colors</small></li>
+    <li class="todo" style="color:#b3261e"><span class="st" style="border-color:#b3261e;color:#b3261e">!</span>Writing questions<small style="color:#b3261e">timed out</small></li>
+  </ul>
+  <div style="margin-top:18px;display:flex;gap:10px"><button class="btn primary">Try again</button><button class="btn secondary">Get help</button></div>
+</div></div></div>
+</section>
+
+<!-- ================= 1 · STUDIO ARRIVAL ================= -->
+<section class="screen" id="s-arrive">
+<p class="spec-note"><b>Spec Parts 6.1, 6.4, 6.5.</b> The reveal is the assigned template on the themed canvas. Banner chips are computed from the generation report — a chip appears only when its value is real. <code>Templates</code> is its own rail item. While <code>QUIZ_TEMPLATES_LIVE=false</code>, <code>View on my store</code> is hidden and a <code>Preview only</code> chip shows.</p>
+<div class="frame">
+  <div class="topbar">
+    <div class="quiz-name">Find your shade <span class="chip grey">Preview only</span></div>
+    <div class="tabs"><button class="on">Build</button><button>Check matches</button><button>Live</button></div>
+    <button class="btn primary">Publish</button>
+  </div>
+  <div class="banner"><span class="dot"></span><div><b>Built from your 75 products.</b> <span class="chips">Fraunces headings · warm neutral palette · Match template · Minimal look.</span> Nothing is live until you publish.</div><div class="actions"><button class="play">Play the quiz</button><button class="x">✕</button></div></div>
+  <div class="studio-body">
+    <aside class="rail">
+      <h4>Design</h4>
+      <div class="item"><span class="ic">S</span>Style</div>
+      <div class="item"><span class="ic">T</span>Templates</div>
+      <div class="item"><span class="ic">I</span>Images <span class="dot"></span></div>
+      <div class="divider"></div>
+      <h4>Screens</h4>
+      <div class="item on"><span class="ic">→</span>Intro</div>
+      <div class="item"><span class="ic">1</span>Your skin type</div>
+      <div class="item"><span class="ic">2</span>Undertone</div>
+      <div class="item"><span class="ic">3</span>Shades you reach for</div>
+      <div class="item"><span class="ic">4</span>Finish</div>
+      <div class="item"><span class="ic">5</span>Coverage</div>
+      <div class="item"><span class="ic">6</span>How you wear it</div>
+      <div class="item"><span class="ic">@</span>Email capture</div>
+      <div class="item"><span class="ic">★</span>Results</div>
+      <div class="item" style="color:#9a9eab"><span class="ic">+</span>Add question</div>
+    </aside>
+    <div class="canvas-wrap t1">
+      <div class="store-strip"><span class="slogo">TINT BEAUTY</span></div>
+      <div class="canvas"><div class="q"><div class="q-wrap">
+        <div class="t1-intro">
+          <div class="slot" data-kind="Hero photo"></div>
+          <div class="kicker">Find my shade</div>
+          <h1>Find your Miracle Tint match</h1>
+          <p>Six quick questions. We'll match you to the shade that disappears into your skin.</p>
+          <button class="cta">Find my shade</button>
+        </div>
+        <div class="phases" style="margin-top:44px;max-width:640px;margin-left:auto;margin-right:auto"><div>Skin profile</div><div>Shade discovery</div><div>Preferences</div></div>
+      </div></div></div>
+      <div class="device-toggle"><button class="on">Desktop</button><button>Mobile</button></div>
+    </div>
+    <aside class="editrail">
+      <h4>Style</h4>
+      <div class="field"><label>Template</label><div class="val">Match <span class="chip grey" style="margin-left:auto">Change in Templates</span></div></div>
+      <div class="field"><label>Look</label><div class="val">Minimal</div></div>
+      <div class="field"><label>Accent color</label><div class="val"><span class="sw" style="background:#B04A5A"></span>#B04A5A <span class="chip green" style="margin-left:auto">From your theme</span></div></div>
+      <div class="field"><label>Text color</label><div class="val"><span class="sw" style="background:#191517"></span>#191517 <span class="chip green" style="margin-left:auto">From your theme</span></div></div>
+      <div class="field"><label>Background</label><div class="val"><span class="sw" style="background:#fff;border:1px solid #ddd"></span>#FFFFFF <span class="chip grey" style="margin-left:auto">Preset</span></div></div>
+      <p style="font-size:11.5px;color:var(--sub);margin-top:4px">Every field shows a real value and where it came from. "Blank = default" is not a state.</p>
+    </aside>
+  </div>
+</div>
+<div class="callout"><b>Banner truth rule.</b> If the palette wasn't extracted, the chip "warm neutral palette" does not render. If nothing qualifies, the banner reads: <i>Built from your catalog. Tap Style to match your brand.</i> The 9/26 build showed "Serif headings · warm ivory palette" over all-default colors — that string can no longer be produced.</div>
+</section>
+
+<!-- ================= 2 · GALLERY ================= -->
+<section class="screen" id="s-gal">
+<p class="spec-note"><b>Spec Part 7.</b> Top-level rail item, full-screen. Cards are three-screen strips (intro · visual question · results) rendered live from this merchant's quiz — which is why intros must differ per template. The Look switcher re-renders every card, showing that Look and Template are independent.</p>
+<div class="frame">
+  <div class="gal-head">
+    <div><h2>What should your quiz do?</h2><p>Switching never loses your content.</p></div>
+    <div class="looks"><button>Editorial</button><button class="on">Minimal</button><button>Bold</button></div>
+    <button class="btn secondary" style="margin-left:12px">✕</button>
+  </div>
+  <div class="gal-grid">
+    <div class="gcard current"><span class="curchip">Current</span>
+      <div class="strip">
+        <div class="mini"><div class="scaled"><div class="t1 q" style="min-height:400px"><div class="t1-intro"><div class="slot" data-kind="Hero photo"></div><h1>Find your Miracle Tint match</h1><button class="cta">Find my shade</button></div></div></div><span class="lbl">INTRO</span></div>
+        <div class="mini"><div class="scaled"><div class="t1 q" style="min-height:400px"><div class="q-wrap"><div class="phases"><div>Skin</div><div class="on">Shade</div><div>Prefs</div></div><div class="t1-q">Which tones do you see on your skin?</div><div class="tiles three" style="margin-top:20px"><figure class="tile"><div class="slot sm" data-kind="Swatch"></div><figcaption>Neutral</figcaption></figure><figure class="tile sel"><div class="slot sm" data-kind="Swatch"></div><figcaption>Pink</figcaption></figure><figure class="tile"><div class="slot sm" data-kind="Swatch"></div><figcaption>Yellow</figcaption></figure></div></div></div></div><span class="lbl">QUESTION</span></div>
+        <div class="mini"><div class="scaled"><div class="t1 q" style="min-height:400px"><div class="t1r" style="grid-template-columns:1fr 1fr"><div class="main"><div class="slot" data-kind="Product"></div></div><div><h4>About your match</h4><ul class="echo"><li><b>Undertone:</b> Pink</li><li><b>Coverage:</b> Sheer</li></ul><div class="shade"><div class="slot sm" data-kind="Swatch"></div><div><b>FIRST DATE</b><small>warm berry</small></div></div><button class="cta">Add to cart</button></div></div></div></div><span class="lbl">RESULTS</span></div>
+      </div>
+      <div class="meta"><div><h3>Match</h3><div class="q">"Which one is right for me?"</div><p>5–8 questions in phases · visual answers · one hero match with your answers echoed back</p></div><button class="btn secondary use">Keep</button></div>
+    </div>
+    <div class="gcard">
+      <div class="strip">
+        <div class="mini"><div class="scaled"><div class="t2 q" style="min-height:400px"><div class="land" style="grid-template-columns:1fr 1fr"><div><h1 style="font-size:30px">Find your shade in 60 seconds</h1><button class="cta">Unlock my discount</button></div><div class="prev"><span class="pl">QUIZ PREVIEW</span><div class="pq">Which tones do you see?</div><div class="po sel"><i>A</i>Neutral</div><div class="po"><i>B</i>Pink</div></div></div></div></div><span class="lbl">INTRO</span></div>
+        <div class="mini"><div class="scaled"><div class="t2 q" style="min-height:400px"><div class="q-wrap"><div class="t2-q">Which tones do you see on your skin?</div><div class="lcards" style="margin-top:20px"><div class="lcard"><div class="slot" data-kind="Lifestyle"></div><div class="tx"><h4>Neutral</h4></div></div><div class="lcard sel"><div class="slot" data-kind="Lifestyle"></div><div class="tx"><h4>Pink</h4></div></div></div></div></div></div><span class="lbl">QUESTION</span></div>
+        <div class="mini"><div class="scaled"><div class="t2 q" style="min-height:400px"><div class="pick" style="grid-template-columns:1fr"><div class="slot" data-kind="Product"></div><div><div class="lbl">BEST FOR YOU</div><h3>First Date</h3><ul><li>Pink undertone → cool-leaning berry</li><li>Sheer coverage → buildable balm</li></ul></div></div><table class="cmp"><tr><th></th><th class="p">First Date</th><th>Rosewood</th></tr><tr><td>Finish</td><td class="p">Satin</td><td>Dewy</td></tr></table></div></div><span class="lbl">RESULTS</span></div>
+      </div>
+      <div class="meta"><div><h3>Consult</h3><div class="q">"Help me decide."</div><p>6–8 questions · lifestyle cards · a top pick with reasons and a comparison table</p></div><button class="btn primary use">Use this template</button></div>
+    </div>
+    <div class="gcard">
+      <div class="strip">
+        <div class="mini"><div class="scaled"><div class="t3 q" style="min-height:400px"><div class="founder"><div class="slot round" data-kind="Founder"></div><h1>Hi, I'm Nadia</h1><p>Founder, Tint Beauty</p><button class="cta">Let's get started</button></div></div></div><span class="lbl">INTRO</span></div>
+        <div class="mini"><div class="scaled"><div class="t3 q" style="min-height:400px"><div class="q-wrap"><div class="t3-q">What's your main concern?</div><div class="t3-bar">Dryness</div><div class="t3-bar sel">Dullness</div><div class="t3-bar">Redness</div></div></div></div><span class="lbl">QUESTION</span></div>
+        <div class="mini"><div class="scaled"><div class="t3 q" style="min-height:400px"><div class="t3r"><h2>Your routine</h2><div class="regimen"><div class="grp">☀ Morning</div><div class="step"><div class="slot sm" data-kind="Product"></div><div><h5>Tint SPF</h5></div></div><div class="grp">☾ Night</div><div class="step"><div class="slot sm" data-kind="Product"></div><div><h5>Miracle Balm</h5></div></div></div></div></div></div><span class="lbl">RESULTS</span></div>
+      </div>
+      <div class="meta"><div><h3>Routine</h3><div class="q">"What should I use together?"</div><p>4–6 questions · results are a sequenced set with one add-all</p></div><button class="btn primary use">Use this template</button></div>
+    </div>
+    <div class="gcard">
+      <div class="strip">
+        <div class="mini"><div class="scaled"><div class="t4 q" style="min-height:400px"><div class="t4-intro"><div class="slot" data-kind="Hero photo"></div><h1>What's your glow type? ✨</h1><button class="cta">Let's go</button></div></div></div><span class="lbl">INTRO</span></div>
+        <div class="mini"><div class="scaled"><div class="t4 q" style="min-height:400px"><div class="q-wrap"><div class="t4-q">Pick your vibe</div><div class="chunk" style="margin-top:18px"><div><span class="e">🌸</span>Soft &amp; dewy</div><div class="sel"><span class="e">🔥</span>Bold &amp; bright</div></div></div></div></div><span class="lbl">QUESTION</span></div>
+        <div class="mini"><div class="scaled"><div class="t4 q t4r" style="min-height:400px"><div class="arch">YOUR GLOW TYPE</div><h2>Main Character</h2><div class="kit"><div class="row"><div class="m"><div class="slot sm" data-kind="Product"></div></div><div class="m"><div class="slot sm" data-kind="Product"></div></div><div class="m"><div class="slot sm" data-kind="Product"></div></div></div><button class="addall">Add all 3</button></div></div></div><span class="lbl">RESULTS</span></div>
+      </div>
+      <div class="meta"><div><h3>Discover</h3><div class="q">"What's my type?"</div><p>4–5 questions · archetype reveal + a kit</p></div><button class="btn primary use">Use this template</button></div>
+    </div>
+    <div class="gcard" style="grid-column:1/-1;max-width:610px">
+      <div class="strip">
+        <div class="mini"><div class="scaled"><div class="t5 q" style="min-height:400px"><div class="t5-intro"><h1>Find your shade</h1><button class="cta">Start</button></div></div></div><span class="lbl">INTRO</span></div>
+        <div class="mini"><div class="scaled"><div class="t5 q" style="min-height:400px"><div class="q-wrap"><div class="t5-q">Which tones do you see on your skin?</div><div class="bar5">Neutral</div><div class="bar5 sel">Pink</div></div></div></div><span class="lbl">QUESTION</span></div>
+        <div class="mini"><div class="scaled"><div class="t5 q" style="min-height:400px"><div class="t5r"><h2>Your matches</h2><div class="grid5"><div class="card5"><div class="slot sm" data-kind="Product"></div><h4>First Date</h4></div><div class="card5"><div class="slot sm" data-kind="Product"></div><h4>Rosewood</h4></div></div></div></div></div><span class="lbl">RESULTS</span></div>
+      </div>
+      <div class="meta"><div><h3>Clean</h3><div class="q">Any of the above, with no imagery.</div><p>The fallback. Every other template degrades here, keeping your Look.</p></div><button class="btn primary use">Use this template</button></div>
+    </div>
+  </div>
+</div>
+</section>
+<!-- ================= 3 · IMAGE SLOTS ================= -->
+<section class="screen" id="s-slots">
+<p class="spec-note"><b>Spec Part 4.</b> Every image position is a slot; a slot always renders in Studio. The Images rail lists every slot the current template declares, unresolved first.</p>
+<div class="section-title">Widget anatomy</div>
+<div class="frame narrow"><div class="anat">
+  <div>
+    <h4>ImageSlot · unresolved (Studio)</h4>
+    <ul>
+      <li><code>--gq-color-surface</code> fill, 1.5 px dashed <code>--gq-color-border</code></li>
+      <li>Radius inherited from the container it sits in</li>
+      <li>20 px image glyph, centered; caption <i>Image · {kind}</i> in 11 px at 55%</li>
+      <li>Caption hides when the short side is under 56 px; glyph stays</li>
+      <li>Hover → caption becomes <i>Click to choose</i>; click opens the picker pre-filtered to this kind</li>
+      <li><b>Storefront:</b> never rendered. Slot collapses per kind (spec 4.2) with no layout shift beyond the hero column.</li>
+    </ul>
+  </div>
+  <div class="demo t1">
+    <div class="slot r12" data-kind="Hero photo" style="width:200px;height:120px"></div>
+    <div class="slot r8" data-kind="Lifestyle" style="width:150px;height:100px"></div>
+    <div class="slot r8" data-kind="Variant photo" style="width:96px;height:96px"></div>
+    <div class="slot sm r8" data-kind="Swatch" style="width:44px;height:44px"></div>
+    <div class="slot round" data-kind="Founder" style="width:80px;height:80px"></div>
+    <div class="slot r8 resolved" style="width:96px;height:96px;background:linear-gradient(140deg,#c96a72,#8e3742)"></div>
+  </div>
+</div></div>
+
+<div class="section-title">Images rail + slot rows</div>
+<div class="frame">
+  <div class="topbar"><div class="quiz-name">Find your shade</div><div class="tabs"><button class="on">Build</button><button>Check matches</button><button>Live</button></div><button class="btn primary">Publish</button></div>
+  <div class="studio-body" style="grid-template-columns:290px 1fr">
+    <aside class="img-panel">
+      <h4>Images</h4><div class="sub">Every image this template uses. Unresolved first.</div>
+      <h5>Intro</h5>
+      <div class="srow"><span class="adot"></span><div class="slot sm r8 th t1" data-kind="Hero"></div><div><h6>Hero photo</h6><div class="src">Not found yet</div></div><button class="chg">Choose</button></div>
+      <h5>Q2 · Undertone</h5>
+      <div class="srow"><span class="adot"></span><div class="slot sm r8 th t1" data-kind="Swatch"></div><div><h6>Answer · Neutral</h6><div class="src">Not found yet</div></div><button class="chg">Choose</button></div>
+      <div class="srow"><div class="th resolved slot" style="background:linear-gradient(140deg,#e8c8bd,#d4a99c)"></div><div><h6>Answer · Pink</h6><div class="src">Variant image · Miracle Tint / Pink</div></div><button class="chg">Change</button></div>
+      <div class="srow"><div class="th resolved slot" style="background:linear-gradient(140deg,#e8d3a8,#d3b57c)"></div><div><h6>Answer · Yellow</h6><div class="src">Variant image · Miracle Tint / Golden</div></div><button class="chg">Change</button></div>
+      <h5>Results</h5>
+      <div class="srow"><div class="th resolved slot" style="background:linear-gradient(140deg,#c96a72,#8e3742)"></div><div><h6>Match cards</h6><div class="src">Product images (auto)</div></div><button class="chg">Change</button></div>
+    </aside>
+    <div class="canvas-wrap t1"><div class="store-strip"><span class="slogo">TINT BEAUTY</span></div>
+      <div class="canvas"><div class="q"><div class="q-wrap">
+        <div class="phases"><div>Skin profile</div><div class="on">Shade discovery</div><div>Preferences</div></div>
+        <div class="t1-q">Which of these tones do you see on your skin?</div>
+        <div class="help">Take a close look and pick the one that best matches you in natural light.</div>
+        <div class="tiles three">
+          <figure class="tile"><div class="slot" data-kind="Swatch"></div><figcaption>Neutral</figcaption></figure>
+          <figure class="tile sel"><div class="slot resolved" style="background:linear-gradient(140deg,#e8c8bd,#d4a99c)"></div><figcaption>Pink</figcaption></figure>
+          <figure class="tile"><div class="slot resolved" style="background:linear-gradient(140deg,#e8d3a8,#d3b57c)"></div><figcaption>Yellow</figcaption></figure>
+        </div>
+        <div class="tip"><u>Tip:</u> Pull up a photo of yourself on your phone and hold it near these swatches.</div>
+      </div></div></div>
+    </div>
+  </div>
+</div>
+<div class="callout"><b>Library not built ≠ merchant problem.</b> The 9/26 "Needs a brand hero image" lock meant indexing hadn't run. Indexing runs at sync automatically; if it fails, the Images rail shows one retry banner. Nobody texts a domain to anyone.</div>
+</section>
+
+<!-- ================= T1 MATCH ================= -->
+<section class="screen" id="s-t1">
+<p class="spec-note"><b>Spec Part 3 · T1 Match.</b> Demo: Tint Beauty. Phased progress, tag + description text answers, swatch tiles from variant images, required loading screen, results with the answers echoed back. Every screen in the inventory is below.</p>
+
+<div class="section-title">S0 · Intro — type B hero photo, phases visible</div>
+<div class="frame t1"><div class="q"><div class="q-wrap">
+  <div class="t1-top"><span class="back">‹ Back</span><span class="brand">TINT BEAUTY</span><span style="opacity:.6">01 / 07</span></div>
+  <div class="phases"><div>Skin profile</div><div>Shade discovery</div><div>Preferences</div></div>
+  <div class="t1-intro">
+    <div class="slot" data-kind="Hero photo"></div>
+    <h1>Find your Miracle Tint match</h1>
+    <p>Six quick questions. We'll match you to the shade that disappears into your skin.</p>
+    <button class="cta">Find my shade</button>
+  </div>
+</div></div></div>
+
+<div class="section-title">S1 · Text question — bold tag + description rows</div>
+<div class="frame t1"><div class="q"><div class="q-wrap">
+  <div class="t1-top"><span class="back">‹ Back</span><span class="brand">TINT BEAUTY</span><span style="opacity:.6">02 / 07</span></div>
+  <div class="phases"><div class="on"><i style="width:50%"></i>Skin profile</div><div>Shade discovery</div><div>Preferences</div></div>
+  <div class="t1-q">What's your skin type?</div>
+  <div class="help">Choose the one that sounds most like you.</div>
+  <div class="tagrow"><span class="ic">◌</span><b>Dry</b><span>My skin needs a little more nourishment</span></div>
+  <div class="tagrow"><span class="ic">◍</span><b>Oily</b><span>My skin gets shiny as the day goes on</span></div>
+  <div class="tagrow sel"><span class="ic">◐</span><b>Combo</b><span>My skin is a mix — never just one thing</span></div>
+  <div class="tagrow"><span class="ic">○</span><b>Normal</b><span>My skin usually feels even and comfortable</span></div>
+</div></div></div>
+
+<div class="section-title">S2 · Visual question — swatch tiles (variant images, by construction)</div>
+<div class="frame t1"><div class="q"><div class="q-wrap">
+  <div class="t1-top"><span class="back">‹ Back</span><span class="brand">TINT BEAUTY</span><span style="opacity:.6">04 / 07</span></div>
+  <div class="phases"><div class="on"><i style="width:100%"></i>Skin profile</div><div class="on"><i style="width:30%"></i>Shade discovery</div><div>Preferences</div></div>
+  <div class="t1-q">Which of these tones do you see on your skin?</div>
+  <div class="help">Take a close look and pick the one that best matches you in natural light.</div>
+  <div class="tiles three">
+    <figure class="tile"><div class="slot" data-kind="Swatch"></div><figcaption>Neutral</figcaption></figure>
+    <figure class="tile sel"><div class="slot" data-kind="Swatch"></div><figcaption>Pink</figcaption></figure>
+    <figure class="tile"><div class="slot" data-kind="Swatch"></div><figcaption>Yellow</figcaption></figure>
+  </div>
+  <div class="tip"><u>Tip:</u> Pull up a photo of yourself on your phone and hold it near these swatches.</div>
+</div></div></div>
+
+<div class="section-title">S3 · Multi-select visual — 4-col product tiles</div>
+<div class="frame t1"><div class="q"><div class="q-wrap">
+  <div class="t1-top"><span class="back">‹ Back</span><span class="brand">TINT BEAUTY</span><span style="opacity:.6">05 / 07</span></div>
+  <div class="phases"><div class="on"><i style="width:100%"></i>Skin profile</div><div class="on"><i style="width:60%"></i>Shade discovery</div><div>Preferences</div></div>
+  <div class="t1-q">Which shades do you reach for?</div>
+  <div class="help">Select all that apply.</div>
+  <div class="tiles">
+    <figure class="tile"><div class="slot" data-kind="Variant photo"></div><figcaption>Rosewood<small>warm rose</small></figcaption></figure>
+    <figure class="tile sel"><div class="slot" data-kind="Variant photo"></div><figcaption>First Date<small>berry crush</small></figcaption></figure>
+    <figure class="tile"><div class="slot" data-kind="Variant photo"></div><figcaption>Terracotta<small>burnt peach</small></figcaption></figure>
+    <figure class="tile sel"><div class="slot" data-kind="Variant photo"></div><figcaption>Main Character<small>true red</small></figcaption></figure>
+  </div>
+  <div style="text-align:center;margin-top:28px"><button class="cta">Continue</button></div>
+</div></div></div>
+
+<div class="section-title">S5 · Loading — required in Match, 2.5–4 s, trust lines verbatim-sourced</div>
+<div class="frame t1"><div class="loading"><div><div class="ring"></div><h3>Finding your shade…</h3><p>Matching your undertone across 24 shades.</p><div class="rot">"Made for every skin tone." — from tintbeauty.com</div></div></div></div>
+
+<div class="section-title">S6 · Results — gallery · About your match · Your shade · Why this works</div>
+<div class="frame t1"><div class="q"><div class="q-wrap" style="max-width:980px">
+  <div class="t1-top"><span class="back">‹ Back</span><span class="brand">TINT BEAUTY</span><span></span></div>
+  <p style="text-align:center;font-size:14px;opacity:.65;margin-bottom:26px">Here's what we think will look amazing with your complexion</p>
+  <div class="t1r">
+    <div class="thumbs"><div class="slot sm" data-kind="Thumb"></div><div class="slot sm" data-kind="Thumb"></div><div class="slot sm" data-kind="Thumb"></div><div class="slot sm" data-kind="Thumb"></div></div>
+    <div class="main"><div class="slot" data-kind="Product photo"></div></div>
+    <div>
+      <h4>About your match</h4>
+      <p style="font-size:13px;opacity:.65;margin-bottom:8px">Selected for you based on your answers:</p>
+      <ul class="echo"><li><b>Skin type:</b> Combo</li><li><b>Undertone:</b> Pink</li><li><b>Reaches for:</b> Berry, red</li><li><b>Coverage:</b> Buildable</li></ul>
+      <h4 style="margin-top:18px">Select size</h4>
+      <div class="sizes"><div class="on">STANDARD<br><span style="font-weight:400">50 g</span></div><div>MINI<br><span style="font-weight:400">8.5 g</span></div></div>
+      <h4>Your shade</h4>
+      <div class="shade"><div class="slot sm" data-kind="Swatch"></div><div><b>FIRST DATE</b> <span class="chip grey">Tint</span><small>A cool berry for pink undertones</small></div></div>
+      <h4>Why this works</h4>
+      <p class="why">Your pink undertone reads cool, so First Date's blue-leaning berry sits in your skin instead of on it. Buildable means it goes from stain to full color — matching how you said you wear it.</p>
+      <button class="cta" style="width:100%">Add to cart — $24</button>
+    </div>
+  </div>
+  <div class="t1-alts">
+    <div class="a"><div class="slot sm" data-kind="Product"></div><div><h5>Main Character</h5><small>when you want the red-red · $24</small></div></div>
+    <div class="a"><div class="slot sm" data-kind="Product"></div><div><h5>Rosewood</h5><small>the everyday version · $24</small></div></div>
+  </div>
+</div></div></div>
+
+<div class="section-title">S4 · Email capture — placement: after results (Match default)</div>
+<div class="frame t1"><div class="q"><div class="email">
+  <h3>Save your match</h3><p>We'll email your shade and 10% off your first order.</p>
+  <div class="in">Email address</div><button class="cta" style="width:100%">Send my match</button>
+  <div class="consent">By continuing you agree to receive emails from Tint Beauty.</div>
+  <div class="skip">Skip</div>
+</div></div></div>
+<div class="frame t1"><div class="q"><div class="email">
+  <h3>Congrats, you've received 10% OFF</h3><p>Use this at checkout — we've already applied it.</p>
+  <div class="codebox"><b>TINT10</b><span>Copy</span></div>
+  <div class="applied">✓ Applied to your cart</div>
+</div></div></div>
+</section>
+<!-- ================= T2 CONSULT ================= -->
+<section class="screen" id="s-t2">
+<p class="spec-note"><b>Spec Part 3 · T2 Consult.</b> Demo: Fernwood Sleep. Landing-page intro with a live preview card and discount hook, lettered text rows, 2×2 lifestyle cards, labeled progress, results with rationale and comparison. Countdown/urgency strings are banned here.</p>
+
+<div class="section-title">S0 · Intro — type C landing + hook (email placement: hook_start)</div>
+<div class="frame t2"><div class="q" style="padding-top:56px"><div class="land">
+  <div>
+    <div class="rating">★★★★★ <b>4.8/5</b> <span style="opacity:.6">· from your reviews app</span></div>
+    <h1>Unlock a discount and find your ideal mattress in 60 seconds</h1>
+    <p>Answer a few questions and discover the mattress that matches how you actually sleep.</p>
+    <div class="benefits"><span>✓ 60 seconds</span><span>✓ No commitment</span><span>✓ Offer at the end</span></div>
+    <div class="ctarow"><button class="cta" style="text-transform:none;letter-spacing:0;font-size:15px">Unlock my discount →</button><small>100-night trial included on every mattress</small></div>
+  </div>
+  <div class="prev">
+    <span class="pl">QUIZ PREVIEW</span><div class="badge">MYSTERY<b>?%</b>OFF</div>
+    <div class="pbar"><i class="f"></i><i class="f"></i><i></i><i></i><i></i><i></i></div>
+    <div style="font-size:10.5px;letter-spacing:.1em;font-weight:700;color:var(--tacc);margin-bottom:4px">QUESTION 2 OF 6</div>
+    <div class="pq">What's your usual sleep position?</div>
+    <div class="po sel"><i>A</i>On my side <span style="margin-left:auto">✓</span></div>
+    <div class="po"><i>B</i>On my back</div>
+    <div class="po"><i>C</i>On my stomach</div>
+  </div>
+</div></div></div>
+
+<div class="section-title">S1 · Text question — lettered rows</div>
+<div class="frame t2"><div class="q"><div class="q-wrap">
+  <div class="t2-meta"><span class="back">‹ Back</span><span>Question 3 of 7</span></div>
+  <div class="t2-bar"><i></i></div>
+  <div class="t2-q">Will someone over 230 lbs be sleeping on this mattress?</div>
+  <div class="help">This changes how much support we look for.</div>
+  <div class="lett"><i>A</i>Yes</div>
+  <div class="lett sel"><i>B</i>No</div>
+  <div class="lett"><i>C</i>Prefer not to answer</div>
+</div></div></div>
+
+<div class="section-title">S2 · Visual question — 2×2 lifestyle cards (collection banners / lifestyle media)</div>
+<div class="frame t2"><div class="q"><div class="q-wrap">
+  <div class="t2-meta"><span class="back">‹ Back</span><span>Question 4 of 7</span></div>
+  <div class="t2-bar"><i style="width:57%"></i></div>
+  <div class="t2-q">Who will be using the mattress?</div>
+  <div class="help">I'm shopping for:</div>
+  <div class="lcards">
+    <div class="lcard"><div class="slot" data-kind="Lifestyle"></div><div class="tx"><h4>Just me</h4><p>I sleep alone.</p></div></div>
+    <div class="lcard sel"><div class="slot" data-kind="Lifestyle"></div><div class="tx"><h4>Us two</h4><p>We share the bed.</p></div></div>
+    <div class="lcard"><div class="slot" data-kind="Lifestyle"></div><div class="tx"><h4>Kids or teens</h4><p>A growing sleeper.</p></div></div>
+    <div class="lcard"><div class="slot" data-kind="Lifestyle"></div><div class="tx"><h4>My baby</h4><p>Crib or toddler bed.</p></div></div>
+  </div>
+</div></div></div>
+
+<div class="section-title">S4 · Email capture before results — reveals the hooked discount</div>
+<div class="frame t2"><div class="q"><div class="email">
+  <h3>Your mattress is ready</h3><p>Enter your email to reveal your mystery discount and see your match.</p>
+  <div class="in">Email address</div><button class="cta" style="width:100%;text-transform:none;letter-spacing:0">Reveal my discount →</button>
+  <div class="consent">We'll send your results and occasional sleep tips. Unsubscribe anytime.</div>
+  <div class="skip">Skip — just show my match</div>
+</div></div></div>
+<div class="frame t2"><div class="q"><div class="email">
+  <h3>You unlocked $50 off</h3><p>Already applied — it'll show at checkout.</p>
+  <div class="codebox"><b>QUIZ50</b><span>Copy</span></div><div class="applied">✓ Applied to your cart</div>
+</div></div></div>
+
+<div class="section-title">S6 · Results — recap · top pick with reasons · comparison table</div>
+<div class="frame t2"><div class="q"><div class="q-wrap t2r" style="max-width:860px">
+  <h2 style="font-size:32px">Your match: the Fernwood Hybrid</h2>
+  <div class="recap"><span>Back sleeper</span><span>Sleeps warm</span><span>Us two</span><span>Under 230 lbs</span><span>Queen</span><span>Comfort first</span></div>
+  <div class="pick">
+    <div class="slot" data-kind="Product photo"></div>
+    <div>
+      <div class="lbl">BEST FOR YOU</div>
+      <h3>Fernwood Hybrid · Queen</h3>
+      <div class="price">$1,290 · 100-night trial · $50 off applied</div>
+      <ul>
+        <li>Back sleeper → zoned coils keep your spine even</li>
+        <li>Sleeps warm → latex comfort layer, no memory-foam heat</li>
+        <li>Us two → edge-to-edge coil frame limits motion transfer</li>
+      </ul>
+      <button class="cta" style="margin-top:14px;text-transform:none;letter-spacing:0">Add to cart — $1,240</button>
+    </div>
+  </div>
+  <table class="cmp">
+    <tr><th></th><th class="p"><div class="th-img"><div class="slot sm" data-kind="Product"></div>Hybrid — your match</div></th><th><div class="th-img"><div class="slot sm" data-kind="Product"></div>Original Foam</div></th><th><div class="th-img"><div class="slot sm" data-kind="Product"></div>Firm+</div></th></tr>
+    <tr><td>Feel</td><td class="p">Medium-firm</td><td>Medium-soft</td><td>Firm</td></tr>
+    <tr><td>Cooling</td><td class="p">Latex + coils</td><td>Gel foam</td><td>Latex + coils</td></tr>
+    <tr><td>Motion transfer</td><td class="p">Low</td><td>Lowest</td><td>Low</td></tr>
+    <tr><td>Queen price</td><td class="p">$1,290</td><td>$990</td><td>$1,340</td></tr>
+    <tr><td></td><td class="p"></td><td><span style="font-weight:600;color:var(--tacc)">View →</span></td><td><span style="font-weight:600;color:var(--tacc)">View →</span></td></tr>
+  </table>
+  <p style="font-size:12px;opacity:.55;margin-top:14px">Rows come from real variant options and price. No invented specs. No countdown.</p>
+</div></div></div>
+</section>
+
+<!-- ================= T3 ROUTINE ================= -->
+<section class="screen" id="s-t3">
+<p class="spec-note"><b>Spec Part 3 · T3 Routine.</b> Demo: Aria Skincare. Founder intro, optional name capture used later, centered bars, icon tiles for lifestyle questions, email gate before results (always skippable), results as a sequenced regimen with one add-all.</p>
+
+<div class="section-title">S0 · Intro — type D founder (falls to type E when no founder data)</div>
+<div class="frame t3"><div class="q"><div class="founder">
+  <div class="brand">Aria</div>
+  <div class="slot round" data-kind="Founder portrait"></div>
+  <h1>Hi there, I'm Nadia.</h1>
+  <p>I'm a licensed esthetician and the founder of Aria. Four questions and I'll build your routine.</p>
+  <button class="cta">Let's get started</button>
+</div></div></div>
+
+<div class="section-title">S0b · Optional name capture (used in later headings)</div>
+<div class="frame t3"><div class="q"><div class="q-wrap">
+  <div class="t3-q">To start, who is the routine for?</div>
+  <div class="t3-sub">&nbsp;</div>
+  <div class="t3-name">Enter your name here</div>
+  <button class="cta off">Continue</button>
+  <span class="skip">Skip</span>
+</div></div></div>
+
+<div class="section-title">S1 · Text question — centered bars, name echoed</div>
+<div class="frame t3"><div class="q"><div class="q-wrap">
+  <div class="t3-q">Nice to meet you, Maya.</div>
+  <div class="t3-sub">What can we help with?</div>
+  <div class="t3-grid2">
+    <div class="t3-bar">Acne</div><div class="t3-bar">General skin health</div>
+    <div class="t3-bar">Oily skin</div><div class="t3-bar sel">Dry skin</div>
+    <div class="t3-bar">Dark spots</div><div class="t3-bar">Redness</div>
+    <div class="t3-bar" style="grid-column:1/-1">Aging signs</div>
+  </div>
+  <div style="margin-top:26px"><button class="cta">Continue</button></div>
+  <div style="margin-top:14px" class="back">← Back</div>
+</div></div></div>
+
+<div class="section-title">S2 · Visual question — icon tiles (optional)</div>
+<div class="frame t3"><div class="q"><div class="q-wrap" style="max-width:760px">
+  <div class="t3-q">Do you feel you lack energy?</div>
+  <div class="t3-sub">&nbsp;</div>
+  <div class="icotiles">
+    <div class="icotile"><div class="slot sm" data-kind="Icon"></div><b>Yes, quite often</b></div>
+    <div class="icotile sel"><div class="slot sm" data-kind="Icon"></div><b>Once in a while</b></div>
+    <div class="icotile"><div class="slot sm" data-kind="Icon"></div><b>No, not really</b></div>
+  </div>
+</div></div></div>
+
+<div class="section-title">S4 · Email gate before results — skip is always visible</div>
+<div class="frame t3"><div class="q"><div class="email">
+  <h3 style="font-family:'Cormorant Garamond',serif;font-weight:500;font-size:32px">What is your email?</h3><p>We'll send your routine so you can find it later.</p>
+  <div class="in" style="border-radius:99px">you@example.com</div><button class="cta" style="border-radius:6px">Submit</button>
+  <div class="skip">Skip to my routine</div>
+</div></div></div>
+
+<div class="section-title">S6 · Results — regimen with Morning / Night, sticky total, one add-all</div>
+<div class="frame t3" style="min-height:620px"><div class="q"><div class="t3r">
+  <div style="font-size:13px;opacity:.6;text-align:left;margin-bottom:10px">‹ Retake</div>
+  <h2>Your personalized routine</h2>
+  <div class="for">Built for</div>
+  <div class="concern">◐ Dry skin</div>
+  <div class="whyblk"><b>Why this regimen is right for you</b>You told us dry, tight skin and low energy days. This leans on hydration first and keeps the step count at four so it actually gets done.</div>
+  <div class="regimen">
+    <div class="rh"><h3>Regimen #01</h3><span class="tot">$96 · save $14</span></div>
+    <div class="grp">☀ Morning</div>
+    <div class="step"><div class="slot sm" data-kind="Product"></div><div><h5>Gentle Gel Cleanser</h5><small>Step 1 · cleanse without stripping</small></div><span class="pr">$18</span></div>
+    <div class="step"><div class="slot sm" data-kind="Product"></div><div><h5>Daily SPF 40</h5><small>Step 2 · non-negotiable</small></div><span class="pr">$22</span></div>
+    <div class="grp">☾ Night</div>
+    <div class="step"><div class="slot sm" data-kind="Product"></div><div><h5>Hyaluronic Serum</h5><small>Step 1 · on damp skin</small></div><span class="pr">$32</span></div>
+    <div class="step"><div class="slot sm" data-kind="Product"></div><div><h5>Barrier Cream</h5><small>Step 2 · seals it in</small></div><span class="pr">$28</span></div>
+  </div>
+</div></div>
+<div class="sticky"><div class="tot">Today's total: <b>$96</b><s>$110</s></div><button class="cta" style="border-radius:6px">Add routine to cart</button></div></div>
+</section>
+
+<!-- ================= T4 DISCOVER ================= -->
+<section class="screen" id="s-t4">
+<p class="spec-note"><b>Spec Part 3 · T4 Discover.</b> Demo: GlowPop. Bold hero intro, chunky cards with emoji or a 64 px image slot, segmented pills, archetype results with a kit. Assigned only on playful signals — never a fallback.</p>
+
+<div class="section-title">S0 · Intro — bold hero</div>
+<div class="frame t4"><div class="q"><div class="q-wrap t4-intro">
+  <div class="slot" data-kind="Hero photo"></div>
+  <h1>What's your glow type? ✨</h1>
+  <p>4 questions. Zero judgement. A kit at the end.</p>
+  <button class="cta">Let's go →</button>
+</div></div></div>
+
+<div class="section-title">S1 · Question — emoji cards, multi-select</div>
+<div class="frame t4"><div class="q"><div class="q-wrap">
+  <div class="t4-prog"><i class="f"></i><i class="f"></i><i></i><i></i></div>
+  <div class="t4-q">What's your skin dealing with rn?</div>
+  <div class="help">Pick all that apply</div>
+  <div class="chunk">
+    <div><span class="e">🫠</span>Oily by noon</div>
+    <div class="sel"><span class="e">🌵</span>Desert-level dry</div>
+    <div><span class="e">🌋</span>Breakout season</div>
+    <div class="sel"><span class="e">😴</span>Dull &amp; tired</div>
+  </div>
+  <div style="margin-top:24px"><button class="cta">Next →</button></div>
+</div></div></div>
+
+<div class="section-title">S2 · Visual question — cards with a 56 px product slot</div>
+<div class="frame t4"><div class="q"><div class="q-wrap">
+  <div class="t4-prog"><i class="f"></i><i class="f"></i><i class="f"></i><i></i></div>
+  <div class="t4-q">Pick your finish</div>
+  <div class="help">One only</div>
+  <div class="chunk">
+    <div class="sel"><div class="slot sm" data-kind="Product"></div>Glass skin</div>
+    <div><div class="slot sm" data-kind="Product"></div>Soft matte</div>
+    <div><div class="slot sm" data-kind="Product"></div>Glitter era</div>
+    <div><div class="slot sm" data-kind="Product"></div>No-makeup makeup</div>
+  </div>
+</div></div></div>
+
+<div class="section-title">S6 · Results — archetype + hero + kit</div>
+<div class="frame t4"><div class="q"><div class="q-wrap t4r">
+  <div class="arch">YOUR GLOW TYPE</div>
+  <h2>You're a Dewy Dreamer 💧</h2>
+  <div class="line">Dry, tired skin that just wants a nap and a glass of water. We got you.</div>
+  <div class="t4-hero"><div class="slot" data-kind="Product photo"></div><h3>Cloud Cream</h3><div class="price">$29 · the moisture main character</div><button class="cta" style="width:100%">Add to cart</button></div>
+  <div class="kit"><h4>Your Dewy Dreamer kit</h4>
+    <div class="row"><div class="m"><div class="slot sm" data-kind="Product"></div><h5>Glow Drops</h5><small>$24</small></div><div class="m"><div class="slot sm" data-kind="Product"></div><h5>Hydra Mist</h5><small>$18</small></div><div class="m"><div class="slot sm" data-kind="Product"></div><h5>Cloud Cream</h5><small>$29</small></div></div>
+    <button class="addall">Add all 3 — $64 ✨</button>
+  </div>
+</div></div></div>
+</section>
+
+<!-- ================= T5 CLEAN ================= -->
+<section class="screen" id="s-t5">
+<p class="spec-note"><b>Spec Part 3 · T5 Clean.</b> Demo: Northline. The universal default and every degradation's destination. No image slots in questions; results cards carry one slot each that collapses to an initial block on the storefront.</p>
+<div class="section-title">S0 · Intro — type E minimal</div>
+<div class="frame t5"><div class="q"><div class="t5-intro">
+  <div class="kicker">Find my fit</div>
+  <h1>Your perfect match, in 60 seconds</h1>
+  <p>Answer a few quick questions and we'll match you to exactly what suits you.</p>
+  <button class="cta">Start the quiz</button>
+  <div class="trust"><span>✓ 5 quick questions</span><span>✓ Free shipping over $50</span><span>✓ 30-day returns</span></div>
+</div></div></div>
+<div class="section-title">S1 · Question — stacked bars</div>
+<div class="frame t5"><div class="q"><div class="q-wrap">
+  <div class="t5-meta"><span class="back">‹ Back</span><div class="bar"><i></i></div><span>3/5</span></div>
+  <div class="t5-q">What's the occasion?</div>
+  <div class="help">We'll build around it.</div>
+  <div class="bar5">Everyday</div><div class="bar5 sel">Work</div><div class="bar5">Travel</div><div class="bar5">A gift</div>
+</div></div></div>
+<div class="section-title">S6 · Results — 2-col grid</div>
+<div class="frame t5"><div class="q"><div class="t5r">
+  <h2>Your matches</h2><p>Based on: Work · Under $100 · Neutral colors</p>
+  <div class="grid5">
+    <div class="card5"><div class="slot" data-kind="Product photo"></div><h4>Field Tote</h4><div class="price">$68</div><div class="why">Fits a 14" laptop; the neutral you asked for.</div><button class="add">Add to cart</button></div>
+    <div class="card5"><div class="slot" data-kind="Product photo"></div><h4>Commuter Pouch</h4><div class="price">$28</div><div class="why">Cables and cards, one zip.</div><button class="add">Add to cart</button></div>
+    <div class="card5"><div class="slot" data-kind="Product photo"></div><h4>Wool Cap</h4><div class="price">$42</div><div class="why">Under budget, work-appropriate.</div><button class="add">Add to cart</button></div>
+    <div class="card5"><div class="slot" data-kind="Product photo"></div><h4>Card Wallet</h4><div class="price">$36</div><div class="why">Slim enough for a jacket pocket.</div><button class="add">Add to cart</button></div>
+  </div>
+</div></div></div>
+</section>
+
+<!-- ================= LOOKS ================= -->
+<section class="screen" id="s-looks">
+<p class="spec-note"><b>Spec Part 2.3.</b> The same Match question (S2 · undertone) rendered under all three Looks. The root component is identical; only tokens and a small set of layout switches change. This is what the gallery's Look switcher shows a merchant.</p>
+<div class="section-title">Editorial — serif, split, hairline rows, swatch as a small square</div>
+<div class="frame"><div class="look-ed">
+  <div class="slot" data-kind="Hero photo (sticky)"></div>
+  <div class="rt"><div class="kicker">Shade discovery · 4 of 7</div><h2>Which of these tones do you see on your skin?</h2>
+    <div class="row">Neutral<div class="slot sm" data-kind="Swatch"></div></div>
+    <div class="row sel">Pink<div class="slot sm" data-kind="Swatch"></div></div>
+    <div class="row">Yellow<div class="slot sm" data-kind="Swatch"></div></div>
+  </div>
+</div></div>
+<div class="section-title">Minimal — sans, centered, 8 px radius tiles</div>
+<div class="frame"><div class="look-min"><h2>Which of these tones do you see on your skin?</h2>
+  <div class="g"><figure><div class="slot" data-kind="Swatch"></div><figcaption>Neutral</figcaption></figure><figure class="sel"><div class="slot" data-kind="Swatch"></div><figcaption>Pink</figcaption></figure><figure><div class="slot" data-kind="Swatch"></div><figcaption>Yellow</figcaption></figure><figure><div class="slot" data-kind="Swatch"></div><figcaption>Olive</figcaption></figure></div>
+</div></div>
+<div class="section-title">Bold — heavy rounded sans, card tiles with shadow, filled selection</div>
+<div class="frame"><div class="look-bold"><h2>Which tones do you see on your skin? 👀</h2>
+  <div class="g"><figure><div class="slot" data-kind="Swatch"></div><figcaption>Neutral</figcaption></figure><figure class="sel"><div class="slot" data-kind="Swatch"></div><figcaption>Pink</figcaption></figure><figure><div class="slot" data-kind="Swatch"></div><figcaption>Yellow</figcaption></figure><figure><div class="slot" data-kind="Swatch"></div><figcaption>Olive</figcaption></figure></div>
+</div></div>
+<div class="callout"><b>Coverage check (spec 2.5).</b> Colour cosmetics → Match/Minimal. Fragrance, serif theme → Consult/Editorial. Skincare with step collections → Routine/Minimal. Mattress → Consult/Minimal. Tile or interiors → Match/Editorial. Press-on nails, playful copy → Match/Bold. Generic apparel, no variant imagery → Clean. A store that fits none of these is a spec bug, not a sixth template.</div>
+</section>
+
+<script>
+const nav=document.getElementById('nav');
+nav.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+ nav.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
+ document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('on',s.id===b.dataset.s));
+ window.scrollTo({top:0});});
+</script>
+</body>
+</html>

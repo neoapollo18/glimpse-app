@@ -12,6 +12,7 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
+import { shopNeedsBilling } from "../lib/billing-gate.server";
 import { extractBrandProfile, getBrandProfile } from "../lib/brand-profile.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -22,6 +23,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
+  // Resource routes bypass app.tsx's billing gate; extraction drives the
+  // Admin API + a homepage fetch.
+  if (await shopNeedsBilling(session.shop, session.accessToken ?? "")) {
+    return json({ ok: false, error: "Your Gleame subscription isn't active. Visit Billing to continue." }, { status: 402 });
+  }
   const form = await request.formData();
   if (form.get("intent") !== "extract") {
     return json({ ok: false, error: "Unknown intent" }, { status: 400 });

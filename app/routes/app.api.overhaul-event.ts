@@ -1,5 +1,5 @@
-// Admin-side funnel event sink (Overhaul Part 6). The install-flow and
-// Reveal screens report their own milestones; names are whitelisted so
+// Admin-side funnel event sink (Overhaul Part 6). The onboarding screens
+// and the Studio report their own milestones; names are whitelisted so
 // this can't become a generic event injector.
 
 import type { ActionFunctionArgs } from "@remix-run/node";
@@ -14,6 +14,9 @@ const ALLOWED: OverhaulEvent[] = [
   "reveal_quiz_played",
   "store_preview_opened",
   "studio_opened",
+  // v3 (V3-CONTRACTS §11): the onboarding Build screen reports a failed or
+  // timed-out generation {step, reason}.
+  "generation_failed",
 ];
 
 export const action = async ({ request }: ActionFunctionArgs) => {

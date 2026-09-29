@@ -1,6 +1,6 @@
 // In-process record of the last quiz-generation outcome per shop.
 //
-// Exists for the wizard's WATCH MODE: when the SSE stream cuts, the client
+// Exists for the Studio's WATCH MODE: when the SSE stream cuts, the client
 // polls the studio loader waiting for the draft — but a generation that
 // FAILS after the cut writes nothing, and the merchant used to watch a
 // progress bar for the full watch budget before a generic timeout. The
@@ -22,11 +22,15 @@ export interface GenStatus {
   at: number;
   error?: string;
   warnings?: string[];
+  /** v3: the last REAL step that completed (contract §10) - a failure
+   * outcome carries it so a watcher can say "it stopped while {step}". */
+  lastStep?: string | null;
 }
 
 interface GenEntry {
   token: number;
   heartbeatAt: number;
+  lastStep?: string;
   outcome?: GenStatus;
 }
 
@@ -49,11 +53,28 @@ export function recordGenHeartbeat(shopId: string, token: number): void {
   entry.heartbeatAt = Date.now();
 }
 
+/** A generation step completed (catalog | theme | questions | paths | images). */
+export function recordGenStep(shopId: string, token: number, step: string): void {
+  const entry = statusByShop.get(shopId);
+  if (!entry || entry.token !== token || entry.outcome) return;
+  entry.lastStep = step;
+  entry.heartbeatAt = Date.now();
+}
+
 export function recordGenOutcome(shopId: string, token: number, outcome: { error?: string; warnings?: string[] }): void {
   const entry = statusByShop.get(shopId);
   // Superseded by a newer run for this shop — its status is not ours to write.
   if (!entry || entry.token !== token) return;
-  entry.outcome = { at: Date.now(), ...outcome };
+  entry.outcome = { at: Date.now(), lastStep: entry.lastStep ?? null, ...outcome };
+}
+
+/** True while a generation for this shop is alive in this process (no
+ * outcome yet, heartbeat fresh). The onboarding Build screen's "Try again"
+ * waits on this instead of starting a second paid run. */
+export function isGenRunning(shopId: string): boolean {
+  const entry = statusByShop.get(shopId);
+  if (!entry || entry.outcome) return false;
+  return Date.now() - entry.heartbeatAt <= STALE_MS;
 }
 
 export function getGenStatus(shopId: string): GenStatus | null {
@@ -75,6 +96,7 @@ export function getGenStatus(shopId: string): GenStatus | null {
   if (Date.now() - entry.heartbeatAt > STALE_MS) {
     return {
       at: entry.heartbeatAt,
+      lastStep: entry.lastStep ?? null,
       error: "Generation stopped unexpectedly. Try again — your answers are still filled in.",
     };
   }

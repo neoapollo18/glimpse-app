@@ -1,7 +1,7 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
 import { useLoaderData, useNavigate, useFetcher, useSearchParams, useRevalidator } from "@remix-run/react";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect } from "react";
 import {
   Page,
   Text,
@@ -9,7 +9,6 @@ import {
   BlockStack,
   InlineStack,
   Button,
-  ProgressBar,
   InlineGrid,
   Banner,
   Select,
@@ -25,42 +24,21 @@ import {
   getConfiguredProducts,
   getQuizEngagement,
   getOnboardingState,
-  updateOnboardingStep,
-  saveOnboardingSurvey,
-  completeOnboarding as completeOnboardingDb,
 } from "../lib/supabase.server";
-import { sendOnboardingCompleteEmail } from "../lib/email.server";
-import { useCatalogSync } from "../lib/use-catalog-sync";
+
+// Z0 (V3-SPEC Part 1): the setup wizard, its step components, the manual
+// catalog-sync button and the OVERHAUL_ONBOARDING gate are gone. A shop
+// with no quiz that would previously have seen the wizard is sent to
+// /app/onboarding/scope by the loader; everyone else gets the dashboard.
+// shops.overhaul_enabled stays as a column, unread.
 
 // ============================================================
 // Types
 // ============================================================
 
-interface ConfiguredProduct {
-  id: string;
-  product_name: string;
-  shopify_id: string;
-  transformation_prompt: string;
-  created_at: string;
-}
-
-interface ProductStat {
-  product_id: string;
-  product_name: string;
-  shopify_id: string;
-  transformations: number;
-}
-
 interface LoaderData {
   shopDomain: string;
   ownerName: string;
-  configuredProductsCount: number;
-  onboarding: {
-    step: number;
-    completed: boolean;
-    goals: string[];
-    attribution: string[];
-  };
   quiz: {
     questions: number;
     rules: number;
@@ -72,8 +50,6 @@ interface LoaderData {
   };
   totalTransformations: number;
   quizMatches: number;
-  // Persisted catalog-sync resume point (null = no sync in progress).
-  catalogSyncCursor: string | null;
 }
 
 // ============================================================
@@ -106,7 +82,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // head-count query instead.
   const transformSince = new Date();
   transformSince.setDate(transformSince.getDate() - 365);
-  const [allProducts, onboarding, chatConfig, quizEngagement, transformCountRes, syncCursorRes] = await Promise.all([
+  const [allProducts, onboarding, chatConfig, quizEngagement, transformCountRes] = await Promise.all([
     getConfiguredProducts(shopDomain),
     getOnboardingState(shopDomain),
     getChatAssistantConfig(shopDomain).catch(() => null),
@@ -118,12 +94,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           .eq("shop_id", shopRow.id)
           .eq("event_type", "transformation")
           .gte("created_at", transformSince.toISOString())
-      : Promise.resolve(null),
-    // Persisted resume cursor so the onboarding sync retry continues from
-    // where it stopped instead of restarting from page 1 (findShopByDomain
-    // doesn't select this column).
-    shopRow
-      ? supabase.from("shops").select("catalog_sync_cursor").eq("id", shopRow.id).maybeSingle()
       : Promise.resolve(null),
   ]);
   const [counts, vtoEnabled] = shopRow
@@ -145,44 +115,41 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     vtoEnabled,
   };
 
-  console.log(`[Onboarding Loader] shop=${shopDomain}, step=${onboarding.step}, completed=${onboarding.completed}`);
-
-  // Overhaul install flow (Part 3, flagged): fresh shops on the flag skip
-  // the wizard entirely — scope -> build -> Reveal at /app/onboard. Shops
-  // with an existing quiz or finished onboarding never re-enter it.
-  if (shopRow && !onboarding.completed && (counts?.questions ?? 0) === 0) {
-    const flagOn =
-      process.env.OVERHAUL_ONBOARDING === "true" ||
-      Boolean(
-        (
-          await supabase
-            .from("shops")
-            .select("overhaul_enabled")
-            .eq("id", shopRow.id)
-            .maybeSingle()
-        ).data?.overhaul_enabled,
-      );
-    if (flagOn) throw redirect("/app/onboard");
-  }
-
   // "Configured" means TRY-ON configured (has a transformation prompt).
-  // Catalog sync inserts prompt-less rows into the same table mid-onboarding;
-  // counting those flipped the wizard-skip heuristic below and dumped
-  // merchants onto the dashboard in the middle of the Connect Catalog step.
-  const configuredProducts = allProducts.filter(
+  // Catalog sync inserts prompt-less rows into the same table; counting
+  // those would flip the skip heuristic below for mid-sync shops.
+  const configuredProductsCount = allProducts.filter(
     (p: any) => typeof p.transformation_prompt === "string" && p.transformation_prompt.length > 0,
-  );
-  const configuredProductsCount = configuredProducts.length;
+  ).length;
+
+  // Onboarding routing (V3-CONTRACTS §10). Exactly the shops the wizard used
+  // to catch go to /app/onboarding/scope: no quiz questions AND none of the
+  // long-standing skip heuristics:
+  //   1. onboarding explicitly completed, OR
+  //   2. 2+ try-on products configured (clearly set up), OR
+  //   3. try-on products but never started onboarding (pre-existing), OR
+  //   4. the quiz is live.
+  // Every shop WITH a quiz (ORLY, L&M, Glamnetic, every live merchant) has
+  // questions > 0 and never enters onboarding, whatever the flags say.
+  const quizIsLive = quiz.questions > 0 && quiz.quizLive;
+  const shouldSkipOnboarding =
+    onboarding.completed ||
+    configuredProductsCount >= 2 ||
+    (configuredProductsCount > 0 && onboarding.step === 0) ||
+    quizIsLive;
+  if (shopRow && quiz.questions === 0 && !shouldSkipOnboarding) {
+    // Carry the embedded-admin params (host/shop/embedded) so App Bridge
+    // doesn't re-bootstrap the frame on the redirect.
+    const search = new URL(request.url).search;
+    throw redirect(`/app/onboarding/scope${search}`);
+  }
 
   return json<LoaderData>({
     shopDomain,
     ownerName,
-    configuredProductsCount,
-    onboarding,
     quiz,
     totalTransformations: transformCountRes?.count ?? 0,
     quizMatches: quizEngagement?.resultsShown ?? 0,
-    catalogSyncCursor: (syncCursorRes?.data?.catalog_sync_cursor as string | null) ?? null,
   });
 };
 
@@ -195,13 +162,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const shopDomain = session.shop;
   const formData = await request.formData();
   const intent = formData.get("intent") as string;
-
-  // All intents can optionally include a step update to avoid race conditions
-  const stepRaw = formData.get("step") as string | null;
-  const goalsRaw = formData.get("goals") as string | null;
-  const attributionRaw = formData.get("attribution") as string | null;
-
-  console.log(`[Onboarding Action] intent=${intent}, step=${stepRaw}, shop=${shopDomain}`);
 
   switch (intent) {
     case "set-mode": {
@@ -224,631 +184,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
       return json({ ok: true, intent });
     }
-    case "updateStep": {
-      const step = parseInt(stepRaw!, 10);
-      console.log(`[Onboarding Action] Saving step ${step} for ${shopDomain}`);
-      await updateOnboardingStep(shopDomain, step);
-      console.log(`[Onboarding Action] Step ${step} saved successfully`);
-      return json({ ok: true });
-    }
-    case "saveSurveyAndStep": {
-      // Combined: save survey data AND update step in sequence (no race)
-      const goals = goalsRaw ? JSON.parse(goalsRaw) : undefined;
-      const attribution = attributionRaw ? JSON.parse(attributionRaw) : undefined;
-      await saveOnboardingSurvey(shopDomain, goals, attribution);
-      if (stepRaw) {
-        await updateOnboardingStep(shopDomain, parseInt(stepRaw, 10));
-      }
-      return json({ ok: true });
-    }
-    case "completeOnboarding": {
-      const goals = goalsRaw ? JSON.parse(goalsRaw) : [];
-      const attribution = attributionRaw ? JSON.parse(attributionRaw) : [];
-      await completeOnboardingDb(shopDomain);
-      sendOnboardingCompleteEmail(shopDomain, goals, attribution).catch(() => {});
-      return json({ ok: true });
-    }
     default:
       return json({ error: "Unknown intent" }, { status: 400 });
   }
 };
 
 // ============================================================
-// Constants
-// ============================================================
-
-// Z0 (V2-SPEC Part 1.2): the goals and attribution survey steps and the
-// book-a-call escape hatch are deleted. DB step numbers 1-7 are kept so
-// merchants mid-wizard resume sanely; steps 2-3 now alias to the welcome
-// screen and welcome advances straight to the catalog step.
-const TOTAL_STEPS = 7;
-const VISIBLE_STEPS = 5;
-
-const LOOM_EMBED_URL = "https://www.loom.com/embed/f9049be91b344462980e623eaf232f81";
-
-// ============================================================
-// Step Components
-// ============================================================
-
-function Step1Welcome({ onNext }: { onNext: () => void }) {
-  return (
-    <BlockStack gap="600">
-      <BlockStack gap="200" inlineAlign="center">
-        <Text as="h2" variant="headingLg" alignment="center">
-          What you can do with Gleame
-        </Text>
-        <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
-          Here's a quick overview of how Gleame will help your store
-        </Text>
-      </BlockStack>
-
-      <InlineGrid columns={{ xs: 1, sm: 2 }} gap="400">
-        <div
-          style={{
-            border: "1px solid #E1E3E5",
-            borderRadius: "12px",
-            padding: "24px",
-            background: "#FFFFFF",
-          }}
-        >
-          <BlockStack gap="300">
-            <Text as="span" variant="headingXl">
-              🎯
-            </Text>
-            <Text as="h3" variant="headingMd">
-              Match every shopper to the right products
-            </Text>
-            <Text as="p" variant="bodyMd" tone="subdued">
-              A Find My Fit quiz in your brand's voice asks a few fun questions
-              and recommends the perfect products from your catalog.
-            </Text>
-          </BlockStack>
-        </div>
-
-        <div
-          style={{
-            border: "1px solid #E1E3E5",
-            borderRadius: "12px",
-            padding: "24px",
-            background: "#FFFFFF",
-          }}
-        >
-          <BlockStack gap="300">
-            <Text as="span" variant="headingXl">
-              📊
-            </Text>
-            <Text as="h3" variant="headingMd">
-              Increase Conversion Rate & Reduce Returns
-            </Text>
-            <Text as="p" variant="bodyMd" tone="subdued">
-              Guided shoppers buy with confidence. AI drafts your quiz from
-              your real catalog in about a minute; you edit and publish.
-            </Text>
-          </BlockStack>
-        </div>
-      </InlineGrid>
-
-      <InlineStack align="center">
-        <Button variant="primary" size="large" onClick={onNext}>
-          Get Started
-        </Button>
-      </InlineStack>
-    </BlockStack>
-  );
-}
-
-function Step4ConnectCatalog({
-  onNext,
-  onBack,
-}: {
-  onNext: () => void;
-  onBack: () => void;
-}) {
-  // Shared chunked-sync driver (same code path as the Quiz Builder card).
-  const { start, progress, syncDone, syncError, syncedCount, syncWarnings } = useCatalogSync();
-  // Persisted resume point (revalidated after each successful page): retries
-  // continue where the last chain stopped instead of redoing the catalog
-  // from page 1 — same pattern as the studio's "Resume sync" affordance.
-  const { catalogSyncCursor } = useLoaderData<typeof loader>();
-
-  return (
-    <BlockStack gap="600">
-      <BlockStack gap="200" inlineAlign="center">
-        <Text as="h2" variant="headingLg" alignment="center">
-          Connect your catalog
-        </Text>
-        <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
-          Gleame syncs your Shopify products so the quiz can recommend them.
-          Nothing changes in your store.
-        </Text>
-      </BlockStack>
-
-      <div
-        style={{
-          border: "1px solid #E1E3E5",
-          borderRadius: "12px",
-          padding: "32px",
-          background: "#FFFFFF",
-          textAlign: "center",
-        }}
-      >
-        <BlockStack gap="400" inlineAlign="center">
-          {syncDone ? (
-            <>
-              <Text as="span" variant="headingXl">
-                ✅
-              </Text>
-              <Text as="p" variant="headingMd">
-                Catalog synced ({syncedCount} products)
-              </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                We'll keep it up to date automatically from now on.
-              </Text>
-              {syncWarnings.length > 0 && (
-                <Text as="p" variant="bodySm" tone="caution" alignment="center">
-                  Some products reported sync warnings: {syncWarnings[0]}
-                  {syncWarnings.length > 1 ? ` (+${syncWarnings.length - 1} more)` : ""}
-                </Text>
-              )}
-            </>
-          ) : progress ? (
-            <div style={{ width: "100%", maxWidth: 360 }}>
-              <BlockStack gap="200">
-                <ProgressBar
-                  progress={progress.total ? Math.min(100, Math.round((progress.done / progress.total) * 100)) : 10}
-                  size="small"
-                  tone="primary"
-                />
-                <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-                  Synced {progress.done}
-                  {progress.total ? ` of ${progress.total}` : ""} products…
-                </Text>
-              </BlockStack>
-            </div>
-          ) : (
-            <>
-              <Text as="span" variant="headingXl">
-                🛍️
-              </Text>
-              {syncError && (
-                <Text as="p" variant="bodySm" tone="critical">
-                  Sync hit a problem: {syncError}. You can retry, or continue and
-                  sync later from the Quiz Builder.
-                </Text>
-              )}
-              <Button variant="primary" onClick={() => start(catalogSyncCursor ?? undefined)}>
-                {syncError ? "Retry sync" : catalogSyncCursor ? "Resume sync" : "Sync catalog"}
-              </Button>
-            </>
-          )}
-        </BlockStack>
-      </div>
-
-      <InlineStack align="space-between">
-        {/* All exits disabled mid-sync: unmounting this step kills the
-            page-by-page chain silently, leaving a partial catalog. */}
-        <Button onClick={onBack} disabled={progress !== null}>Back</Button>
-        <Button variant="primary" onClick={onNext} disabled={progress !== null}>
-          {syncDone ? "Continue" : "Skip for now"}
-        </Button>
-      </InlineStack>
-    </BlockStack>
-  );
-}
-
-function Step5BuildQuiz({
-  onNext,
-  onBack,
-  onNavigateToBuilder,
-}: {
-  onNext: () => void;
-  onBack: () => void;
-  onNavigateToBuilder: () => void;
-}) {
-  return (
-    <BlockStack gap="600">
-      <BlockStack gap="200" inlineAlign="center">
-        <Text as="h2" variant="headingLg" alignment="center">
-          Build your quiz
-        </Text>
-        <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
-          Create your Find My Fit quiz in the Quiz Studio. You'll work on a
-          draft — nothing goes live until you publish.
-        </Text>
-      </BlockStack>
-
-      <div
-        style={{
-          border: "1px solid #E1E3E5",
-          borderRadius: "12px",
-          padding: "32px",
-          background: "#FFFFFF",
-          textAlign: "center",
-        }}
-      >
-        <BlockStack gap="400" inlineAlign="center">
-          <Text as="span" variant="headingXl">
-            🧩
-          </Text>
-          <Text as="p" variant="bodyMd" tone="subdued">
-            Tell Gleame what you sell and it drafts the whole quiz from your
-            catalog — questions, answers, and styling. Edit anything next to a
-            live preview, then come back here to finish up.
-          </Text>
-          <Button variant="primary" onClick={onNavigateToBuilder}>
-            Open Quiz Studio
-          </Button>
-        </BlockStack>
-      </div>
-
-      <InlineStack align="space-between">
-        <Button onClick={onBack}>Back</Button>
-        <Button variant="primary" onClick={onNext}>
-          Continue
-        </Button>
-      </InlineStack>
-    </BlockStack>
-  );
-}
-
-function Step6GoLive({
-  onNext,
-  onBack,
-  onSkip,
-  onNavigateToQuizSetup,
-}: {
-  onNext: () => void;
-  onBack: () => void;
-  onSkip: () => void;
-  onNavigateToQuizSetup: () => void;
-}) {
-  return (
-    <BlockStack gap="600">
-      <BlockStack gap="200" inlineAlign="center">
-        <Text as="h2" variant="headingLg" alignment="center">
-          Get your quiz live on your storefront
-        </Text>
-        <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
-          Add the Find My Fit quiz to your theme so shoppers get matched to the
-          right products
-        </Text>
-      </BlockStack>
-
-      <InlineStack align="center">
-        <Button onClick={onNavigateToQuizSetup}>
-          Open Quiz Studio
-        </Button>
-      </InlineStack>
-
-      {/* Video Walkthrough */}
-      <BlockStack gap="300">
-        <Text as="h3" variant="headingMd">
-          Video Walkthrough
-        </Text>
-        <div
-          style={{
-            position: "relative",
-            paddingBottom: "56.25%",
-            height: 0,
-            borderRadius: "12px",
-            overflow: "hidden",
-            border: "1px solid #E1E3E5",
-          }}
-        >
-          <iframe
-            title="Gleame quiz setup walkthrough"
-            src={LOOM_EMBED_URL}
-            allow="fullscreen"
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              width: "100%",
-              height: "100%",
-            }}
-          />
-        </div>
-      </BlockStack>
-
-      {/* Quick Instructions */}
-      <div
-        style={{
-          border: "1px solid #E1E3E5",
-          borderRadius: "12px",
-          padding: "20px",
-          background: "#FFFFFF",
-        }}
-      >
-        <BlockStack gap="300">
-          <Text as="h3" variant="headingMd">
-            Quick Instructions
-          </Text>
-          <BlockStack gap="200">
-            <Text as="p" variant="bodyMd">
-              1. Publish your quiz from the Quiz Studio (the Publish step
-              checks everything for you)
-            </Text>
-            <Text as="p" variant="bodyMd">
-              2. In the theme editor, add the "Gleame Quiz" section to a page
-            </Text>
-            <Text as="p" variant="bodyMd">
-              3. Click "Save" in the theme editor
-            </Text>
-          </BlockStack>
-        </BlockStack>
-      </div>
-
-      <InlineStack align="space-between">
-        <Button onClick={onBack}>Back</Button>
-        <InlineStack gap="200">
-          <Button onClick={onSkip}>Skip</Button>
-          <Button variant="primary" onClick={onNext}>
-            Continue
-          </Button>
-        </InlineStack>
-      </InlineStack>
-    </BlockStack>
-  );
-}
-
-function Step7Complete({
-  onFinish,
-}: {
-  onFinish: () => void;
-}) {
-  return (
-    <BlockStack gap="600">
-      <BlockStack gap="300" inlineAlign="center">
-        <Text as="span" variant="heading2xl" alignment="center">
-          🎉
-        </Text>
-        <Text as="h2" variant="headingLg" alignment="center">
-          You're all set!
-        </Text>
-        <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
-          Your Find My Fit quiz is ready to match shoppers with the products
-          they'll love — and buy.
-        </Text>
-      </BlockStack>
-
-      <div
-        style={{
-          border: "1px solid #E1E3E5",
-          borderRadius: "12px",
-          padding: "24px",
-          background: "#FFFFFF",
-        }}
-      >
-        <BlockStack gap="300">
-          <Text as="h3" variant="headingMd">
-            What's next?
-          </Text>
-          <BlockStack gap="200">
-            <Text as="p" variant="bodyMd">
-              • Refine questions, design, and recommendation logic any time in
-              the Quiz Studio
-            </Text>
-            <Text as="p" variant="bodyMd">
-              • Watch quiz views, completions, and add-to-carts in Analytics
-            </Text>
-            <Text as="p" variant="bodyMd">
-              • Ask the Studio's AI chat to make changes for you
-            </Text>
-          </BlockStack>
-        </BlockStack>
-      </div>
-
-      <InlineStack align="center">
-        <Button variant="primary" size="large" onClick={onFinish}>
-          Go to Dashboard
-        </Button>
-      </InlineStack>
-    </BlockStack>
-  );
-}
-
-// ============================================================
-// Onboarding Wizard
-// ============================================================
-
-function LegacySetupFlow({
-  initialStep,
-  onComplete,
-  navigate,
-}: {
-  initialStep: number;
-  onComplete: () => void;
-  navigate: ReturnType<typeof useNavigate>;
-}) {
-  const [currentStep, setCurrentStep] = useState(
-    initialStep > 0 ? initialStep : 1
-  );
-  const fetcher = useFetcher();
-  const [pendingNav, setPendingNav] = useState<string | null>(null);
-  const prevFetcherState = useRef(fetcher.state);
-
-  // Sync currentStep with server state when initialStep changes
-  // (e.g. after revalidation or returning from another page)
-  useEffect(() => {
-    const serverStep = initialStep > 0 ? initialStep : 1;
-    setCurrentStep((prev) => Math.max(prev, serverStep));
-  }, [initialStep]);
-
-  // Navigate only after the fetcher transitions from non-idle back to idle
-  // (i.e., after the save actually completes). This prevents navigating
-  // before the submission has started processing.
-  useEffect(() => {
-    if (
-      pendingNav &&
-      prevFetcherState.current !== "idle" &&
-      fetcher.state === "idle"
-    ) {
-      navigate(pendingNav);
-      // Studio deep links need the dashboard (which hosts the studio modal)
-      // to render — the wizard itself has no modal host, so without this
-      // the button set ?open=studio and nothing happened.
-      if (pendingNav.includes("open=studio")) onComplete();
-      setPendingNav(null);
-    }
-    prevFetcherState.current = fetcher.state;
-  }, [fetcher.state, pendingNav, navigate, onComplete]);
-
-  // Persist step 1 on first mount if DB has step 0 (step 1 is never persisted otherwise)
-  useEffect(() => {
-    if (initialStep === 0) {
-      fetcher.submit(
-        { intent: "updateStep", step: "1" },
-        { method: "POST", action: "/app?index" }
-      );
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Helper: persist via fetcher with explicit action targeting the index route
-  const persistToServer = useCallback(
-    (data: Record<string, string>) => {
-      console.log("[Onboarding] persistToServer called with:", data);
-      fetcher.submit(data, { method: "POST", action: "/app?index" });
-    },
-    [fetcher]
-  );
-
-  const goToStep = useCallback(
-    (step: number) => {
-      setCurrentStep(step);
-      // Fire-and-forget for in-page transitions (no navigation away)
-      persistToServer({ intent: "updateStep", step: step.toString() });
-    },
-    [persistToServer]
-  );
-
-  const handleComplete = () => {
-    persistToServer({
-      intent: "completeOnboarding",
-      goals: JSON.stringify([]),
-      attribution: JSON.stringify([]),
-    });
-    onComplete();
-  };
-
-  // DB steps 2-3 (deleted survey screens) alias to the welcome screen.
-  const visibleStep = currentStep <= 3 ? 1 : currentStep - 2;
-  const progressPercentage = Math.round((visibleStep / VISIBLE_STEPS) * 100);
-
-  return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "#F6F6F7",
-        padding: "0",
-      }}
-    >
-      {/* Header with progress */}
-      <div
-        style={{
-          maxWidth: "780px",
-          margin: "0 auto",
-          padding: "32px 20px 0",
-        }}
-      >
-        <InlineStack align="space-between" blockAlign="center">
-          <Text as="h1" variant="headingLg" fontWeight="bold">
-            Welcome to Gleame
-          </Text>
-          <Text as="span" variant="bodySm" tone="subdued">
-            Step {visibleStep} of {VISIBLE_STEPS}
-          </Text>
-        </InlineStack>
-
-        <div style={{ marginTop: "12px" }}>
-          <ProgressBar
-            progress={progressPercentage}
-            size="small"
-            tone="primary"
-          />
-        </div>
-      </div>
-
-      {/* Step content */}
-      <div
-        style={{
-          maxWidth: "780px",
-          margin: "0 auto",
-          padding: "40px 20px",
-        }}
-      >
-        <div
-          style={{
-            background: "#FFFFFF",
-            borderRadius: "16px",
-            padding: "40px",
-            boxShadow: "0 1px 3px rgba(0, 0, 0, 0.08)",
-          }}
-        >
-          {currentStep <= 3 && <Step1Welcome onNext={() => goToStep(4)} />}
-
-          {currentStep === 4 && (
-            <Step4ConnectCatalog
-              onNext={() => goToStep(5)}
-              onBack={() => goToStep(1)}
-            />
-          )}
-
-          {currentStep === 5 && (
-            <Step5BuildQuiz
-              onNext={() => goToStep(6)}
-              onBack={() => goToStep(4)}
-              onNavigateToBuilder={() => {
-                persistToServer({ intent: "updateStep", step: "5" });
-                setPendingNav("/app?open=studio");
-              }}
-            />
-          )}
-
-          {currentStep === 6 && (
-            <Step6GoLive
-              onNext={() => goToStep(7)}
-              onBack={() => goToStep(5)}
-              onSkip={() => goToStep(7)}
-              onNavigateToQuizSetup={() => {
-                persistToServer({ intent: "updateStep", step: "6" });
-                setPendingNav("/app?open=studio");
-              }}
-            />
-          )}
-
-          {currentStep === 7 && <Step7Complete onFinish={handleComplete} />}
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div
-        style={{
-          textAlign: "center",
-          padding: "0 20px 40px",
-        }}
-      >
-        <Text as="p" variant="bodySm" tone="subdued">
-          Need help?{" "}
-          <a
-            href="https://gleame.ai"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: "#2C6ECB", textDecoration: "none" }}
-          >
-            Contact our support team
-          </a>
-        </Text>
-      </div>
-    </div>
-  );
-}
-
-// ============================================================
 // Dashboard View (existing dashboard)
 // ============================================================
 
-// Quiz-first home: intro + status + one obvious door into Quiz Studio
+// Quiz-first home: intro + status + one obvious door into the Studio
 // (which hosts everything else). Replaces both the old try-on dashboard
 // and the standalone quiz hub page.
 
@@ -966,8 +311,6 @@ function DashboardView({
     fetcher.submit(fd, { method: "POST" });
   };
 
-  const logicReady =
-    quiz.questions > 0 && (quiz.rules > 0 || (quiz.mode !== "matrix" && quiz.hasGuidance));
   // "Shoppers matched" = quiz matches for quiz-first shops; only legacy
   // try-on shops (VTO configured, quiz not live) see the selfie try-on count.
   const showTryOnStat = quiz.vtoEnabled && !quiz.quizLive;
@@ -996,8 +339,11 @@ function DashboardView({
                   : "Your quiz isn't live yet. Build it in the Studio, then turn it on below."}
             </p>
             <div className="gleame-hero-actions">
-              <button className="gleame-hero-cta" onClick={openStudio}>
-                {quiz.questions === 0 ? "Build my quiz" : "Open Quiz Studio"}
+              <button
+                className="gleame-hero-cta"
+                onClick={() => (quiz.questions === 0 ? navigate("/app/onboarding/scope") : openStudio())}
+              >
+                {quiz.questions === 0 ? "Build my quiz" : "Open Studio"}
                 <span aria-hidden> →</span>
               </button>
               <button className="gleame-hero-ghost" onClick={() => navigate("/app/analytics")}>
@@ -1139,7 +485,7 @@ function DashboardView({
           src={`/studio?tab=${studioStep}&navtoken=${navToken}`}
           onHide={closeStudio}
         >
-          <TitleBar title="Quiz Studio" />
+          <TitleBar title="Studio" />
         </Modal>
       )}
     </Page>
@@ -1151,55 +497,8 @@ function DashboardView({
 // ============================================================
 
 export default function Dashboard() {
-  const {
-    shopDomain,
-    ownerName,
-    configuredProductsCount,
-    onboarding,
-    quiz,
-    totalTransformations,
-    quizMatches,
-  } = useLoaderData<typeof loader>();
+  const { shopDomain, ownerName, quiz, totalTransformations, quizMatches } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
-
-  // Skip onboarding if:
-  // 1. Explicitly completed, OR
-  // 2. 2+ products configured (merchant is clearly set up), OR
-  // 3. Has products but never started onboarding (pre-existing merchant), OR
-  // 4. The QUIZ is live — the golden path's whole goal; without this a
-  //    merchant who published from step 5 was dropped back into the wizard
-  //    on every dashboard visit until they hand-clicked through to step 7.
-  const quizIsLive = quiz.questions > 0 && quiz.quizLive;
-  const shouldSkipOnboarding =
-    onboarding.completed ||
-    configuredProductsCount >= 2 ||
-    (configuredProductsCount > 0 && onboarding.step === 0) ||
-    quizIsLive;
-
-  const [onboardingCompleted, setOnboardingCompleted] =
-    useState(shouldSkipOnboarding);
-
-  // Update if loader data changes
-  useEffect(() => {
-    if (
-      onboarding.completed ||
-      configuredProductsCount >= 2 ||
-      (configuredProductsCount > 0 && onboarding.step === 0) ||
-      quizIsLive
-    ) {
-      setOnboardingCompleted(true);
-    }
-  }, [onboarding.completed, configuredProductsCount, onboarding.step, quizIsLive]);
-
-  if (!onboardingCompleted) {
-    return (
-      <LegacySetupFlow
-        initialStep={onboarding.step}
-        onComplete={() => setOnboardingCompleted(true)}
-        navigate={navigate}
-      />
-    );
-  }
 
   return (
     <DashboardView

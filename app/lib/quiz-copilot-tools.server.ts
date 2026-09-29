@@ -448,7 +448,19 @@ const COPY_KEYS = new Set([
   // coercion would mangle them.
   "quiz_results_prose", "quiz_archetype_title", "quiz_archetype_line",
   "quiz_hero_image",
+  // v3 (migration 080): the Look and the email placement are merchant
+  // settings (Style panel / Lead editor). quiz_template still goes through
+  // app.api.quiz-template only; quiz_phases / quiz_founder /
+  // quiz_generation_report are generator-owned object columns, never copy.
+  "quiz_look", "quiz_email_placement",
 ]);
+
+// Copy keys with a closed value set — anything else is rejected, so a
+// stray string can never violate the migration-080 CHECK constraints.
+const ENUM_COPY_KEYS: Record<string, readonly string[]> = {
+  quiz_look: ["editorial", "minimal", "bold"],
+  quiz_email_placement: ["hook_start", "gate_results", "after_results", "off"],
+};
 
 // Copy keys that are booleans on the live config row — String() coercion
 // would store "true"/"false" and break the typed column at publish.
@@ -488,6 +500,12 @@ export function applyUpdateCopy(draft: DraftShape, input: any, _catalog: Catalog
       const n = Number(v);
       if (!Number.isInteger(n) || n < 0) {
         return { ok: false, error: `${k} must be a whole number >= 0 (got ${JSON.stringify(v)})` };
+      }
+      continue;
+    }
+    if (ENUM_COPY_KEYS[k]) {
+      if (typeof v !== "string" || !ENUM_COPY_KEYS[k].includes(v)) {
+        return { ok: false, error: `${k} must be one of ${ENUM_COPY_KEYS[k].join(", ")} (got ${JSON.stringify(v)})` };
       }
       continue;
     }

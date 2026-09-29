@@ -34,11 +34,24 @@ import {
   type CatalogProduct,
   type GeneratedQuizConfig,
 } from "./quiz-config-schema.server";
-import { TEMPLATES, TEMPLATE_IDS, type TemplateId } from "./quiz-templates";
+import { TEMPLATES, TEMPLATE_IDS, isTemplateEligible, isTemplateId, isLookId, type LookId, type TemplateId } from "./quiz-templates";
 import type { GroundingReport } from "./quiz-grounding.server";
+import type { BrandProfile } from "./brand-profile.server";
 import { captureLiveConfig, saveLiveQuizConfig, type QuizDraft } from "./quiz-draft.server";
 import { withShopSaveLock } from "./shop-save-lock.server";
-import { supabase, getVariantsForProducts } from "./supabase.server";
+import { supabase, getVariantsForProducts, saveChatAssistantConfig } from "./supabase.server";
+import {
+  buildGenerationReport,
+  countImageSlots,
+  extractedColorsFromProfile,
+  headingFontFromProfile,
+  resolvePhases,
+  stepDetail,
+  type GenerationReport,
+  type GenerationStep,
+  type GenerationStepKey,
+  type QuizPhase,
+} from "./generation-report.server";
 
 export interface BrandBrief {
   /** MACHINE-DERIVED only (spec v2 Part 0.1 failure 4): the Brand Profile's
@@ -159,7 +172,7 @@ export function buildSystemBlocks(catalogText: string): Anthropic.TextBlockParam
   ];
 }
 
-function briefToPrompt(brief: BrandBrief, questionRange: [number, number]): string {
+function briefToPrompt(brief: BrandBrief, questionRange: [number, number], template: TemplateId | null): string {
   const [qMin, qMax] = questionRange;
   return [
     `Design a complete quiz for this store.`,
@@ -174,6 +187,11 @@ function briefToPrompt(brief: BrandBrief, questionRange: [number, number]): stri
     brief.priorityProductIds?.length
       ? `Priority products (feature these prominently): ${brief.priorityProductIds.map((id) => `p:${id}`).join(", ")}`
       : "",
+    // v3 Match (spec 3 / T1): questions run in 2-3 named phases. Asked in
+    // the volatile brief, never in the cached system blocks.
+    template === "t1"
+      ? `PHASES: this quiz runs in phases. Add a top-level "phases" array of 2-3 objects {label, axisKeys}: label is 1-3 words in the brand voice (e.g. "About you", "Your shade", "Preferences"); axisKeys lists the question axis keys in that phase, in flow order. Every question belongs to exactly one phase and phases follow the question order.`
+      : "",
     `Return the full quiz config.`,
   ]
     .filter(Boolean)
@@ -183,8 +201,6 @@ function briefToPrompt(brief: BrandBrief, questionRange: [number, number]): stri
 // ---------------------------------------------------------------------
 // v2 machine-derived inputs + deterministic post-pass helpers (spec Part 5)
 // ---------------------------------------------------------------------
-
-import type { BrandProfile } from "./brand-profile.server";
 
 /** Brand Profile tone → voice phrase. The brief's voice is machine-derived
  * by construction; there is no free-text voice field anywhere. */
@@ -469,8 +485,17 @@ export interface GenerateResult {
   /** Set when the imagery floor degraded the assigned template to T5
    * Clean (spec 4.3) - already reassigned in the saved settings. */
   degradedTo?: "t5" | null;
+  /** v3: the template the saved quiz carries (assigned, merchant-chosen on
+   * the scope screen, or degraded) and the generation report the Studio
+   * banner + Build screen read (contract §8). */
+  template?: TemplateId | null;
+  report?: GenerationReport | null;
   usage: ClaudeUsage[];
 }
+
+/** Per-step completion event (contract §10): the Build screen advances
+ * ONLY on these. Streamed as SSE {type:"step", key, detail, ms}. */
+export type GenerationStepEvent = GenerationStep;
 
 /** Tolerate a ```json fence around the object; everything else must parse. */
 function stripJsonFences(raw: string): string {
@@ -550,13 +575,26 @@ export async function generateQuizConfig(args: {
   /** streamedChars (cumulative model output) lets the client render REAL
    * within-phase progress instead of a bar parked at the phase cap. */
   onProgress?: (phase: string, streamedChars?: number) => void;
-  /** Brand accent picked in the onboarding wizard, applied to the draft's
-   * design settings server-side. The client-side follow-up apply was lost
-   * whenever the SSE stream cut before the result event. */
+  /** v3 (contract §10): fired once per REAL step as it completes, with the
+   * number the Build screen shows. Never fired ahead of the work. */
+  onStep?: (step: GenerationStepEvent) => void;
+  /** Brand accent to apply to the saved design settings. Defaults to the
+   * Brand Profile's accent token when absent. */
   accentColor?: string | null;
+  /** Collection count from the scope screen (report §8). 0 = unknown. */
+  collectionCount?: number | null;
 }): Promise<GenerateResult> {
-  const { shopId, shopDomain, brief, onProgress, accentColor } = args;
+  const { shopId, shopDomain, brief, onProgress, onStep } = args;
   const usage: ClaudeUsage[] = [];
+  const steps: GenerationStep[] = [];
+  let stepStartedAt = Date.now();
+  const completeStep = (key: GenerationStepKey, detail: string) => {
+    const now = Date.now();
+    const step: GenerationStep = { key, detail, ms: Math.max(0, now - stepStartedAt) };
+    stepStartedAt = now;
+    steps.push(step);
+    onStep?.(step);
+  };
 
   // Throttled token progress (~1.5s): plain phase text + machine-readable
   // char count. PER-CALL counter — sharing one across generate + repair
@@ -596,6 +634,11 @@ export async function generateQuizConfig(args: {
     return { ok: false, error, warnings: [], usage };
   }
 
+  // Step 1 - catalog. Collections aren't synced; the scope screen counted
+  // them live and passes the number through (0 = unknown, never invented).
+  const collectionCount = Math.max(0, Math.floor(Number(args.collectionCount ?? 0)) || 0);
+  completeStep("catalog", stepDetail.catalog(activeCount, collectionCount));
+
   // Machine-derived brief resolution (spec v2 Part 0.1, failure 4): the
   // Brand Profile is the source of truth for category and voice. The
   // client's values are themselves profile-sourced by the build screen;
@@ -607,14 +650,47 @@ export async function generateQuizConfig(args: {
     brandVoice:
       (profile?.tone ? TONE_VOICE[profile.tone] : null) ?? (brief.brandVoice || "warm and confident"),
   };
-  const assignedTemplate: TemplateId | null =
+  // Template: the Brand Profile's assignment (spec 2.4), unless the scope
+  // screen persisted a merchant choice that is still eligible (t5 always).
+  // The persisted column is only consulted here for shops that have no real
+  // quiz yet - the save guard below refuses everyone else before any write.
+  const profileTemplate: TemplateId | null =
     profile?.templateAssignment?.template &&
     (TEMPLATE_IDS as string[]).includes(profile.templateAssignment.template)
       ? (profile.templateAssignment.template as TemplateId)
       : null;
+  const existingConfig = await captureLiveConfigSafe(shopId);
+  const persistedTemplate = existingConfig?.settings.quiz_template ?? null;
+  let assignedTemplate: TemplateId | null = profileTemplate;
+  let templateSource: "profile" | "merchant" = "profile";
+  if (isTemplateId(persistedTemplate) && persistedTemplate !== profileTemplate) {
+    let eligible = persistedTemplate === "t5";
+    if (!eligible && profile) {
+      try {
+        const { templateSignalsFromProfile } = await import("./brand-profile.server");
+        eligible = isTemplateEligible(persistedTemplate, templateSignalsFromProfile(profile));
+      } catch {
+        eligible = false;
+      }
+    }
+    if (eligible) {
+      assignedTemplate = persistedTemplate;
+      templateSource = "merchant";
+    }
+  }
   const questionRange: [number, number] = assignedTemplate
     ? TEMPLATES[assignedTemplate].questionRange
     : [MIN_QUESTIONS_FLOOR, 6];
+  const persistedLook = existingConfig?.settings.quiz_look ?? null;
+  const resolvedLook: LookId = isLookId(persistedLook) ? persistedLook : (profile?.look ?? "minimal");
+
+  // Step 2 - theme. Font only when it really came from the theme/homepage;
+  // colors only when extracted (presets never count).
+  const headingFont = headingFontFromProfile(profile);
+  const extractedColors = extractedColorsFromProfile(profile);
+  completeStep("theme", stepDetail.theme(headingFont.name, extractedColors.length));
+  const accentColor =
+    args.accentColor ?? (profile?.sources?.colorAccent?.source !== "preset" ? profile?.tokens?.colorAccent ?? null : null);
 
   // NO per-call serializeCatalog options: the copilot reuses these exact
   // bytes as its cached system prefix, so any argument that reorders the
@@ -623,7 +699,7 @@ export async function generateQuizConfig(args: {
   const { text: catalogText, truncated } = serializeCatalog(catalog);
   const system = buildSystemBlocks(catalogText);
   const messages: Anthropic.MessageParam[] = [
-    { role: "user", content: briefToPrompt(resolvedBrief, questionRange) },
+    { role: "user", content: briefToPrompt(resolvedBrief, questionRange, assignedTemplate) },
   ];
 
   onProgress?.("Drafting your quiz…");
@@ -801,12 +877,83 @@ export async function generateQuizConfig(args: {
   // settings; publishing is NEVER blocked by imagery. T4 is never a
   // fallback - degradation always lands on T5.
   const degradedTo = result.degradedTo ?? null;
-  if (degradedTo && assignedTemplate && assignedTemplate !== "t5") {
-    (draft.settings as Record<string, unknown>).quiz_template = "t5";
+  const degraded = Boolean(degradedTo && assignedTemplate && assignedTemplate !== "t5");
+  const finalTemplate: TemplateId = degraded ? "t5" : (assignedTemplate ?? "t5");
+  // The saved quiz always carries its template (NULL would mean legacy
+  // rendering). Safe by construction: the locked save below refuses any
+  // shop that already has real quiz content, so this never touches a live
+  // merchant's template.
+  (draft.settings as Record<string, unknown>).quiz_template = finalTemplate;
+  if (degraded) {
     warnings.push(
-      `Not enough imagery for the ${TEMPLATES[assignedTemplate].name} template - the quiz uses ${TEMPLATES.t5.name} instead. Add images later from the Studio's Images rail.`
+      `Not enough imagery for the ${TEMPLATES[assignedTemplate!].name} template - the quiz uses ${TEMPLATES.t5.name} instead. Add images later from the Studio's Images rail.`
     );
   }
+
+  // Step 3 - questions (+ phases, Match only). Phases are resolved against
+  // the FINAL question list: the post-pass may have dropped or added
+  // questions since the model proposed its grouping.
+  const finalConfig = prepared.config;
+  const axisLabels: Record<string, string> = {};
+  for (const a of finalConfig.axes) axisLabels[a.key] = a.label;
+  const phases: QuizPhase[] | null =
+    finalTemplate === "t1" ? resolvePhases(finalConfig.questions, finalConfig.phases ?? null, axisLabels) : null;
+  completeStep("questions", stepDetail.questions(finalConfig.questions.length, phases?.length ?? 0));
+
+  // Step 4 - paths: products reachable through an answer path, plus the
+  // wildcard slot (the validator guarantees the union is 100%).
+  const inScopeLive = catalog.filter(isLiveProduct);
+  const answerMap = computeAnswerProductMap(finalConfig, catalog);
+  const answerCounts: Record<string, number> = {};
+  const reachedIds = new Set<string>();
+  for (const [key, ids] of answerMap) {
+    answerCounts[key] = ids.size;
+    for (const id of ids) reachedIds.add(id);
+  }
+  const inScopeIds = new Set(inScopeLive.map((p) => p.id));
+  for (const id of finalConfig.wildcard?.productIds ?? []) if (inScopeIds.has(id)) reachedIds.add(id);
+  const reached = [...reachedIds].filter((id) => inScopeIds.has(id)).length;
+  completeStep("paths", stepDetail.paths(reached, inScopeLive.length));
+
+  // Step 5 - images: declared non-optional slots resolved by an answer's
+  // own image or a merchant-placed quiz_image_slots entry.
+  const reportFlow = {
+    questions: finalConfig.questions.map((q) => ({
+      axisKey: q.axisKey,
+      prompt: q.prompt,
+      options: (q.options ?? []).map((o) => ({
+        label: o.label,
+        axisValueValue: o.axisValueValue,
+        imageUrl: o.imageUrl ?? null,
+        selectAll: Boolean(o.selectAll),
+        displayMeta: o.displayMeta ?? null,
+      })),
+    })),
+  };
+  const existingSlots = existingConfig?.settings.quiz_image_slots ?? null;
+  const slotCount = countImageSlots(finalTemplate, reportFlow, existingSlots, {
+    look: resolvedLook,
+    autoResolved: {
+      hero: existingConfig?.settings.quiz_hero_image ?? profile?.brand.coverImageUrl ?? null,
+    },
+  });
+  completeStep("images", stepDetail.images(slotCount.placed, slotCount.total));
+
+  const report = buildGenerationReport({
+    productCount: inScopeLive.length,
+    collectionCount,
+    flow: reportFlow,
+    answerCounts,
+    groundingFloor: grounded.floor,
+    phases,
+    profile,
+    template: finalTemplate,
+    look: resolvedLook,
+    degradedFrom: degraded ? assignedTemplate : null,
+    imageSlots: existingSlots,
+    hasFounder: false, // quiz_founder stays null (Q13 default → intro type E)
+    steps,
+  });
 
   // 5.6 trust lines: verbatim brand-profile statements + catalog-computed
   // scale line, never model output. (quiz_trust_lines persists once its
@@ -823,6 +970,11 @@ export async function generateQuizConfig(args: {
   if (accentColor && /^#[0-9a-fA-F]{6}$/.test(accentColor)) {
     (draft.settings as Record<string, unknown>).quiz_accent_color = accentColor;
   }
+  // The v3 jsonb columns (quiz_phases, quiz_generation_report; migration
+  // 080) are written in their OWN call after the save, never inside this
+  // settings upsert: an unrun migration must degrade to a missing banner,
+  // not turn a saved quiz into a reported failure. quiz_founder stays
+  // null (intro type E default).
   // Scope narrows serving too, not just generation: the recommender's
   // candidate pool honors product_scope 'selected'.
   if (scopeIds) {
@@ -848,6 +1000,18 @@ export async function generateQuizConfig(args: {
     });
   });
   if (!saved.ok) return { ok: false, error: `Save failed: ${saved.error}`, warnings, usage };
+  // Generator-owned v3 columns, written directly (see above). A failure
+  // here (e.g. migration 080 not yet run) is a warning, not a lost quiz.
+  try {
+    await saveChatAssistantConfig(shopDomain, {
+      quiz_template: finalTemplate,
+      quiz_phases: phases && phases.length ? phases : null,
+      quiz_generation_report: report as unknown as Record<string, unknown>,
+    });
+  } catch (e) {
+    console.warn(`[quiz-generate] report write failed for ${shopDomain}: ${(e as Error).message}`);
+    warnings.push("The generation report could not be saved; the Studio banner will use its fallback line.");
+  }
 
   // Part 6/8: generation_completed with the properties the funnel needs,
   // plus template_assigned.signals.degraded_from on an imagery degrade.
@@ -865,10 +1029,15 @@ export async function generateQuizConfig(args: {
     rules: draft.flow.rules.length,
     reachability: Math.round(grounded.reachability * 100) / 100,
     dropped_answers: grounded.droppedAnswers.length,
-    template: assignedTemplate,
+    template: finalTemplate,
+    template_source: templateSource,
     degraded_to: degradedTo,
+    look: resolvedLook,
+    phases: phases?.length ?? 0,
     bank_filled: prepared.filledFromBank,
     wildcard_products: prepared.wildcardCount,
+    images_placed: slotCount.placed,
+    images_total: slotCount.total,
   });
 
   return {
@@ -881,6 +1050,19 @@ export async function generateQuizConfig(args: {
       mode: String((draft.settings as Record<string, unknown>).recommendation_mode ?? "?"),
     },
     degradedTo,
+    template: finalTemplate,
+    report,
     usage,
   };
+}
+
+/** The live config read OUTSIDE the save lock, for template/look/slot
+ * inputs only. The guarded save re-reads under the lock before writing. */
+async function captureLiveConfigSafe(shopId: string): Promise<QuizDraft | null> {
+  try {
+    return await captureLiveConfig(shopId);
+  } catch (e) {
+    console.warn(`[quiz-generate] live config unavailable for ${shopId}: ${(e as Error).message}`);
+    return null;
+  }
 }

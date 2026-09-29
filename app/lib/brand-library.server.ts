@@ -22,6 +22,17 @@
  */
 
 import { supabase, findShopByDomain, uploadReferenceImage } from "./supabase.server";
+import {
+  isMissingColumnError,
+  libraryStatusPatch,
+  parseLibraryStatusRow,
+  resolveBuildOutcome,
+  truncateIndexError,
+  type LibraryIndexStatus,
+  type LibraryStatus,
+} from "./brand-library-status";
+
+export type { LibraryIndexStatus, LibraryStatus } from "./brand-library-status";
 
 // ---------------------------------------------------------------------
 // Types
@@ -96,6 +107,65 @@ function warnMissingTableOnce(): void {
   console.warn(
     "[BrandLibrary] brand_library table missing (run supabase-migrations/075_brand_library.sql) — library operations are a no-op until it exists"
   );
+}
+
+// Migration 080 adds shops.library_index_status / library_index_error /
+// library_indexed_at. Until it runs, status writes no-op with ONE warning
+// and reads resolve to status: null ("never attempted").
+let warnedMissingStatusColumns = false;
+
+function warnMissingStatusColumnsOnce(): void {
+  if (warnedMissingStatusColumns) return;
+  warnedMissingStatusColumns = true;
+  console.warn(
+    "[BrandLibrary] shops.library_index_* columns missing (run supabase-migrations/080_v3_templates.sql) — index status is not persisted until they exist"
+  );
+}
+
+// ---------------------------------------------------------------------
+// Index status writes (V3-CONTRACTS §9, spec 4.6)
+// ---------------------------------------------------------------------
+
+/** Shop reference: the shop_domain string, or the shops.id uuid. */
+export type ShopRef = string | { shopId: string };
+
+/**
+ * Persist a library index status transition on the shops row. Never
+ * throws: a status write must never fail a sync or a build. Returns true
+ * when a row was updated, false when the columns are missing (pre-080,
+ * warned once), the row does not exist, or the update failed.
+ *
+ *   pending  → clears error
+ *   building → clears error
+ *   ready    → clears error, stamps library_indexed_at = now
+ *   failed   → error = truncated short message
+ */
+export async function setLibraryIndexStatus(
+  shop: ShopRef,
+  status: LibraryIndexStatus,
+  error?: unknown
+): Promise<boolean> {
+  const patch = libraryStatusPatch(status, error);
+  const label = typeof shop === "string" ? shop : `shop ${shop.shopId}`;
+  try {
+    let query = supabase.from("shops").update(patch);
+    query = typeof shop === "string" ? query.eq("shop_domain", shop) : query.eq("id", shop.shopId);
+    const { data, error: dbError } = await query.select("id");
+    if (dbError) {
+      if (isMissingColumnError(dbError)) warnMissingStatusColumnsOnce();
+      else console.warn(`[BrandLibrary] status write (${status}) failed for ${label}:`, dbError.message);
+      return false;
+    }
+    if (!data || data.length === 0) {
+      // Supabase UPDATE matching 0 rows succeeds silently — say so.
+      console.warn(`[BrandLibrary] status write (${status}) matched no shops row for ${label}`);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn(`[BrandLibrary] status write (${status}) threw for ${label}:`, (e as Error).message);
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------
@@ -477,42 +547,127 @@ async function extractDominantColor(url: string): Promise<string[] | null> {
   }
 }
 
+export interface BuildBrandLibraryResult {
+  /** Images written to brand_library by this run. */
+  imageCount: number;
+  taggedPct: number;
+  ms: number;
+  /** Terminal index status persisted on shops.library_index_status. */
+  status: "ready" | "failed";
+  /** Short failure reason (also persisted); null when ready. */
+  error: string | null;
+}
+
 /**
- * Full library index build. Gated on catalog_sync_enabled; additive
- * upserts on (shop_id, url); feature-detects the table. Time-boxed:
- * sources are collected in priority order and the build stops adding
- * network-derived sources once the budget is spent (what was collected
- * still gets written).
+ * Full library index build with the status lifecycle (V3-CONTRACTS §9):
+ *   building → ready | failed
+ *
+ * Gated on catalog_sync_enabled (a gated-off shop gets NO status write,
+ * so live merchants see zero behavior change); additive upserts on
+ * (shop_id, url); feature-detects the table. Time-boxed: sources are
+ * collected in priority order and the build stops adding network-derived
+ * sources once the budget is spent (what was collected still gets
+ * written). A time-boxed partial library counts as `ready` when at least
+ * one image was indexed; a build that indexed nothing is `failed` with a
+ * reason so the Studio can show its retry banner. Never throws.
  */
 export async function buildBrandLibrary(
   shopDomain: string,
   opts?: BuildBrandLibraryOptions
-): Promise<{ imageCount: number; taggedPct: number; ms: number }> {
+): Promise<BuildBrandLibraryResult> {
   const t0 = Date.now();
+  const finish = (
+    imageCount: number,
+    taggedPct: number,
+    status: "ready" | "failed",
+    error: string | null
+  ): BuildBrandLibraryResult => ({ imageCount, taggedPct, ms: Date.now() - t0, status, error });
+
+  // Gate + lookup are outside the status lifecycle on purpose: nothing
+  // is written for a shop that never opted into sync.
+  let enabled = false;
+  try {
+    enabled = await isCatalogSyncEnabledInline(shopDomain);
+  } catch (e) {
+    return finish(0, 0, "failed", truncateIndexError(e));
+  }
+  if (!enabled) return finish(0, 0, "failed", "catalog sync is not enabled for this shop");
+  let shop: { id: string } | null = null;
+  try {
+    shop = await findShopByDomain(shopDomain);
+  } catch (e) {
+    return finish(0, 0, "failed", truncateIndexError(e));
+  }
+  if (!shop) return finish(0, 0, "failed", "shop not found");
+
+  await setLibraryIndexStatus({ shopId: shop.id }, "building");
+
+  let taggedPct = 0;
+  let imageCount = 0;
+  let outcome: { status: "ready" | "failed"; error: string | null };
+  try {
+    const run = await runLibraryBuild(shopDomain, shop.id, opts, t0);
+    taggedPct = run.taggedPct;
+    imageCount = run.imageCount;
+    outcome = resolveBuildOutcome({
+      imageCount: run.imageCount,
+      timedOut: run.timedOut,
+      error: run.error,
+    });
+  } catch (e) {
+    console.warn(`[BrandLibrary] build threw for ${shopDomain}:`, (e as Error).message);
+    outcome = resolveBuildOutcome({ imageCount: 0, error: e });
+  }
+
+  await setLibraryIndexStatus({ shopId: shop.id }, outcome.status, outcome.error);
+  if (outcome.status === "failed") {
+    console.warn(`[BrandLibrary] index FAILED for ${shopDomain}: ${outcome.error}`);
+  }
+  return finish(imageCount, taggedPct, outcome.status, outcome.error);
+}
+
+interface LibraryRunResult {
+  imageCount: number;
+  taggedPct: number;
+  /** The time-box cut at least one source short. */
+  timedOut: boolean;
+  /** Write-side or setup failure that left nothing usable; null if fine. */
+  error: string | null;
+}
+
+/** The collection + tag + write pass. May throw (the caller maps that to
+ * `failed`); returns `error` for the non-throwing dead ends. */
+async function runLibraryBuild(
+  shopDomain: string,
+  shopId: string,
+  opts: BuildBrandLibraryOptions | undefined,
+  t0: number
+): Promise<LibraryRunResult> {
   const deadline = t0 + (opts?.timeBoxMs ?? 25_000);
   const timeLeft = () => deadline - Date.now();
-  const done = (imageCount: number, taggedPct: number) => ({
+  let timedOut = false;
+  const done = (imageCount: number, taggedPct: number, error: string | null = null): LibraryRunResult => ({
     imageCount,
     taggedPct,
-    ms: Date.now() - t0,
+    timedOut,
+    error,
   });
-
-  if (!(await isCatalogSyncEnabledInline(shopDomain))) return done(0, 0);
-  const shop = await findShopByDomain(shopDomain);
-  if (!shop) return done(0, 0);
 
   // Feature-detect early: a cheap head query tells us whether 075 ran.
   {
     const probe = await supabase.from("brand_library").select("id").limit(1);
     if (probe.error) {
-      if (isMissingTableError(probe.error)) warnMissingTableOnce();
-      else console.warn(`[BrandLibrary] probe failed for ${shopDomain}:`, probe.error.message);
-      return done(0, 0);
+      if (isMissingTableError(probe.error)) {
+        warnMissingTableOnce();
+        return done(0, 0, "brand_library table missing (migration 075 pending)");
+      }
+      console.warn(`[BrandLibrary] probe failed for ${shopDomain}:`, probe.error.message);
+      return done(0, 0, `brand_library probe failed: ${probe.error.message}`);
     }
   }
 
   const collected: CollectedImage[] = [];
-  const products = await loadShopProducts(shop.id);
+  const products = await loadShopProducts(shopId);
   const rowIdByGid = new Map(products.map((p) => [p.shopify_id, p.id]));
 
   // Source 1: product media (all positions; position 1 tags packshot,
@@ -521,7 +676,11 @@ export async function buildBrandLibrary(
     try {
       let after: string | null = null;
       let pages = 0;
-      while (timeLeft() > 4000 && pages < 40) {
+      while (pages < 40) {
+        if (timeLeft() <= 4000) {
+          timedOut = true;
+          break;
+        }
         pages++;
         const data: any = await opts.admin(PRODUCT_MEDIA_QUERY, { first: 25, after });
         const conn = data?.products;
@@ -569,6 +728,7 @@ export async function buildBrandLibrary(
   }
 
   // Source 2: collection banner images.
+  if (opts?.admin && timeLeft() <= 3000) timedOut = true;
   if (opts?.admin && timeLeft() > 3000) {
     try {
       const data: any = await opts.admin(COLLECTIONS_QUERY, { first: 100 });
@@ -590,6 +750,7 @@ export async function buildBrandLibrary(
   }
 
   // Source 3a: Brand API assets (logo + cover).
+  if (opts?.admin && timeLeft() <= 2000) timedOut = true;
   if (opts?.admin && timeLeft() > 2000) {
     try {
       const data: any = await opts.admin(BRAND_ASSETS_QUERY);
@@ -611,6 +772,7 @@ export async function buildBrandLibrary(
   }
 
   // Source 3b: homepage og:image + hero img candidates. Best-effort.
+  if (timeLeft() <= 3000) timedOut = true;
   if (timeLeft() > 3000) {
     try {
       const res = await fetchWithTimeout(`https://${shopDomain}/`, Math.min(6000, timeLeft() - 1000));
@@ -651,7 +813,7 @@ export async function buildBrandLibrary(
     }
   }
   const unique = [...byUrl.values()];
-  if (unique.length === 0) return done(0, 0);
+  if (unique.length === 0) return done(0, 0); // caller resolves: timed out vs. nothing found
 
   // Tag + optional dominant colors (capped, only while time remains).
   const wantColors = opts?.dominantColors !== false;
@@ -675,7 +837,7 @@ export async function buildBrandLibrary(
       dominant = await extractDominantColor(img.url);
     }
     rows.push({
-      shop_id: shop.id,
+      shop_id: shopId,
       url: img.url,
       source: img.source,
       role: tag.role,
@@ -692,6 +854,7 @@ export async function buildBrandLibrary(
 
   // Batched additive upserts on (shop_id, url) — uniform keys per batch.
   let written = 0;
+  let lastWriteError: string | null = null;
   for (const batch of chunk(rows, 200)) {
     const { data, error } = await supabase
       .from("brand_library")
@@ -700,9 +863,10 @@ export async function buildBrandLibrary(
     if (error) {
       if (isMissingTableError(error)) {
         warnMissingTableOnce();
-        return done(0, 0);
+        return done(0, 0, "brand_library table missing (migration 075 pending)");
       }
       console.warn(`[BrandLibrary] upsert batch failed for ${shopDomain}:`, error.message);
+      lastWriteError = error.message;
       continue;
     }
     written += data?.length ?? 0;
@@ -710,8 +874,14 @@ export async function buildBrandLibrary(
 
   const taggedPct = rows.length ? Math.round((tagged / rows.length) * 100) : 0;
   console.log(
-    `[BrandLibrary] built for ${shopDomain}: ${written} images, ${taggedPct}% tagged, ${Date.now() - t0}ms`
+    `[BrandLibrary] built for ${shopDomain}: ${written} images, ${taggedPct}% tagged, ${Date.now() - t0}ms` +
+      (timedOut ? " (time-boxed, partial)" : "")
   );
+  // Every batch failed → nothing usable was written; surface the reason.
+  // Some batches failed → partial library, still `ready` (warned above).
+  if (written === 0 && lastWriteError) {
+    return done(0, taggedPct, `brand_library write failed: ${lastWriteError}`);
+  }
   return done(written, taggedPct);
 }
 
@@ -833,6 +1003,61 @@ export async function libraryStats(shopDomain: string): Promise<{
     console.warn(`[BrandLibrary] variant coverage failed for ${shopDomain}:`, (e as Error).message);
   }
   return out;
+}
+
+// ---------------------------------------------------------------------
+// Index status (V3-CONTRACTS §9, spec 4.6). Indexing runs at sync; the
+// Studio reads this to show ONE retry banner when it failed, never a
+// content lock. Columns land with migration 080 — read defensively.
+// ---------------------------------------------------------------------
+
+/**
+ * Contract shape `{ status, error, imageCount, indexedAt }`. Never throws.
+ *   - status null = never attempted (or the 080 columns are not there yet:
+ *     the select is retried without them so imageCount still resolves)
+ *   - imageCount is a cheap HEAD count; a missing brand_library table
+ *     (pre-075) resolves to 0
+ */
+export async function getLibraryStatus(shopDomain: string): Promise<LibraryStatus> {
+  let row: Record<string, unknown> | null = null;
+  try {
+    const shop = await supabase
+      .from("shops")
+      .select("id, library_index_status, library_index_error, library_indexed_at")
+      .eq("shop_domain", shopDomain)
+      .maybeSingle();
+    if (shop.error) {
+      if (isMissingColumnError(shop.error)) {
+        warnMissingStatusColumnsOnce();
+        const retry = await supabase.from("shops").select("id").eq("shop_domain", shopDomain).maybeSingle();
+        row = retry.error ? null : ((retry.data as Record<string, unknown> | null) ?? null);
+      } else {
+        console.warn(`[BrandLibrary] status read failed for ${shopDomain}:`, shop.error.message);
+      }
+    } else {
+      row = (shop.data as Record<string, unknown> | null) ?? null;
+    }
+  } catch (e) {
+    console.warn(`[BrandLibrary] status read threw for ${shopDomain}:`, (e as Error).message);
+  }
+  if (!row) return parseLibraryStatusRow(null);
+
+  let imageCount = 0;
+  try {
+    const count = await supabase
+      .from("brand_library")
+      .select("id", { count: "exact", head: true })
+      .eq("shop_id", row.id as string);
+    if (count.error) {
+      if (isMissingTableError(count.error)) warnMissingTableOnce();
+      else console.warn(`[BrandLibrary] status count failed for ${shopDomain}:`, count.error.message);
+    } else if (typeof count.count === "number") {
+      imageCount = count.count;
+    }
+  } catch (e) {
+    console.warn(`[BrandLibrary] status count threw for ${shopDomain}:`, (e as Error).message);
+  }
+  return parseLibraryStatusRow(row, imageCount);
 }
 
 // ---------------------------------------------------------------------

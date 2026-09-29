@@ -21,9 +21,12 @@
 
 import { supabase } from "./supabase.server";
 import {
+  LOOKS,
+  selectLook,
   selectTemplate,
-  TEMPLATES,
   type BrandTokens,
+  type LookId,
+  type LookSignals,
   type TemplateAssignment,
   type TemplateSignals,
 } from "./quiz-templates";
@@ -69,6 +72,13 @@ export interface BrandProfile {
   category: string | null;
   tone: "playful" | "neutral" | "refined" | null;
   templateAssignment: TemplateAssignment;
+  /** v3 Look (spec 2.3/2.4): aesthetic preset chosen from brand signals,
+   * independent of the template. Older profiles lack it → "minimal". */
+  look?: LookId;
+  lookSignals?: LookSignals;
+  /** v3: the template-selection inputs, kept so the template API and the
+   * Studio can re-check eligibility without re-extracting. */
+  templateSignals?: TemplateSignals;
   /** Verbatim brand statements only (v2 Part 4/G): the Brand API slogan
    * and a guarantee/shipping line lifted verbatim from homepage copy.
    * Never paraphrased, never invented — fewer is fine. */
@@ -489,12 +499,23 @@ interface CatalogExtract {
   /** Average variant option (facet) count per variant, from " / "-joined
    * variant titles ("Red / Small" = 2). "Default Title" counts as 1. */
   avgOptionCount: number | null;
+  /** v3 (spec 2.4): share of products with ≥1 real (non-"Default Title")
+   * variant option — shade/size/finish density, the Match signal. */
+  variantOptionDensity: number | null;
+  /** v3: products whose tags/type read as routine steps, AM/PM, kits, sets. */
+  routineSignals: number;
+  /** v3: gift/playful tags + copy hits. */
+  giftSignals: number;
+  playfulCopy: boolean;
 }
+
+const ROUTINE_TAG_RE = /\b(step ?\d|am\/pm|a\.m\.|p\.m\.|morning|night(?:time)?|routine|regimen|kit|set|bundle|cleanser|toner|serum|moisturi[sz]er|spf)\b/i;
+const GIFT_TAG_RE = /\b(gift|gifting|stocking|holiday|party|fun|cute|bestie|glow ?up|vibe)\b/i;
 
 async function extractFromCatalog(shopId: string): Promise<CatalogExtract> {
   const { data, count } = await supabase
     .from("products")
-    .select("id, product_type, image_url, price", { count: "exact" })
+    .select("id, product_type, image_url, price, tags, product_name", { count: "exact" })
     .eq("shop_id", shopId)
     .neq("status", "deleted")
     .limit(1000);
@@ -502,10 +523,21 @@ async function extractFromCatalog(shopId: string): Promise<CatalogExtract> {
   const typeCounts = new Map<string, number>();
   let withImage = 0;
   const prices: number[] = [];
+  let routineSignals = 0;
+  let giftSignals = 0;
+  let playfulHits = 0;
   for (const r of rows) {
     const t = (r.product_type ?? "").trim();
     if (t) typeCounts.set(t, (typeCounts.get(t) ?? 0) + 1);
     if (r.image_url) withImage++;
+    const tagText = [
+      Array.isArray((r as any).tags) ? ((r as any).tags as unknown[]).join(" ") : String((r as any).tags ?? ""),
+      t,
+      String((r as any).product_name ?? ""),
+    ].join(" ");
+    if (ROUTINE_TAG_RE.test(tagText)) routineSignals++;
+    if (GIFT_TAG_RE.test(tagText)) giftSignals++;
+    if (/[!]{2,}|\p{Extended_Pictographic}/u.test(String((r as any).product_name ?? ""))) playfulHits++;
     const price = typeof r.price === "number" ? r.price : parseFloat(String(r.price ?? ""));
     if (Number.isFinite(price) && price > 0) prices.push(price);
   }
@@ -513,23 +545,33 @@ async function extractFromCatalog(shopId: string): Promise<CatalogExtract> {
     ? Math.round((prices.reduce((a, b) => a + b, 0) / prices.length) * 100)
     : null;
 
-  // Variant option counts from a bounded sample of variant titles.
+  // Variant option counts from a bounded sample of variant titles, plus
+  // the v3 option DENSITY (share of sampled products with a real variant).
   let avgOptionCount: number | null = null;
+  let variantOptionDensity: number | null = null;
   const sampleIds = rows.map((r) => r.id).filter(Boolean).slice(0, 150);
   if (sampleIds.length) {
     const { data: variantSample } = await supabase
       .from("product_variants")
-      .select("variant_title")
+      .select("product_id, variant_title")
       .in("product_id", sampleIds)
       .neq("status", "deleted")
       .limit(1000);
-    const segCounts = (variantSample ?? [])
-      .map((v) => String(v.variant_title ?? "").trim())
+    const titles = (variantSample ?? []).map((v) => ({
+      productId: String((v as any).product_id ?? ""),
+      title: String(v.variant_title ?? "").trim(),
+    }));
+    const segCounts = titles
+      .map((v) => v.title)
       .filter(Boolean)
       .map((title) => title.split("/").length);
     if (segCounts.length) {
       avgOptionCount = segCounts.reduce((a, b) => a + b, 0) / segCounts.length;
     }
+    const withOptions = new Set(
+      titles.filter((v) => v.title && !/^default title$/i.test(v.title)).map((v) => v.productId)
+    );
+    variantOptionDensity = withOptions.size / sampleIds.length;
   }
   const types = [...typeCounts.entries()].sort((a, b) => b[1] - a[1]).map(([t]) => t);
   const top = types[0] ?? null;
@@ -550,6 +592,10 @@ async function extractFromCatalog(shopId: string): Promise<CatalogExtract> {
     category,
     avgPriceCents,
     avgOptionCount,
+    variantOptionDensity,
+    routineSignals,
+    giftSignals,
+    playfulCopy: rows.length > 0 && playfulHits / rows.length >= 0.2,
   };
 }
 
@@ -632,8 +678,8 @@ export async function extractBrandProfile(
     return presetVal;
   };
 
-  // Neutral preset fallbacks come from t2 Ivory — never the playful look.
-  const neutral = TEMPLATES.t2.presets[0].tokens;
+  // Neutral preset fallbacks come from the Minimal Look — never Bold.
+  const neutral = LOOKS.minimal.tokens;
 
   const fontHeading = pick("fontHeading", theme?.headingFont?.stack, homepage?.headingFont, neutral.fontHeading);
   const fontBody = pick("fontBody", theme?.bodyFont?.stack, homepage?.bodyFont, neutral.fontBody);
@@ -719,24 +765,35 @@ export async function extractBrandProfile(
       ? Math.max(variantCoverage, catalog.imageCoverage)
       : variantCoverage ?? catalog.imageCoverage;
 
-  const signals: TemplateSignals = {
-    serifHeading: Boolean(theme?.headingFont?.serif || homepage?.headingSerif || /serif/i.test(fontHeading) && !/sans-serif/i.test(fontHeading)),
+  const serifHeading = Boolean(
+    theme?.headingFont?.serif || homepage?.headingSerif || (/serif/i.test(fontHeading) && !/sans-serif/i.test(fontHeading))
+  );
+  const lookSignals: LookSignals = {
+    serifHeading,
     roundedHeading: Boolean(theme?.headingFont?.rounded || homepage?.headingRounded),
+    heavyHeading: /\b(black|heavy|extra-?bold|800|900)\b/i.test(fontHeading),
     avgSaturation: homepage?.avgSaturation ?? null,
-    imageryDensity: homepage?.imageryDensity ?? null,
+    emojiInCopy: /\p{Extended_Pictographic}/u.test(homepage?.copySample ?? ""),
+  };
+  // v3 (spec 2.4): template from CATALOG STRUCTURE, look from BRAND PROFILE.
+  const signals: TemplateSignals = {
+    variantOptionDensity: catalog.variantOptionDensity,
+    avgPriceCents: catalog.avgPriceCents,
+    avgOptionCount: catalog.avgOptionCount,
+    productCount: catalog.productCount,
+    routineSignals: catalog.routineSignals,
+    giftSignals: catalog.giftSignals + (tone === "playful" ? 1 : 0),
+    playfulCopy: catalog.playfulCopy || tone === "playful",
+    lowAov: catalog.avgPriceCents !== null && catalog.avgPriceCents < 3500,
+    category: catalog.category,
+    imagePerAnswerCoverage,
     lifestyleImageCount: Math.max(
       (homepage?.lifestyleImageCount ?? 0) + (brand?.coverImageUrl ? 1 : 0),
       libraryBuilt ? stats!.lifestyleImageCount : 0
     ),
-    imagePerAnswerCoverage,
-    buttonRadius: radiusButton,
-    category: catalog.category,
-    // v2 optional signals — only set when the library has real content.
-    ...(libraryBuilt ? { heroImageCount: stats!.heroImageCount } : {}),
-    ...(libraryBuilt ? { bannerCoverage: stats!.bannerCoverage } : {}),
-    avgPriceCents: catalog.avgPriceCents,
-    avgOptionCount: catalog.avgOptionCount,
+    bannerCoverage: libraryBuilt ? stats!.bannerCoverage : null,
   };
+  const look = selectLook(lookSignals);
   const templateAssignment = selectTemplate(signals);
 
   const profile: BrandProfile = {
@@ -777,6 +834,9 @@ export async function extractBrandProfile(
     category: catalog.category,
     tone,
     templateAssignment,
+    look,
+    lookSignals,
+    templateSignals: signals,
     trustStatements: extractTrustStatements(brand?.slogan ?? null, homepage?.copySample ?? ""),
   };
 
@@ -798,13 +858,41 @@ export async function extractBrandProfile(
   const { trackOverhaulEvent } = await import("./overhaul-events.server");
   trackOverhaulEvent(shopDomain, "template_assigned", {
     template: templateAssignment.template,
+    look,
     scores: templateAssignment.scores,
     signals: templateAssignment.signals,
+    degraded_from: templateAssignment.degradedFrom ?? null,
     confidence: overall,
     theme_name: profile.theme.name,
   });
 
   return profile;
+}
+
+/** Template-selection inputs for a stored profile (v3). Profiles written
+ * before v3 carry no templateSignals; rebuild a conservative set from the
+ * v1/v2 fields so eligibility checks keep working without re-extraction. */
+export function templateSignalsFromProfile(profile: BrandProfile): TemplateSignals {
+  if (profile.templateSignals) return profile.templateSignals;
+  return {
+    variantOptionDensity: null,
+    avgPriceCents: null,
+    avgOptionCount: null,
+    productCount: profile.catalog.productCount,
+    routineSignals: 0,
+    giftSignals: 0,
+    playfulCopy: profile.tone === "playful",
+    lowAov: false,
+    category: profile.category,
+    imagePerAnswerCoverage: profile.catalog.imageCoverage,
+    lifestyleImageCount: profile.homepage.lifestyleImageCount + (profile.brand.coverImageUrl ? 1 : 0),
+    bannerCoverage: null,
+  };
+}
+
+/** The profile's Look, defaulting older profiles to Minimal (never Bold). */
+export function lookFromProfile(profile: BrandProfile | null): LookId {
+  return profile?.look ?? "minimal";
 }
 
 export async function getBrandProfile(shopDomain: string): Promise<BrandProfile | null> {

@@ -1,11 +1,20 @@
 import { useEffect, useState } from "react";
-import { Badge, Button, Popover, Box, BlockStack, Text, ProgressBar } from "@shopify/polaris";
+import { Badge, Button, Popover, Box, BlockStack, Text, ProgressBar, Tooltip } from "@shopify/polaris";
 import { useCatalogSync } from "../../lib/use-catalog-sync";
 import type { StudioTab } from "../../routes/studio";
 
 // V2-SPEC 2.1 top bar (56px): inline-editable quiz name left; centered
 // segmented tabs Build / Check matches / Live; right side "View on my
 // store" (secondary) + "Publish" (primary, opens the publish sheet).
+//
+// V3-SPEC 6.4: while QUIZ_TEMPLATES_LIVE is off, a template quiz cannot
+// reach the storefront, so "View on my store" is hidden and a grey
+// `Preview only` chip sits next to the quiz name. Legacy shops unchanged.
+// V3-SPEC Part 1: no manual sync button exists; the only affordance left
+// is resuming a sync that was interrupted mid-catalog.
+
+const PREVIEW_ONLY_TIP =
+  "Templates aren't live on storefronts yet. Your shoppers still see your current quiz.";
 
 const TABS: Array<{ id: StudioTab; label: string }> = [
   { id: "build", label: "Build" },
@@ -24,6 +33,7 @@ export function StudioTopBar({
   onViewStore,
   viewStoreBusy,
   onPublishClick,
+  previewOnly,
 }: {
   tab: StudioTab;
   onTabChange: (t: StudioTab) => void;
@@ -35,6 +45,8 @@ export function StudioTopBar({
   onViewStore: () => void;
   viewStoreBusy: boolean;
   onPublishClick: () => void;
+  /** Template quiz while the storefront flag is off (spec 6.4). */
+  previewOnly?: boolean;
 }) {
   const [syncOpen, setSyncOpen] = useState(false);
   const sync = useCatalogSync();
@@ -96,6 +108,13 @@ export function StudioTopBar({
           onFocus={(e) => (e.target.style.borderColor = "#C9CCCF")}
           onBlurCapture={(e) => (e.target.style.borderColor = "transparent")}
         />
+        {previewOnly && (
+          <span style={{ flexShrink: 0 }}>
+            <Tooltip content={PREVIEW_ONLY_TIP}>
+              <Badge tone="new">Preview only</Badge>
+            </Tooltip>
+          </span>
+        )}
         {problemCount > 0 && (
           <button
             onClick={() => onTabChange("live")}
@@ -106,8 +125,9 @@ export function StudioTopBar({
           </button>
         )}
         {/* A persisted cursor means a sync was interrupted mid-catalog:
-            keep the chip (and its Resume-sync button) until it clears. */}
-        {(!catalog.syncEnabled || !catalog.productCount || catalog.cursor != null) && (
+            the one place a merchant can nudge indexing along. Sync itself
+            runs at install; there is no manual sync button. */}
+        {catalog.cursor != null ? (
           <Popover
             active={syncOpen}
             onClose={() => setSyncOpen(false)}
@@ -116,15 +136,15 @@ export function StudioTopBar({
                 onClick={() => setSyncOpen((v) => !v)}
                 style={{ border: 0, background: "transparent", padding: 0, cursor: "pointer", flexShrink: 0 }}
               >
-                <Badge tone="attention">{catalog.cursor ? "Sync incomplete" : "Catalog not synced"}</Badge>
+                <Badge tone="attention">Sync incomplete</Badge>
               </button>
             }
           >
             <Box padding="300" width="280px">
               <BlockStack gap="200">
                 <Text as="p" variant="bodySm">
-                  Gleame builds quizzes and recommendations from your real
-                  products. Existing product configuration is never
+                  Your catalog sync stopped partway. Resume to finish indexing
+                  the rest of your products; nothing already configured is
                   overwritten.
                 </Text>
                 {sync.progress ? (
@@ -149,7 +169,7 @@ export function StudioTopBar({
                     loading={sync.busy}
                     onClick={() => sync.start(catalog.cursor ?? undefined)}
                   >
-                    {catalog.cursor ? "Resume sync" : "Sync catalog"}
+                    Resume
                   </Button>
                 )}
                 {sync.syncError && (
@@ -160,6 +180,14 @@ export function StudioTopBar({
               </BlockStack>
             </Box>
           </Popover>
+        ) : (
+          (!catalog.syncEnabled || !catalog.productCount) && (
+            <span style={{ flexShrink: 0 }}>
+              <Tooltip content="Gleame indexes your catalog automatically after install. Check back shortly.">
+                <Badge tone="attention">Catalog not synced</Badge>
+              </Tooltip>
+            </span>
+          )
         )}
       </div>
 
@@ -187,12 +215,19 @@ export function StudioTopBar({
       </div>
 
       <div className="studio-topbar-right">
-        <Button onClick={onViewStore} loading={viewStoreBusy} disabled={!hasDraft}>
-          View on my store
-        </Button>
-        <Button variant="primary" onClick={onPublishClick}>
-          Publish
-        </Button>
+        {!previewOnly && (
+          <Button onClick={onViewStore} loading={viewStoreBusy} disabled={!hasDraft}>
+            View on my store
+          </Button>
+        )}
+        {/* Spec 6.4: while templates aren't live on storefronts the publish
+            action is hidden for template quizzes (the Preview only chip
+            explains); legacy quizzes keep publishing. */}
+        {!previewOnly && (
+          <Button variant="primary" onClick={onPublishClick}>
+            Publish
+          </Button>
+        )}
       </div>
     </>
   );

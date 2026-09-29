@@ -9,8 +9,8 @@ import {
   readTemplateContentFields,
   type TemplateContentFields,
 } from "../lib/quiz-preview.server";
-import { getBrandProfile } from "../lib/brand-profile.server";
-import { resolveQuizTokens } from "../lib/quiz-templates";
+import { getBrandProfile, lookFromProfile } from "../lib/brand-profile.server";
+import { defaultEmailPlacement, isTemplateId, resolveQuizTokens } from "../lib/quiz-templates";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -73,11 +73,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       servedTemplate = "t5";
     }
   }
-  const brandTokens = resolveQuizTokens(
-    servedTemplate,
-    config.quiz_preset,
-    brandProfile?.tokens ?? null
-  );
+  // v3 (V3-CONTRACTS §2/§6): Look = merchant column, else the Brand
+  // Profile's derived look, else Minimal. Email placement = merchant
+  // column, else the template default. Both absent for legacy shops.
+  const servedLook = servedTemplate ? config.quiz_look ?? lookFromProfile(brandProfile) : null;
+  const servedEmailPlacement =
+    servedTemplate && isTemplateId(servedTemplate)
+      ? config.quiz_email_placement ?? defaultEmailPlacement(servedTemplate)
+      : null;
+  const brandTokens = resolveQuizTokens(servedTemplate, servedLook, brandProfile?.tokens ?? null);
 
   // v2 template content (spec Parts 3 / 5.6): trust lines, results prose,
   // archetype copy, hero image, image slots. These live in the same
@@ -131,18 +135,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       // merchant overrides above. Both absent for legacy shops.
       template: servedTemplate,
       brandTokens,
-      // T3's immersive backdrop: the Brand API cover image in v1
-      // (per-question imagery lands with the generation pipeline).
-      screenImageUrl:
-        servedTemplate === "t3" ? brandProfile?.brand?.coverImageUrl ?? null : null,
-      // v2 template content, present ONLY when a template is assigned.
-      // theme.heroImage feeds T1's sticky hero (Part 4 source priority
-      // lands upstream; merchants can override via quiz_hero_image);
-      // imageSlots is the Images-rail slot map (Part 4.4), passed through.
+      // Kept null for payload parity with pre-v3 responses (v2's T3
+      // immersive backdrop no longer exists; the widget ignores null).
+      screenImageUrl: null,
+      // v3 template payload (V3-CONTRACTS §6), present ONLY when a template
+      // is assigned: look, email placement, Match phases, the Images-rail
+      // slot map, and theme.heroImage (legacy v2 field the hero slot falls
+      // back to when the slot map has no `hero`).
       ...(tplContent
         ? {
+            look: servedLook,
+            emailPlacement: servedEmailPlacement,
+            phases: config.quiz_phases ?? [],
             theme: { heroImage: tplContent.heroImage },
-            imageSlots: tplContent.imageSlots,
+            imageSlots: tplContent.imageSlots ?? {},
           }
         : {}),
       numRecommendations: config.num_recommendations,
@@ -163,6 +169,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         visualCaption: renderTokens(config.quiz_visual_caption),
         altAudienceLabel: config.quiz_alt_audience_label,
         altAudienceUrl: config.quiz_alt_audience_url,
+        // v3 intro types (spec 5.1), template shops only. `rating` is
+        // ALWAYS null until a review-app reader exists — never typed by
+        // default. `founder` feeds intro type D; null falls to type E.
+        ...(tplContent
+          ? {
+              founder: config.quiz_founder,
+              rating: null,
+              benefitChips: config.quiz_trust_items,
+            }
+          : {}),
       },
       gate: {
         // Migration 068: false skips the photo step entirely (questions
@@ -239,6 +255,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         buttonLabel: config.quiz_lead_button_label,
         skipLabel: config.quiz_lead_skip_label,
         consentText: renderTokens(config.quiz_lead_consent_text),
+        // v3 (template shops only, legacy payload stays byte-identical):
+        // whether a discount is configured, so the hook_start intro can
+        // promise one. The CODE itself stays unserved, see below.
+        ...(tplContent ? { hasDiscount: Boolean(config.quiz_lead_discount_code) } : {}),
         // The discount code is deliberately NOT served here: this response
         // is public, CORS *, and cached — a scrapeable code would gut the
         // email-for-code trade. The quiz-lead POST returns it after a

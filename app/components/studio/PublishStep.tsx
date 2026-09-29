@@ -33,6 +33,15 @@ const MODE_LABELS: Record<string, string> = {
 
 const THEME_EXT_UUID = "1013fc3f-b18d-aa39-07f6-10dfd57397a6749693b0";
 
+/** V3-SPEC 6.4: a template quiz cannot be published while the storefront
+ * flag is off. Legacy shops (no template) are never gated by it. */
+function isPreviewOnly(data: StudioLoaderData): boolean {
+  return Boolean(data.studio.template) && !data.studio.templatesLive;
+}
+
+const PREVIEW_ONLY_LINE =
+  "Templates aren't live on storefronts yet, so publishing is paused for this quiz. Your shoppers keep seeing your current quiz.";
+
 function themeEditorUrl(shopDomain: string): string {
   const handle = shopDomain.replace(".myshopify.com", "");
   return `https://admin.shopify.com/store/${handle}/themes/current/editor?template=page.gleame-quiz&addAppBlockId=${THEME_EXT_UUID}/gleame-quiz&target=newAppsSection`;
@@ -70,6 +79,7 @@ export function PublishSheet({
   const servableCount = (flow?.questions ?? []).filter((q) =>
     isQuestionServable(q as Parameters<typeof isQuestionServable>[0]),
   ).length;
+  const previewOnly = isPreviewOnly(data);
 
   const publish = async () => {
     setBusy(true);
@@ -210,19 +220,27 @@ export function PublishSheet({
 
               {result?.error && <Banner tone="critical">{result.error}</Banner>}
 
-              <Button
-                variant="primary"
-                size="large"
-                fullWidth
-                loading={busy}
-                disabled={questionCount === 0}
-                onClick={publish}
-              >
-                Publish
-              </Button>
-              <Text as="p" variant="bodySm" tone="subdued">
-                Nothing is visible to shoppers until you publish.
-              </Text>
+              {previewOnly ? (
+                <Text as="p" variant="bodySm" tone="subdued">
+                  {PREVIEW_ONLY_LINE}
+                </Text>
+              ) : (
+                <>
+                  <Button
+                    variant="primary"
+                    size="large"
+                    fullWidth
+                    loading={busy}
+                    disabled={questionCount === 0}
+                    onClick={publish}
+                  >
+                    Publish
+                  </Button>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Nothing is visible to shoppers until you publish.
+                  </Text>
+                </>
+              )}
             </>
           )}
         </BlockStack>
@@ -265,6 +283,7 @@ export function LiveTab({
   const toggling = fetcher.state !== "idle" && fetcher.formData?.get("intent") === "set-live";
   const matrixWithoutRules = mode === "matrix" && ruleCount === 0;
   const liveUrl = `https://${data.shopDomain}/pages/find-my-match`;
+  const previewOnly = isPreviewOnly(data);
 
   const setLive = (enabled: boolean) => {
     const fd = new FormData();
@@ -288,7 +307,9 @@ export function LiveTab({
                   </a>
                 )}
               </InlineStack>
-              {surfaceOn ? (
+              {previewOnly ? (
+                <Badge tone="new">Preview only</Badge>
+              ) : surfaceOn ? (
                 <Button loading={toggling} onClick={() => setLive(false)}>
                   Turn off
                 </Button>
@@ -303,13 +324,18 @@ export function LiveTab({
                 </Button>
               )}
             </InlineStack>
+            {previewOnly && (
+              <Text as="p" variant="bodySm" tone="subdued">
+                {PREVIEW_ONLY_LINE}
+              </Text>
+            )}
             <Text as="p" variant="bodySm" tone="subdued">
               Edits save to {data.shopDomain} as you make them; shoppers see the quiz only while
               it's on. {questionCount} {questionCount === 1 ? "question" : "questions"}
               {ruleCount > 0 ? ` · ${ruleCount} ${ruleCount === 1 ? "rule" : "rules"}` : ""} ·{" "}
               {MODE_LABELS[mode] ?? mode} matching.
             </Text>
-            {matrixWithoutRules && !surfaceOn && (
+            {matrixWithoutRules && !surfaceOn && !previewOnly && (
               <Text as="p" variant="bodySm" tone="subdued">
                 Pin products to answer paths in Check matches before turning the quiz on.
               </Text>
@@ -317,7 +343,7 @@ export function LiveTab({
             {fetcher.data && !fetcher.data.ok && fetcher.data.error && (
               <Banner tone="critical">{fetcher.data.error}</Banner>
             )}
-            {!surfaceOn && (
+            {!surfaceOn && !previewOnly && (
               <InlineStack gap="200">
                 <Button variant="plain" onClick={onOpenPublish}>
                   Publish for the first time

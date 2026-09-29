@@ -12,7 +12,9 @@
  *   publish_completed, first_shopper_completion,
  *   matches_action {action: pin|exclude|boost},
  *   image_slot_changed {slot, source: library|upload},
- *   library_built {image_count, tagged_pct, ms}
+ *   library_built {image_count, tagged_pct, ms, status, error, source}
+ *   v3 (V3-CONTRACTS §11): generation_failed {step, reason},
+ *   look_switched {from, to, source}; template_switched gains look.
  */
 
 import { supabase } from "./supabase.server";
@@ -31,7 +33,9 @@ export type OverhaulEvent =
   | "first_shopper_completion"
   | "matches_action"
   | "image_slot_changed"
-  | "library_built";
+  | "library_built"
+  | "generation_failed"
+  | "look_switched";
 
 export function trackOverhaulEvent(
   shopDomain: string,

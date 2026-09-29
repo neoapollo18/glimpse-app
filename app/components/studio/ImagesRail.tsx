@@ -1,22 +1,304 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Banner, Button, Spinner, Text } from "@shopify/polaris";
-import type { StudioFlow } from "./types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Banner, Button, Spinner, Text, Tooltip } from "@shopify/polaris";
+import { isSlotUnresolved, type StudioLibraryStatus, type StudioSlot } from "./types";
 
-// V2-SPEC 4.4-4.5: the Images rail lists every image slot the CURRENT
-// template uses (Hero for t1, question imagery for t3, answer tiles +
-// loading screen for t2, Results for all), each with a thumb, its source
-// chip, and Change. Change opens the brand-library picker: the merchant's
-// own indexed images (GET /app/api/brand-library, built by the library
-// package), filterable, with upload allowed here, post-Reveal only. The
-// endpoint 404ing degrades to a "still indexing" empty state.
+// V3-SPEC 4.4-4.6: the Images rail lists EVERY image slot the current
+// template declares (quiz-templates declareSlots, resolved by the studio
+// loader), grouped by screen in rail order, unresolved rows first with an
+// amber dot. A row is a 52 px thumb (the resolved image, or a dashed
+// placeholder that echoes the widget's own ImageSlot), the slot label, a
+// source chip, and Choose / Change into the brand-library picker.
+//
+// Library-not-built is an INFRA state, never a content problem (4.6): one
+// retry banner when indexing failed, a quiet line while it runs. There is
+// no "needs a hero image" lock anywhere.
 
-export interface ImageSlot {
-  key: string;
-  name: string;
-  group: string;
-  currentUrl: string | null;
-  sourceLabel: string;
+export interface SlotTheme {
+  bg: string;
+  border: string;
+  ink: string;
 }
+
+const KIND_GLYPH: Record<StudioSlot["kind"], string> = {
+  hero: "▭",
+  lifestyle: "▭",
+  product: "◫",
+  variant: "◫",
+  swatch: "●",
+  icon: "✦",
+  logo: "Aa",
+  thumb: "◫",
+};
+
+/** Picker filter chip pre-selected for a slot kind (spec 4.5). */
+export function filterForKind(kind: StudioSlot["kind"]): string {
+  if (kind === "hero" || kind === "lifestyle") return "lifestyle";
+  if (kind === "logo") return "logos";
+  return "products";
+}
+
+function SlotThumb({ slot, theme }: { slot: StudioSlot; theme: SlotTheme }) {
+  const round = slot.key === "founder";
+  if (slot.url) {
+    return (
+      <img
+        src={slot.url}
+        alt=""
+        style={{
+          width: 52,
+          height: 52,
+          borderRadius: round ? "50%" : 8,
+          objectFit: "cover",
+          flexShrink: 0,
+          border: "1px solid rgba(0,0,0,.06)",
+        }}
+      />
+    );
+  }
+  const auto = slot.source === "auto";
+  return (
+    <div
+      aria-hidden
+      style={{
+        width: 52,
+        height: 52,
+        borderRadius: round ? "50%" : 8,
+        flexShrink: 0,
+        boxSizing: "border-box",
+        background: auto ? "#F1F3F5" : theme.bg,
+        border: auto ? "1px solid #E1E3E5" : `1.5px dashed ${theme.border}`,
+        color: auto ? "#9A9EAB" : theme.ink,
+        opacity: auto ? 1 : 0.7,
+        display: "grid",
+        placeItems: "center",
+        fontSize: slot.kind === "logo" ? 11 : 16,
+        fontWeight: slot.kind === "logo" ? 700 : 400,
+      }}
+    >
+      {KIND_GLYPH[slot.kind]}
+    </div>
+  );
+}
+
+function SourceChip({ slot }: { slot: StudioSlot }) {
+  const unresolved = isSlotUnresolved(slot);
+  const merchant = slot.source === "merchant";
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 5,
+        fontSize: 11,
+        lineHeight: "16px",
+        color: unresolved ? "#7A5A00" : merchant ? "#0B6B3A" : "#6D7175",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+        maxWidth: "100%",
+      }}
+      title={slot.sourceLabel}
+    >
+      {unresolved && (
+        <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#E3A008", flexShrink: 0 }} />
+      )}
+      {slot.sourceLabel}
+    </span>
+  );
+}
+
+export function ImagesRail({
+  slots,
+  library,
+  theme,
+  busy,
+  autoOpenSlotKey,
+  onAutoOpenConsumed,
+  onBack,
+  onSetSlot,
+  onRetryIndex,
+}: {
+  slots: StudioSlot[];
+  library: StudioLibraryStatus;
+  theme: SlotTheme;
+  busy: boolean;
+  /** Slot to open the picker for right away (widget `gleame:pick-slot`). */
+  autoOpenSlotKey?: string | null;
+  onAutoOpenConsumed?: () => void;
+  onBack: () => void;
+  onSetSlot: (slotKey: string, url: string, source: string, prevUrl: string | null) => void;
+  onRetryIndex: () => Promise<void> | void;
+}) {
+  const [pickerSlot, setPickerSlot] = useState<StudioSlot | null>(null);
+  const [retrying, setRetrying] = useState(false);
+
+  // Groups in declaration order (Intro → Q2 · … → Results); within a
+  // group unresolved rows sort first, stably.
+  const groups = useMemo(() => {
+    const order: string[] = [];
+    const byGroup = new Map<string, StudioSlot[]>();
+    for (const s of slots) {
+      if (!byGroup.has(s.screenLabel)) {
+        byGroup.set(s.screenLabel, []);
+        order.push(s.screenLabel);
+      }
+      byGroup.get(s.screenLabel)!.push(s);
+    }
+    return order.map((label) => {
+      const rows = byGroup.get(label)!;
+      const unresolved = rows.filter((r) => isSlotUnresolved(r));
+      const resolved = rows.filter((r) => !isSlotUnresolved(r));
+      return { label, rows: [...unresolved, ...resolved] };
+    });
+  }, [slots]);
+
+  useEffect(() => {
+    if (!autoOpenSlotKey) return;
+    const target = slots.find((s) => s.key === autoOpenSlotKey);
+    if (target) setPickerSlot(target);
+    onAutoOpenConsumed?.();
+  }, [autoOpenSlotKey, slots, onAutoOpenConsumed]);
+
+  const retry = async () => {
+    setRetrying(true);
+    try {
+      await onRetryIndex();
+    } finally {
+      setRetrying(false);
+    }
+  };
+
+  const indexing = library.status === "building" || library.status === "pending";
+
+  return (
+    <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 12, flex: 1, minHeight: 0 }}>
+      <button
+        onClick={onBack}
+        style={{ border: 0, background: "transparent", color: "#6D7175", fontSize: 12.5, cursor: "pointer", textAlign: "left", padding: 0 }}
+      >
+        ← Back to screens
+      </button>
+      <div>
+        <Text as="h4" variant="headingSm">
+          Images
+        </Text>
+        <Text as="p" variant="bodySm" tone="subdued">
+          Every image this template uses. Unresolved first.
+        </Text>
+      </div>
+
+      {library.status === "failed" && (
+        <Banner
+          tone="warning"
+          action={{ content: "Retry", onAction: () => void retry(), loading: retrying }}
+        >
+          We couldn't read your store's images yet — retrying
+        </Banner>
+      )}
+      {indexing && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#6D7175" }}>
+          <Spinner size="small" />
+          Indexing your store's images…
+        </div>
+      )}
+
+      <div style={{ overflowY: "auto", flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 14 }}>
+        {groups.length === 0 && (
+          <Text as="p" variant="bodySm" tone="subdued">
+            This template uses no images beyond your product photos.
+          </Text>
+        )}
+        {groups.map((g) => (
+          <div key={g.label}>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: "#8A8F98",
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+                padding: "0 0 6px",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+              title={g.label}
+            >
+              {g.label}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {g.rows.map((s) => {
+                const unresolved = isSlotUnresolved(s);
+                return (
+                  <div
+                    key={s.key}
+                    style={{
+                      display: "flex",
+                      gap: 10,
+                      alignItems: "center",
+                      padding: 8,
+                      border: `1px solid ${unresolved && !s.optional ? "#F1D48A" : "#E1E3E5"}`,
+                      borderRadius: 10,
+                      background: "#fff",
+                      transition: "border-color 150ms ease",
+                    }}
+                  >
+                    <SlotThumb slot={s} theme={theme} />
+                    <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
+                      <div
+                        style={{ fontSize: 12.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                        title={s.label}
+                      >
+                        {s.label}
+                        {s.optional && (
+                          <span style={{ fontWeight: 400, color: "#9A9EAB" }}> · optional</span>
+                        )}
+                      </div>
+                      <SourceChip slot={s} />
+                    </div>
+                    <Tooltip content={unresolved ? "Pick an image from your brand library" : "Swap this image"}>
+                      <button
+                        onClick={() => setPickerSlot(s)}
+                        disabled={busy}
+                        style={{
+                          border: 0,
+                          background: "transparent",
+                          color: "#2C6ECB",
+                          fontSize: 12.5,
+                          fontWeight: 600,
+                          cursor: busy ? "default" : "pointer",
+                          flexShrink: 0,
+                          padding: "4px 2px",
+                        }}
+                      >
+                        {unresolved ? "Choose" : "Change"}
+                      </button>
+                    </Tooltip>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+      {pickerSlot && (
+        <BrandLibraryPicker
+          slotName={`${pickerSlot.screenLabel} · ${pickerSlot.label}`}
+          initialFilter={filterForKind(pickerSlot.kind)}
+          onClose={() => setPickerSlot(null)}
+          onSelect={(url, source) => {
+            onSetSlot(pickerSlot.key, url, source, pickerSlot.url);
+            setPickerSlot(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------
+// Brand library picker (Shopify theme-editor pattern, spec 4.5)
+// ---------------------------------------------------------------------
 
 interface LibraryImage {
   id: string;
@@ -29,200 +311,6 @@ interface LibraryImage {
   productIds: string[] | null;
 }
 
-export function buildImageSlots(
-  template: string | null,
-  flow: StudioFlow,
-  slots: Record<string, string>
-): ImageSlot[] {
-  const out: ImageSlot[] = [];
-  const src = (key: string, fallback: string) =>
-    slots[key] ? "From your brand library" : fallback;
-
-  if (template === "t1") {
-    out.push({
-      key: "hero",
-      name: "Quiz hero",
-      group: "Hero",
-      currentUrl: slots.hero ?? null,
-      sourceLabel: src("hero", "From your homepage (auto)"),
-    });
-  }
-  if (template === "t3") {
-    flow.questions.forEach((q, i) => {
-      const key = `question:${q.axisKey}`;
-      out.push({
-        key,
-        name: `Q${i + 1} · ${q.prompt.trim() || "Untitled question"}`,
-        group: "Question imagery",
-        currentUrl: slots[key] ?? null,
-        sourceLabel: src(key, "Lifestyle image (auto)"),
-      });
-    });
-  }
-  if (template === "t2") {
-    flow.questions.forEach((q) => {
-      q.options.forEach((o) => {
-        const key = `answer:${q.axisKey}:${o.axisValueValue}`;
-        out.push({
-          key,
-          name: `Answer · ${o.label || o.axisValueValue}`,
-          group: "Answer tiles",
-          currentUrl: slots[key] ?? o.imageUrl ?? null,
-          sourceLabel: slots[key]
-            ? "From your brand library"
-            : o.imageUrl
-              ? "Product image (auto)"
-              : "Not resolved yet",
-        });
-      });
-    });
-    out.push({
-      key: "loading",
-      name: "Loading screen",
-      group: "Loading screen",
-      currentUrl: slots.loading ?? null,
-      sourceLabel: src("loading", "Brand imagery (auto)"),
-    });
-  }
-  out.push({
-    key: "results",
-    name: "Results · match cards",
-    group: "Results",
-    currentUrl: slots.results ?? null,
-    sourceLabel: src("results", "Product images (auto)"),
-  });
-  return out;
-}
-
-export function ImagesRail({
-  template,
-  flow,
-  imageSlots,
-  onBack,
-  onSetSlot,
-  busy,
-}: {
-  template: string | null;
-  flow: StudioFlow;
-  imageSlots: Record<string, string>;
-  onBack: () => void;
-  onSetSlot: (slotKey: string, url: string, source: string, prevUrl: string | null) => void;
-  busy: boolean;
-}) {
-  const [pickerSlot, setPickerSlot] = useState<ImageSlot | null>(null);
-  const slots = buildImageSlots(template, flow, imageSlots);
-  const groups = [...new Set(slots.map((s) => s.group))];
-
-  return (
-    <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 10, flex: 1, minHeight: 0 }}>
-      <button
-        onClick={onBack}
-        style={{ border: 0, background: "transparent", color: "#6D7175", fontSize: 12.5, cursor: "pointer", textAlign: "left", padding: 0 }}
-      >
-        ← Back to screens
-      </button>
-      <div>
-        <Text as="h4" variant="headingSm">
-          Images
-        </Text>
-        <Text as="p" variant="bodySm" tone="subdued">
-          Auto-picked from your store. Change any of them.
-        </Text>
-      </div>
-      {template === "t5" && (
-        <Text as="p" variant="bodySm" tone="subdued">
-          The Clean template works with zero imagery; only results cards use images.
-        </Text>
-      )}
-      <div style={{ overflowY: "auto", flex: 1, minHeight: 0 }}>
-        {groups.map((g) => (
-          <div key={g} style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: "#6D7175", letterSpacing: "0.06em", textTransform: "uppercase", padding: "4px 0" }}>
-              {g}
-            </div>
-            {slots
-              .filter((s) => s.group === g)
-              .map((s) => (
-                <div
-                  key={s.key}
-                  style={{
-                    display: "flex",
-                    gap: 10,
-                    alignItems: "center",
-                    padding: 8,
-                    border: "1px solid #E1E3E5",
-                    borderRadius: 10,
-                    marginBottom: 8,
-                    background: "#fff",
-                  }}
-                >
-                  {s.currentUrl ? (
-                    <img
-                      src={s.currentUrl}
-                      alt=""
-                      style={{ width: 44, height: 44, borderRadius: 8, objectFit: "cover", flexShrink: 0 }}
-                    />
-                  ) : (
-                    <div
-                      style={{
-                        width: 44,
-                        height: 44,
-                        borderRadius: 8,
-                        background: "#F1F3F5",
-                        flexShrink: 0,
-                        display: "grid",
-                        placeItems: "center",
-                        color: "#C3C8CF",
-                        fontSize: 16,
-                      }}
-                    >
-                      ▦
-                    </div>
-                  )}
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {s.name}
-                    </div>
-                    <div style={{ fontSize: 11, color: "#6D7175" }}>{s.sourceLabel}</div>
-                  </div>
-                  <button
-                    onClick={() => setPickerSlot(s)}
-                    disabled={busy}
-                    style={{
-                      border: 0,
-                      background: "transparent",
-                      color: "#4A3AFF",
-                      fontSize: 12.5,
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      flexShrink: 0,
-                    }}
-                  >
-                    Change
-                  </button>
-                </div>
-              ))}
-          </div>
-        ))}
-      </div>
-      {pickerSlot && (
-        <BrandLibraryPicker
-          slotName={pickerSlot.name}
-          onClose={() => setPickerSlot(null)}
-          onSelect={(url, source) => {
-            onSetSlot(pickerSlot.key, url, source, pickerSlot.currentUrl);
-            setPickerSlot(null);
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------
-// Brand library picker (Shopify theme-editor pattern)
-// ---------------------------------------------------------------------
-
 const FILTERS = [
   { id: "", label: "All" },
   { id: "products", label: "Products" },
@@ -233,14 +321,17 @@ const FILTERS = [
 
 export function BrandLibraryPicker({
   slotName,
+  initialFilter,
   onClose,
   onSelect,
 }: {
   slotName: string;
+  /** Filter chip pre-selected on open (the slot's kind, spec 4.5). */
+  initialFilter?: string;
   onClose: () => void;
   onSelect: (url: string, source: string) => void;
 }) {
-  const [filter, setFilter] = useState("");
+  const [filter, setFilter] = useState(initialFilter ?? "");
   const [search, setSearch] = useState("");
   const [images, setImages] = useState<LibraryImage[]>([]);
   const [status, setStatus] = useState<"loading" | "ok" | "missing" | "error">("loading");
@@ -259,7 +350,6 @@ export function BrandLibraryPicker({
       );
       if (my !== seq.current) return;
       if (res.status === 404) {
-        // The library package hasn't landed for this shop yet.
         setStatus("missing");
         setImages([]);
         return;
@@ -330,7 +420,7 @@ export function BrandLibraryPicker({
         }}
       >
         <div style={{ padding: "16px 20px", borderBottom: "1px solid #E1E3E5", display: "flex", alignItems: "center", gap: 14 }}>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <Text as="h3" variant="headingSm">
               Your brand library
             </Text>
@@ -366,6 +456,7 @@ export function BrandLibraryPicker({
                 background: filter === f.id ? "#1A1C1E" : "#fff",
                 color: filter === f.id ? "#fff" : "#6D7175",
                 cursor: "pointer",
+                transition: "background 120ms ease, color 120ms ease",
               }}
             >
               {f.label}
@@ -389,7 +480,7 @@ export function BrandLibraryPicker({
           )}
           {status === "missing" && (
             <div style={{ gridColumn: "1/-1", textAlign: "center", padding: 30, color: "#6D7175", fontSize: 13 }}>
-              Library is still indexing. Check back in a few minutes.
+              Your store's images are still being indexed. Check back in a few minutes.
             </div>
           )}
           {status === "error" && (
@@ -413,7 +504,8 @@ export function BrandLibraryPicker({
                   overflow: "hidden",
                   position: "relative",
                   cursor: "pointer",
-                  border: selected?.id === img.id ? "2px solid #4A3AFF" : "2px solid transparent",
+                  border: selected?.id === img.id ? "2px solid #1A1C1E" : "2px solid transparent",
+                  transition: "border-color 120ms ease",
                 }}
               >
                 <img
@@ -446,7 +538,7 @@ export function BrandLibraryPicker({
                       width: 20,
                       height: 20,
                       borderRadius: 999,
-                      background: "#4A3AFF",
+                      background: "#1A1C1E",
                       color: "#fff",
                       fontSize: 11,
                       display: "grid",

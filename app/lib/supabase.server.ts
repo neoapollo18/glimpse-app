@@ -3304,6 +3304,13 @@ export interface ChatAssistantConfig {
   quiz_archetype_line: string | null;
   quiz_hero_image: string | null;
   quiz_image_slots: Record<string, string> | null;
+  // ---- v3 Template × Look (migration 080, docs/overhaul/V3-CONTRACTS.md §4) ----
+  // All NULL for legacy shops; only read when quiz_template is set.
+  quiz_look: 'editorial' | 'minimal' | 'bold' | null;
+  quiz_email_placement: 'hook_start' | 'gate_results' | 'after_results' | 'off' | null;
+  quiz_phases: Array<{ label: string; axisKeys: string[] }> | null;
+  quiz_founder: { name: string; credentials: string | null; portraitUrl: string | null } | null;
+  quiz_generation_report: Record<string, unknown> | null;
   // ---- Lead capture step (migration 067) ----
   // Optional email/SMS capture screen between the last question and the
   // photo gate. Off by default; the step is always skippable for shoppers.
@@ -3519,17 +3526,52 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   quiz_archetype_line: null,
   quiz_hero_image: null,
   quiz_image_slots: null,
+  quiz_look: null,
+  quiz_email_placement: null,
+  quiz_phases: null,
+  quiz_founder: null,
+  quiz_generation_report: null,
   quiz_multi_set_prompt: null,
   quiz_lead_enabled: false,
   quiz_lead_collect_phone: false,
   quiz_lead_headline: 'Want us to send your matches?',
   quiz_lead_body: "Pop in your email and we'll save your results — plus tips picked for your answers.",
   quiz_lead_button_label: 'Save my results',
-  quiz_lead_skip_label: 'Skip for now',
+  quiz_lead_skip_label: 'Skip',
   quiz_lead_consent_text: 'By continuing you agree to receive marketing messages. Unsubscribe anytime.',
   quiz_lead_discount_code: null,
   quiz_lead_discount_message: 'Here’s your code — we’ve applied it to your checkout automatically.',
 };
+
+// v3 phases: [{label, axisKeys[]}] — anything malformed degrades to null
+// (the widget then renders the Match phase header from question order).
+function mapQuizPhases(raw: any): ChatAssistantConfig['quiz_phases'] {
+  if (!Array.isArray(raw)) return null;
+  const out: Array<{ label: string; axisKeys: string[] }> = [];
+  for (const p of raw) {
+    if (!p || typeof p !== 'object') continue;
+    const label = typeof p.label === 'string' ? p.label.trim() : '';
+    const axisKeys = Array.isArray(p.axisKeys)
+      ? p.axisKeys.filter((k: unknown): k is string => typeof k === 'string' && k.trim() !== '')
+      : [];
+    if (!label || axisKeys.length === 0) continue;
+    out.push({ label, axisKeys });
+  }
+  return out.length ? out.slice(0, 4) : null;
+}
+
+// v3 founder (intro type D): name required; portrait must be https.
+function mapQuizFounder(raw: any): ChatAssistantConfig['quiz_founder'] {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const name = typeof raw.name === 'string' ? raw.name.trim() : '';
+  if (!name) return null;
+  return {
+    name,
+    credentials: typeof raw.credentials === 'string' && raw.credentials.trim() ? raw.credentials.trim() : null,
+    portraitUrl:
+      typeof raw.portraitUrl === 'string' && /^https:\/\//.test(raw.portraitUrl.trim()) ? raw.portraitUrl.trim() : null,
+  };
+}
 
 // Defensive parse of the quiz_shade_fallbacks jsonb: keep only
 // axis → value → [string values] entries; anything malformed degrades to
@@ -3723,6 +3765,19 @@ function mapChatAssistantRow(data: any): ChatAssistantConfig {
     quiz_image_slots:
       data.quiz_image_slots && typeof data.quiz_image_slots === 'object' && !Array.isArray(data.quiz_image_slots)
         ? data.quiz_image_slots
+        : null,
+    // v3 (migration 080): tolerate missing columns; malformed → null.
+    quiz_look: ['editorial', 'minimal', 'bold'].includes(data.quiz_look)
+      ? (data.quiz_look as ChatAssistantConfig['quiz_look'])
+      : null,
+    quiz_email_placement: ['hook_start', 'gate_results', 'after_results', 'off'].includes(data.quiz_email_placement)
+      ? (data.quiz_email_placement as ChatAssistantConfig['quiz_email_placement'])
+      : null,
+    quiz_phases: mapQuizPhases(data.quiz_phases),
+    quiz_founder: mapQuizFounder(data.quiz_founder),
+    quiz_generation_report:
+      data.quiz_generation_report && typeof data.quiz_generation_report === 'object' && !Array.isArray(data.quiz_generation_report)
+        ? (data.quiz_generation_report as Record<string, unknown>)
         : null,
     quiz_multi_set_prompt:
       typeof data.quiz_multi_set_prompt === 'string' && data.quiz_multi_set_prompt.trim()
@@ -3961,6 +4016,16 @@ const hexOrUndefined = (v: unknown): string | undefined =>
 // Single defensive mapper for the display_meta jsonb, shared by the
 // storefront flow and the admin editor so the two can't drift on what a
 // saved option looks like. Malformed blobs degrade to plain rendering.
+// v3 Discover / Bold answer emoji: a short run of pictographic characters
+// only (ZWJ sequences and variation selectors allowed), so a stray string
+// can never ride into the widget under the `emoji` key.
+const EMOJI_ONLY_RE = /^(?:\p{Extended_Pictographic}|\p{Emoji_Component}|\u200d|\ufe0f)+$/u;
+function emojiOrUndefined(v: unknown): string | undefined {
+  if (typeof v !== 'string') return undefined;
+  const t = v.trim();
+  return t && t.length <= 16 && EMOJI_ONLY_RE.test(t) ? t : undefined;
+}
+
 function mapDisplayMeta(raw: any): {
   sublabel?: string;
   tag?: string;
@@ -3968,9 +4033,11 @@ function mapDisplayMeta(raw: any): {
   meterPct?: number;
   swatch?: string;
   swatch2?: string;
+  emoji?: string;
 } | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   return {
+    emoji: emojiOrUndefined(raw.emoji),
     sublabel: typeof raw.sublabel === 'string' ? raw.sublabel : undefined,
     tag: typeof raw.tag === 'string' ? raw.tag : undefined,
     meterLabel: typeof raw.meterLabel === 'string' ? raw.meterLabel : undefined,

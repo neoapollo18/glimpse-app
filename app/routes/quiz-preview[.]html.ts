@@ -65,16 +65,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // questions — the merchant needs to see what they're building).
   const draft = await captureLiveConfig(payload.shopId);
 
+  const overrides = templateOverridesFromUrl(new URL(request.url));
   const [config, sample] = await Promise.all([
-    buildPreviewQuizConfig(
-      payload.shopDomain,
-      draft,
-      templateOverridesFromUrl(new URL(request.url))
-    ),
+    buildPreviewQuizConfig(payload.shopDomain, draft, overrides),
     buildPreviewSampleRecommend(payload.shopId, draft),
   ]);
   const { productJson, ...sampleRecommend } = sample;
   const flow = buildPreviewFlow(draft);
+
+  // v3 screenshot suite: `library=empty` strips every resolved image so
+  // each declared slot renders unresolved (Studio placeholder widget /
+  // storefront collapse). Preview-only; the storefront never sees it.
+  if (overrides.library === "empty") {
+    const c = config as Record<string, any>;
+    c.imageSlots = {};
+    if (c.theme) c.theme = { ...c.theme, heroImage: null };
+    if (c.landing?.founder) c.landing = { ...c.landing, founder: { ...c.landing.founder, portraitUrl: null } };
+    for (const q of (flow as any).questions ?? []) {
+      for (const o of q.options ?? []) if (o && typeof o === "object") o.imageUrl = null;
+    }
+  }
 
   const css = readAsset("gleame-quiz.css");
   const js = readAsset("gleame-quiz.js");
@@ -94,7 +104,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 <body>
 <div id="gleame-quiz-root" data-shop-domain="${escapeAttr(payload.shopDomain)}"></div>
 <script>
-window.GLEAME_QUIZ_PREVIEW = ${JSON.stringify({ config, flow, sampleRecommend, productJson }).replace(/</g, "\\u003c")};
+window.GLEAME_QUIZ_PREVIEW = ${JSON.stringify({
+    config,
+    flow,
+    sampleRecommend,
+    productJson,
+    // v3 (V3-CONTRACTS §6): this document IS the Studio canvas, so
+    // unresolved image slots render the dashed placeholder widget here
+    // (never on the storefront / app-proxy preview). `overrides.step`
+    // boots the widget on a specific screen for the gallery strips.
+    studio: true,
+    overrides: { step: overrides.step ?? null },
+  }).replace(/</g, "\\u003c")};
 </script>
 <script>${js}</script>
 </body>

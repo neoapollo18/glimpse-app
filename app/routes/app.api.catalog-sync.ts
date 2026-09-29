@@ -41,6 +41,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (!cursor) {
       const enabled = await enableCatalogSync(shopDomain);
       if (!enabled.ok) return json({ ok: false, error: enabled.error, intent });
+      // A sync has started: the library will be built on the final page.
+      // `pending` lets Studio/onboarding tell "queued" from "never
+      // attempted" (V3-CONTRACTS §9). Best-effort; never blocks the sync.
+      try {
+        const { setLibraryIndexStatus } = await import("../lib/brand-library.server");
+        await setLibraryIndexStatus(shopDomain, "pending");
+      } catch (err) {
+        console.warn(`[catalog-sync] library status (pending) failed for ${shopDomain}:`, err);
+      }
     }
     const page = await syncCatalogPage(admin, shopDomain, cursor);
     // Per-page errors are WARNINGS, not terminal: ok:false made the client
@@ -51,9 +60,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       console.warn(`[catalog-sync] ${shopDomain} page warnings:`, page.errors.slice(0, 5).join("; "));
     }
 
-    // Full sync complete -> build the brand library (V2-SPEC Part 4.1).
-    // Awaited but time-boxed; a library failure never fails the sync.
-    let library: { imageCount: number; taggedPct: number; ms: number } | undefined;
+    // Full sync complete -> build the brand library (V2-SPEC Part 4.1,
+    // V3-CONTRACTS §9). Awaited but time-boxed; buildBrandLibrary writes
+    // shops.library_index_status (building -> ready|failed) itself. A
+    // library failure never fails the sync: the response carries
+    // library.status/error and the route still returns ok:true.
+    let library:
+      | { status: "ready" | "failed"; imageCount: number; taggedPct: number; ms: number; error: string | null }
+      | undefined;
     if (page.nextCursor === null) {
       try {
         const { buildBrandLibrary } = await import("../lib/brand-library.server");
@@ -65,15 +79,34 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           }
           return body.data;
         };
-        library = await buildBrandLibrary(shopDomain, { admin: adminGraphql, timeBoxMs: 25_000 });
+        const built = await buildBrandLibrary(shopDomain, { admin: adminGraphql, timeBoxMs: 25_000 });
+        library = {
+          status: built.status,
+          imageCount: built.imageCount,
+          taggedPct: built.taggedPct,
+          ms: built.ms,
+          error: built.error,
+        };
         const { trackOverhaulEvent } = await import("../lib/overhaul-events.server");
         trackOverhaulEvent(shopDomain, "library_built", {
-          image_count: library.imageCount,
-          tagged_pct: library.taggedPct,
-          ms: library.ms,
+          status: built.status,
+          error: built.error,
+          image_count: built.imageCount,
+          tagged_pct: built.taggedPct,
+          ms: built.ms,
+          source: "catalog_sync",
         });
       } catch (err) {
+        // buildBrandLibrary never throws (it persists `failed` itself);
+        // this catches the dynamic import / event plumbing only.
         console.warn(`[catalog-sync] brand library build failed for ${shopDomain}:`, err);
+        library = {
+          status: "failed",
+          imageCount: 0,
+          taggedPct: 0,
+          ms: 0,
+          error: err instanceof Error ? err.message : "library build failed",
+        };
       }
     }
 

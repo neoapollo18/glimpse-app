@@ -500,8 +500,18 @@
   // class (gq-t1..gq-t5); absent template = legacy rendering, untouched.
   function applyBrandTokens() {
     var t = config.brandTokens;
+    // v3 (V3-CONTRACTS §6): gq-t{n} + gq-look-{look} on the root, only when
+    // a template is assigned. Stale classes from a previous Studio update
+    // (template/look switch) are dropped first; legacy shops never carry
+    // either class, so this is a no-op for them.
+    var stale = [];
+    for (var ci = 0; ci < root.classList.length; ci++) {
+      if (/^gq-(t[1-5]|look-[a-z]+)$/.test(root.classList[ci])) stale.push(root.classList[ci]);
+    }
+    for (var si = 0; si < stale.length; si++) root.classList.remove(stale[si]);
     if (config.template && /^t[1-5]$/.test(config.template)) {
       root.classList.add('gq-' + config.template);
+      root.classList.add('gq-look-' + activeLook());
     }
     if (!t) return;
     var set = function(name, val) {
@@ -698,6 +708,11 @@
     if (target.screen === 'lead' && (!leadActive() || state.leadDone)) {
       target = { screen: 'gate', screenIndex: 0 };
     }
+    // v3 Routine name capture (template-only screen; legacy sessions never
+    // hold 'name'): a stale entry resolves to the first question.
+    if (target.screen === 'name' && !routineNameCaptureAllowed()) {
+      target = { screen: 'question', screenIndex: 0 };
+    }
     // A gate entry while the photo step is off resolves to the last
     // question — Back from results must never land on the hidden step
     // (renderGate would auto-forward and trap the Back button).
@@ -883,6 +898,9 @@
 
   function render(direction) {
     var seq = ++renderSeq;
+    // Studio-only slot placeholders watch their size; the outgoing screen's
+    // slots are dropped here (null everywhere else).
+    if (slotObserver) slotObserver.disconnect();
     // Overhaul v2 (spec Part 3): an assigned template swaps in a distinct
     // structural renderer for intro/question/results. Lead and gate keep
     // the shared renderers (token-styled) in every template. No template
@@ -891,7 +909,8 @@
     var next;
     switch (state.screen) {
       case 'question': next = tpl ? tplQuestionScreen(tpl) : renderScreen(); break;
-      case 'lead':     next = renderLead(); break;
+      case 'lead':     next = tpl ? tplLeadScreen(tpl) : renderLead(); break;
+      case 'name':     next = tpl ? tplNameScreen(tpl) : renderIntro(); break; // v3 Routine name capture
       case 'gate':     next = renderGate(); break;
       case 'results':  next = tpl ? tplResultsScreen(tpl) : renderResults(); break;
       case 'intro':
@@ -1644,7 +1663,11 @@
   // -- Lead capture (optional bonus step before the gate) --
 
   function leadActive() {
-    return Boolean(config && config.lead && config.lead.enabled);
+    if (!(config && config.lead && config.lead.enabled)) return false;
+    // v3 templates honor the email placement setting (spec 5.2): 'off'
+    // disables capture outright. Legacy shops (no template) are unchanged.
+    if (activeTpl() && tplEmailPlacement() === 'off') return false;
+    return true;
   }
 
   // Merchant toggle (migration 068): gate.enabled=false skips the photo
@@ -1661,7 +1684,10 @@
   // complete" path (advanceFrom, the dead-screen skip) routes through here
   // so the lead step can't be bypassed by one of them.
   function routeAfterQuestions() {
-    if (leadActive() && !state.leadDone) {
+    // v3 templates with after_results placement render the capture as a
+    // card inside the results instead of a step here (tplLeadBeforeResults
+    // is always true for legacy shops).
+    if (leadActive() && !state.leadDone && tplLeadBeforeResults()) {
       state.screen = 'lead';
       trackEvent('quiz_lead_view');
     } else {
@@ -1919,7 +1945,7 @@
     };
     body.appendChild(form);
 
-    var skip = el('button', 'gq-skip-link', escapeHtml(lead.skipLabel || 'Skip for now') + ' →');
+    var skip = el('button', 'gq-skip-link', escapeHtml(lead.skipLabel || 'Skip') + ' →');
     skip.type = 'button';
     skip.onclick = function() {
       trackEvent('quiz_lead_skipped');
@@ -3024,6 +3050,8 @@
       // A captured/declined lead survives restarts — never re-ask the same
       // session for the email it already gave (or refused).
       leadDone: state.leadDone,
+      // v3 Routine: the name given this session survives "Try another look".
+      shopperName: state.shopperName,
     };
     draft = {}; // ghost selections must not leak into intro option visibility
     editReturn = false;
@@ -3040,41 +3068,286 @@
   }
 
   // =====================================================================
-  // Overhaul v2 structural templates (spec Part 3; wireframes.html is the
-  // visual contract). Five distinct DOM layouts keyed off config.template:
-  //   t1 TplSalon  - fixed 44/56 split consultation, prose results
-  //   t2 TplStudio - image-tile shade finder, computation screen, echo
-  //   t3 TplGuide  - lifestyle cards, comparison-table results
-  //   t4 TplPop    - personality quiz, archetype + kit bundle results
-  //   t5 TplClean  - universal default, works with zero imagery
+  // Gleame v3 templates — decision shapes (docs/overhaul/V3-SPEC.md Parts
+  // 2–5; docs/overhaul/V3-CONTRACTS.md §6 is the frozen widget contract).
+  // Five structurally distinct root components keyed off config.template:
+  //   t1 TplMatch    - "Which one is right for me?"  hero match + answer echo
+  //   t2 TplConsult  - "Help me decide."             top pick + comparison
+  //   t3 TplRoutine  - "What should I use together?" regimen + add-all
+  //   t4 TplDiscover - "What's my type?"             archetype + kit of 3
+  //   t5 TplClean    - any of the above, no imagery  simple grid
+  // A LOOK (config.look: editorial | minimal | bold) is a token preset plus
+  // a few layout switches applied through the gq-look-* root class; it
+  // never changes the root component. Every image position is an
+  // ImageSlot (spec 4.2): Studio previews render a placeholder for an
+  // unresolved slot, the storefront renders the per-kind collapse.
   // Everything behavioral (draft/commit machinery, showIf, multi-select,
-  // analytics, persistence, cart, try-on, footnotes) is the SAME code the
-  // legacy renderers use; only the DOM composition differs. A null/absent
-  // config.template (every live merchant today) never reaches any of this.
+  // analytics, persistence, cart, try-on, lead capture) is the SAME code
+  // the legacy renderers use; only the DOM composition differs. A
+  // null/absent config.template (every live merchant) never reaches this.
   // =====================================================================
 
   function activeTpl() {
     if (!config || !config.template || !/^t[1-5]$/.test(config.template)) return null;
     switch (config.template) {
-      case 't1': return TplSalon;
-      case 't2': return TplStudio;
-      case 't3': return TplGuide;
-      case 't4': return TplPop;
+      case 't1': return TplMatch;
+      case 't2': return TplConsult;
+      case 't3': return TplRoutine;
+      case 't4': return TplDiscover;
       case 't5': return TplClean;
     }
     return null;
   }
 
-  // T2's required results-computation screen runs once per results arrival.
-  // Lives on state (persisted): a reload of computed results must not
-  // replay the interstitial.
-
-  // Word-form kicker for T1 ("Question two"); digits past twelve.
-  var TPL_NUM_WORDS = ['one', 'two', 'three', 'four', 'five', 'six', 'seven',
-    'eight', 'nine', 'ten', 'eleven', 'twelve'];
-  function questionKicker(n) {
-    return 'Question ' + (TPL_NUM_WORDS[n - 1] || n);
+  var LOOK_IDS = ['editorial', 'minimal', 'bold'];
+  function activeLook() {
+    var l = config && config.look;
+    return LOOK_IDS.indexOf(l) !== -1 ? l : 'minimal';
   }
+
+  // Studio-only rendering (dashed slot placeholders). The app-proxy
+  // on-store preview never sets PREVIEW.studio.
+  function isStudio() {
+    return Boolean(PREVIEW && PREVIEW.studio);
+  }
+
+  // Emoji in answer copy render only under the Bold look or in Discover.
+  function emojiAllowed() {
+    return activeLook() === 'bold' || (config && config.template === 't4');
+  }
+
+  // Email placement (spec 5.2): merchant column, else the template default.
+  var TPL_EMAIL_DEFAULT = { t1: 'after_results', t2: 'hook_start', t3: 'gate_results', t4: 'after_results', t5: 'after_results' };
+  function tplEmailPlacement() {
+    var p = config && config.emailPlacement;
+    if (p === 'hook_start' || p === 'gate_results' || p === 'after_results' || p === 'off') return p;
+    return TPL_EMAIL_DEFAULT[config.template] || 'after_results';
+  }
+
+  // Whether the lead step sits in the flow BEFORE results (its own screen).
+  // Legacy shops: always (the shipped bonus step). Templates: hook_start
+  // and gate_results; after_results renders a card inside the results.
+  function tplLeadBeforeResults() {
+    if (!activeTpl()) return true;
+    var p = tplEmailPlacement();
+    return p === 'hook_start' || p === 'gate_results';
+  }
+
+  function httpsUrl(u) {
+    return typeof u === 'string' && /^https:\/\//.test(u) ? u : null;
+  }
+
+  // Product-JSON image urls: Shopify's /products/{handle}.js returns
+  // product-level featured_image / images[] protocol-relative
+  // (//cdn.shopify.com/...). Normalise those to https; merchant-typed slot
+  // urls stay strict https (httpsUrl).
+  function safeImgUrl(u) {
+    if (typeof u !== 'string') return null;
+    if (/^\/\//.test(u)) return 'https:' + u;
+    return httpsUrl(u);
+  }
+
+  function storeDisplayName() {
+    return (config && (config.storeName || config.assistantName)) ||
+      String(shopDomain || '').replace(/\.myshopify\.com$/, '').replace(/[-_.]+/g, ' ');
+  }
+
+  function initialOf(text) {
+    var t = String(text || '').trim();
+    return t ? t.charAt(0).toUpperCase() : '?';
+  }
+
+  function zeroPad(n) {
+    return (n < 10 ? '0' : '') + n;
+  }
+
+  // ---- ImageSlot (spec 4.2, contract §6) ----
+  //
+  // Resolution: config.imageSlots[key] → the caller's url (answer imageUrl,
+  // product image, theme.heroImage for the hero) → unresolved. Unresolved
+  // in Studio renders the dashed placeholder (click posts gleame:pick-slot);
+  // unresolved on the storefront renders the per-kind collapse and never
+  // the placeholder. `pending` marks a slot whose url is still loading
+  // (product JSON): a neutral surface until slotSetUrl settles it.
+
+  var SLOT_KIND_LABELS = {
+    hero: 'Hero photo', lifestyle: 'Lifestyle', product: 'Product', variant: 'Variant photo',
+    swatch: 'Swatch', icon: 'Icon', logo: 'Logo', thumb: 'Thumbnail',
+  };
+  var SLOT_GLYPH = '<svg class="gq-slot-glyph" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 8"/></svg>';
+
+  function resolveSlotUrl(key, url) {
+    var slots = config && config.imageSlots;
+    var fromRail = slots && key ? httpsUrl(slots[key]) : null;
+    return fromRail || httpsUrl(url);
+  }
+
+  function ratioParts(ratio) {
+    var m = /^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/.exec(String(ratio || '1:1'));
+    return m ? [parseFloat(m[1]), parseFloat(m[2])] : [1, 1];
+  }
+
+  function imageSlot(spec) {
+    var kind = SLOT_KIND_LABELS[spec.kind] ? spec.kind : 'product';
+    var slot = el('div', 'gq-slot gq-slot--' + kind + (spec.className ? ' ' + spec.className : ''));
+    slot.setAttribute('data-slot-key', spec.key || '');
+    slot.setAttribute('data-slot-kind', kind);
+    if (spec.sizePx) {
+      slot.classList.add('gq-slot--fixed');
+      slot.style.width = spec.sizePx + 'px';
+      slot.style.height = spec.sizePx + 'px';
+      if (spec.sizePx < 56) slot.classList.add('gq-slot--tiny');
+    } else {
+      var rp = ratioParts(spec.ratio);
+      slot.style.aspectRatio = rp[0] + ' / ' + rp[1];
+      slot.style.setProperty('--gq-slot-pad', ((rp[1] / rp[0]) * 100).toFixed(3) + '%');
+    }
+    slot.gqSpec = { key: spec.key, kind: kind, alt: spec.alt || '', initial: spec.initial, color: spec.color || null };
+    if (spec.pending) {
+      slot.classList.add('gq-slot--unresolved', 'gq-slot--pending');
+    } else {
+      slotSetUrl(slot, resolveSlotUrl(spec.key, spec.url));
+    }
+    return slot;
+  }
+
+  // Settle (or re-settle) a slot: an https url resolves it; null applies
+  // the Studio placeholder or the storefront collapse for its kind.
+  function slotSetUrl(slot, url) {
+    var s = slot.gqSpec || { kind: 'product' };
+    slot.innerHTML = '';
+    slot.classList.remove('gq-slot--resolved', 'gq-slot--unresolved', 'gq-slot--pending',
+      'gq-slot--placeholder', 'gq-slot--collapsed', 'gq-slot--initial', 'gq-slot--color', 'gq-slot--name');
+    slot.onclick = null;
+    slot.onkeydown = null;
+    slot.removeAttribute('role');
+    slot.removeAttribute('tabindex');
+    slot.removeAttribute('aria-label');
+    var resolved = httpsUrl(url);
+    if (resolved) {
+      slot.classList.add('gq-slot--resolved');
+      var img = el('img', 'gq-slot-img');
+      img.alt = s.alt || '';
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      img.onerror = function() { slotSetUrl(slot, null); }; // never a broken glyph
+      img.src = resolved;
+      slot.appendChild(img);
+      return slot;
+    }
+    // A hex swatch counts as artwork for swatch/variant tiles: paint it.
+    if (s.color && /^#[0-9a-fA-F]{3,8}$/.test(s.color)) {
+      slot.classList.add('gq-slot--resolved', 'gq-slot--color');
+      slot.style.background = s.color;
+      return slot;
+    }
+    slot.classList.add('gq-slot--unresolved');
+    if (isStudio()) {
+      slot.classList.add('gq-slot--placeholder');
+      slot.setAttribute('role', 'button');
+      slot.setAttribute('tabindex', '0');
+      slot.setAttribute('aria-label', 'Choose image · ' + SLOT_KIND_LABELS[s.kind]);
+      slot.innerHTML = '<span class="gq-slot-ph">' + SLOT_GLYPH +
+        '<span class="gq-slot-cap"><span class="gq-slot-cap-kind">Image · ' + escapeHtml(SLOT_KIND_LABELS[s.kind]) + '</span>' +
+        '<span class="gq-slot-cap-hover">Click to choose</span></span></span>';
+      var pick = function(e) {
+        if (e) { e.preventDefault(); e.stopPropagation(); }
+        postPreviewMsg({ type: 'gleame:pick-slot', slotKey: s.key || '', kind: s.kind });
+      };
+      slot.onclick = pick;
+      slot.onkeydown = function(e) { if (e.key === 'Enter' || e.key === ' ') pick(e); };
+      watchSlotSize(slot);
+      return slot;
+    }
+    // Storefront collapse per kind (spec 4.2).
+    switch (s.kind) {
+      case 'hero':
+      case 'lifestyle':
+      case 'icon':
+        slot.classList.add('gq-slot--collapsed');
+        break;
+      case 'logo':
+        slot.classList.add('gq-slot--name');
+        slot.appendChild(el('span', 'gq-slot-name', escapeHtml(storeDisplayName())));
+        break;
+      default: // variant | swatch | product | thumb → surface block + initial
+        slot.classList.add('gq-slot--initial');
+        slot.appendChild(el('span', 'gq-slot-initial', escapeHtml(s.initial || initialOf(s.alt))));
+    }
+    return slot;
+  }
+
+  function slotIsCollapsed(slot) {
+    return slot.classList.contains('gq-slot--collapsed');
+  }
+
+  // Caption hides under a 56px short side (the glyph stays). Fixed-size
+  // slots know their size up front; fluid ones watch it.
+  var slotObserver = null;
+  function watchSlotSize(slot) {
+    if (slot.classList.contains('gq-slot--fixed')) return;
+    if (typeof ResizeObserver === 'undefined') return;
+    if (!slotObserver) {
+      slotObserver = new ResizeObserver(function(entries) {
+        for (var i = 0; i < entries.length; i++) {
+          var r = entries[i].contentRect;
+          entries[i].target.classList.toggle('gq-slot--tiny', Math.min(r.width, r.height) < 56);
+        }
+      });
+    }
+    slotObserver.observe(slot);
+  }
+
+  // Product image slot for a match: renders pending, settles once the
+  // product JSON (promise-cached) resolves. Returns the slot.
+  function productSlot(m, kind, ratio, sizePx, className) {
+    var slot = imageSlot({
+      key: 'results', kind: kind || 'product', ratio: ratio || '1:1', sizePx: sizePx,
+      alt: m.productName || '', initial: initialOf(m.productName), className: className, pending: true,
+    });
+    var railUrl = resolveSlotUrl('results', null);
+    if (railUrl) { slotSetUrl(slot, railUrl); return slot; }
+    fetchProductJson(m.productHandle).then(function(pj) {
+      var cached = tryonCache[matchKey(m)];
+      if (cached) {
+        slotSetUrl(slot, null);
+        slot.innerHTML = '';
+        slot.classList.remove('gq-slot--unresolved', 'gq-slot--placeholder', 'gq-slot--initial', 'gq-slot--collapsed');
+        slot.classList.add('gq-slot--resolved');
+        var img = el('img', 'gq-slot-img');
+        img.alt = m.productName || '';
+        img.src = 'data:image/jpeg;base64,' + cached;
+        slot.appendChild(img);
+        return;
+      }
+      slotSetUrl(slot, safeImgUrl(imageForRec(pj, m)));
+    });
+    return slot;
+  }
+
+  // Try-on on a slot (hero cards): the slot doubles as the legacy media
+  // element so applyTryonToMedia's blur-up + badge work unchanged.
+  function slotTryon(slot, m, hasPhotoNow) {
+    if (!hasPhotoNow) return;
+    fetchProductJson(m.productHandle).then(function() {
+      var img = slot.querySelector('.gq-slot-img');
+      if (!img) {
+        img = el('img', 'gq-slot-img');
+        img.alt = m.productName || '';
+        slot.appendChild(img);
+      }
+      slot.classList.add('gq-media--working');
+      applyTryonToMedia(slot, img, m, true, function(ok) {
+        slot.classList.remove('gq-media--working');
+        if (ok) {
+          slot.classList.remove('gq-slot--unresolved', 'gq-slot--placeholder', 'gq-slot--initial');
+          slot.classList.add('gq-slot--resolved');
+        }
+      });
+    });
+  }
+
+  // ---- Shared chrome ----
 
   function tplBackButton() {
     var back = el('button', 'gq-back gq-tpl-back',
@@ -3084,89 +3357,98 @@
     return back;
   }
 
-  // Thin fill bar shared by T1 (2px), T2 (3px), and T5 (2px). Completed
-  // steps only, matching the legacy pips' done/current semantics.
+  // Thin fill bar (Consult 3px, Clean 2px). Completed steps only, matching
+  // the legacy pips' done/current semantics.
   function tplBar(cls, stepNumber) {
     var bar = el('div', cls);
+    bar.setAttribute('role', 'progressbar');
+    bar.setAttribute('aria-valuemin', '0');
+    bar.setAttribute('aria-valuemax', String(screens.length));
+    bar.setAttribute('aria-valuenow', String(Math.max(0, stepNumber - 1)));
     var fill = el('span', cls + '-fill');
     fill.style.width = Math.round(((stepNumber - 1) / Math.max(1, screens.length)) * 100) + '%';
     bar.appendChild(fill);
     return bar;
   }
 
-  var TPL_MODE_CONTAINER = {
-    salon: 'gq-t1-answers',
-    tiles: 'gq-t2-grid',
-    guide: 'gq-t3-grid',
-    guidetext: 'gq-t3-grid gq-t3-grid--text',
-    pop: 'gq-t4-grid',
-    bars: 'gq-t5-list',
-  };
-  var TPL_MODE_BTN = {
-    salon: 'gq-t1-a',
-    tiles: 'gq-t2-tile',
-    guide: 'gq-t3-card',
-    guidetext: 'gq-t3-card gq-t3-card--text',
-    pop: 'gq-t4-a',
-    bars: 'gq-t5-a',
-  };
-
-  // T2 tiles require artwork per answer: an image, or a sanitized swatch
-  // that can paint the tile. Questions that fail this render the T5 bar
-  // path inside T2 (spec 4.3 degradation, never broken images).
-  function optionHasTileArt(o) {
-    var meta = o.displayMeta || {};
-    return Boolean(o.imageUrl || meta.swatch || meta.swatch2);
+  function tplCta(label, cls) {
+    var btn = el('button', 'gq-add-btn gq-tpl-cta' + (cls ? ' ' + cls : ''), escapeHtml(label));
+    btn.type = 'button';
+    return btn;
   }
 
-  function tplOptionHtml(mode, opt) {
-    var meta = opt.displayMeta || {};
-    var label = escapeHtml(opt.label);
-    var sub = meta.sublabel ? escapeHtml(meta.sublabel) : '';
-    switch (mode) {
-      case 'salon':
-        return '<span class="gq-t1-a-label">' + label + '</span>' +
-          (sub ? '<small class="gq-t1-a-sub">' + sub + '</small>' : '');
-      case 'tiles': {
-        var fill;
-        if (opt.imageUrl) {
-          fill = '<img class="gq-t2-sw" src="' + escapeHtml(opt.imageUrl) + '" alt="" loading="lazy">';
-        } else {
-          // Swatches are strict-hex sanitized server-side; escaped anyway.
-          var s1 = meta.swatch || meta.swatch2;
-          var s2 = meta.swatch2 || meta.swatch;
-          fill = '<span class="gq-t2-sw" style="background:linear-gradient(140deg,' +
-            escapeHtml(s1) + ',' + escapeHtml(s2) + ')"></span>';
-        }
-        return fill + '<span class="gq-t2-label">' + label +
-          (sub ? '<small>' + sub + '</small>' : '') + '</span>';
-      }
-      case 'guide': {
-        // A missing image gets the surface placeholder block with the
-        // option initial, never a broken-image glyph.
-        var media = opt.imageUrl
-          ? '<img class="gq-t3-ph" src="' + escapeHtml(opt.imageUrl) + '" alt="" loading="lazy">'
-          : '<span class="gq-t3-ph gq-t3-ph--empty">' + escapeHtml((opt.label || '?').charAt(0).toUpperCase()) + '</span>';
-        return media + '<span class="gq-t3-tx"><span class="gq-t3-card-title">' + label + '</span>' +
-          (sub ? '<span class="gq-t3-card-desc">' + sub + '</span>' : '') + '</span>';
-      }
-      case 'guidetext':
-        return '<span class="gq-t3-tx"><span class="gq-t3-card-title">' + label + '</span>' +
-          (sub ? '<span class="gq-t3-card-desc">' + sub + '</span>' : '') + '</span>';
-      case 'pop': {
-        var emoji = meta.emoji ? '<span class="gq-t4-e">' + escapeHtml(meta.emoji) + '</span>' : '';
-        return emoji + '<span class="gq-t4-a-label">' + label +
-          (sub ? '<small class="gq-t4-a-sub">' + sub + '</small>' : '') + '</span>';
-      }
-      default: // bars
-        return '<span class="gq-t5-a-label">' + label + '</span>' +
-          (sub ? '<small class="gq-t5-a-sub">' + sub + '</small>' : '');
+  function startQuiz(tpl) {
+    if (tpl.id === 't3' && routineNameCaptureActive()) {
+      state.screen = 'name';
+    } else {
+      state.screen = 'question';
+      state.screenIndex = 0;
     }
+    saveState();
+    pushStep();
+    render('forward');
+  }
+
+  // Per-template intro CTA copy. A merchant label (landing.ctaLabel) wins;
+  // hook_start with a configured discount promises it (spec 5.2).
+  var TPL_CTA = { t1: 'Find my match', t2: 'Find my match', t3: 'Let’s get started', t4: 'Let’s go →', t5: 'Start the quiz' };
+  function introCtaLabel(tpl) {
+    var landing = config.landing || {};
+    if (landing.ctaLabel) return landing.ctaLabel;
+    if (leadActive() && tplEmailPlacement() === 'hook_start' && config.lead && config.lead.hasDiscount) return 'Unlock my discount';
+    return TPL_CTA[tpl.id] || 'Start the quiz';
+  }
+
+  function optionDesc(opt) {
+    var meta = opt.displayMeta || {};
+    return meta.sublabel || opt.reasonText || '';
+  }
+
+  // Answer artwork for a visual tile: an image url, or a hex swatch that
+  // can paint the tile (kind 'swatch' when the option only has a swatch).
+  function optionArt(opt) {
+    var meta = opt.displayMeta || {};
+    var url = httpsUrl(opt.imageUrl);
+    var color = meta.swatch || meta.swatch2 || null;
+    return { url: url, color: url ? null : color, kind: (!url && color) ? 'swatch' : 'variant' };
+  }
+
+  // A question is visual (S2) when at least one answer carries artwork —
+  // mirrors isVisualQuestion in app/lib/quiz-templates.ts.
+  function questionIsVisual(q) {
+    return q.options.some(function(o) {
+      if (o.selectAll) return false;
+      if (httpsUrl(o.imageUrl)) return true;
+      var meta = o.displayMeta || {};
+      return typeof meta.swatch === 'string' || typeof meta.swatch2 === 'string';
+    });
+  }
+
+  function answerSlotKey(q, opt) {
+    return 'answer:' + q.axisKey + ':' + opt.axisValue;
+  }
+
+  function firstVisualQuestion() {
+    for (var i = 0; i < flow.questions.length; i++) {
+      if (questionIsVisual(flow.questions[i])) return flow.questions[i];
+    }
+    return flow.questions[0] || null;
+  }
+
+  var CHECK_MINI = '<svg class="gq-tpl-check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>';
+
+  // "Select all that apply" is visible on every multi-select screen unless
+  // the merchant helper already says it.
+  function multiHint(q) {
+    if (!q.multiSelect) return null;
+    if (q.helperText && /select all|pick all|choose all|all that apply/i.test(q.helperText)) return null;
+    return el('p', 'gq-tpl-multi', q.maxSelections ? 'Select up to ' + q.maxSelections : 'Select all that apply');
   }
 
   // Template counterpart of buildOptionList: same wiring (wireOptionClick,
-  // draft seeding, "open to anything" escape hatch), different DOM.
-  function tplOptionBlock(tpl, qi, q, needsContinue, onChange, noAnim) {
+  // draft seeding, "open to anything" escape hatch), DOM per template via
+  // tpl.optionList(q, specific) / tpl.optionButton(q, opt, idx).
+  function tplOptionBlock(tpl, qi, q, needsContinue, onChange, noAnim, inert) {
     var opts = visibleOptions(q);
     var anyOpt = null;
     var specific = [];
@@ -3174,21 +3456,25 @@
       if (o.selectAll && !anyOpt) anyOpt = o;
       else specific.push(o);
     });
-    var mode = tpl.optionMode(specific.length > 0 ? specific : opts);
     var block = el('div', 'gq-option-block' + (noAnim ? ' gq-no-anim' : ''));
-    var list = el('div', TPL_MODE_CONTAINER[mode]);
+    var list = tpl.optionList(q, specific);
     specific.forEach(function(opt, idx) {
-      var btn = el('button', TPL_MODE_BTN[mode], tplOptionHtml(mode, opt));
+      var btn = tpl.optionButton(q, opt, idx);
       btn.type = 'button';
       btn.style.setProperty('--gq-stagger', idx);
       var current = draft[qi];
       if (current && current.options.indexOf(opt) !== -1) btn.classList.add('is-selected');
-      wireOptionClick(btn, qi, q, opt, needsContinue, onChange);
+      if (inert) {
+        btn.tabIndex = -1;
+        if (idx === 0) btn.classList.add('is-selected');
+      } else {
+        wireOptionClick(btn, qi, q, opt, needsContinue, onChange);
+      }
       list.appendChild(btn);
     });
     block.appendChild(list);
-    if (anyOpt) {
-      var anyBtn = el('button', 'gq-option-any', '<span>' + escapeHtml(anyOpt.label) + '</span>');
+    if (anyOpt && !inert) {
+      var anyBtn = el('button', 'gq-option-any gq-tpl-any', '<span>' + escapeHtml(anyOpt.label) + '</span>');
       anyBtn.type = 'button';
       var cur = draft[qi];
       if (cur && cur.options.indexOf(anyOpt) !== -1) anyBtn.classList.add('is-selected');
@@ -3198,40 +3484,16 @@
     return block;
   }
 
-  function tplFramed(tpl, screen) {
-    return tpl.frame ? tpl.frame(screen) : screen;
-  }
-
-  // T1's fixed split: sticky brand hero left, scrolling column right.
-  // Hero image comes from config.theme.heroImage; absent, the CSS
-  // gradient placeholder stands in (never a broken image).
-  function salonFrame(content) {
-    var wrap = el('div', 'gq-t1-split');
-    var hero = el('div', 'gq-t1-hero');
-    var heroUrl = config.theme && config.theme.heroImage;
-    if (heroUrl && /^https:\/\//.test(String(heroUrl))) {
-      var img = el('img', 'gq-t1-hero-img');
-      img.alt = '';
-      img.onerror = function() { if (img.parentNode) img.parentNode.removeChild(img); };
-      img.src = heroUrl;
-      hero.appendChild(img);
-    }
-    wrap.appendChild(hero);
-    var right = el('div', 'gq-t1-right');
-    right.appendChild(content);
-    wrap.appendChild(right);
-    return wrap;
-  }
-
   // -- Template question screens --
   // Mirrors renderScreen's behavior exactly (draft seeding, dead-screen
-  // skip, Continue semantics, same-screen conditionals); DOM per template.
+  // skip, Continue semantics, same-screen conditionals); the template
+  // composes the DOM through tpl.questionChrome / tpl.questionHead.
 
   function tplQuestionScreen(tpl) {
     var screenIdx = state.screenIndex;
     var qIdxs = screens[screenIdx];
-    var screen = el('div', 'gq-step gq-tpl-step gq-tpl-step--' + tpl.id);
-    if (!qIdxs) return tplFramed(tpl, screen);
+    var screen = el('div', 'gq-step gq-tpl-step gq-tpl-step--' + tpl.id + ' gq-' + tpl.id + '-screen');
+    if (!qIdxs) return screen;
 
     draft = {};
     qIdxs.forEach(function(qi) {
@@ -3261,16 +3523,12 @@
         replaceStep();
         render('forward');
       }, 0);
-      return tplFramed(tpl, screen);
+      return screen;
     }
 
-    var chrome = el('div', 'gq-tpl-chrome');
-    chrome.appendChild(tplBackButton());
-    var prog = tpl.progress(screenIdx + 1);
-    if (prog) chrome.appendChild(prog);
-    screen.appendChild(chrome);
+    screen.appendChild(tpl.questionChrome(screenIdx + 1));
 
-    var body = el('div', 'gq-tpl-body');
+    var body = el('div', 'gq-tpl-body gq-' + tpl.id + '-body');
     var needsContinue = qIdxs.length > 1 || flow.questions[qIdxs[0]].multiSelect;
     var continueBtn = null;
     var hasConditionals = qIdxs.some(function(qi) {
@@ -3308,111 +3566,584 @@
 
     qIdxs.forEach(function(qi, part) {
       var q = flow.questions[qi];
-      if (part === 0 && tpl.kicker) {
-        body.appendChild(el('p', 'gq-tpl-kicker', escapeHtml(tpl.kicker(screenIdx + 1))));
-      }
-      body.appendChild(el(part === 0 ? 'h2' : 'h3',
-        part === 0 ? 'gq-tpl-q' : 'gq-tpl-q gq-tpl-q--sub', escapeHtml(q.prompt)));
-      if (q.helperText) body.appendChild(el('p', 'gq-tpl-help', escapeHtml(q.helperText)));
+      var visual = questionIsVisual(q);
+      body.appendChild(tpl.questionHead(q, part, screenIdx, visual));
       var list = tplOptionBlock(tpl, qi, q, needsContinue, onSelectionChange, false);
       listHolders[qi] = list;
       body.appendChild(list);
+      // Match: the helper reads as a tip beneath visual tiles (spec T1 S2).
+      if (tpl.id === 't1' && visual && q.helperText) {
+        body.appendChild(el('p', 'gq-t1-tip', '<span class="gq-t1-tip-label">Tip</span> ' + escapeHtml(q.helperText)));
+      }
     });
 
     if (needsContinue) {
       var isLast = screenIdx === screens.length - 1;
       var ctaLabel = isLast
         ? ((config.results && config.results.showMatchesLabel) || 'Show my matches')
-        : 'Continue';
+        : (tpl.id === 't4' ? 'Next' : 'Continue');
       continueBtn = el('button', 'gq-add-btn gq-continue-btn gq-tpl-continue', escapeHtml(ctaLabel) + ' →');
       continueBtn.type = 'button';
       continueBtn.onclick = function() { commitScreen(screenIdx); };
-      body.appendChild(continueBtn);
+      var row = el('div', 'gq-tpl-continue-row');
+      row.appendChild(continueBtn);
+      body.appendChild(row);
       refreshContinue();
     }
 
     screen.appendChild(body);
-    return tplFramed(tpl, screen);
+    return screen;
   }
 
-  // -- Template intro (spec 5.3: always its own screen, single CTA) --
+  // Default question header: prompt + helper (+ multi-select hint).
+  function tplPromptBlock(q, part, extraClass) {
+    var frag = document.createDocumentFragment();
+    frag.appendChild(el(part === 0 ? 'h2' : 'h3',
+      (part === 0 ? 'gq-tpl-q' : 'gq-tpl-q gq-tpl-q--sub') + (extraClass ? ' ' + extraClass : ''),
+      escapeHtml(q.prompt)));
+    if (q.helperText) frag.appendChild(el('p', 'gq-tpl-help', escapeHtml(q.helperText)));
+    var hint = multiHint(q);
+    if (hint) frag.appendChild(hint);
+    return frag;
+  }
+
+  // ---- Intro types A–E (spec 5.1): five distinct components ----
+
+  function tplIntroType(tpl) {
+    var look = activeLook();
+    var landing = config.landing || {};
+    switch (tpl.id) {
+      case 't1': return 'hero';
+      case 't2': return look === 'editorial' ? 'split' : 'landing';
+      case 't3': return landing.founder && landing.founder.name ? 'founder' : 'minimal';
+      case 't4': return 'hero';
+      default: return 'minimal';
+    }
+  }
 
   function tplIntroScreen(tpl) {
     draft = {};
+    var type = tplIntroType(tpl);
+    var screen = el('div', 'gq-tpl-step gq-tpl-intro gq-intro-' + type + ' gq-' + tpl.id + '-intro');
+    if (screens.length === 0) {
+      screen.appendChild(el('p', 'gq-tpl-help', 'This quiz isn’t configured yet.'));
+      return screen;
+    }
+    switch (type) {
+      case 'split': introSplit(tpl, screen); break;
+      case 'landing': introLanding(tpl, screen); break;
+      case 'founder': introFounder(tpl, screen); break;
+      case 'hero': introHero(tpl, screen); break;
+      default: introMinimal(tpl, screen);
+    }
+    return screen;
+  }
+
+  function introStart(tpl, cls) {
+    var btn = tplCta(introCtaLabel(tpl), 'gq-tpl-begin' + (cls ? ' ' + cls : ''));
+    btn.onclick = function() { startQuiz(tpl); };
+    return btn;
+  }
+
+  function introTrust(items, max, cls) {
+    if (!Array.isArray(items) || items.length === 0) return null;
+    var trust = el('div', cls || 'gq-tpl-trust');
+    items.slice(0, max || 3).forEach(function(item) {
+      if (typeof item !== 'string' || !item) return;
+      var t = el('span', 'gq-tpl-trust-item');
+      t.innerHTML = CHECK_MINI + '<span>' + escapeHtml(item) + '</span>';
+      trust.appendChild(t);
+    });
+    return trust;
+  }
+
+  // A · Split: fixed 44/56; hero slot left (sticky); kicker + headline +
+  // two-line prose + single CTA right. Unresolved hero on the storefront
+  // collapses the column (no-image variant).
+  function introSplit(tpl, screen) {
     var landing = config.landing || {};
-    var screen = el('div', 'gq-tpl-step gq-tpl-intro gq-tpl-step--' + tpl.id);
-    var body = el('div', 'gq-tpl-body gq-tpl-intro-body');
-    if (landing.eyebrow) body.appendChild(el('p', 'gq-tpl-kicker', escapeHtml(landing.eyebrow)));
-    body.appendChild(el('h2', 'gq-tpl-q gq-tpl-headline', renderAccent(landing.headline || '')));
-    if (landing.subtext) body.appendChild(el('p', 'gq-tpl-help gq-tpl-subtext', escapeHtml(landing.subtext)));
-    if (screens.length > 0) {
-      var start = el('button', 'gq-add-btn gq-start-btn gq-tpl-begin', escapeHtml(tpl.beginLabel || 'Start the quiz'));
-      start.type = 'button';
-      start.onclick = function() {
+    var heroUrl = resolveSlotUrl('hero', config.theme && config.theme.heroImage);
+    var showHero = Boolean(heroUrl) || isStudio();
+    if (!showHero) screen.classList.add('gq-intro--noimg');
+    var grid = el('div', 'gq-intro-split-grid');
+    if (showHero) {
+      var heroCol = el('div', 'gq-intro-split-hero');
+      heroCol.appendChild(imageSlot({ key: 'hero', kind: 'hero', ratio: '4:5', url: heroUrl, alt: '' }));
+      grid.appendChild(heroCol);
+    }
+    var copy = el('div', 'gq-intro-split-copy');
+    if (landing.eyebrow) copy.appendChild(el('p', 'gq-tpl-kicker', escapeHtml(landing.eyebrow)));
+    copy.appendChild(el('h2', 'gq-tpl-headline', renderAccent(landing.headline || '')));
+    if (landing.subtext) copy.appendChild(el('p', 'gq-tpl-prose gq-tpl-prose--2', escapeHtml(landing.subtext)));
+    copy.appendChild(introStart(tpl));
+    grid.appendChild(copy);
+    screen.appendChild(grid);
+  }
+
+  // B · Hero photo: centered column; hero slot 16:9 above; headline; one
+  // line; CTA. Match shows its phase header beneath the chrome.
+  function introHero(tpl, screen) {
+    var landing = config.landing || {};
+    if (tpl.id === 't1') {
+      var top = el('div', 'gq-t1-top');
+      top.appendChild(el('span', 'gq-t1-top-spacer'));
+      top.appendChild(el('span', 'gq-t1-brand', escapeHtml(landing.eyebrow || '')));
+      top.appendChild(el('span', 'gq-t1-numeral', zeroPad(1) + ' / ' + zeroPad(screens.length + 1)));
+      screen.appendChild(top);
+      screen.appendChild(matchPhaseBar(-1));
+    }
+    var col = el('div', 'gq-intro-hero-col');
+    var heroUrl = resolveSlotUrl('hero', config.theme && config.theme.heroImage);
+    if (heroUrl || isStudio()) {
+      col.appendChild(imageSlot({ key: 'hero', kind: 'hero', ratio: '16:9', url: heroUrl, alt: '', className: 'gq-intro-hero-slot' }));
+    } else {
+      screen.classList.add('gq-intro--noimg');
+    }
+    if (tpl.id !== 't1' && landing.eyebrow) col.appendChild(el('p', 'gq-tpl-kicker', escapeHtml(landing.eyebrow)));
+    col.appendChild(el('h2', 'gq-tpl-headline', renderAccent(landing.headline || '')));
+    if (landing.subtext) col.appendChild(el('p', 'gq-tpl-prose', escapeHtml(landing.subtext)));
+    col.appendChild(introStart(tpl));
+    if (tpl.id === 't4') {
+      var trust = introTrust(landing.trustItems, 3, 'gq-tpl-trust gq-t4-trust');
+      if (trust) col.appendChild(trust);
+    }
+    screen.appendChild(col);
+  }
+
+  // C · Landing + hook: 2-col. Left = rating chip (ONLY a real object),
+  // headline, one line, 3 benefit chips, primary CTA (hook copy) + support
+  // line. Right = live non-interactive miniature of the first visual
+  // question with a discount badge when a code is configured.
+  function introLanding(tpl, screen) {
+    var landing = config.landing || {};
+    var lead = config.lead || {};
+    var grid = el('div', 'gq-intro-landing-grid');
+    var left = el('div', 'gq-intro-landing-copy');
+    var rating = landing.rating;
+    if (rating && typeof rating === 'object' && rating.value) {
+      var chip = el('div', 'gq-intro-rating');
+      chip.innerHTML = '<span class="gq-intro-stars" aria-hidden="true">★★★★★</span> <b>' +
+        escapeHtml(String(rating.value)) + '/5</b>' +
+        (rating.count ? '<span class="gq-intro-rating-src"> · ' + escapeHtml(String(rating.count)) + ' reviews</span>' : '') +
+        (rating.source ? '<span class="gq-intro-rating-src"> · ' + escapeHtml(String(rating.source)) + '</span>' : '');
+      left.appendChild(chip);
+    }
+    if (landing.eyebrow) left.appendChild(el('p', 'gq-tpl-kicker', escapeHtml(landing.eyebrow)));
+    left.appendChild(el('h2', 'gq-tpl-headline', renderAccent(landing.headline || '')));
+    if (landing.subtext) left.appendChild(el('p', 'gq-tpl-prose', escapeHtml(landing.subtext)));
+    var chips = Array.isArray(landing.benefitChips) ? landing.benefitChips : [];
+    if (chips.length > 0) {
+      var row = el('div', 'gq-intro-benefits');
+      chips.slice(0, 3).forEach(function(c) {
+        if (typeof c !== 'string' || !c) return;
+        var b = el('span', 'gq-intro-benefit');
+        b.innerHTML = CHECK_MINI + '<span>' + escapeHtml(c) + '</span>';
+        row.appendChild(b);
+      });
+      left.appendChild(row);
+    }
+    var ctaRow = el('div', 'gq-intro-ctarow');
+    ctaRow.appendChild(introStart(tpl));
+    var support = Array.isArray(landing.trustItems) && landing.trustItems[0];
+    if (support) ctaRow.appendChild(el('p', 'gq-intro-support', escapeHtml(support)));
+    left.appendChild(ctaRow);
+    grid.appendChild(left);
+
+    var card = el('div', 'gq-intro-preview');
+    card.setAttribute('aria-hidden', 'true');
+    card.appendChild(el('span', 'gq-intro-preview-label', 'Quiz preview'));
+    if (lead.hasDiscount && leadActive()) {
+      card.appendChild(el('span', 'gq-intro-badge', '<span>Mystery</span><b>?%</b><span>off</span>'));
+    }
+    var previewUrl = resolveSlotUrl('preview', null);
+    if (previewUrl || isStudio()) {
+      card.appendChild(imageSlot({ key: 'preview', kind: 'product', ratio: '16:10', url: previewUrl, alt: '', className: 'gq-intro-preview-slot' }));
+    }
+    var q = firstVisualQuestion();
+    if (q) {
+      var qi = flow.questions.indexOf(q);
+      var mini = el('div', 'gq-intro-preview-mini');
+      var pbar = el('div', 'gq-intro-preview-bar');
+      for (var i = 0; i < screens.length; i++) {
+        pbar.appendChild(el('i', i <= (qi > 0 ? 1 : 0) ? 'is-filled' : ''));
+      }
+      mini.appendChild(pbar);
+      mini.appendChild(el('p', 'gq-intro-preview-kicker', 'Question ' + (qi + 1) + ' of ' + screens.length));
+      mini.appendChild(el('p', 'gq-intro-preview-q', escapeHtml(q.prompt)));
+      var savedDraft = draft;
+      draft = {};
+      var block = tplOptionBlock(tpl, qi, q, false, null, true, true);
+      draft = savedDraft;
+      block.classList.add('gq-intro-preview-block');
+      mini.appendChild(block);
+      card.appendChild(mini);
+    }
+    grid.appendChild(card);
+    screen.appendChild(grid);
+  }
+
+  // D · Founder / voice: portrait slot (1:1 circle 160px), "Hi, I'm
+  // {name}", credentials line, CTA. Only when landing.founder has a name.
+  function introFounder(tpl, screen) {
+    var landing = config.landing || {};
+    var founder = landing.founder || {};
+    var col = el('div', 'gq-intro-founder-col');
+    if (landing.eyebrow) col.appendChild(el('p', 'gq-tpl-kicker gq-intro-founder-brand', escapeHtml(landing.eyebrow)));
+    var portraitUrl = resolveSlotUrl('founder', founder.portraitUrl);
+    if (portraitUrl || isStudio()) {
+      col.appendChild(imageSlot({ key: 'founder', kind: 'hero', ratio: '1:1', sizePx: 160, url: portraitUrl, alt: founder.name || '', className: 'gq-intro-founder-slot' }));
+    } else {
+      screen.classList.add('gq-intro--noimg');
+    }
+    col.appendChild(el('h2', 'gq-tpl-headline gq-intro-founder-hi', 'Hi, I’m ' + escapeHtml(founder.name) + '.'));
+    if (founder.credentials) col.appendChild(el('p', 'gq-intro-founder-cred', escapeHtml(founder.credentials)));
+    var pitch = landing.subtext || landing.headline;
+    if (pitch) col.appendChild(el('p', 'gq-tpl-prose', escapeHtml(pitch)));
+    col.appendChild(introStart(tpl));
+    screen.appendChild(col);
+  }
+
+  // E · Minimal: kicker, headline, one line, CTA, 3 trust items.
+  function introMinimal(tpl, screen) {
+    var landing = config.landing || {};
+    var col = el('div', 'gq-intro-minimal-col');
+    if (tpl.id === 't3') col.appendChild(el('p', 'gq-t3-brand', escapeHtml(storeDisplayName())));
+    if (landing.eyebrow) col.appendChild(el('p', 'gq-tpl-kicker', escapeHtml(landing.eyebrow)));
+    col.appendChild(el('h2', 'gq-tpl-headline', renderAccent(landing.headline || '')));
+    if (landing.subtext) col.appendChild(el('p', 'gq-tpl-prose', escapeHtml(landing.subtext)));
+    col.appendChild(introStart(tpl));
+    var trust = introTrust(landing.trustItems, 3);
+    if (trust) col.appendChild(trust);
+    screen.appendChild(col);
+  }
+
+  // ---- Routine name capture (T3 S0b) ----
+  // Optional; the name lives on state (persisted with the session, never
+  // sent anywhere) and greets the shopper on the first question. A
+  // logged-in customer's first name skips the step. config.nameCapture
+  // === false turns it off.
+
+  function routineNameCaptureAllowed() {
+    if (!(config && config.template === 't3')) return false;
+    if (config.nameCapture === false) return false;
+    if (customerFirstName) return false;
+    return true;
+  }
+
+  function routineNameCaptureActive() {
+    return routineNameCaptureAllowed() && !state.shopperName;
+  }
+
+  function shopperName() {
+    return (state.shopperName || customerFirstName || '').trim();
+  }
+
+  function leaveNameCapture() {
+    state.screen = 'question';
+    state.screenIndex = 0;
+    saveState();
+    replaceStep();
+    render('forward');
+  }
+
+  function tplNameScreen(tpl) {
+    draft = {};
+    var screen = el('div', 'gq-step gq-tpl-step gq-t3-name gq-' + tpl.id + '-screen');
+    // Stale render (history entry / config change / logged-in customer):
+    // step past it in place, same pattern as dead question screens.
+    if (!routineNameCaptureAllowed()) {
+      setTimeout(function() {
+        if (state.screen !== 'name') return;
         state.screen = 'question';
         state.screenIndex = 0;
         saveState();
-        pushStep();
+        replaceStep();
         render('forward');
-      };
-      body.appendChild(start);
-    } else {
-      body.appendChild(el('p', 'gq-tpl-help', 'This quiz isn’t configured yet.'));
+      }, 0);
+      return screen;
     }
-    if (tpl.id !== 't1' && Array.isArray(landing.trustItems) && landing.trustItems.length > 0) {
-      var trust = el('div', 'gq-tpl-trust');
-      landing.trustItems.forEach(function(item) {
-        trust.appendChild(el('span', 'gq-tpl-trust-item', escapeHtml(item)));
-      });
-      body.appendChild(trust);
-    }
+    screen.appendChild(tpl.questionChrome(0));
+    var body = el('div', 'gq-tpl-body gq-t3-body gq-t3-name-body');
+    body.appendChild(el('h2', 'gq-tpl-q gq-t3-q', 'To start, who is the routine for?'));
+    var form = el('form', 'gq-t3-name-form');
+    var input = document.createElement('input');
+    input.className = 'gq-lead-input gq-t3-name-input';
+    input.type = 'text';
+    input.name = 'name';
+    input.maxLength = 40;
+    input.placeholder = 'Enter your name here';
+    input.autocomplete = 'given-name';
+    input.setAttribute('aria-label', 'Your name');
+    if (state.shopperName) input.value = state.shopperName;
+    form.appendChild(input);
+    var cont = tplCta('Continue', 'gq-t3-name-continue');
+    cont.disabled = !input.value.trim();
+    form.appendChild(cont);
+    input.oninput = function() { cont.disabled = !input.value.trim(); };
+    form.onsubmit = function(e) {
+      e.preventDefault();
+      var v = input.value.trim().replace(/\s+/g, ' ');
+      if (!v) return;
+      state.shopperName = v.slice(0, 40);
+      leaveNameCapture();
+    };
+    body.appendChild(form);
+    var skip = el('button', 'gq-skip-link gq-tpl-skip', 'Skip');
+    skip.type = 'button';
+    skip.onclick = function() { state.shopperName = ''; leaveNameCapture(); };
+    body.appendChild(skip);
     screen.appendChild(body);
-    return tplFramed(tpl, screen);
+    return screen;
   }
 
-  // -- Template results: shared card plumbing --
+  // ---- Email capture (S4) per placement ----
 
-  function tplMatchMedia(m, cls) {
-    var media = el('div', cls + ' gq-tpl-media');
-    var ph = el('span', 'gq-tpl-ph', escapeHtml((m.productName || '?').charAt(0).toUpperCase()));
-    media.appendChild(ph);
-    var img = el('img', 'gq-tpl-img');
-    img.alt = m.productName || '';
-    img.loading = 'lazy';
-    // addEventListener, not onload: applyTryonToMedia assigns onload for
-    // its blur-up and must not evict the placeholder toggle.
-    img.addEventListener('load', function() { media.classList.add('has-img'); });
-    media.appendChild(img);
-    return { media: media, img: img };
+  function leadDefaultHeadline(lead) {
+    if (lead.headline) return lead.headline;
+    var p = tplEmailPlacement();
+    if (p === 'hook_start' && lead.hasDiscount) return 'Your match is ready';
+    return 'Want us to send your matches?';
   }
 
-  // Resolve product JSON into a template card: image (the initial
-  // placeholder block stays when none resolves, never a broken glyph),
-  // price text, and the hero try-on when a photo is in memory.
-  function tplHydrateCard(parts, m, priceEl, isHero, hasPhotoNow) {
-    fetchProductJson(m.productHandle).then(function(pj) {
-      var cached = tryonCache[matchKey(m)];
-      if (cached) {
-        parts.img.src = 'data:image/jpeg;base64,' + cached;
-        parts.media.classList.add('gq-media--tryon');
-        setMediaBadge(parts.media);
-      } else {
-        var src = imageForRec(pj, m);
-        if (src) parts.img.src = src;
+  function leadSubmitLabel(lead) {
+    if (lead.buttonLabel) return lead.buttonLabel;
+    if (tplEmailPlacement() === 'hook_start' && lead.hasDiscount) return 'Reveal my discount →';
+    return 'Save my results';
+  }
+
+  // The form + post-submit reveal. onDone(kind) fires after 'submit' (a
+  // code is on screen, or no code → caller advances) or 'skip'.
+  function tplLeadForm(lead, opts) {
+    var wrap = el('div', 'gq-tpl-lead-card' + (opts.inline ? ' gq-tpl-lead-card--inline' : ''));
+    wrap.appendChild(el(opts.inline ? 'h3' : 'h2', 'gq-tpl-lead-title', renderAccent(leadDefaultHeadline(lead))));
+    if (lead.body) wrap.appendChild(el('p', 'gq-tpl-lead-body', escapeHtml(lead.body)));
+
+    var form = el('form', 'gq-lead-form gq-tpl-lead-form');
+    var emailInput = document.createElement('input');
+    emailInput.className = 'gq-lead-input';
+    emailInput.type = 'email';
+    emailInput.name = 'email';
+    emailInput.placeholder = 'you@email.com';
+    emailInput.autocomplete = 'email';
+    emailInput.setAttribute('inputmode', 'email');
+    emailInput.setAttribute('aria-label', 'Email address');
+    form.appendChild(emailInput);
+    var phoneInput = null;
+    if (lead.collectPhone) {
+      phoneInput = document.createElement('input');
+      phoneInput.className = 'gq-lead-input';
+      phoneInput.type = 'tel';
+      phoneInput.name = 'phone';
+      phoneInput.placeholder = 'Phone number (optional)';
+      phoneInput.autocomplete = 'tel';
+      phoneInput.setAttribute('inputmode', 'tel');
+      phoneInput.setAttribute('aria-label', 'Phone number');
+      form.appendChild(phoneInput);
+    }
+    var err = el('p', 'gq-lead-error');
+    err.setAttribute('role', 'alert');
+    err.style.display = 'none';
+    form.appendChild(err);
+    function showLeadError(msg) { err.textContent = msg; err.style.display = 'block'; }
+
+    var submitLabel = leadSubmitLabel(lead);
+    var submitBtn = el('button', 'gq-add-btn gq-lead-submit gq-tpl-lead-submit', escapeHtml(submitLabel));
+    submitBtn.type = 'submit';
+    form.appendChild(submitBtn);
+    if (lead.consentText) form.appendChild(el('p', 'gq-lead-consent', escapeHtml(lead.consentText)));
+    wrap.appendChild(form);
+
+    // Skip is a visible text link under the submit, never hidden.
+    var skip = el('button', 'gq-skip-link gq-tpl-skip', escapeHtml(lead.skipLabel || 'Skip'));
+    skip.type = 'button';
+    skip.onclick = function() {
+      trackEvent('quiz_lead_skipped');
+      opts.onDone('skip');
+    };
+    wrap.appendChild(skip);
+
+    form.onsubmit = function(e) {
+      e.preventDefault();
+      if (submitBtn.disabled) return;
+      err.style.display = 'none';
+      var email = emailInput.value.trim().toLowerCase();
+      var phone = phoneInput ? phoneInput.value.replace(/[\s().-]/g, '') : '';
+      if (!email && !phone) {
+        showLeadError(phoneInput ? 'Enter your email or phone number.' : 'Enter your email.');
+        return;
       }
-      if (priceEl) {
-        var unit = priceCentsForRec(pj, m);
-        var qty = Math.max(1, m.quantity || 1);
-        if (unit != null) priceEl.textContent = formatMoney(unit * qty);
+      if (email && (email.length > 254 || !LEAD_EMAIL_RE.test(email))) {
+        showLeadError('That email doesn’t look right.');
+        return;
       }
-      if (isHero && hasPhotoNow && !cached) {
-        parts.media.classList.add('gq-media--working');
-        applyTryonToMedia(parts.media, parts.img, m, true, function() {
-          parts.media.classList.remove('gq-media--working');
+      if (phone && !LEAD_PHONE_RE.test(phone)) {
+        showLeadError('That phone number doesn’t look right.');
+        return;
+      }
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Saving…';
+      submitLead(email, phone)
+        .then(function(response) {
+          trackEvent('quiz_lead_submitted');
+          var code = (response && response.discountCode) || lead.discountCode;
+          var message = (response && response.discountMessage) || lead.discountMessage;
+          state.leadDone = true;
+          saveState();
+          if (!code) { opts.onDone('submit'); return; }
+          applyDiscountCode(code);
+          if (opts.stillHere && !opts.stillHere()) return; // navigated away mid-submit
+          trackEvent('quiz_lead_discount_shown');
+          form.style.display = 'none';
+          skip.style.display = 'none';
+          wrap.appendChild(tplLeadReveal({ discountCode: code, discountMessage: message }, opts.inline));
+          if (opts.onReveal) opts.onReveal();
+        })
+        .catch(function(error) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = submitLabel;
+          var msg = error && error.message && /email|phone/i.test(error.message)
+            ? error.message
+            : 'Something went wrong — try again, or skip.';
+          showLeadError(msg);
         });
-      }
-    });
+    };
+    return wrap;
   }
+
+  // Post-submit state (all placements): discount headline, code in a
+  // dashed box with Copy, "Applied at checkout". Built on the shipped
+  // reveal; the inline (results) card drops the Continue.
+  function tplLeadReveal(lead, inline) {
+    var reveal = buildLeadReveal(lead);
+    reveal.classList.add('gq-tpl-lead-reveal');
+    var msg = reveal.querySelector('.gq-lead-reveal-msg');
+    if (msg) {
+      var head = el(inline ? 'h3' : 'h2', 'gq-tpl-lead-title gq-tpl-lead-reveal-title', escapeHtml(lead.discountMessage || 'Here’s your code'));
+      reveal.insertBefore(head, msg);
+      msg.parentNode.removeChild(msg);
+    }
+    var applied = el('p', 'gq-tpl-lead-applied', CHECK_MINI + '<span>Applied at checkout</span>');
+    var cont = reveal.querySelector('.gq-lead-continue');
+    if (inline) {
+      if (cont) cont.parentNode.removeChild(cont);
+      reveal.appendChild(applied);
+    } else if (cont) {
+      reveal.insertBefore(applied, cont);
+    } else {
+      reveal.appendChild(applied);
+    }
+    return reveal;
+  }
+
+  // Own-screen capture (hook_start, gate_results): template chrome, then
+  // the card. Submit with a code shows the reveal + Continue; skip and
+  // code-less submits continue exactly where advanceFrom would have gone.
+  function tplLeadScreen(tpl) {
+    var lead = config.lead || {};
+    var screen = el('div', 'gq-step gq-tpl-step gq-tpl-lead gq-' + tpl.id + '-lead gq-' + tpl.id + '-screen');
+    if (!PREVIEW && (!leadActive() || state.leadDone)) {
+      setTimeout(function() {
+        if (state.screen !== 'lead') return;
+        state.screen = 'gate';
+        saveState();
+        replaceStep();
+        render('forward');
+      }, 0);
+      return screen;
+    }
+    screen.appendChild(tpl.questionChrome(screens.length + 1, true));
+    var body = el('div', 'gq-tpl-body gq-' + tpl.id + '-body');
+    body.appendChild(tplLeadForm(lead, {
+      inline: false,
+      stillHere: function() { return state.screen === 'lead'; },
+      onDone: function() { leaveLead(); },
+    }));
+    screen.appendChild(body);
+    return screen;
+  }
+
+  // after_results: the capture card below the hero match inside the
+  // results body. Submit swaps the card for the reveal; skip removes it.
+  // Reload never re-asks (state.leadDone).
+  function tplLeadCard() {
+    if (tplEmailPlacement() !== 'after_results') return null;
+    if (!leadActive() || state.leadDone) return null;
+    var lead = config.lead || {};
+    // Once per session (persisted): results re-render on every price/shade
+    // update and must not re-emit the view event.
+    if (!state.leadViewed) {
+      state.leadViewed = true;
+      saveState();
+      trackEvent('quiz_lead_view');
+    }
+    var card = tplLeadForm(lead, {
+      inline: true,
+      onDone: function(kind) {
+        state.leadDone = true;
+        saveState();
+        if (card.parentNode) card.parentNode.removeChild(card);
+      },
+    });
+    card.classList.add('gq-tpl-lead-inline');
+    return card;
+  }
+
+  // ---- Loading (S5): thin ring, brand line, rotating trust statements ----
+  // Required in Match; optional in Consult/Routine (only with trust lines).
+  // 2.5–4s, capped at 4s, once per results arrival: the flag lives on
+  // state (persisted) so a reload of computed results never replays it.
+  // (state.t2ComputeDone is the historical name of that flag.)
+
+  var TPL_LOADING_TITLE = { t1: 'Finding your match…', t2: 'Finding your match…', t3: 'Building your routine…' };
+  function tplLoadingWanted(tpl, results) {
+    if (tpl.loading === 'absent') return false;
+    if (state.t2ComputeDone) return false;
+    if (tpl.loading === 'required') return true;
+    return Array.isArray(results.trustLines) && results.trustLines.some(function(t) { return typeof t === 'string' && t; });
+  }
+
+  function tplLoadingScreen(tpl, results) {
+    var screen = el('div', 'gq-tpl-loading gq-' + tpl.id + '-loading');
+    var inner = el('div', 'gq-tpl-loading-inner');
+    inner.appendChild(el('div', 'gq-tpl-ring'));
+    inner.appendChild(el('h3', 'gq-tpl-loading-title', escapeHtml(TPL_LOADING_TITLE[tpl.id] || 'Finding your match…')));
+    var brand = (config.landing && config.landing.eyebrow) || '';
+    if (brand) inner.appendChild(el('p', 'gq-tpl-loading-brand', escapeHtml(brand)));
+    var lines = Array.isArray(results.trustLines)
+      ? results.trustLines.filter(function(t) { return typeof t === 'string' && t; }).slice(0, 3)
+      : [];
+    var rot = null;
+    if (lines.length > 0) {
+      rot = el('p', 'gq-tpl-loading-rot', escapeHtml(lines[0]));
+      rot.setAttribute('aria-live', 'polite');
+      inner.appendChild(rot);
+    }
+    screen.appendChild(inner);
+
+    var at = 0;
+    var interval = lines.length > 1 ? setInterval(function() {
+      var connected = rot && (rot.isConnected !== undefined ? rot.isConnected : document.contains(rot));
+      if (!connected) { clearInterval(interval); return; }
+      at = (at + 1) % lines.length;
+      rot.classList.remove('is-in');
+      rot.textContent = lines[at];
+      requestAnimationFrame(function() { rot.classList.add('is-in'); });
+    }, 1200) : null;
+
+    var duration = Math.min(4000, Math.max(2500, 2500 + lines.length * 400));
+    setTimeout(function() {
+      if (interval) clearInterval(interval);
+      // A superseded render (the node never attached, or was replaced)
+      // must not double-render results.
+      var connected = screen.isConnected !== undefined ? screen.isConnected : document.contains(screen);
+      if (!connected) return;
+      if (state.screen !== 'results') return;
+      render('forward');
+    }, duration);
+    return screen;
+  }
+
+  // ---- Results: shared card plumbing ----
 
   function tplSpecLine(m) {
     var bits = [];
@@ -3440,24 +4171,34 @@
     return btn;
   }
 
-  function tplViewLink(m, results) {
+  function tplViewLink(m, results, label) {
     if (!m.productHandle) return null;
-    var view = el('a', 'gq-view-link', escapeHtml(results.viewProductLabel || 'View full product') + ' →');
+    var view = el('a', 'gq-view-link gq-tpl-view', escapeHtml(label || results.viewProductLabel || 'View full product') + ' →');
     view.href = '/products/' + encodeURIComponent(m.productHandle) +
       (m.variantNumericId ? '?variant=' + encodeURIComponent(m.variantNumericId) : '');
     view.onclick = function() { trackEvent('quiz_view_product'); saveState(); };
     return view;
   }
 
-  // The shopper's actual answers as chips (spec 5.7 results echo). Shared
-  // by T2's "About your match" block and T3's recap row.
+  // Price text element that fills in when the product JSON resolves.
+  function tplPrice(m, cls) {
+    var price = el('p', cls, '');
+    fetchProductJson(m.productHandle).then(function(pj) {
+      var unit = priceCentsForRec(pj, m);
+      var qty = Math.max(1, m.quantity || 1);
+      if (unit != null) price.textContent = formatMoney(unit * qty);
+    });
+    return price;
+  }
+
+  // The shopper's actual answers (facet label: value), plus the shade axis.
   function tplAnswerChips() {
     var chips = [];
     for (var qi = 0; qi < flow.questions.length; qi++) {
       var a = state.answers[qi];
       if (!a || !a.values || a.values.length === 0) continue;
       var q = flow.questions[qi];
-      chips.push({ axis: q.axisLabel, value: answerLabels(q, a).join(', ') });
+      chips.push({ axis: q.axisLabel || q.prompt, value: answerLabels(q, a).join(', ') });
     }
     var shade = shadeReasonLine();
     var axis = shadeAxis();
@@ -3479,13 +4220,53 @@
     return row;
   }
 
-  function tplResultsHeadline(results, ctx) {
+  function tplResultsHeadline(results, ctx, fallback) {
     return (ctx.hasPhotoNow && ctx.definitive)
-      ? (results.headlinePhoto || "Here's your match — on you")
-      : (results.headlineNoPhoto || 'Your matches');
+      ? (results.headlinePhoto || fallback || "Here's your match — on you")
+      : (results.headlineNoPhoto || fallback || 'Your matches');
   }
 
-  // -- Template results dispatcher --
+  function tplSubtext(results, matches) {
+    if (!results.subtext) return null;
+    return renderName(results.subtext)
+      .replace(/\{count\}/g, String(matches.length))
+      .replace(/\{match_word\}/g, matches.length === 1 ? 'match' : 'matches');
+  }
+
+  // Bundle add-all through the shipped machinery: every match, no picking
+  // UI, merchant label template overridable per template.
+  function tplBundleRow(matches, results, labelTemplate) {
+    var holder = el('div', 'gq-tpl-bundle');
+    var stub = el('button', 'gq-add-btn gq-add-btn--bundle', escapeHtml(buildAddLabel(labelTemplate || results.bundleLabel, matches.length, null).replace(/\s*[—·-]\s*$/, '')));
+    stub.type = 'button';
+    stub.disabled = true;
+    holder.appendChild(stub);
+    // The label template is read once by buildBundleRow: resolve the
+    // product JSONs first so a missing price drops the " — {total}" tail
+    // instead of rendering "Add all 3 — ".
+    Promise.all(matches.map(function(m) {
+      return m.productHandle ? fetchProductJson(m.productHandle) : Promise.resolve(null);
+    })).then(function(pjs) {
+      var allPriced = pjs.every(function(pj, i) { return priceCentsForRec(pj, matches[i]) != null; });
+      var label = labelTemplate || results.bundleLabel || null;
+      if (label && !allPriced) label = label.replace(/\s*[—·-]?\s*\{total\}/g, '');
+      bundlePicker = {
+        size: matches.length,
+        sel: matches.map(function(_, i) { return i; }),
+        pickable: false,
+        refreshers: [],
+        onChange: null,
+      };
+      var r = {};
+      for (var k in results) if (Object.prototype.hasOwnProperty.call(results, k)) r[k] = results[k];
+      if (label) r.bundleLabel = label;
+      holder.innerHTML = '';
+      holder.appendChild(buildBundleRow(matches, r));
+    });
+    return holder;
+  }
+
+  // -- Results dispatcher --
 
   function tplResultsScreen(tpl) {
     var results = config.results || {};
@@ -3497,15 +4278,13 @@
     var definitive = !state.partial || !shadeActionable;
     bundlePicker = null;
 
-    // T2's required computation screen, once per results arrival
-    // (spec Part 3 T2: 2.5 to 4s, hard cap 4s, never fake-infinite).
-    if (tpl.id === 't2' && !state.t2ComputeDone && matches.length > 0) {
+    if (matches.length > 0 && tplLoadingWanted(tpl, results)) {
       state.t2ComputeDone = true;
       saveState();
-      return tplComputingScreen(results);
+      return tplLoadingScreen(tpl, results);
     }
 
-    var screen = el('div', 'gq-results gq-tpl-results gq-tpl-results--' + tpl.id);
+    var screen = el('div', 'gq-results gq-tpl-results gq-tpl-results--' + tpl.id + ' ' + tpl.resultsMarker);
 
     if (matches.length === 0) {
       var none = el('div', 'gq-error',
@@ -3528,17 +4307,18 @@
       screen.appendChild(referral);
     }
 
-    tpl.resultsBody(screen, matches, {
+    tpl.results(screen, matches, {
       results: results,
       definitive: definitive,
       hasPhotoNow: hasPhotoNow,
       tryonOn: tryonOn,
+      leadCard: definitive ? tplLeadCard : function() { return null; },
     });
 
     if (state.partial && shadeActionable) screen.appendChild(buildShadeGate());
-    // T2 renders its VTO module inside the results body; the other
+    // Match renders its VTO module inside the results body; the other
     // templates keep the shipped upsell banner as the try-on entry point.
-    if (tpl.id !== 't2' && definitive && tryonOn && !hasPhotoNow && config.upsell && config.upsell.cta) {
+    if (tpl.id !== 't1' && definitive && tryonOn && !hasPhotoNow && config.upsell && config.upsell.cta) {
       screen.appendChild(buildUpsellBanner());
     }
 
@@ -3554,42 +4334,577 @@
     return screen;
   }
 
-  // T2 results-computation screen: progress ring + up to 3 rotating trust
-  // lines (config.results.trustLines, verbatim-sourced server-side).
-  function tplComputingScreen(results) {
-    var screen = el('div', 'gq-t2l');
-    var inner = el('div', 'gq-t2l-inner');
-    inner.appendChild(el('div', 'gq-t2l-ring'));
-    inner.appendChild(el('h3', 'gq-t2l-title', 'Finding your match…'));
-    var lines = Array.isArray(results.trustLines)
-      ? results.trustLines.filter(function(t) { return typeof t === 'string' && t; }).slice(0, 3)
-      : [];
-    var rot = null;
-    if (lines.length > 0) {
-      rot = el('p', 'gq-t2l-rot', escapeHtml(lines[0]));
-      inner.appendChild(rot);
+  // =====================================================================
+  // T1 · Match
+  // =====================================================================
+
+  // Phase index per screen from config.phases [{label, axisKeys}]: a
+  // screen belongs to the phase listing its first question's axis; an
+  // unlisted axis inherits the previous screen's phase.
+  function matchPhases() {
+    var raw = Array.isArray(config.phases) ? config.phases : [];
+    var phases = [];
+    raw.forEach(function(p) {
+      if (!p || typeof p !== 'object') return;
+      phases.push({ label: typeof p.label === 'string' ? p.label : '', axisKeys: Array.isArray(p.axisKeys) ? p.axisKeys : [] });
+    });
+    var perScreen = [];
+    var current = 0;
+    var mapped = false;
+    for (var s = 0; s < screens.length; s++) {
+      var key = flow.questions[screens[s][0]].axisKey;
+      for (var p = 0; p < phases.length; p++) {
+        if (phases[p].axisKeys.indexOf(key) !== -1) { current = p; mapped = true; break; }
+      }
+      perScreen.push(current);
     }
-    screen.appendChild(inner);
-
-    var at = 0;
-    var interval = lines.length > 1 ? setInterval(function() {
-      var connected = rot && (rot.isConnected !== undefined ? rot.isConnected : document.contains(rot));
-      if (!connected) { clearInterval(interval); return; }
-      at = (at + 1) % lines.length;
-      rot.textContent = lines[at];
-    }, 1100) : null;
-
-    setTimeout(function() {
-      if (interval) clearInterval(interval);
-      if (state.screen !== 'results') return;
-      render('forward');
-    }, 2800);
-    return screen;
+    // Stale/renamed axis keys (no screen maps to any phase): fall back to
+    // the plain per-screen bar rather than pinning everything to phase 0.
+    if (!mapped) return { phases: [], perScreen: [] };
+    return { phases: phases, perScreen: perScreen };
   }
 
-  // -- T1 Salon results: consultation prose + stacked cards, no grid --
+  // Segmented phase bar. Done phases fill 100%; the active phase reads at
+  // accent 20% with the current step's share at 100%. screenIdx -1 =
+  // intro (nothing started). Empty phases → one segment per screen.
+  function matchPhaseBar(screenIdx) {
+    var info = matchPhases();
+    var bar = el('div', 'gq-t1-phases');
+    bar.setAttribute('aria-hidden', 'true');
+    if (info.phases.length === 0) {
+      bar.classList.add('gq-t1-phases--plain');
+      for (var s = 0; s < screens.length; s++) {
+        var seg = el('span', 'gq-t1-phase' + (s < screenIdx ? ' is-done' : s === screenIdx ? ' is-active' : ''));
+        var f = el('i', 'gq-t1-phase-fill');
+        f.style.width = s <= screenIdx ? '100%' : '0%';
+        seg.appendChild(f);
+        bar.appendChild(seg);
+      }
+      return bar;
+    }
+    var activePhase = screenIdx >= 0 ? info.perScreen[screenIdx] : -1;
+    info.phases.forEach(function(p, i) {
+      var seg = el('span', 'gq-t1-phase' + (i < activePhase ? ' is-done' : i === activePhase ? ' is-active' : ''));
+      var fill = el('i', 'gq-t1-phase-fill');
+      var total = 0, done = 0;
+      for (var s = 0; s < screens.length; s++) {
+        if (info.perScreen[s] !== i) continue;
+        total++;
+        if (s <= screenIdx) done++;
+      }
+      fill.style.width = (i < activePhase ? 100 : total > 0 ? Math.round((done / total) * 100) : 0) + '%';
+      seg.appendChild(fill);
+      seg.appendChild(el('span', 'gq-t1-phase-name', escapeHtml(p.label)));
+      bar.appendChild(seg);
+    });
+    return bar;
+  }
 
-  function salonProse(results, matches) {
+  function matchChrome(stepNumber, isBonus) {
+    var frag = document.createDocumentFragment();
+    var top = el('div', 'gq-t1-top');
+    top.appendChild(tplBackButton());
+    top.appendChild(el('span', 'gq-t1-brand', escapeHtml((config.landing && config.landing.eyebrow) || '')));
+    top.appendChild(el('span', 'gq-t1-numeral',
+      isBonus ? 'Bonus' : zeroPad(stepNumber + 1) + ' / ' + zeroPad(screens.length + 1)));
+    frag.appendChild(top);
+    frag.appendChild(matchPhaseBar(isBonus ? screens.length : stepNumber - 1));
+    return frag;
+  }
+
+  function matchOptionList(q, specific) {
+    if (questionIsVisual(q)) {
+      return el('div', 'gq-t1-tiles gq-t1-tiles--' + (specific.length >= 4 ? '4' : '3'));
+    }
+    return el('div', 'gq-t1-rows');
+  }
+
+  function matchOptionButton(q, opt) {
+    if (questionIsVisual(q)) {
+      var art = optionArt(opt);
+      var tile = el('button', 'gq-t1-tile');
+      tile.appendChild(imageSlot({
+        key: answerSlotKey(q, opt), kind: art.kind, ratio: '1:1', url: art.url, color: art.color,
+        alt: opt.label, initial: initialOf(opt.label), className: 'gq-t1-tile-slot',
+      }));
+      var cap = el('span', 'gq-t1-tile-label', escapeHtml(opt.label));
+      var desc = optionDesc(opt);
+      if (desc) cap.appendChild(el('small', 'gq-t1-tile-sub', escapeHtml(desc)));
+      tile.appendChild(cap);
+      // appendChild, never innerHTML +=: re-serializing would drop the
+      // slot's click handler and spec.
+      var chk = el('span', 'gq-t1-tile-check', CHECK_MINI);
+      tile.appendChild(chk.firstChild);
+      return tile;
+    }
+    var row = el('button', 'gq-t1-row');
+    var desc2 = optionDesc(opt);
+    row.innerHTML = '<span class="gq-t1-row-tag">' + escapeHtml(opt.label) + '</span>' +
+      (desc2 ? '<span class="gq-t1-row-desc">' + escapeHtml(desc2) + '</span>' : '') + CHECK_MINI;
+    return row;
+  }
+
+  function matchQuestionHead(q, part, screenIdx, visual) {
+    var frag = document.createDocumentFragment();
+    frag.appendChild(el(part === 0 ? 'h2' : 'h3', (part === 0 ? 'gq-tpl-q' : 'gq-tpl-q gq-tpl-q--sub') + ' gq-t1-q', escapeHtml(q.prompt)));
+    // Visual questions keep the helper as a tip under the tiles.
+    if (q.helperText && !visual) frag.appendChild(el('p', 'gq-tpl-help', escapeHtml(q.helperText)));
+    var hint = multiHint(q);
+    if (hint) frag.appendChild(hint);
+    return frag;
+  }
+
+  // Variant/size selector when the product JSON has > 1 variant: a pill
+  // row; the selection re-arms the add-to-cart button.
+  function matchVariantPicker(m, pj, parts, results) {
+    if (!pj || !Array.isArray(pj.variants) || pj.variants.length < 2) return null;
+    var addBtn = parts.addBtn;
+    var wrap = el('div', 'gq-t1r-variants');
+    wrap.appendChild(el('h4', 'gq-t1r-h4', 'Select ' + escapeHtml((pj.options && pj.options[0] && (pj.options[0].name || pj.options[0])) || 'option').toLowerCase()));
+    var row = el('div', 'gq-t1r-variant-row');
+    var currentId = String(m.variantNumericId || pj.variants[0].id);
+    pj.variants.slice(0, 8).forEach(function(v) {
+      var pill = el('button', 'gq-t1r-variant' + (String(v.id) === currentId ? ' is-selected' : ''));
+      pill.type = 'button';
+      pill.innerHTML = '<span>' + escapeHtml(v.title || '') + '</span>' +
+        (typeof v.price === 'number' ? '<small>' + escapeHtml(formatMoney(v.price)) + '</small>' : '');
+      if (v.available === false) pill.disabled = true;
+      pill.onclick = function() {
+        var sel = row.querySelectorAll('.is-selected');
+        for (var i = 0; i < sel.length; i++) sel[i].classList.remove('is-selected');
+        pill.classList.add('is-selected');
+        var qty = Math.max(1, m.quantity || 1);
+        var unit = typeof v.price === 'number' ? v.price * qty : null;
+        if (parts.priceEl && unit != null) parts.priceEl.textContent = formatMoney(unit);
+        if (parts.viewLink && m.productHandle) {
+          parts.viewLink.href = '/products/' + encodeURIComponent(m.productHandle) + '?variant=' + encodeURIComponent(v.id);
+        }
+        if (addBtn) {
+          // Re-arm for the picked variant; an in-flight/just-added button
+          // keeps its transient label (wireAddButton restores it itself).
+          wireAddButton(addBtn, v.id, qty);
+          if (!addBtn.classList.contains('is-working') && !addBtn.classList.contains('is-added')) {
+            addBtn.disabled = false;
+            addBtn.textContent = buildAddLabel(results.addButtonTemplate, qty, unit);
+          }
+        }
+      };
+      row.appendChild(pill);
+    });
+    wrap.appendChild(row);
+    return wrap;
+  }
+
+  function matchWhyText(m, results) {
+    if (Array.isArray(m.reasons) && m.reasons.length > 0) {
+      var r = m.reasons.slice(0, 2).map(function(s) { return String(s).replace(/[.\s]+$/, ''); });
+      return r.join('. ') + '.';
+    }
+    return m.tagline || null;
+  }
+
+  function matchResults(screen, matches, ctx) {
+    var results = ctx.results;
+    var hero = matches[0];
+    var wrap = el('div', 'gq-t1r-wrap');
+    var top = el('div', 'gq-t1-top gq-t1-top--results');
+    top.appendChild(el('span', 'gq-t1-top-spacer'));
+    top.appendChild(el('span', 'gq-t1-brand', escapeHtml((config.landing && config.landing.eyebrow) || '')));
+    top.appendChild(el('span', 'gq-t1-top-spacer'));
+    wrap.appendChild(top);
+    wrap.appendChild(el('p', 'gq-t1r-headline', renderAccent(renderName(tplResultsHeadline(results, ctx, "Here's what we think will look amazing")))));
+
+    var grid = el('div', 'gq-t1r-grid');
+    // Left: gallery (main 1:1 slot + up to 4 thumbs from the product JSON).
+    var gallery = el('div', 'gq-t1r-gallery');
+    var mainSlot = productSlot(hero, 'product', '1:1', null, 'gq-t1r-main');
+    gallery.appendChild(mainSlot);
+    var thumbs = el('div', 'gq-t1r-thumbs');
+    gallery.appendChild(thumbs);
+    grid.appendChild(gallery);
+    slotTryon(mainSlot, hero, ctx.hasPhotoNow);
+
+    // Right: About your match · variants · Your shade · Why this works · CTA.
+    var info = el('div', 'gq-t1r-info');
+    info.appendChild(el('h4', 'gq-t1r-h4', 'About your match'));
+    info.appendChild(el('p', 'gq-t1r-sub', 'Selected for you based on your answers:'));
+    var echo = el('ul', 'gq-t1r-echo');
+    tplAnswerChips().forEach(function(c) {
+      echo.appendChild(el('li', 'gq-t1r-echo-item', '<b>' + escapeHtml(c.axis) + ':</b> ' + escapeHtml(c.value)));
+    });
+    info.appendChild(echo);
+    info.appendChild(el('h3', 'gq-t1r-name', escapeHtml(hero.productName)));
+    var spec = tplSpecLine(hero);
+    if (spec) info.appendChild(el('p', 'gq-t1r-spec', escapeHtml(spec)));
+
+    var variantHolder = el('div', 'gq-t1r-variant-holder');
+    info.appendChild(variantHolder);
+
+    var shade = shadeReasonLine();
+    if (shadeAxis()) {
+      info.appendChild(el('h4', 'gq-t1r-h4', 'Your shade'));
+      var shadeCard = el('div', 'gq-t1r-shade');
+      var swSlot = imageSlot({
+        key: 'shade', kind: 'swatch', ratio: '1:1', sizePx: 56, url: null,
+        color: shade && shade.swatch ? shade.swatch : null, alt: shade ? shade.label : '', initial: shade ? initialOf(shade.label) : '·',
+        className: 'gq-t1r-shade-slot',
+      });
+      shadeCard.appendChild(swSlot);
+      var st = el('div', 'gq-t1r-shade-text');
+      st.appendChild(el('b', 'gq-t1r-shade-name', escapeHtml(shade ? shade.label : shadeAxis().label)));
+      st.appendChild(el('small', 'gq-t1r-shade-line', escapeHtml(shade ? (hero.variantTitle ? hero.variantTitle + ' · ' + shade.source : shade.source) : 'Add a photo or pick your shade below')));
+      shadeCard.appendChild(st);
+      info.appendChild(shadeCard);
+    }
+
+    var why = matchWhyText(hero, results);
+    if (why) {
+      info.appendChild(el('h4', 'gq-t1r-h4', 'Why this works'));
+      info.appendChild(el('p', 'gq-t1r-why', escapeHtml(why)));
+    }
+    var priceEl = tplPrice(hero, 'gq-t1r-price');
+    info.appendChild(priceEl);
+    var addBtn = null;
+    if (ctx.definitive) {
+      addBtn = tplAddButton(hero, results, 'gq-t1r-add');
+      info.appendChild(addBtn);
+    }
+    var view = tplViewLink(hero, results);
+    if (view) info.appendChild(view);
+    if (results.matchFootnote) info.appendChild(buildMatchFootnote(results.matchFootnote));
+    grid.appendChild(info);
+    wrap.appendChild(grid);
+
+    // Gallery thumbs + variant picker once the product JSON resolves.
+    fetchProductJson(hero.productHandle).then(function(pj) {
+      var imgs = (pj && Array.isArray(pj.images) ? pj.images : []).map(safeImgUrl).filter(Boolean).slice(0, 4);
+      imgs.forEach(function(u, i) {
+        var t = imageSlot({ key: 'results', kind: 'thumb', ratio: '1:1', url: u, alt: hero.productName || '', className: 'gq-t1r-thumb' + (i === 0 ? ' is-selected' : '') });
+        t.setAttribute('role', 'button');
+        t.setAttribute('tabindex', '0');
+        var choose = function() {
+          var sel = thumbs.querySelectorAll('.is-selected');
+          for (var k = 0; k < sel.length; k++) sel[k].classList.remove('is-selected');
+          t.classList.add('is-selected');
+          if (!mainSlot.classList.contains('gq-media--tryon')) slotSetUrl(mainSlot, u);
+        };
+        t.onclick = choose;
+        t.onkeydown = function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); choose(); } };
+        thumbs.appendChild(t);
+      });
+      if (isStudio() && imgs.length === 0) {
+        for (var k = 0; k < 4; k++) {
+          thumbs.appendChild(imageSlot({ key: 'results', kind: 'thumb', ratio: '1:1', url: null, alt: '', className: 'gq-t1r-thumb' }));
+        }
+      }
+      var picker = matchVariantPicker(hero, pj, { addBtn: addBtn, priceEl: priceEl, viewLink: view }, results);
+      if (picker) variantHolder.appendChild(picker);
+    });
+
+    var leadCard = ctx.leadCard();
+    if (leadCard) wrap.appendChild(leadCard);
+
+    // Two alternates.
+    var alts = matches.slice(1, 3);
+    if (alts.length > 0) {
+      var altRow = el('div', 'gq-t1-alts');
+      altRow.appendChild(el('h4', 'gq-t1r-h4 gq-t1-alts-title', escapeHtml(results.alsoMatchedLabel || 'Also worth a look')));
+      var altGrid = el('div', 'gq-t1-alts-grid');
+      alts.forEach(function(m) {
+        var a = el('div', 'gq-t1-alt');
+        a.appendChild(productSlot(m, 'product', '1:1', 72, 'gq-t1-alt-slot'));
+        var ai = el('div', 'gq-t1-alt-info');
+        ai.appendChild(el('h5', 'gq-t1-alt-name', escapeHtml(m.productName)));
+        var meta = [];
+        var w = tplWhyText(m);
+        if (w) meta.push(w);
+        var line = el('small', 'gq-t1-alt-line', escapeHtml(meta.join(' · ')));
+        ai.appendChild(line);
+        var altPrice = tplPrice(m, 'gq-t1-alt-price');
+        ai.appendChild(altPrice);
+        var actions = el('div', 'gq-t1-alt-actions');
+        if (ctx.definitive) actions.appendChild(tplAddButton(m, results, 'gq-t1-alt-add'));
+        var v2 = tplViewLink(m, results, 'View');
+        if (v2) actions.appendChild(v2);
+        ai.appendChild(actions);
+        if (results.matchFootnote) ai.appendChild(buildMatchFootnote(results.matchFootnote));
+        a.appendChild(ai);
+        altGrid.appendChild(a);
+      });
+      altRow.appendChild(altGrid);
+      wrap.appendChild(altRow);
+    }
+
+    // VTO module where configured (try-on on, no photo yet, upsell copy).
+    if (ctx.definitive && ctx.tryonOn && !ctx.hasPhotoNow && config.upsell && config.upsell.cta) {
+      var vto = buildUpsellBanner();
+      vto.classList.add('gq-t1r-vto');
+      wrap.appendChild(vto);
+    }
+    screen.appendChild(wrap);
+  }
+
+  var TplMatch = {
+    id: 't1',
+    rootClass: 'gq-t1',
+    loading: 'required',
+    resultsMarker: 'gq-t1r',
+    questionChrome: matchChrome,
+    questionHead: matchQuestionHead,
+    optionList: matchOptionList,
+    optionButton: matchOptionButton,
+    results: matchResults,
+  };
+
+  // =====================================================================
+  // T2 · Consult
+  // =====================================================================
+
+  function consultChrome(stepNumber, isBonus) {
+    var frag = document.createDocumentFragment();
+    var meta = el('div', 'gq-t2-meta');
+    meta.appendChild(tplBackButton());
+    meta.appendChild(el('span', 'gq-t2-count', isBonus ? 'One last thing' : 'Question ' + stepNumber + ' of ' + screens.length));
+    frag.appendChild(meta);
+    frag.appendChild(tplBar('gq-t2-bar', isBonus ? screens.length + 1 : stepNumber));
+    return frag;
+  }
+
+  function consultOptionList(q, specific) {
+    return el('div', questionIsVisual(q) ? 'gq-t2-cards' : 'gq-t2-rows');
+  }
+
+  function consultOptionButton(q, opt, idx) {
+    var desc = optionDesc(opt);
+    if (questionIsVisual(q)) {
+      var art = optionArt(opt);
+      var card = el('button', 'gq-t2-card');
+      var slot = imageSlot({
+        key: answerSlotKey(q, opt), kind: 'lifestyle', ratio: '3:2', url: art.url, alt: opt.label, className: 'gq-t2-card-slot',
+      });
+      if (slotIsCollapsed(slot)) card.classList.add('gq-t2-card--noimg');
+      card.appendChild(slot);
+      var tx = el('span', 'gq-t2-card-tx');
+      tx.appendChild(el('span', 'gq-t2-card-title', escapeHtml(opt.label)));
+      if (desc) tx.appendChild(el('span', 'gq-t2-card-desc', escapeHtml(desc)));
+      card.appendChild(tx);
+      card.appendChild(el('span', 'gq-t2-check', CHECK_MINI));
+      return card;
+    }
+    var row = el('button', 'gq-t2-row');
+    row.innerHTML = '<i class="gq-t2-letter" aria-hidden="true">' + String.fromCharCode(65 + (idx % 26)) + '</i>' +
+      '<span class="gq-t2-row-tx"><span class="gq-t2-row-label">' + escapeHtml(opt.label) + '</span>' +
+      (desc ? '<span class="gq-t2-row-desc">' + escapeHtml(desc) + '</span>' : '') + '</span>' +
+      '<span class="gq-t2-check">' + CHECK_MINI + '</span>';
+    return row;
+  }
+
+  function consultQuestionHead(q, part) {
+    return tplPromptBlock(q, part, 'gq-t2-q');
+  }
+
+  function consultResults(screen, matches, ctx) {
+    var results = ctx.results;
+    var hero = matches[0];
+    var wrap = el('div', 'gq-t2r-wrap');
+    wrap.appendChild(el('h2', 'gq-t2r-headline', renderAccent(renderName(tplResultsHeadline(results, ctx, 'Your match: ' + (hero.productName || ''))))));
+    var recap = el('div', 'gq-t2r-recap');
+    recap.appendChild(el('p', 'gq-t2r-recap-label', 'Based on your answers'));
+    recap.appendChild(tplChipRow('gq-tpl-chips gq-t2r-chips', false));
+    wrap.appendChild(recap);
+
+    var pick = el('div', 'gq-t2r-pick');
+    var slot = productSlot(hero, 'product', '4:3', null, 'gq-t2r-pick-slot');
+    pick.appendChild(slot);
+    slotTryon(slot, hero, ctx.hasPhotoNow);
+    var info = el('div', 'gq-t2r-info');
+    info.appendChild(el('p', 'gq-t2r-lbl', escapeHtml(state.matrixApplied ? (results.bestMatchPill || 'Best for you') : 'Our pick')));
+    info.appendChild(el('h3', 'gq-t2r-name', escapeHtml(hero.productName + (hero.variantTitle ? ' · ' + hero.variantTitle : ''))));
+    info.appendChild(tplPrice(hero, 'gq-t2r-price'));
+    var bullets = Array.isArray(hero.reasons) ? hero.reasons.slice(0, 3) : [];
+    if (bullets.length === 0 && hero.tagline) bullets = [hero.tagline];
+    if (bullets.length > 0) {
+      var ul = el('ul', 'gq-t2r-bullets');
+      bullets.forEach(function(b) { ul.appendChild(el('li', 'gq-t2r-bullet', '<span class="gq-t2r-arrow" aria-hidden="true">→</span><span>' + escapeHtml(b) + '</span>')); });
+      info.appendChild(ul);
+    }
+    if (ctx.definitive) info.appendChild(tplAddButton(hero, results, 'gq-t2r-cta'));
+    var view = tplViewLink(hero, results);
+    if (view) info.appendChild(view);
+    if (results.matchFootnote) info.appendChild(buildMatchFootnote(results.matchFootnote));
+    pick.appendChild(info);
+    wrap.appendChild(pick);
+
+    var leadCard = ctx.leadCard();
+    if (leadCard) wrap.appendChild(leadCard);
+
+    // Comparison table: top pick vs up to 2 alternates. Rows ONLY from
+    // real data — price always, variant / sets when present. No urgency.
+    var cols = matches.slice(0, 3);
+    if (cols.length >= 2) {
+      var tableWrap = el('div', 'gq-t2r-table-wrap');
+      var table = document.createElement('table');
+      table.className = 'gq-t2r-table';
+      var thead = document.createElement('thead');
+      var headRow = document.createElement('tr');
+      var corner = document.createElement('th');
+      corner.setAttribute('scope', 'col');
+      corner.className = 'gq-t2r-corner';
+      headRow.appendChild(corner);
+      cols.forEach(function(m, i) {
+        var th = document.createElement('th');
+        th.setAttribute('scope', 'col');
+        if (i === 0) th.className = 'gq-t2r-pickcol';
+        var cell = el('div', 'gq-t2r-th');
+        cell.appendChild(productSlot(m, 'thumb', '1:1', 52, 'gq-t2r-th-slot'));
+        cell.appendChild(el('span', 'gq-t2r-th-name', escapeHtml(m.productName || '') + (i === 0 ? '<small>your match</small>' : '')));
+        th.appendChild(cell);
+        headRow.appendChild(th);
+      });
+      thead.appendChild(headRow);
+      table.appendChild(thead);
+      var tbody = document.createElement('tbody');
+
+      function addRow(label, cellFn) {
+        var tr = document.createElement('tr');
+        var th = document.createElement('th');
+        th.setAttribute('scope', 'row');
+        th.textContent = label;
+        tr.appendChild(th);
+        cols.forEach(function(m, i) {
+          var td = document.createElement('td');
+          if (i === 0) td.className = 'gq-t2r-pickcol';
+          cellFn(td, m, i);
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      }
+      addRow('Price', function(td, m) {
+        fetchProductJson(m.productHandle).then(function(pj) {
+          var unit = priceCentsForRec(pj, m);
+          var qty = Math.max(1, m.quantity || 1);
+          if (unit != null) td.textContent = formatMoney(unit * qty);
+        });
+      });
+      if (cols.some(function(m) { return m.variantTitle; })) {
+        addRow('Option', function(td, m) { td.textContent = m.variantTitle || '—'; });
+      }
+      if (cols.some(function(m) { return m.quantity > 1; })) {
+        addRow('Sets', function(td, m) { td.textContent = String(Math.max(1, m.quantity || 1)); });
+      }
+      if (cols.some(function(m) { return tplWhyText(m); })) {
+        addRow('Why', function(td, m) { td.textContent = tplWhyText(m) || '—'; });
+      }
+      // Secondary CTA per alternate.
+      addRow('', function(td, m, i) {
+        if (i === 0) { td.appendChild(el('span', 'gq-t2r-yours', 'Your match')); return; }
+        var v = tplViewLink(m, results, 'View');
+        if (v) td.appendChild(v);
+        if (ctx.definitive) td.appendChild(tplAddButton(m, results, 'gq-t2r-alt-add'));
+      });
+      table.appendChild(tbody);
+      tableWrap.appendChild(table);
+      wrap.appendChild(tableWrap);
+    }
+    screen.appendChild(wrap);
+  }
+
+  var TplConsult = {
+    id: 't2',
+    rootClass: 'gq-t2',
+    loading: 'optional',
+    resultsMarker: 'gq-t2r',
+    questionChrome: consultChrome,
+    questionHead: consultQuestionHead,
+    optionList: consultOptionList,
+    optionButton: consultOptionButton,
+    results: consultResults,
+  };
+
+  // =====================================================================
+  // T3 · Routine
+  // =====================================================================
+
+  function routineChrome(stepNumber, isBonus) {
+    var meta = el('div', 'gq-t3-meta');
+    meta.appendChild(tplBackButton());
+    if (stepNumber > 0) {
+      meta.appendChild(el('span', 'gq-t3-count', isBonus ? 'Almost there' : stepNumber + ' of ' + screens.length));
+    }
+    return meta;
+  }
+
+  function routineOptionList(q, specific) {
+    if (questionIsVisual(q)) return el('div', 'gq-t3-icons gq-t3-icons--' + (specific.length >= 3 ? '3' : '2'));
+    return el('div', 'gq-t3-bars' + (specific.length >= 6 ? ' gq-t3-bars--2col' : ''));
+  }
+
+  function routineOptionButton(q, opt) {
+    var desc = optionDesc(opt);
+    if (questionIsVisual(q)) {
+      var art = optionArt(opt);
+      var tile = el('button', 'gq-t3-icon');
+      var slot = imageSlot({
+        key: answerSlotKey(q, opt), kind: 'icon', ratio: '1:1', sizePx: 96, url: art.url, alt: '', className: 'gq-t3-icon-slot',
+      });
+      if (slotIsCollapsed(slot)) tile.classList.add('gq-t3-icon--noicon');
+      tile.appendChild(slot);
+      tile.appendChild(el('b', 'gq-t3-icon-label', escapeHtml(opt.label)));
+      if (desc) tile.appendChild(el('small', 'gq-t3-icon-desc', escapeHtml(desc)));
+      return tile;
+    }
+    var bar = el('button', 'gq-t3-bar');
+    bar.innerHTML = '<span class="gq-t3-bar-label">' + escapeHtml(opt.label) + '</span>' +
+      (desc ? '<small class="gq-t3-bar-desc">' + escapeHtml(desc) + '</small>' : '');
+    return bar;
+  }
+
+  function routineQuestionHead(q, part, screenIdx) {
+    var frag = document.createDocumentFragment();
+    var name = shopperName();
+    if (part === 0 && screenIdx === 0 && name) {
+      frag.appendChild(el('h2', 'gq-tpl-q gq-t3-q', 'Nice to meet you, ' + escapeHtml(name) + '.'));
+      frag.appendChild(el('p', 'gq-t3-sub', escapeHtml(q.prompt)));
+    } else {
+      frag.appendChild(el(part === 0 ? 'h2' : 'h3', (part === 0 ? 'gq-tpl-q' : 'gq-tpl-q gq-tpl-q--sub') + ' gq-t3-q', escapeHtml(q.prompt)));
+    }
+    if (q.helperText) frag.appendChild(el('p', 'gq-tpl-help', escapeHtml(q.helperText)));
+    var hint = multiHint(q);
+    if (hint) frag.appendChild(hint);
+    return frag;
+  }
+
+  var ROUTINE_NIGHT = /\b(night|p\.?m\b|retinol|overnight|sleep|evening|bedtime)/i;
+  var ROUTINE_MORNING = /\b(spf|sunscreen|sun\b|day\b|daily|morning|a\.?m\b|daytime)/i;
+  function routineSlotFor(m) {
+    var text = [m.productName, m.variantTitle, m.tagline].join(' ');
+    if (ROUTINE_NIGHT.test(text)) return 'night';
+    if (ROUTINE_MORNING.test(text)) return 'morning';
+    return null;
+  }
+
+  // ☀ Morning / ☾ Night grouping by keyword; unclassified fill Morning
+  // first, then Night. Returns [{key, label, steps: [match]}].
+  function routineGroups(matches) {
+    var morning = [], night = [], rest = [];
+    matches.forEach(function(m) {
+      var s = routineSlotFor(m);
+      if (s === 'night') night.push(m);
+      else if (s === 'morning') morning.push(m);
+      else rest.push(m);
+    });
+    var half = Math.ceil((matches.length) / 2);
+    rest.forEach(function(m) {
+      if (morning.length < half || matches.length < 2) morning.push(m);
+      else night.push(m);
+    });
+    var groups = [];
+    if (morning.length) groups.push({ key: 'morning', label: 'Morning', glyph: '☀', steps: morning });
+    if (night.length) groups.push({ key: 'night', label: 'Night', glyph: '☾', steps: night });
+    return groups;
+  }
+
+  function routineWhy(matches) {
     var labels = [];
     for (var qi = 0; qi < flow.questions.length; qi++) {
       var a = state.answers[qi];
@@ -3598,413 +4913,328 @@
     }
     var shade = shadeReasonLine();
     if (shade) labels.push(shade.label);
-    var top = matches[0] ? matches[0].productName : '';
-    var second = matches[1] ? matches[1].productName : '';
-    if (results.proseTemplate) {
-      // Function replacements: product names and answer labels are raw
-      // merchant/catalog strings — "Gloss $& Go" via a string replacement
-      // would re-inject the matched token ($&, $', $` are metacharacters).
-      var sub = function(v) { return function() { return v; }; };
-      return results.proseTemplate
-        .replace(/\{answers\}/g, sub(labels.join(', ')))
-        .replace(/\{answer\}/g, sub(labels[0] || ''))
-        .replace(/\{top_match\}/g, sub(top))
-        .replace(/\{second_match\}/g, sub(second));
-    }
     var told = labels.length > 0
       ? 'You told us ' + labels.join(', ').toLowerCase() + '.'
-      : 'You told us what you’re looking for.';
-    var start = second
-      ? 'We’d start you with ' + top + ', and keep ' + second + ' close for when you want more.'
-      : 'We’d start you with ' + top + '.';
-    return told + ' ' + start;
+      : 'You told us what you’re working with.';
+    var names = matches.map(function(m) { return m.productName; }).filter(Boolean);
+    var n = names.length;
+    var build = n > 1
+      ? 'This keeps it to ' + n + ' steps' + (n <= 4 ? ' — ' + names.join(', ') + ' —' : '') + ' in the order to use them, so it actually gets done.'
+      : 'This starts with ' + (names[0] || 'one product') + ' so it actually gets done.';
+    return told + ' ' + build;
   }
 
-  function salonResultsBody(screen, matches, ctx) {
+  function routineResults(screen, matches, ctx) {
     var results = ctx.results;
-    var body = el('div', 'gq-t1r');
-    body.appendChild(el('h2', 'gq-t1r-headline', renderAccent(renderName(tplResultsHeadline(results, ctx)))));
-    body.appendChild(el('p', 'gq-t1r-prose', escapeHtml(salonProse(results, matches))));
-
-    var list = el('div', 'gq-t1r-list');
-    matches.slice(0, 3).forEach(function(m, i) {
-      var card = el('div', 'gq-t1r-card');
-      var parts = tplMatchMedia(m, 'gq-t1r-img');
-      card.appendChild(parts.media);
-      var info = el('div', 'gq-t1r-info');
-      info.appendChild(el('h3', 'gq-t1r-name', escapeHtml(m.productName)));
-      var spec = tplSpecLine(m);
-      if (spec) info.appendChild(el('p', 'gq-t1r-spec', escapeHtml(spec)));
-      var price = el('p', 'gq-t1r-price', '');
-      info.appendChild(price);
-      var why = tplWhyText(m);
-      if (why) info.appendChild(el('p', 'gq-t1r-why', escapeHtml(why)));
-      if (ctx.definitive) info.appendChild(tplAddButton(m, results, 'gq-t1r-add'));
-      var view = tplViewLink(m, results);
-      if (view) info.appendChild(view);
-      if (results.matchFootnote) info.appendChild(buildMatchFootnote(results.matchFootnote));
-      card.appendChild(info);
-      list.appendChild(card);
-      tplHydrateCard(parts, m, price, i === 0, ctx.hasPhotoNow);
-    });
-    body.appendChild(list);
-    screen.appendChild(body);
-  }
-
-  // -- T2 Studio results: answer echo + hero match + alternates + VTO --
-
-  function studioResultsBody(screen, matches, ctx) {
-    var results = ctx.results;
-    var wrap = el('div', 'gq-t2r');
-
-    var echo = el('div', 'gq-t2r-echo');
-    echo.appendChild(el('h4', 'gq-t2r-echo-title', 'About your match'));
-    echo.appendChild(tplChipRow('gq-tpl-chips', true));
-    wrap.appendChild(echo);
-
-    var hero = matches[0];
-    var heroCard = el('div', 'gq-t2r-hero');
-    var parts = tplMatchMedia(hero, 'gq-t2r-sw');
-    heroCard.appendChild(parts.media);
-    var info = el('div', 'gq-t2r-info');
-    info.appendChild(el('p', 'gq-t2r-lbl',
-      escapeHtml(state.matrixApplied ? (results.bestMatchPill || 'Top match') : 'Your match')));
-    info.appendChild(el('h2', 'gq-t2r-name', escapeHtml(hero.productName)));
-    var spec = tplSpecLine(hero);
-    if (spec) info.appendChild(el('p', 'gq-t2r-spec', escapeHtml(spec)));
-    var price = el('p', 'gq-t2r-price', '');
-    info.appendChild(price);
-    var shade = shadeReasonLine();
-    if (shade && ctx.definitive) {
-      var line = el('p', 'gq-shade-line');
-      if (shade.swatch) {
-        var dot = el('span', 'gq-shade-dot');
-        dot.style.background = shade.swatch;
-        line.appendChild(dot);
-      }
-      line.appendChild(document.createTextNode(shade.label + ' — ' + shade.source));
-      info.appendChild(line);
+    var wrap = el('div', 'gq-t3r-wrap');
+    var name = shopperName();
+    wrap.appendChild(el('h2', 'gq-t3r-headline', renderAccent(renderName(tplResultsHeadline(results, ctx, 'Your personalized routine')))));
+    var chips = tplAnswerChips();
+    if (chips.length > 0) {
+      wrap.appendChild(el('p', 'gq-t3r-for', escapeHtml(name ? 'Built for ' + name : 'Built for')));
+      var row = el('div', 'gq-t3r-concerns');
+      chips.forEach(function(c) { row.appendChild(el('span', 'gq-t3r-concern', escapeHtml(c.value))); });
+      wrap.appendChild(row);
     }
-    var why = tplWhyText(hero);
-    if (why) info.appendChild(el('p', 'gq-t2r-why', escapeHtml(why)));
-    if (ctx.definitive) info.appendChild(tplAddButton(hero, results, 'gq-t2r-cta'));
-    var view = tplViewLink(hero, results);
-    if (view) info.appendChild(view);
-    if (results.matchFootnote) info.appendChild(buildMatchFootnote(results.matchFootnote));
-    heroCard.appendChild(info);
-    wrap.appendChild(heroCard);
-    tplHydrateCard(parts, hero, price, true, ctx.hasPhotoNow);
+    var why = el('div', 'gq-t3r-why');
+    why.appendChild(el('b', 'gq-t3r-why-title', 'Why this regimen is right for you'));
+    why.appendChild(el('p', 'gq-t3r-why-text', escapeHtml(routineWhy(matches))));
+    wrap.appendChild(why);
 
-    var alts = matches.slice(1, 3);
-    if (alts.length > 0) {
-      var altRow = el('div', 'gq-t2r-alts');
-      alts.forEach(function(m) {
-        var a = el('div', 'gq-t2r-alt');
-        var p2 = tplMatchMedia(m, 'gq-t2r-alt-sw');
-        a.appendChild(p2.media);
-        var ai = el('div', 'gq-t2r-alt-info');
-        ai.appendChild(el('h4', 'gq-t2r-alt-name', escapeHtml(m.productName)));
-        var price2 = el('p', 'gq-t2r-alt-price', '');
-        ai.appendChild(price2);
-        var why2 = tplWhyText(m);
-        if (why2) ai.appendChild(el('p', 'gq-t2r-alt-why', escapeHtml(why2)));
-        if (ctx.definitive) ai.appendChild(tplAddButton(m, results, 'gq-t2r-alt-add'));
-        if (results.matchFootnote) ai.appendChild(buildMatchFootnote(results.matchFootnote));
-        a.appendChild(ai);
-        altRow.appendChild(a);
-        tplHydrateCard(p2, m, price2, false, false);
+    var regimen = el('div', 'gq-t3r-regimen');
+    var head = el('div', 'gq-t3r-regimen-head');
+    head.appendChild(el('h3', 'gq-t3r-regimen-title', 'Your regimen'));
+    var headTotal = el('span', 'gq-t3r-regimen-total', '');
+    head.appendChild(headTotal);
+    regimen.appendChild(head);
+    var stepNo = 0;
+    var totals = {};
+    var totalEls = [headTotal];
+    function refreshTotal() {
+      var sum = 0, known = true;
+      matches.forEach(function(m, i) {
+        if (totals[i] == null) { known = false; return; }
+        sum += totals[i];
       });
-      wrap.appendChild(altRow);
+      var txt = known ? formatMoney(sum) : '';
+      totalEls.forEach(function(e) { e.textContent = txt; });
     }
-
-    // VTO module, only when try-on generation is enabled for the shop.
-    // Reuses the shipped upsell handler (photo capture, shade rerun).
-    if (ctx.definitive && ctx.tryonOn && !ctx.hasPhotoNow && config.upsell && config.upsell.cta) {
-      var vto = buildUpsellBanner();
-      vto.classList.add('gq-t2r-vto');
-      wrap.appendChild(vto);
-    }
-    screen.appendChild(wrap);
-  }
-
-  // -- T3 Guide results: recap + why-bullets + comparison table --
-
-  function guideResultsBody(screen, matches, ctx) {
-    var results = ctx.results;
-    var wrap = el('div', 'gq-t3r');
-    wrap.appendChild(el('h2', 'gq-t3r-headline', renderAccent(renderName(tplResultsHeadline(results, ctx)))));
-    wrap.appendChild(tplChipRow('gq-tpl-chips gq-t3r-recap', false));
-
-    var hero = matches[0];
-    var heroCard = el('div', 'gq-t3r-hero');
-    var parts = tplMatchMedia(hero, 'gq-t3r-heroimg');
-    heroCard.appendChild(parts.media);
-    var info = el('div', 'gq-t3r-info');
-    info.appendChild(el('p', 'gq-t3r-lbl',
-      escapeHtml(state.matrixApplied ? (results.bestMatchPill || 'Top match') : 'Best for you')));
-    info.appendChild(el('h3', 'gq-t3r-name', escapeHtml(hero.productName)));
-    var spec = tplSpecLine(hero);
-    if (spec) info.appendChild(el('p', 'gq-t3r-spec', escapeHtml(spec)));
-    var price = el('p', 'gq-t3r-price', '');
-    info.appendChild(price);
-    var bullets = Array.isArray(hero.reasons) ? hero.reasons.slice(0, 3) : [];
-    if (bullets.length === 0 && hero.tagline) bullets = [hero.tagline];
-    if (bullets.length > 0) {
-      var ul = el('ul', 'gq-t3r-bullets');
-      bullets.forEach(function(b) { ul.appendChild(el('li', 'gq-t3r-bullet', escapeHtml(b))); });
-      info.appendChild(ul);
-    }
-    if (ctx.definitive) info.appendChild(tplAddButton(hero, results, 'gq-t3r-cta'));
-    var view = tplViewLink(hero, results);
-    if (view) info.appendChild(view);
-    if (results.matchFootnote) info.appendChild(buildMatchFootnote(results.matchFootnote));
-    heroCard.appendChild(info);
-    wrap.appendChild(heroCard);
-    tplHydrateCard(parts, hero, price, true, ctx.hasPhotoNow);
-
-    // Comparison table: top match vs up to 2 alternates. Rows only from
-    // real data (price always; variant and sets when present) and never
-    // invented specs.
-    var cols = matches.slice(0, 3);
-    if (cols.length >= 2) {
-      var table = document.createElement('table');
-      table.className = 'gq-t3r-table';
-      var headRow = document.createElement('tr');
-      headRow.appendChild(document.createElement('th'));
-      cols.forEach(function(m, i) {
-        var th = document.createElement('th');
-        if (i === 0) th.className = 'gq-t3r-pick';
-        th.textContent = m.productName || '';
-        headRow.appendChild(th);
-      });
-      table.appendChild(headRow);
-
-      var priceRow = document.createElement('tr');
-      var priceLabel = document.createElement('td');
-      priceLabel.textContent = 'Price';
-      priceRow.appendChild(priceLabel);
-      cols.forEach(function(m, i) {
-        var td = document.createElement('td');
-        if (i === 0) td.className = 'gq-t3r-pick';
+    routineGroups(matches).forEach(function(g) {
+      regimen.appendChild(el('div', 'gq-t3r-group gq-t3r-group--' + g.key,
+        '<span class="gq-t3r-group-glyph" aria-hidden="true">' + g.glyph + '</span>' + g.label));
+      g.steps.forEach(function(m, i) {
+        stepNo++;
+        var idx = matches.indexOf(m);
+        var step = el('div', 'gq-t3r-step');
+        var slot = productSlot(m, 'product', '1:1', 72, 'gq-t3r-step-slot');
+        step.appendChild(slot);
+        if (idx === 0) slotTryon(slot, m, ctx.hasPhotoNow);
+        var tx = el('div', 'gq-t3r-step-tx');
+        tx.appendChild(el('h5', 'gq-t3r-step-name', escapeHtml(m.productName)));
+        var role = tplWhyText(m);
+        tx.appendChild(el('small', 'gq-t3r-step-role', 'Step ' + (i + 1) + (role ? ' · ' + escapeHtml(role) : '')));
+        var actions = el('div', 'gq-t3r-step-actions');
+        if (ctx.definitive) actions.appendChild(tplAddButton(m, results, 'gq-t3r-step-add'));
+        var v = tplViewLink(m, results, 'View');
+        if (v) actions.appendChild(v);
+        tx.appendChild(actions);
+        if (results.matchFootnote) tx.appendChild(buildMatchFootnote(results.matchFootnote));
+        step.appendChild(tx);
+        var price = el('span', 'gq-t3r-step-price', '');
+        step.appendChild(price);
+        regimen.appendChild(step);
         fetchProductJson(m.productHandle).then(function(pj) {
           var unit = priceCentsForRec(pj, m);
           var qty = Math.max(1, m.quantity || 1);
-          if (unit != null) td.textContent = formatMoney(unit * qty);
+          if (unit != null) { price.textContent = formatMoney(unit * qty); totals[idx] = unit * qty; }
+          refreshTotal();
         });
-        priceRow.appendChild(td);
       });
-      table.appendChild(priceRow);
+    });
+    wrap.appendChild(regimen);
 
-      if (cols.some(function(m) { return m.variantTitle; })) {
-        var vRow = document.createElement('tr');
-        var vLabel = document.createElement('td');
-        vLabel.textContent = 'Variant';
-        vRow.appendChild(vLabel);
-        cols.forEach(function(m, i) {
-          var td = document.createElement('td');
-          if (i === 0) td.className = 'gq-t3r-pick';
-          td.textContent = m.variantTitle || '';
-          vRow.appendChild(td);
-        });
-        table.appendChild(vRow);
-      }
+    var leadCard = ctx.leadCard();
+    if (leadCard) wrap.appendChild(leadCard);
 
-      if (cols.some(function(m) { return m.quantity > 1; })) {
-        var qRow = document.createElement('tr');
-        var qLabel = document.createElement('td');
-        qLabel.textContent = 'Sets';
-        qRow.appendChild(qLabel);
-        cols.forEach(function(m, i) {
-          var td = document.createElement('td');
-          if (i === 0) td.className = 'gq-t3r-pick';
-          td.textContent = String(Math.max(1, m.quantity || 1));
-          qRow.appendChild(td);
-        });
-        table.appendChild(qRow);
-      }
-
-      if (ctx.definitive) {
-        var aRow = document.createElement('tr');
-        aRow.appendChild(document.createElement('td'));
-        cols.forEach(function(m, i) {
-          var td = document.createElement('td');
-          if (i === 0) td.className = 'gq-t3r-pick';
-          td.appendChild(tplAddButton(m, results, 'gq-t3r-table-add'));
-          aRow.appendChild(td);
-        });
-        table.appendChild(aRow);
-      }
-      wrap.appendChild(table);
+    // Sticky footer: today's total (sum as prices resolve) + one add-all
+    // through the bundle machinery. Bundle-savings copy only when the
+    // merchant enabled bundle pricing; otherwise the plain sum.
+    if (ctx.definitive) {
+      var foot = el('div', 'gq-t3r-total');
+      var tot = el('div', 'gq-t3r-total-text');
+      tot.appendChild(el('span', 'gq-t3r-total-label', 'Today’s total: '));
+      var totVal = el('b', 'gq-t3r-total-value', '');
+      totalEls.push(totVal);
+      tot.appendChild(totVal);
+      if (results.bundleEnabled) tot.appendChild(el('small', 'gq-t3r-total-save', 'Bundle savings applied at checkout'));
+      foot.appendChild(tot);
+      var bundleRow = tplBundleRow(matches, results, 'Add routine to cart');
+      bundleRow.classList.add('gq-t3r-addall');
+      foot.appendChild(bundleRow);
+      wrap.appendChild(foot);
     }
     screen.appendChild(wrap);
   }
 
-  // -- T4 Pop results: archetype reveal + hero + kit bundle row --
+  var TplRoutine = {
+    id: 't3',
+    rootClass: 'gq-t3',
+    loading: 'optional',
+    resultsMarker: 'gq-t3r',
+    questionChrome: routineChrome,
+    questionHead: routineQuestionHead,
+    optionList: routineOptionList,
+    optionButton: routineOptionButton,
+    results: routineResults,
+  };
 
-  function popResultsBody(screen, matches, ctx) {
-    var results = ctx.results;
-    var wrap = el('div', 'gq-t4r');
-    var headline = results.archetypeTitle || tplResultsHeadline(results, ctx);
-    wrap.appendChild(el('h2', 'gq-t4r-headline', renderAccent(renderName(headline))));
-    var line = results.archetypeLine || results.subtext || null;
-    if (line) {
-      wrap.appendChild(el('p', 'gq-t4r-line', escapeHtml(renderName(line)
-        .replace(/\{count\}/g, String(matches.length))
-        .replace(/\{match_word\}/g, matches.length === 1 ? 'match' : 'matches'))));
+  // =====================================================================
+  // T4 · Discover
+  // =====================================================================
+
+  function discoverChrome(stepNumber, isBonus) {
+    var frag = document.createDocumentFragment();
+    var meta = el('div', 'gq-t4-meta');
+    meta.appendChild(tplBackButton());
+    var seg = el('div', 'gq-t4-prog');
+    seg.setAttribute('role', 'progressbar');
+    seg.setAttribute('aria-label', 'Question ' + stepNumber + ' of ' + screens.length);
+    seg.setAttribute('aria-valuemin', '0');
+    seg.setAttribute('aria-valuemax', String(screens.length));
+    seg.setAttribute('aria-valuenow', String(isBonus ? screens.length : Math.max(0, stepNumber - 1)));
+    for (var i = 0; i < screens.length; i++) {
+      seg.appendChild(el('i', i < stepNumber || isBonus ? 'gq-t4-seg is-filled' : 'gq-t4-seg'));
     }
+    meta.appendChild(seg);
+    frag.appendChild(meta);
+    return frag;
+  }
 
+  function discoverOptionList() {
+    return el('div', 'gq-t4-cards');
+  }
+
+  function discoverOptionButton(q, opt) {
+    var meta = opt.displayMeta || {};
+    var card = el('button', 'gq-t4-card');
+    if (questionIsVisual(q)) {
+      var art = optionArt(opt);
+      card.appendChild(imageSlot({
+        key: answerSlotKey(q, opt), kind: 'thumb', ratio: '1:1', sizePx: 64, url: art.url, color: art.color,
+        alt: opt.label, initial: initialOf(opt.label), className: 'gq-t4-card-slot',
+      }));
+    } else if (meta.emoji && emojiAllowed()) {
+      card.appendChild(el('span', 'gq-t4-emoji', escapeHtml(meta.emoji)));
+    }
+    var tx = el('span', 'gq-t4-card-tx');
+    tx.appendChild(el('span', 'gq-t4-card-label', escapeHtml(opt.label)));
+    var desc = optionDesc(opt);
+    if (desc) tx.appendChild(el('small', 'gq-t4-card-desc', escapeHtml(desc)));
+    card.appendChild(tx);
+    return card;
+  }
+
+  function discoverQuestionHead(q, part) {
+    return tplPromptBlock(q, part, 'gq-t4-q');
+  }
+
+  function archetypeName(results) {
+    var t = results.archetypeTitle || '';
+    return t.replace(/^\s*you['’]re\s+(a|an|the)\s+/i, '').replace(/[.!\s]+$/, '').trim();
+  }
+
+  function discoverResults(screen, matches, ctx) {
+    var results = ctx.results;
     var hero = matches[0];
-    var heroCard = el('div', 'gq-t4r-hero');
-    var parts = tplMatchMedia(hero, 'gq-t4r-ph');
-    heroCard.appendChild(parts.media);
-    heroCard.appendChild(el('h3', 'gq-t4r-name', escapeHtml(hero.productName)));
-    var spec = tplSpecLine(hero);
-    if (spec) heroCard.appendChild(el('p', 'gq-t4r-spec', escapeHtml(spec)));
-    var price = el('p', 'gq-t4r-price', '');
-    heroCard.appendChild(price);
-    var why = tplWhyText(hero);
-    if (why) heroCard.appendChild(el('p', 'gq-t4r-why', escapeHtml(why)));
-    if (ctx.definitive) heroCard.appendChild(tplAddButton(hero, results, 'gq-t4r-cta'));
-    var view = tplViewLink(hero, results);
-    if (view) heroCard.appendChild(view);
-    if (results.matchFootnote) heroCard.appendChild(buildMatchFootnote(results.matchFootnote));
-    wrap.appendChild(heroCard);
-    tplHydrateCard(parts, hero, price, true, ctx.hasPhotoNow);
+    var wrap = el('div', 'gq-t4r-wrap');
+    var kicker = results.archetypeKicker || 'Your type';
+    wrap.appendChild(el('p', 'gq-t4r-kicker', escapeHtml(kicker)));
+    var title = results.archetypeTitle || tplResultsHeadline(results, ctx);
+    wrap.appendChild(el('h2', 'gq-t4r-archetype', renderAccent(renderName(title))));
+    var line = results.archetypeLine || tplSubtext(results, matches);
+    if (line) wrap.appendChild(el('p', 'gq-t4r-line', escapeHtml(renderName(line))));
 
-    // Kit bundle row: the top 3 matches through the existing bundle
-    // machinery (buildBundleRow), one Add all plus individual adds.
+    var heroCard = el('div', 'gq-t4r-hero');
+    var slot = productSlot(hero, 'product', '4:3', null, 'gq-t4r-hero-slot');
+    heroCard.appendChild(slot);
+    slotTryon(slot, hero, ctx.hasPhotoNow);
+    var hi = el('div', 'gq-t4r-hero-tx');
+    hi.appendChild(el('h3', 'gq-t4r-name', escapeHtml(hero.productName)));
+    var priceLine = el('p', 'gq-t4r-price', '');
+    var why = tplWhyText(hero);
+    fetchProductJson(hero.productHandle).then(function(pj) {
+      var unit = priceCentsForRec(pj, hero);
+      var qty = Math.max(1, hero.quantity || 1);
+      var bits = [];
+      if (unit != null) bits.push(formatMoney(unit * qty));
+      if (why) bits.push(why);
+      priceLine.textContent = bits.join(' · ');
+    });
+    if (why) priceLine.textContent = why;
+    hi.appendChild(priceLine);
+    if (ctx.definitive) hi.appendChild(tplAddButton(hero, results, 'gq-t4r-cta'));
+    var view = tplViewLink(hero, results);
+    if (view) hi.appendChild(view);
+    if (results.matchFootnote) hi.appendChild(buildMatchFootnote(results.matchFootnote));
+    heroCard.appendChild(hi);
+    wrap.appendChild(heroCard);
+
+    var leadCard = ctx.leadCard();
+    if (leadCard) wrap.appendChild(leadCard);
+
     var kit = matches.slice(0, 3);
-    if (ctx.definitive && kit.length >= 2) {
+    if (kit.length >= 2) {
+      var arch = archetypeName(results);
       var kitWrap = el('div', 'gq-t4r-kit');
-      kitWrap.appendChild(el('h4', 'gq-t4r-kit-title', 'Your kit'));
+      kitWrap.appendChild(el('h4', 'gq-t4r-kit-title', escapeHtml(arch ? 'Your ' + arch + ' kit' : 'Your kit')));
       var row = el('div', 'gq-t4r-kit-row');
       kit.forEach(function(m) {
         var mini = el('div', 'gq-t4r-mini');
-        var p2 = tplMatchMedia(m, 'gq-t4r-mini-ph');
-        mini.appendChild(p2.media);
+        mini.appendChild(productSlot(m, 'product', '1:1', null, 'gq-t4r-mini-slot'));
         mini.appendChild(el('h5', 'gq-t4r-mini-name', escapeHtml(m.productName)));
-        var price2 = el('p', 'gq-t4r-mini-price', '');
-        mini.appendChild(price2);
-        mini.appendChild(tplAddButton(m, results, 'gq-t4r-mini-add'));
+        mini.appendChild(tplPrice(m, 'gq-t4r-mini-price'));
+        if (ctx.definitive) mini.appendChild(tplAddButton(m, results, 'gq-t4r-mini-add'));
         if (results.matchFootnote) mini.appendChild(buildMatchFootnote(results.matchFootnote));
         row.appendChild(mini);
-        tplHydrateCard(p2, m, price2, false, false);
       });
       kitWrap.appendChild(row);
-      // Add-all strip: same merchant opt-in gate as the legacy renderer
-      // (quiz_bundle_enabled). The kit DISPLAY is part of T4's design;
-      // the bundle button and its stored label copy are not.
-      if (results.bundleEnabled) {
-        bundlePicker = {
-          size: kit.length,
-          sel: kit.map(function(_, i) { return i; }),
-          pickable: false,
-          refreshers: [],
-          onChange: null,
-        };
-        kitWrap.appendChild(buildBundleRow(kit, results));
+      if (ctx.definitive && results.bundleEnabled) {
+        var bundle = tplBundleRow(kit, results, 'Add all {count} — {total}');
+        bundle.classList.add('gq-t4r-addall');
+        kitWrap.appendChild(bundle);
       }
       wrap.appendChild(kitWrap);
     }
     screen.appendChild(wrap);
   }
 
-  // -- T5 Clean results: up to 4 cards, 2-col grid, image-optional --
+  var TplDiscover = {
+    id: 't4',
+    rootClass: 'gq-t4',
+    loading: 'absent',
+    resultsMarker: 'gq-t4r',
+    questionChrome: discoverChrome,
+    questionHead: discoverQuestionHead,
+    optionList: discoverOptionList,
+    optionButton: discoverOptionButton,
+    results: discoverResults,
+  };
 
-  function cleanResultsBody(screen, matches, ctx) {
+  // =====================================================================
+  // T5 · Clean
+  // =====================================================================
+
+  function cleanChrome(stepNumber, isBonus) {
+    var meta = el('div', 'gq-t5-meta');
+    meta.appendChild(tplBackButton());
+    meta.appendChild(tplBar('gq-t5-prog', isBonus ? screens.length + 1 : stepNumber));
+    meta.appendChild(el('span', 'gq-t5-count', isBonus ? '✓' : stepNumber + '/' + screens.length));
+    return meta;
+  }
+
+  function cleanOptionList() {
+    return el('div', 'gq-t5-bars');
+  }
+
+  function cleanOptionButton(q, opt) {
+    var bar = el('button', 'gq-t5-bar');
+    var desc = optionDesc(opt);
+    bar.innerHTML = '<span class="gq-t5-bar-tx"><span class="gq-t5-bar-label">' + escapeHtml(opt.label) + '</span>' +
+      (desc ? '<small class="gq-t5-bar-desc">' + escapeHtml(desc) + '</small>' : '') + '</span>' + CHECK_MINI;
+    return bar;
+  }
+
+  function cleanQuestionHead(q, part) {
+    return tplPromptBlock(q, part, 'gq-t5-q');
+  }
+
+  function cleanResults(screen, matches, ctx) {
     var results = ctx.results;
-    var wrap = el('div', 'gq-t5r');
+    var wrap = el('div', 'gq-t5r-wrap');
     wrap.appendChild(el('h2', 'gq-t5r-headline', renderAccent(renderName(tplResultsHeadline(results, ctx)))));
-    if (results.subtext) {
-      wrap.appendChild(el('p', 'gq-t5r-sub', escapeHtml(renderName(results.subtext)
-        .replace(/\{count\}/g, String(matches.length))
-        .replace(/\{match_word\}/g, matches.length === 1 ? 'match' : 'matches'))));
+    var sub = tplSubtext(results, matches);
+    var chips = tplAnswerChips();
+    if (sub) {
+      wrap.appendChild(el('p', 'gq-t5r-sub', escapeHtml(sub)));
+    } else if (chips.length > 0) {
+      wrap.appendChild(el('p', 'gq-t5r-sub', 'Based on: ' + escapeHtml(chips.map(function(c) { return c.value; }).join(' · '))));
     }
     var grid = el('div', 'gq-t5r-grid');
     matches.slice(0, 4).forEach(function(m, i) {
       var card = el('div', 'gq-t5r-card');
-      var parts = tplMatchMedia(m, 'gq-t5r-ph');
-      card.appendChild(parts.media);
-      card.appendChild(el('h4', 'gq-t5r-name', escapeHtml(m.productName)));
+      var slot = productSlot(m, 'product', '4:3', null, 'gq-t5r-slot');
+      card.appendChild(slot);
+      if (i === 0) slotTryon(slot, m, ctx.hasPhotoNow);
+      var tx = el('div', 'gq-t5r-tx');
+      tx.appendChild(el('h4', 'gq-t5r-name', escapeHtml(m.productName)));
       var spec = tplSpecLine(m);
-      if (spec) card.appendChild(el('p', 'gq-t5r-spec', escapeHtml(spec)));
-      var price = el('p', 'gq-t5r-price', '');
-      card.appendChild(price);
+      if (spec) tx.appendChild(el('p', 'gq-t5r-spec', escapeHtml(spec)));
+      tx.appendChild(tplPrice(m, 'gq-t5r-price'));
       var why = tplWhyText(m);
-      if (why) card.appendChild(el('p', 'gq-t5r-why', escapeHtml(why)));
-      if (ctx.definitive) card.appendChild(tplAddButton(m, results, 'gq-t5r-add'));
+      if (why) tx.appendChild(el('p', 'gq-t5r-why', escapeHtml(why)));
+      if (ctx.definitive) tx.appendChild(tplAddButton(m, results, 'gq-t5r-add'));
       var view = tplViewLink(m, results);
-      if (view) card.appendChild(view);
-      if (results.matchFootnote) card.appendChild(buildMatchFootnote(results.matchFootnote));
+      if (view) tx.appendChild(view);
+      if (results.matchFootnote) tx.appendChild(buildMatchFootnote(results.matchFootnote));
+      card.appendChild(tx);
       grid.appendChild(card);
-      tplHydrateCard(parts, m, price, i === 0, ctx.hasPhotoNow);
     });
     wrap.appendChild(grid);
+    var leadCard = ctx.leadCard();
+    if (leadCard) wrap.appendChild(leadCard);
     screen.appendChild(wrap);
   }
 
-  // -- Template registry (CI asserts these component names) --
-
-  var TplSalon = {
-    id: 't1',
-    beginLabel: 'Begin',
-    frame: salonFrame,
-    kicker: questionKicker,
-    progress: function(stepNumber) { return tplBar('gq-t1-prog', stepNumber); },
-    optionMode: function() { return 'salon'; },
-    resultsBody: salonResultsBody,
-  };
-
-  var TplStudio = {
-    id: 't2',
-    kicker: null,
-    progress: function(stepNumber) { return tplBar('gq-t2-prog', stepNumber); },
-    optionMode: function(specific) {
-      // Imageless questions render T5-style bars inside T2 (spec 4.3).
-      return specific.length > 0 && specific.every(optionHasTileArt) ? 'tiles' : 'bars';
-    },
-    resultsBody: studioResultsBody,
-  };
-
-  var TplGuide = {
-    id: 't3',
-    kicker: null,
-    progress: function(stepNumber) {
-      // Honest labeled progress: diagnostic length is a feature.
-      return el('div', 'gq-t3-meta', 'Question ' + stepNumber + ' of ' + screens.length);
-    },
-    optionMode: function(specific) {
-      // Text-only fallback cards when a question has no imagery at all.
-      return specific.some(function(o) { return o.imageUrl; }) ? 'guide' : 'guidetext';
-    },
-    resultsBody: guideResultsBody,
-  };
-
-  var TplPop = {
-    id: 't4',
-    kicker: null,
-    progress: function(stepNumber) {
-      var seg = el('div', 'gq-t4-prog');
-      for (var i = 0; i < screens.length; i++) {
-        seg.appendChild(el('i', i < stepNumber ? 'gq-t4-seg is-filled' : 'gq-t4-seg'));
-      }
-      return seg;
-    },
-    optionMode: function() { return 'pop'; },
-    resultsBody: popResultsBody,
-  };
-
   var TplClean = {
     id: 't5',
-    kicker: null,
-    progress: function(stepNumber) {
-      var meta = el('div', 'gq-t5-meta');
-      meta.appendChild(tplBar('gq-t5-prog', stepNumber));
-      meta.appendChild(el('span', 'gq-t5-count', stepNumber + '/' + screens.length));
-      return meta;
-    },
-    optionMode: function() { return 'bars'; },
-    resultsBody: cleanResultsBody,
+    rootClass: 'gq-t5',
+    loading: 'absent',
+    resultsMarker: 'gq-t5r',
+    questionChrome: cleanChrome,
+    questionHead: cleanQuestionHead,
+    optionList: cleanOptionList,
+    optionButton: cleanOptionButton,
+    results: cleanResults,
   };
 
   // ---- Boot ----
@@ -4201,7 +5431,13 @@
 
       replaceStep();
       window.addEventListener('popstate', onPopState);
-      render('forward');
+      // Studio deep link (V3-CONTRACTS §6): PREVIEW.overrides.step boots the
+      // widget straight onto that screen (gallery strips, rail jumps).
+      if (PREVIEW && PREVIEW.overrides && PREVIEW.overrides.step) {
+        previewGoto(PREVIEW.overrides.step);
+      } else {
+        render('forward');
+      }
       trackEvent('quiz_view');
     });
   }

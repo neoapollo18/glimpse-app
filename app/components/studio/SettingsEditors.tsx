@@ -14,21 +14,22 @@ import {
 } from "@shopify/polaris";
 import type { StudioActionData } from "../../routes/studio";
 import { postStudioAction } from "./studio-data";
-import { TEMPLATE_IDS, TEMPLATES } from "../../lib/quiz-templates";
+import {
+  EMAIL_PLACEMENTS,
+  LOOKS,
+  LOOK_IDS,
+  TEMPLATES,
+  isTemplateId,
+  type EmailPlacement,
+  type LookId,
+} from "../../lib/quiz-templates";
+import type { StudioColorKey, StudioColorSource } from "./types";
 
-// V2 Style panel: the template is chosen in the full-screen overlay (spec
-// 2.4), never from a radio row here. This panel keeps only the CURRENT
-// template's preset swatches plus the door into the overlay.
-const STYLE_TEMPLATES = TEMPLATE_IDS.map((id) => ({
-  id,
-  name: TEMPLATES[id].name,
-  presets: TEMPLATES[id].presets.map((p) => ({
-    id: p.id,
-    label: p.label,
-    bg: p.tokens.colorBg,
-    accent: p.tokens.colorAccent,
-  })),
-}));
+// V3 Style panel (spec 8.2, contract §7): the template is chosen in the
+// Templates gallery, never here; this panel shows the CURRENT template
+// (from the loader, the single source of truth), the Look, and every
+// color with its REAL resolved value and where it came from. An empty
+// color field is not a state.
 
 // In-studio editors for the fixed slides (Intro, Photo, Results) and the
 // Theme item. These edit DRAFT SETTINGS through the same update_copy /
@@ -212,6 +213,33 @@ function CopyField({
   );
 }
 
+const SOURCE_CHIP: Record<StudioColorSource["source"], { label: string; bg: string; fg: string }> = {
+  theme: { label: "From your theme", bg: "#E3F5EC", fg: "#0B6B3A" },
+  preset: { label: "Preset", bg: "#F1F1F1", fg: "#5C5F62" },
+  merchant: { label: "Yours", bg: "#EEF2FF", fg: "#3730A3" },
+};
+
+function SourceChip({ source }: { source: StudioColorSource["source"] }) {
+  const c = SOURCE_CHIP[source];
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        fontSize: 11,
+        fontWeight: 600,
+        lineHeight: "18px",
+        padding: "0 8px",
+        borderRadius: 999,
+        background: c.bg,
+        color: c.fg,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {c.label}
+    </span>
+  );
+}
+
 function ColorField({
   label,
   fieldKey,
@@ -219,6 +247,7 @@ function ColorField({
   setValue,
   disabled,
   helpText,
+  resolved,
 }: {
   label: string;
   fieldKey: string;
@@ -226,25 +255,48 @@ function ColorField({
   setValue: (key: string, value: string) => void;
   disabled?: boolean;
   helpText?: string;
+  /** Template shops: the value the quiz renders with when no override is
+   * set, and its source. Legacy shops pass nothing and keep a placeholder. */
+  resolved?: StudioColorSource;
 }) {
-  const value = values[fieldKey] ?? "";
-  const invalid = value !== "" && !/^#[0-9a-fA-F]{6}$/.test(value);
+  const override = values[fieldKey] ?? "";
+  // Template shops: the field always shows a real value. Typing makes it
+  // yours; clearing it (or "Use theme value") returns to the resolved one.
+  const fallback = resolved
+    ? resolved.source === "merchant"
+      ? resolved.fallback
+      : { value: resolved.value, source: resolved.source }
+    : null;
+  const shown = override !== "" ? override : fallback?.value ?? "";
+  const source: StudioColorSource["source"] | null = resolved
+    ? override !== ""
+      ? "merchant"
+      : fallback!.source
+    : null;
+  const invalid = override !== "" && !/^#[0-9a-fA-F]{6}$/.test(override);
+  const swatch = /^#[0-9a-fA-F]{6}$/.test(shown) ? shown : "#1a1a1a";
   return (
     <TextField
       label={label}
-      value={value}
+      value={shown}
       onChange={(v) => setValue(fieldKey, v)}
       disabled={disabled}
-      placeholder="Blank = default"
+      placeholder={resolved ? undefined : "Theme default"}
       helpText={helpText}
       error={invalid ? "Use a 6-digit hex like #1a1a1a (not saved until valid)" : undefined}
       autoComplete="off"
+      labelAction={
+        resolved && override !== ""
+          ? { content: fallback?.source === "theme" ? "Use theme value" : "Use preset value", onAction: () => setValue(fieldKey, "") }
+          : undefined
+      }
       connectedLeft={
         <input
           type="color"
-          value={/^#[0-9a-fA-F]{6}$/.test(value) ? value : "#1a1a1a"}
+          value={swatch}
           onChange={(e) => setValue(fieldKey, e.target.value)}
           disabled={disabled}
+          aria-label={`${label} swatch`}
           style={{
             width: 34,
             height: 34,
@@ -256,6 +308,7 @@ function ColorField({
           }}
         />
       }
+      connectedRight={source ? <div style={{ display: "flex", alignItems: "center", paddingLeft: 8 }}><SourceChip source={source} /></div> : undefined}
     />
   );
 }
@@ -561,16 +614,39 @@ export function PhotoEditor({
 // Lead capture (optional email/SMS step before the photo gate)
 // ---------------------------------------------------------------------
 
+const PLACEMENT_LABELS: Record<EmailPlacement, string> = {
+  hook_start: "Promise a discount up front, ask before results",
+  gate_results: "Ask right before results (skip always visible)",
+  after_results: "Show results first, ask below the match",
+  off: "Off",
+};
+
 export function LeadEditor({
   settings,
   chatBusy,
   onPreviewUpdate,
+  template,
+  emailPlacementDefault,
 }: {
   settings: Record<string, unknown>;
   chatBusy: boolean;
   onPreviewUpdate: (p: { flow?: unknown; config?: unknown }) => void;
+  /** v3: the placement setting exists for template shops only (spec 5.2). */
+  template?: string | null;
+  emailPlacementDefault?: EmailPlacement | null;
 }) {
   const { schedule, saveState, error, clearError } = useSettingsAutosave(onPreviewUpdate);
+  const hasTemplate = isTemplateId(template);
+  // "" = template default (column NULL); the applier stores null for it.
+  const [placement, setPlacement] = useState<string>(() => {
+    const v = settings.quiz_email_placement;
+    return typeof v === "string" && (EMAIL_PLACEMENTS as string[]).includes(v) ? v : "";
+  });
+  useEffect(() => {
+    const v = settings.quiz_email_placement;
+    setPlacement(typeof v === "string" && (EMAIL_PLACEMENTS as string[]).includes(v) ? v : "");
+  }, [settings.quiz_email_placement]);
+  const defaultLabel = emailPlacementDefault ? PLACEMENT_LABELS[emailPlacementDefault] : null;
   const [values, setValues] = useState<Record<string, string>>(() => ({
     quiz_lead_headline: str(settings, "quiz_lead_headline"),
     quiz_lead_body: str(settings, "quiz_lead_body"),
@@ -603,8 +679,32 @@ export function LeadEditor({
           setEnabled(v);
           schedule("copy", "quiz_lead_enabled", v);
         }}
-        helpText="Adds an optional step between the last question and the photo step. Shoppers can always skip it. Captured leads appear on the Analytics page."
+        helpText={
+          hasTemplate
+            ? "Shoppers can always skip it. Placement below decides where the ask happens. Captured leads appear on the Analytics page."
+            : "Adds an optional step between the last question and the photo step. Shoppers can always skip it. Captured leads appear on the Analytics page."
+        }
       />
+      {hasTemplate && (
+        <Select
+          label="Placement"
+          options={[
+            { label: defaultLabel ? `Template default (${defaultLabel})` : "Template default", value: "" },
+            ...EMAIL_PLACEMENTS.map((p) => ({ label: PLACEMENT_LABELS[p], value: p })),
+          ]}
+          value={placement}
+          disabled={disabled || !enabled}
+          onChange={(v) => {
+            setPlacement(v);
+            schedule("copy", "quiz_email_placement", v === "" ? null : v);
+          }}
+          helpText={
+            placement === "" && defaultLabel
+              ? `Using this template's default: ${defaultLabel.toLowerCase()}.`
+              : "The discount code, when set, is revealed on submit in every placement."
+          }
+        />
+      )}
       <Checkbox
         label="Also collect a phone number (SMS)"
         checked={collectPhone}
@@ -842,14 +942,34 @@ export function ThemeEditor({
   settings,
   chatBusy,
   onPreviewUpdate,
-  onOpenTemplateOverlay,
+  template,
+  look,
+  lookSource,
+  lookBusy,
+  colorSources,
+  onChangeLook,
+  onOpenGallery,
 }: {
   settings: Record<string, unknown>;
   chatBusy: boolean;
   onPreviewUpdate: (p: { flow?: unknown; config?: unknown }) => void;
-  onOpenTemplateOverlay?: () => void;
+  /** Single source of truth (loader `studio.template`), never local state. */
+  template: string | null;
+  look: LookId;
+  lookSource: "merchant" | "brand" | "default";
+  lookBusy?: boolean;
+  colorSources?: Record<StudioColorKey, StudioColorSource>;
+  onChangeLook?: (look: LookId) => void;
+  onOpenGallery?: () => void;
 }) {
   const { schedule, saveState, error, clearError } = useSettingsAutosave(onPreviewUpdate);
+  const hasTemplate = isTemplateId(template);
+  const templateName = hasTemplate ? TEMPLATES[template].name : null;
+  // Look: rendered from props and re-seeded whenever the loader's value
+  // changes (B0: no cached copy survives a revalidation). The local copy
+  // only bridges the click → API → revalidate window.
+  const [lookLocal, setLookLocal] = useState<LookId>(look);
+  useEffect(() => setLookLocal(look), [look]);
   const [values, setValues] = useState<Record<string, string>>(() => ({
     quiz_accent_color: str(settings, "quiz_accent_color"),
     quiz_ink_color: str(settings, "quiz_ink_color"),
@@ -893,39 +1013,19 @@ export function ThemeEditor({
   };
 
   const disabled = chatBusy;
-  const [tpl, setTpl] = useState<string>(str(settings, "quiz_template"));
-  const [preset, setPreset] = useState<string>(str(settings, "quiz_preset"));
-  const [resetting, setResetting] = useState(false);
-  const pickTemplate = (id: string) => {
-    setTpl(id);
-    schedule("copy", "quiz_template", id);
-  };
-  const pickPreset = (id: string) => {
-    setPreset(id);
-    schedule("copy", "quiz_preset", id);
-  };
-  const resetToTheme = async () => {
-    setResetting(true);
-    try {
-      // Re-extract the brand profile, then drop preset + manual color
-      // overrides so the extracted tokens show through.
-      const fd = new FormData();
-      fd.append("intent", "extract");
-      const res = await fetch("/app/api/brand-profile", { method: "POST", body: fd });
-      const body = await res.json();
-      schedule("copy", "quiz_preset", null as unknown as string);
-      for (const k of ["quiz_accent_color", "quiz_ink_color", "quiz_card_bg_color", "quiz_line_color", "quiz_cta_color"]) {
-        setValues((prev) => ({ ...prev, [k]: "" }));
-        schedule("design", k, null);
-      }
-      if (body?.ok && body.profile?.templateAssignment?.template) {
-        pickTemplate(body.profile.templateAssignment.template);
-      }
-      setPreset("");
-    } finally {
-      setResetting(false);
-    }
-  };
+  const colorProps = (key: StudioColorKey) => ({
+    fieldKey: key,
+    values,
+    setValue: setColor,
+    disabled,
+    resolved: hasTemplate ? colorSources?.[key] : undefined,
+  });
+  const lookHelp =
+    lookSource === "merchant"
+      ? "Your choice."
+      : lookSource === "brand"
+        ? "Chosen from your theme's fonts and colors."
+        : "Default until your brand is read.";
   return (
     <BlockStack gap="400">
       <EditorHeader title="Style" saveState={saveState} />
@@ -934,59 +1034,40 @@ export function ThemeEditor({
           {error}
         </Banner>
       )}
-      <InlineStack align="space-between" blockAlign="center">
-        <BlockStack gap="050">
-          <Text as="h4" variant="headingSm">
-            Template
-          </Text>
-          <Text as="p" variant="bodySm" tone="subdued">
-            {tpl ? STYLE_TEMPLATES.find((t) => t.id === tpl)?.name ?? tpl : "Classic Gleame look"}
-          </Text>
-        </BlockStack>
-        <Button size="slim" onClick={onOpenTemplateOverlay} disabled={disabled || !onOpenTemplateOverlay}>
-          Change template
-        </Button>
-      </InlineStack>
-      {tpl && (
-        <InlineStack gap="200" blockAlign="center">
-          {STYLE_TEMPLATES.find((t) => t.id === tpl)?.presets.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              title={p.label}
-              disabled={disabled}
-              onClick={() => pickPreset(p.id)}
-              style={{
-                width: 26,
-                height: 26,
-                borderRadius: "50%",
-                border: 0,
-                cursor: "pointer",
-                background: `linear-gradient(135deg, ${p.bg} 60%, ${p.accent} 60%)`,
-                outline: preset === p.id ? "2px solid #1a1a1e" : "1px solid #d9d6d2",
-                outlineOffset: 1,
-              }}
-            />
-          ))}
-          <Button size="slim" onClick={resetToTheme} loading={resetting} disabled={disabled}>
-            Reset to my theme
-          </Button>
-        </InlineStack>
+      {hasTemplate && (
+        <>
+          <InlineStack align="space-between" blockAlign="center">
+            <BlockStack gap="050">
+              <Text as="h4" variant="headingSm">
+                Template
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                {templateName} · “{TEMPLATES[template].shopperQuestion}”
+              </Text>
+            </BlockStack>
+            <Button size="slim" onClick={onOpenGallery} disabled={disabled || !onOpenGallery}>
+              Change in Templates
+            </Button>
+          </InlineStack>
+          <Select
+            label="Look"
+            options={LOOK_IDS.map((id) => ({ label: LOOKS[id].name, value: id }))}
+            value={lookLocal}
+            disabled={disabled || lookBusy || !onChangeLook}
+            onChange={(v) => {
+              if (v !== "editorial" && v !== "minimal" && v !== "bold") return;
+              setLookLocal(v);
+              onChangeLook?.(v);
+            }}
+            helpText={`${LOOKS[lookLocal].tagline}. ${lookHelp}`}
+          />
+        </>
       )}
-      {!tpl && (
-        <Text as="p" variant="bodySm" tone="subdued">
-          No template assigned yet: this quiz uses the classic Gleame look.
-          Choose a template to restyle it with your store's fonts and colors.
-        </Text>
-      )}
-      <Text as="p" variant="bodySm" tone="subdued">
-        Blank fields inherit the quiz's polished defaults.
-      </Text>
-      <ColorField label="Accent color" fieldKey="quiz_accent_color" values={values} setValue={setColor} disabled={disabled} helpText="Buttons, highlights, and **starred** headline words" />
-      <ColorField label="Text color" fieldKey="quiz_ink_color" values={values} setValue={setColor} disabled={disabled} />
-      <ColorField label="Card background" fieldKey="quiz_card_bg_color" values={values} setValue={setColor} disabled={disabled} />
-      <ColorField label="Border color" fieldKey="quiz_line_color" values={values} setValue={setColor} disabled={disabled} helpText="Card and option borders" />
-      <ColorField label="Button color" fieldKey="quiz_cta_color" values={values} setValue={setColor} disabled={disabled} />
+      <ColorField label="Accent color" {...colorProps("quiz_accent_color")} helpText="Highlights and **starred** headline words" />
+      <ColorField label="Text color" {...colorProps("quiz_ink_color")} />
+      <ColorField label="Card background" {...colorProps("quiz_card_bg_color")} />
+      <ColorField label="Border color" {...colorProps("quiz_line_color")} helpText="Card and option borders" />
+      <ColorField label="Button color" {...colorProps("quiz_cta_color")} />
       <InlineStack gap="200">
         <div style={{ flex: 1, minWidth: 120 }}>
           <TextField label="Button radius" type="number" value={values.quiz_button_radius} onChange={(v) => setNumber("quiz_button_radius", v)} disabled={disabled} placeholder="Default" suffix="px" autoComplete="off" />
@@ -995,28 +1076,33 @@ export function ThemeEditor({
           <TextField label="Card radius" type="number" value={values.quiz_card_radius} onChange={(v) => setNumber("quiz_card_radius", v)} disabled={disabled} placeholder="Default" suffix="px" autoComplete="off" />
         </div>
       </InlineStack>
-      <Select
-        label="Progress indicator"
-        options={[
-          { label: "Default (dots)", value: "" },
-          { label: "Bar", value: "bar" },
-          { label: "Counter (2 of 6)", value: "counter" },
-          { label: "None", value: "none" },
-        ]}
-        value={values.quiz_progress_style}
-        onChange={(v) => setEnum("quiz_progress_style", v)}
-        disabled={disabled}
-      />
-      <Select
-        label="Intro layout"
-        options={[
-          { label: "Split (copy + visual)", value: "split" },
-          { label: "Centered", value: "centered" },
-        ]}
-        value={values.quiz_intro_layout || "split"}
-        onChange={(v) => setEnum("quiz_intro_layout", v)}
-        disabled={disabled}
-      />
+      {/* Legacy-only controls: templates own progress + intro layout. */}
+      {!hasTemplate && (
+        <>
+          <Select
+            label="Progress indicator"
+            options={[
+              { label: "Default (dots)", value: "" },
+              { label: "Bar", value: "bar" },
+              { label: "Counter (2 of 6)", value: "counter" },
+              { label: "None", value: "none" },
+            ]}
+            value={values.quiz_progress_style}
+            onChange={(v) => setEnum("quiz_progress_style", v)}
+            disabled={disabled}
+          />
+          <Select
+            label="Intro layout"
+            options={[
+              { label: "Split (copy + visual)", value: "split" },
+              { label: "Centered", value: "centered" },
+            ]}
+            value={values.quiz_intro_layout || "split"}
+            onChange={(v) => setEnum("quiz_intro_layout", v)}
+            disabled={disabled}
+          />
+        </>
+      )}
       <Select
         label="Animations"
         options={[

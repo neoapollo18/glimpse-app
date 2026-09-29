@@ -2,21 +2,51 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import { shopNeedsBilling } from "../lib/billing-gate.server";
-import { findShopByDomain } from "../lib/supabase.server";
+import { findShopByDomain, getRecommendationCounts } from "../lib/supabase.server";
 import { checkRateLimits, RATE_LIMITS } from "../lib/rate-limiter.server";
 import { isClaudeConfigured } from "../lib/claude.server";
 import { generateQuizConfig, type BrandBrief } from "../lib/quiz-generator.server";
-import { recordGenStart, recordGenHeartbeat, recordGenOutcome } from "../lib/gen-status.server";
+import {
+  getGenStatus,
+  isGenRunning,
+  recordGenStart,
+  recordGenHeartbeat,
+  recordGenOutcome,
+  recordGenStep,
+} from "../lib/gen-status.server";
 
 // AI quiz generation endpoint (admin-authenticated, NOT storefront).
 // Streams SSE progress events; the client uses fetch + a stream reader
 // (EventSource can't POST with App Bridge session tokens).
 //
-// Events: {type:"progress", phase} | {type:"result", summary, warnings}
-//       | {type:"error", error} | {type:"heartbeat"}
+// Events (all kept for existing clients; v3 adds "step"):
+//   {type:"progress", phase, streamed?}
+//   {type:"step", key:"catalog"|"theme"|"questions"|"paths"|"images", detail, ms}
+//   {type:"result", summary, warnings, degradedTo, template, report}
+//   {type:"error", error, warnings?}
+//   {type:"heartbeat"}
+// The onboarding Build screen advances ONLY on "step" events (contract §10).
 
-export const loader = async (_args: LoaderFunctionArgs) => {
-  return new Response("Method Not Allowed", { status: 405 });
+// GET ?intent=status: is a generation still running for this shop, and
+// does a quiz already exist? The onboarding Build screen's "Try again"
+// asks this BEFORE starting another paid run (a client that gave up at
+// 120 s may have a server-side run that is still finishing).
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  if (new URL(request.url).searchParams.get("intent") !== "status") {
+    return new Response("Method Not Allowed", { status: 405 });
+  }
+  const { session } = await authenticate.admin(request);
+  const shop = await findShopByDomain(session.shop);
+  if (!shop) return json({ ok: false, error: "Shop not found" }, { status: 404 });
+  const counts = await getRecommendationCounts(shop.id).catch(() => null);
+  const status = getGenStatus(shop.id);
+  return json({
+    ok: true,
+    questions: counts?.questions ?? 0,
+    running: isGenRunning(shop.id),
+    error: status?.error ?? null,
+    lastStep: status?.lastStep ?? null,
+  });
 };
 
 const encoder = new TextEncoder();
@@ -91,6 +121,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       productIds: scopeKind === "all" ? null : ids,
     };
   }
+  // v3 report §8: collections aren't synced, so the scope screen's live
+  // count rides along. Anything unparsable is 0 (= unknown), never guessed.
+  const collectionCountRaw = Number(formData.get("collectionCount") ?? 0);
+  const collectionCount = Number.isFinite(collectionCountRaw) ? Math.max(0, Math.floor(collectionCountRaw)) : 0;
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -128,14 +162,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           shopDomain,
           brief,
           accentColor: String(formData.get("accentColor") ?? "") || null,
+          collectionCount,
           onProgress: (phase, streamed) => send({ type: "progress", phase, streamed }),
+          onStep: (step) => {
+            recordGenStep(shop.id, genToken, step.key);
+            send({ type: "step", key: step.key, detail: step.detail, ms: step.ms });
+          },
         });
         if (result.ok) {
           recordGenOutcome(shop.id, genToken, { warnings: result.warnings });
           // degradedTo: the validator's imagery floor demoted the assigned
-          // template (already saved to the live row, e.g. t5). Onboard's
-          // styling stage must not re-set the original assignment over it.
-          send({ type: "result", summary: result.summary, warnings: result.warnings, degradedTo: result.degradedTo ?? null });
+          // template (already saved to the live row, e.g. t5). template is
+          // the template the saved quiz carries; report is contract §8.
+          send({
+            type: "result",
+            summary: result.summary,
+            warnings: result.warnings,
+            degradedTo: result.degradedTo ?? null,
+            template: result.template ?? null,
+            report: result.report ?? null,
+          });
         } else {
           recordGenOutcome(shop.id, genToken, { error: result.error, warnings: result.warnings });
           send({ type: "error", error: result.error, warnings: result.warnings });
