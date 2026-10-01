@@ -22,12 +22,15 @@
 import { supabase } from "./supabase.server";
 import {
   LOOKS,
+  isTemplateEligible,
+  isTemplateId,
   selectLook,
   selectTemplate,
   type BrandTokens,
   type LookId,
   type LookSignals,
   type TemplateAssignment,
+  type TemplateId,
   type TemplateSignals,
 } from "./quiz-templates";
 
@@ -394,15 +397,24 @@ interface HomepageExtract {
   copySample: string;
 }
 
-async function fetchWithTimeout(url: string, ms: number): Promise<Response | null> {
+/**
+ * GET a page's text with ONE budget covering headers AND body: the abort
+ * stays armed through `res.text()`, so a host that answers headers fast
+ * and then trickles the body can't hang extraction (the timer used to be
+ * cleared as soon as the headers arrived). null on any failure.
+ */
+async function fetchWithTimeout(url: string, ms: number): Promise<{ url: string; text: string } | null> {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), ms);
   try {
-    return await fetch(url, {
+    const res = await fetch(url, {
       signal: ctl.signal,
       headers: { "User-Agent": "Mozilla/5.0 (compatible; GleameBrandBot/1.0)" },
       redirect: "follow",
     });
+    if (!res.ok) return null;
+    const text = await res.text();
+    return { url: res.url, text };
   } catch {
     return null;
   } finally {
@@ -412,8 +424,8 @@ async function fetchWithTimeout(url: string, ms: number): Promise<Response | nul
 
 export async function analyzeHomepage(shopDomain: string): Promise<HomepageExtract | null> {
   const res = await fetchWithTimeout(`https://${shopDomain}/`, 6000);
-  if (!res || !res.ok) return null;
-  const html = await res.text();
+  if (!res) return null;
+  const html = res.text;
   // Password page → no public homepage; caller degrades gracefully.
   if (/\/password/.test(res.url) || /<body[^>]*class="[^"]*password/i.test(html)) return null;
 
@@ -888,6 +900,27 @@ export function templateSignalsFromProfile(profile: BrandProfile): TemplateSigna
     lifestyleImageCount: profile.homepage.lifestyleImageCount + (profile.brand.coverImageUrl ? 1 : 0),
     bannerCoverage: null,
   };
+}
+
+/**
+ * The template a shop actually RENDERS (storefront + Studio canvas share
+ * this so they can never disagree). Serve-time eligibility re-check, v3:
+ * - null stays null (legacy rendering);
+ * - t5 is always eligible;
+ * - with a Brand Profile, an image gate that no longer passes degrades to
+ *   t5 (imagery changes after assignment; see the 2026-09-25 incident);
+ * - WITHOUT a profile the column is trusted: every writer of quiz_template
+ *   (generation, the template API, onboarding) already enforced
+ *   eligibility, and degrading here made the Studio show Match while the
+ *   storefront served Clean.
+ */
+export function servedTemplateFor(
+  template: string | null | undefined,
+  profile: BrandProfile | null
+): TemplateId | null {
+  if (!isTemplateId(template)) return null;
+  if (template === "t5" || !profile) return template;
+  return isTemplateEligible(template, templateSignalsFromProfile(profile)) ? template : "t5";
 }
 
 /** The profile's Look, defaulting older profiles to Minimal (never Bold). */

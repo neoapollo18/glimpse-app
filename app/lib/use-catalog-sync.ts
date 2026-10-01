@@ -20,12 +20,15 @@ export interface CatalogSyncResponse {
   nextCursor?: string | null;
   synced?: number;
   total?: number | null;
+  // True when a stale resume cursor was dropped server-side and this page
+  // is page 1 of a restarted sync.
+  restarted?: boolean;
   // Present on the final page only: the brand-library build summary
   // (absent when the build failed - the sync itself still succeeded).
   library?: { imageCount: number; taggedPct: number; ms: number };
 }
 
-export function useCatalogSync(options: { onComplete?: () => void } = {}) {
+export function useCatalogSync(options: { onComplete?: () => void; onError?: (error: string) => void } = {}) {
   const fetcher = useFetcher<CatalogSyncResponse>();
   const [progress, setProgress] = useState<{ done: number; total: number | null } | null>(null);
   const [syncDone, setSyncDone] = useState(false);
@@ -35,6 +38,10 @@ export function useCatalogSync(options: { onComplete?: () => void } = {}) {
   const doneSoFar = useRef(0);
   const onCompleteRef = useRef(options.onComplete);
   onCompleteRef.current = options.onComplete;
+  // Callback (not just state): a re-run that fails with the SAME message
+  // leaves syncError unchanged, so an effect keyed on it never re-fires.
+  const onErrorRef = useRef(options.onError);
+  onErrorRef.current = options.onError;
 
   const submitPage = (cursor?: string) => {
     const fd = new FormData();
@@ -59,8 +66,10 @@ export function useCatalogSync(options: { onComplete?: () => void } = {}) {
     // Error responses from auth/shop guards omit `intent` — they still must
     // clear the in-flight state or the progress bar wedges forever.
     if (data.ok === false) {
-      setSyncError(data.error ?? "Sync failed");
+      const message = data.error ?? "Sync failed";
+      setSyncError(message);
       setProgress(null);
+      onErrorRef.current?.(message);
       return;
     }
     if (data.intent !== "sync-catalog") return;

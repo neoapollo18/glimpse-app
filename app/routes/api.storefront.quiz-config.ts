@@ -9,7 +9,7 @@ import {
   readTemplateContentFields,
   type TemplateContentFields,
 } from "../lib/quiz-preview.server";
-import { getBrandProfile, lookFromProfile } from "../lib/brand-profile.server";
+import { getBrandProfile, lookFromProfile, servedTemplateFor } from "../lib/brand-profile.server";
 import { defaultEmailPlacement, isTemplateId, resolveQuizTokens } from "../lib/quiz-templates";
 
 const CORS_HEADERS = {
@@ -63,16 +63,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   //      exist. An ineligible/unknown template degrades to t5 (renders
   //      with zero imagery), never to a broken layout.
   const templatesLive = process.env.QUIZ_TEMPLATES_LIVE === "true";
-  let servedTemplate = templatesLive ? config.quiz_template : null;
-  const brandProfile = servedTemplate
-    ? await getBrandProfile(verifiedShop.shop_domain).catch(() => null)
-    : null;
-  if (servedTemplate && servedTemplate !== "t5") {
-    const eligible = brandProfile?.templateAssignment?.eligible;
-    if (!Array.isArray(eligible) || !eligible.includes(servedTemplate as never)) {
-      servedTemplate = "t5";
-    }
-  }
+  const brandProfile =
+    templatesLive && config.quiz_template
+      ? await getBrandProfile(verifiedShop.shop_domain).catch(() => null)
+      : null;
+  // Shared with the Studio preview (servedTemplateFor) so the canvas and
+  // the storefront render the same template.
+  const servedTemplate = templatesLive ? servedTemplateFor(config.quiz_template, brandProfile) : null;
   // v3 (V3-CONTRACTS §2/§6): Look = merchant column, else the Brand
   // Profile's derived look, else Minimal. Email placement = merchant
   // column, else the template default. Both absent for legacy shops.

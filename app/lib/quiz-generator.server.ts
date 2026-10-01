@@ -18,9 +18,11 @@ import {
   claudeClient,
   callClaudeWithRetry,
   logClaudeUsage,
+  GenerationDeadlineError,
   CLAUDE_MODEL_MAIN,
   type ClaudeUsage,
 } from "./claude.server";
+import type { FillerCandidate } from "./quiz-archetypes.server";
 import {
   GeneratedQuizConfigSchema,
   validateGeneratedConfig,
@@ -268,15 +270,17 @@ function vendorQuestionCandidate(
 
 /**
  * 5.1 hard floor: fill to MIN_QUESTIONS_FLOOR from the archetype stock
- * bank (plus the vendor candidate) when the model went low - the Luna
- * failure was a 17-product store producing 2 questions. Bank questions
- * carry no matrix rules, so a pure-matrix config switches to hybrid (its
- * rules keep winning where they match; the ranker interprets the rest).
+ * bank (plus the vendor candidate, plus the universal fillers) when the
+ * model went low - the Luna failure was a 17-product store producing 2
+ * questions. Bank questions carry no matrix rules, so a pure-matrix config
+ * switches to hybrid (its rules keep winning where they match; the ranker
+ * interprets the rest).
  */
 function fillQuestionsToMinimum(
   config: GeneratedQuizConfig,
   catalog: CatalogProduct[],
   bank: () => GeneratedQuizConfig,
+  fillers: () => FillerCandidate[] = () => [],
 ): GeneratedQuizConfig {
   if (config.questions.length >= MIN_QUESTIONS_FLOOR) return config;
   const axes = [...config.axes];
@@ -291,6 +295,10 @@ function fillQuestionsToMinimum(
   }
   const vendor = vendorQuestionCandidate(catalog);
   if (vendor) candidates.push(vendor);
+  // Universal fillers last (M2): the bank itself only appends them until
+  // ITS floor is met, but the model's questions may overlap the bank's
+  // facet questions, so the full filler list must be reachable here too.
+  for (const f of fillers()) candidates.push(f);
 
   let added = 0;
   for (const c of candidates) {
@@ -446,6 +454,7 @@ async function prepareForValidation(args: {
   catalog: CatalogProduct[];
   shopDomain: string;
   bank: () => GeneratedQuizConfig;
+  fillers?: () => FillerCandidate[];
   questionRange: [number, number];
   template: TemplateId | null;
 }): Promise<PreparedConfig> {
@@ -455,7 +464,7 @@ async function prepareForValidation(args: {
   let config = grounded.config;
 
   const before = config.questions.length;
-  config = fillQuestionsToMinimum(config, catalog, args.bank);
+  config = fillQuestionsToMinimum(config, catalog, args.bank, args.fillers);
   const filledFromBank = config.questions.length - before;
   if (config.questions.length > questionRange[1]) {
     config = { ...config, questions: config.questions.slice(0, questionRange[1]) };
@@ -504,43 +513,116 @@ function stripJsonFences(raw: string): string {
   return fenced ? fenced[1] : trimmed;
 }
 
-type GeneratorCall =
-  | { config: GeneratedQuizConfig; parseErrors: null; rawText: string; usage: ClaudeUsage }
-  | { config: null; parseErrors: string[]; rawText: string; usage: ClaudeUsage };
+/** `usage` lists every model call made inside this GeneratorCall (one, or
+ * two when the max_tokens retry fired); `stopReason` is the final one's. */
+export type GeneratorCall =
+  | { config: GeneratedQuizConfig; parseErrors: null; rawText: string; usage: ClaudeUsage[]; stopReason: string | null }
+  | { config: null; parseErrors: string[]; rawText: string; usage: ClaudeUsage[]; stopReason: string | null };
 
-async function callGenerator(
+/** Positive-integer env override in milliseconds, else the fallback. */
+function envMs(name: string, fallback: number): number {
+  const n = Number(process.env[name]);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+}
+
+/** Hard ceiling on ONE model call (H3). Env QUIZ_GENERATE_CALL_TIMEOUT_MS. */
+export const DEFAULT_CALL_TIMEOUT_MS = 300_000;
+/** Wall-clock budget for the whole generateQuizConfig (H3): past it, no
+ * further model calls (no repair, no imagery repair) - straight to the
+ * stock bank. Env QUIZ_GENERATE_BUDGET_MS. */
+export const DEFAULT_BUDGET_MS = 540_000;
+// A full config is a few thousand output tokens; 20k bounds worst-case
+// adaptive-thinking time (32k let slow generations run multiple minutes
+// longer for no quality gain).
+const GENERATOR_MAX_TOKENS = 20000;
+
+export interface GeneratorCallOpts {
+  onToken?: (deltaChars: number) => void;
+  /** Sink for merchant-facing warnings raised inside the call (the
+   * max_tokens retry). */
+  warnings?: string[];
+  /** Per-call deadline override (tests); default env / DEFAULT_CALL_TIMEOUT_MS. */
+  callTimeoutMs?: number;
+}
+
+/** Exported for the unit tests (the max_tokens retry path); production
+ * callers are inside generateQuizConfig. */
+export async function callGenerator(
   system: Anthropic.TextBlockParam[],
   messages: Anthropic.MessageParam[],
   shopDomain: string,
   label: string,
-  onToken?: (deltaChars: number) => void,
+  opts: GeneratorCallOpts = {},
 ): Promise<GeneratorCall> {
   const client = claudeClient();
+  const callTimeoutMs = opts.callTimeoutMs ?? envMs("QUIZ_GENERATE_CALL_TIMEOUT_MS", DEFAULT_CALL_TIMEOUT_MS);
+
   // NOT structured outputs: this schema blows both API grammar caps (24
   // optional / 16 union parameters), which 400s at request validation. The
   // model returns plain JSON text; the fence-strip + zod parse below and the
   // caller's repair round-trip take the place of the grammar. Parse failures
   // are RETURNED (with the raw text) rather than thrown so the caller can
   // send them back for repair exactly like validator failures.
-  const response = await callClaudeWithRetry(async () => {
-    const stream = client.messages.stream({
-      model: CLAUDE_MODEL_MAIN,
-      // A full config is a few thousand output tokens; 20k bounds
-      // worst-case adaptive-thinking time (32k let slow generations run
-      // multiple minutes longer for no quality gain).
-      max_tokens: 20000,
-      thinking: { type: "adaptive" },
-      system,
-      messages,
-    });
-    // Live progress for the minutes-long call: without it the client sees
-    // a frozen phase string and reads the whole flow as hung.
-    if (onToken) stream.on("text", (delta) => onToken(delta.length));
-    return stream.finalMessage();
-  }, label);
+  const runOnce = (thinking: Anthropic.ThinkingConfigParam, attemptLabel: string) =>
+    callClaudeWithRetry(async () => {
+      // H3: a hard deadline per attempt. The SDK's own timeout is per
+      // HTTP read, so a stream that keeps trickling could run unbounded;
+      // the abort surfaces as a PERMANENT error (no retry burns a second
+      // deadline) and the caller falls back to the stock bank.
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), callTimeoutMs);
+      const startedAt = Date.now();
+      try {
+        const stream = client.messages.stream(
+          {
+            model: CLAUDE_MODEL_MAIN,
+            max_tokens: GENERATOR_MAX_TOKENS,
+            thinking,
+            system,
+            messages,
+          },
+          { signal: controller.signal },
+        );
+        // Live progress for the minutes-long call: without it the client
+        // sees a frozen phase string and reads the whole flow as hung.
+        if (opts.onToken) stream.on("text", (delta) => opts.onToken!(delta.length));
+        const message = await stream.finalMessage();
+        console.log(
+          `[quiz-generate] ${attemptLabel} shop=${shopDomain} ms=${Date.now() - startedAt} stop=${message.stop_reason} thinking=${thinking.type}`,
+        );
+        return message;
+      } catch (e) {
+        if (controller.signal.aborted) {
+          console.error(
+            `[quiz-generate] ${attemptLabel} shop=${shopDomain} aborted after ${Date.now() - startedAt}ms (deadline ${callTimeoutMs}ms)`,
+          );
+          throw new GenerationDeadlineError(attemptLabel, callTimeoutMs);
+        }
+        throw e;
+      } finally {
+        clearTimeout(timer);
+      }
+    }, attemptLabel);
 
-  logClaudeUsage(shopDomain, label, response.usage as ClaudeUsage);
-  const usage = response.usage as ClaudeUsage;
+  let response = await runOnce({ type: "adaptive" }, label);
+  const usage: ClaudeUsage[] = [response.usage as ClaudeUsage];
+  logClaudeUsage(shopDomain, `${label} stop=${response.stop_reason}`, response.usage as ClaudeUsage);
+
+  if (response.stop_reason === "max_tokens") {
+    // M1: a truncated draft is not repair material (the repair round would
+    // be spent re-sending a cut-off JSON). Retry the SAME prompt once with
+    // extended thinking off: JSON emission doesn't need it, and the budget
+    // that thinking consumed goes to the output instead.
+    opts.warnings?.push("The first draft was cut off at the token limit; retried without extended thinking");
+    console.warn(`[quiz-generate] ${label} shop=${shopDomain} hit max_tokens; retrying with thinking disabled`);
+    response = await runOnce({ type: "disabled" }, `${label}-nothink`);
+    usage.push(response.usage as ClaudeUsage);
+    logClaudeUsage(shopDomain, `${label}-nothink stop=${response.stop_reason}`, response.usage as ClaudeUsage);
+    if (response.stop_reason === "max_tokens") {
+      throw new Error(`model output was cut off at the ${GENERATOR_MAX_TOKENS}-token limit twice`);
+    }
+  }
+  const stopReason = response.stop_reason ?? null;
 
   const text = response.content
     .filter((b): b is Anthropic.TextBlock => b.type === "text")
@@ -552,7 +634,7 @@ async function callGenerator(
   try {
     parsedJson = JSON.parse(stripJsonFences(text));
   } catch {
-    return { config: null, parseErrors: ["response was not valid JSON"], rawText: text, usage };
+    return { config: null, parseErrors: ["response was not valid JSON"], rawText: text, usage, stopReason };
   }
   const parsed = GeneratedQuizConfigSchema.safeParse(parsedJson);
   if (!parsed.success) {
@@ -563,9 +645,10 @@ async function callGenerator(
         .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`),
       rawText: text,
       usage,
+      stopReason,
     };
   }
-  return { config: parsed.data, parseErrors: null, rawText: text, usage };
+  return { config: parsed.data, parseErrors: null, rawText: text, usage, stopReason };
 }
 
 export async function generateQuizConfig(args: {
@@ -587,6 +670,21 @@ export async function generateQuizConfig(args: {
   const { shopId, shopDomain, brief, onProgress, onStep } = args;
   const usage: ClaudeUsage[] = [];
   const steps: GenerationStep[] = [];
+  const generationStartedAt = Date.now();
+  const elapsedMs = () => Date.now() - generationStartedAt;
+  // H3 wall-clock budget: once exceeded, no further model calls - repair
+  // rounds are skipped and the stock bank takes over. Checked at every
+  // decision point that would start a call, never mid-call (the per-call
+  // deadline in callGenerator covers that).
+  const budgetMs = envMs("QUIZ_GENERATE_BUDGET_MS", DEFAULT_BUDGET_MS);
+  let tooSlow = false;
+  const overBudget = (): boolean => {
+    if (!tooSlow && elapsedMs() > budgetMs) {
+      tooSlow = true;
+      console.warn(`[quiz-generate] budget exceeded for ${shopDomain}: ${elapsedMs()}ms > ${budgetMs}ms - no further model calls`);
+    }
+    return tooSlow;
+  };
   let stepStartedAt = Date.now();
   const completeStep = (key: GenerationStepKey, detail: string) => {
     const now = Date.now();
@@ -702,25 +800,42 @@ export async function generateQuizConfig(args: {
     { role: "user", content: briefToPrompt(resolvedBrief, questionRange, assignedTemplate) },
   ];
 
+  // L4: the step clock measures the LLM phase from here, so questions.ms
+  // is drafting time, not drafting plus the theme/catalog prep before it.
+  stepStartedAt = Date.now();
   onProgress?.("Drafting your quiz…");
   // Exactly ONE repair round-trip total, spent on whichever failure comes
   // first: a schema-parse miss (free-form JSON), a validation miss, or an
   // imagery miss. An LLM HARD failure never dead-ends: the archetype stock
   // bank instantiates a catalog-grounded quiz instead (fallback_generation)
   // so the merchant still lands on a Reveal (Overhaul Part 3).
-  const { archetypeForCategory, stockConfigFromCatalog } = await import("./quiz-archetypes.server");
+  const { archetypeForCategory, stockConfigFromCatalog, universalFillerCandidates } = await import(
+    "./quiz-archetypes.server"
+  );
   const archetype = archetypeForCategory(resolvedBrief.category || null);
   const bank = () => stockConfigFromCatalog(archetype, catalog, null);
+  const fillers = () => universalFillerCandidates(archetype, catalog, null);
 
   let config: GeneratedQuizConfig | null = null;
   let repairUsed = false;
   let fallbackGeneration = false;
+  // Set when the fallback happened because of TIME (per-call deadline or
+  // the whole-run budget) rather than a model/parse failure - the merchant
+  // warning says so instead of "AI generation unavailable".
+  let fallbackBecauseSlow = false;
   const llmFailures: string[] = [];
+  const callWarnings: string[] = [];
   try {
-    let call = await callGenerator(system, messages, shopDomain, "quiz-generate", tokenProgress("Drafting your quiz…"));
-    usage.push(call.usage);
-    if (call.parseErrors) {
-      onProgress?.("Fixing a few issues…");
+    let call = await callGenerator(system, messages, shopDomain, "quiz-generate", {
+      onToken: tokenProgress("Drafting your quiz…"),
+      warnings: callWarnings,
+    });
+    usage.push(...call.usage);
+    if (call.parseErrors && overBudget()) {
+      llmFailures.push(`model output malformed (${call.parseErrors[0]}) and the time budget is spent`);
+      fallbackBecauseSlow = true;
+    } else if (call.parseErrors) {
+      onProgress?.("Fixing a few issues…", 0);
       repairUsed = true;
       messages.push(
         { role: "assistant", content: call.rawText },
@@ -731,8 +846,11 @@ export async function generateQuizConfig(args: {
             call.parseErrors.join("\n- "),
         },
       );
-      call = await callGenerator(system, messages, shopDomain, "quiz-generate-repair", tokenProgress("Fixing a few issues…"));
-      usage.push(call.usage);
+      call = await callGenerator(system, messages, shopDomain, "quiz-generate-repair", {
+        onToken: tokenProgress("Fixing a few issues…"),
+        warnings: callWarnings,
+      });
+      usage.push(...call.usage);
       if (call.parseErrors) {
         llmFailures.push(`model output stayed malformed (${call.parseErrors[0]})`);
       }
@@ -740,30 +858,34 @@ export async function generateQuizConfig(args: {
     if (!llmFailures.length) config = call.config!;
   } catch (e) {
     llmFailures.push((e as Error).message);
+    if (e instanceof GenerationDeadlineError) fallbackBecauseSlow = true;
   }
 
   if (!config) {
     config = bank();
     fallbackGeneration = true;
     console.warn(
-      `[quiz-generate] LLM fallback for ${shopDomain} (${llmFailures[0] ?? "?"}) — stock bank ${archetype}`
+      `[quiz-generate] LLM fallback for ${shopDomain} (${llmFailures[0] ?? "?"}) — stock bank ${archetype} at ${elapsedMs()}ms`
     );
   }
 
   // Deterministic post-pass + the one-pass v2 validator (spec 5.2): three
   // floors per answer (products, reachability, imagery), the 4-question
   // hard floor, intro assertion, and 100%-coverage-or-wildcard.
-  const prepareArgs = { catalog, shopDomain, bank, questionRange, template: assignedTemplate };
+  const prepareArgs = { catalog, shopDomain, bank, fillers, questionRange, template: assignedTemplate };
   let prepared = await prepareForValidation({ config, ...prepareArgs });
   const floorOpts = () => ({
     floors: { templateId: assignedTemplate, imagery: prepared.imagery },
   });
   let result = validateGeneratedConfig(prepared.config, catalog, floorOpts());
 
-  if (!result.ok && !repairUsed) {
+  if (!result.ok && !repairUsed && overBudget()) {
+    // No time for a repair round: the bank last-resort below takes over.
+    fallbackBecauseSlow = true;
+  } else if (!result.ok && !repairUsed) {
     // One repair round-trip: send the validator errors back.
     repairUsed = true;
-    onProgress?.("Fixing a few issues…");
+    onProgress?.("Fixing a few issues…", 0);
     messages.push(
       { role: "assistant", content: JSON.stringify(prepared.config) },
       {
@@ -774,8 +896,11 @@ export async function generateQuizConfig(args: {
       },
     );
     try {
-      const repaired = await callGenerator(system, messages, shopDomain, "quiz-generate-repair", tokenProgress("Fixing a few issues…"));
-      usage.push(repaired.usage);
+      const repaired = await callGenerator(system, messages, shopDomain, "quiz-generate-repair", {
+        onToken: tokenProgress("Fixing a few issues…"),
+        warnings: callWarnings,
+      });
+      usage.push(...repaired.usage);
       if (repaired.parseErrors) {
         return {
           ok: false,
@@ -791,12 +916,27 @@ export async function generateQuizConfig(args: {
     }
   }
 
+  // M5: an imagery repair can only help when the catalog (or the library)
+  // owns at least one image to re-anchor onto; otherwise it is a paid
+  // round that lands on the same degrade.
+  const anyImageryAvailable = (): boolean =>
+    Object.values(prepared.imagery ?? {}).some((e) => Boolean(e?.url)) ||
+    catalogImageForProducts(catalog.filter(isLiveProduct).map((p) => p.id), catalog) !== null;
+
   // Imagery misses never hard-fail (spec 5 delta / 4.3): spend the repair
   // budget re-anchoring failing answers to facets that have imagery when
   // it's still unspent; otherwise accept degradation to T5 Clean below.
-  if (result.ok && result.degradedTo && !repairUsed && !fallbackGeneration && result.imageryFailures?.length) {
+  if (
+    result.ok &&
+    result.degradedTo &&
+    !repairUsed &&
+    !fallbackGeneration &&
+    result.imageryFailures?.length &&
+    anyImageryAvailable() &&
+    !overBudget()
+  ) {
     repairUsed = true;
-    onProgress?.("Fixing a few issues…");
+    onProgress?.("Fixing a few issues…", 0);
     messages.push(
       { role: "assistant", content: JSON.stringify(prepared.config) },
       {
@@ -807,8 +947,11 @@ export async function generateQuizConfig(args: {
       },
     );
     try {
-      const repaired = await callGenerator(system, messages, shopDomain, "quiz-generate-repair", tokenProgress("Fixing a few issues…"));
-      usage.push(repaired.usage);
+      const repaired = await callGenerator(system, messages, shopDomain, "quiz-generate-repair", {
+        onToken: tokenProgress("Fixing a few issues…"),
+        warnings: callWarnings,
+      });
+      usage.push(...repaired.usage);
       if (!repaired.parseErrors) {
         const prepared2 = await prepareForValidation({ config: repaired.config!, ...prepareArgs });
         const result2 = validateGeneratedConfig(prepared2.config, catalog, {
@@ -844,7 +987,7 @@ export async function generateQuizConfig(args: {
   }
 
   const grounded = prepared.grounding;
-  const warnings = [...result.warnings];
+  const warnings = [...callWarnings, ...result.warnings];
   if (grounded.droppedAnswers.length) {
     warnings.push(
       `Grounding dropped ${grounded.droppedAnswers.length} answer(s) that matched fewer than ${grounded.floor} products` +
@@ -865,12 +1008,13 @@ export async function generateQuizConfig(args: {
   }
   if (fallbackGeneration) {
     warnings.push(
-      "Built from the stock question bank (AI generation unavailable) — the copilot can restyle it any time"
+      fallbackBecauseSlow || tooSlow
+        ? "AI generation took too long; built from the stock bank — the copilot can restyle it any time"
+        : "Built from the stock question bank (AI generation unavailable) — the copilot can restyle it any time",
     );
   }
   if (truncated > 0) warnings.push(`Catalog truncated: ${truncated} products were not shown to the AI`);
 
-  onProgress?.("Saving your quiz…");
   const draft = result.draft! as unknown as QuizDraft;
 
   // Imagery degradation (spec 4.3): reassign to T5 Clean in the saved
@@ -931,29 +1075,19 @@ export async function generateQuizConfig(args: {
     })),
   };
   const existingSlots = existingConfig?.settings.quiz_image_slots ?? null;
-  const slotCount = countImageSlots(finalTemplate, reportFlow, existingSlots, {
-    look: resolvedLook,
-    autoResolved: {
-      hero: existingConfig?.settings.quiz_hero_image ?? profile?.brand.coverImageUrl ?? null,
-    },
-  });
+  let slotCount = { placed: 0, total: 0 };
+  try {
+    slotCount = countImageSlots(finalTemplate, reportFlow, existingSlots, {
+      look: resolvedLook,
+      autoResolved: {
+        // L1: stored pre-v3 profiles can lack `brand` entirely.
+        hero: existingConfig?.settings.quiz_hero_image ?? profile?.brand?.coverImageUrl ?? null,
+      },
+    });
+  } catch (e) {
+    console.warn(`[quiz-generate] image slot count failed for ${shopDomain}: ${(e as Error).message}`);
+  }
   completeStep("images", stepDetail.images(slotCount.placed, slotCount.total));
-
-  const report = buildGenerationReport({
-    productCount: inScopeLive.length,
-    collectionCount,
-    flow: reportFlow,
-    answerCounts,
-    groundingFloor: grounded.floor,
-    phases,
-    profile,
-    template: finalTemplate,
-    look: resolvedLook,
-    degradedFrom: degraded ? assignedTemplate : null,
-    imageSlots: existingSlots,
-    hasFounder: false, // quiz_founder stays null (Q13 default → intro type E)
-    steps,
-  });
 
   // 5.6 trust lines: verbatim brand-profile statements + catalog-computed
   // scale line, never model output. (quiz_trust_lines persists once its
@@ -981,6 +1115,9 @@ export async function generateQuizConfig(args: {
     (draft.settings as Record<string, unknown>).product_scope = "selected";
     (draft.settings as Record<string, unknown>).selected_product_ids = [...scopeIds];
   }
+  // L4: "Saving" is announced only once the three real steps have been
+  // reported, so the Build screen never shows the save phase ahead of them.
+  onProgress?.("Saving your quiz…");
   // Locked save with an overwrite guard: generation runs for a minute or
   // more, and the unconditional save could stomp a quiz the merchant
   // created or meaningfully edited in that window (or in another tab).
@@ -1000,26 +1137,59 @@ export async function generateQuizConfig(args: {
     });
   });
   if (!saved.ok) return { ok: false, error: `Save failed: ${saved.error}`, warnings, usage };
+
+  // L1: the quiz is saved; the report is best-effort from here. A report
+  // build failure (a stored pre-v3 profile missing a field, say) must
+  // never turn a saved quiz into a reported failure.
+  let report: GenerationReport | null = null;
+  try {
+    report = buildGenerationReport({
+      productCount: inScopeLive.length,
+      collectionCount,
+      flow: reportFlow,
+      answerCounts,
+      groundingFloor: grounded.floor,
+      phases,
+      profile,
+      template: finalTemplate,
+      look: resolvedLook,
+      degradedFrom: degraded ? assignedTemplate : null,
+      imageSlots: existingSlots,
+      hasFounder: false, // quiz_founder stays null (Q13 default → intro type E)
+      steps,
+    });
+  } catch (e) {
+    console.warn(`[quiz-generate] report build failed for ${shopDomain}: ${(e as Error).message}`);
+    warnings.push("The generation report could not be built; the Studio banner will use its fallback line.");
+  }
   // Generator-owned v3 columns, written directly (see above). A failure
   // here (e.g. migration 080 not yet run) is a warning, not a lost quiz.
   try {
     await saveChatAssistantConfig(shopDomain, {
       quiz_template: finalTemplate,
       quiz_phases: phases && phases.length ? phases : null,
-      quiz_generation_report: report as unknown as Record<string, unknown>,
+      quiz_generation_report: report ? (report as unknown as Record<string, unknown>) : null,
     });
   } catch (e) {
     console.warn(`[quiz-generate] report write failed for ${shopDomain}: ${(e as Error).message}`);
     warnings.push("The generation report could not be saved; the Studio banner will use its fallback line.");
   }
 
+  console.log(
+    `[quiz-generate] done shop=${shopDomain} total=${elapsedMs()}ms calls=${usage.length} fallback=${fallbackGeneration} ` +
+      `repair=${repairUsed} tooSlow=${tooSlow || fallbackBecauseSlow} steps=${steps.map((s) => `${s.key}:${s.ms}`).join(",")}`,
+  );
+
   // Part 6/8: generation_completed with the properties the funnel needs,
-  // plus template_assigned.signals.degraded_from on an imagery degrade.
+  // plus a template_assigned degrade event (L2 shape: {template,
+  // degraded_from, reason, signals: []}).
   const { trackOverhaulEvent } = await import("./overhaul-events.server");
   if (degradedTo && assignedTemplate && assignedTemplate !== "t5") {
     trackOverhaulEvent(shopDomain, "template_assigned", {
       template: "t5",
-      signals: { degraded_from: assignedTemplate, reason: "imagery_floor" },
+      degraded_from: assignedTemplate,
+      reason: "imagery_floor",
+      signals: [],
     });
   }
   trackOverhaulEvent(shopDomain, "generation_completed", {

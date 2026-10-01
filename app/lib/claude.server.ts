@@ -31,15 +31,34 @@ export function isClaudeConfigured(): boolean {
 }
 
 /**
- * Permanent = retrying cannot help (bad request, auth, quota-style 4xx).
- * Uses the SDK's typed exception classes, never message string matching.
+ * Thrown by callers that abort a model call at a hard wall-clock deadline
+ * (quiz generation's per-call ceiling). Permanent by definition: the
+ * deadline was the budget, so a retry would only burn another budget.
+ */
+export class GenerationDeadlineError extends Error {
+  readonly deadlineMs: number;
+  constructor(label: string, deadlineMs: number) {
+    super(`${label} exceeded its ${Math.round(deadlineMs / 1000)}s deadline`);
+    this.name = "GenerationDeadlineError";
+    this.deadlineMs = deadlineMs;
+  }
+}
+
+/**
+ * Permanent = retrying cannot help (bad request, auth, quota-style 4xx) or
+ * the caller deliberately aborted (deadline, AbortSignal). Uses the SDK's
+ * typed exception classes plus the standard AbortError name, never message
+ * string matching.
  */
 export function isPermanentClaudeError(error: unknown): boolean {
   return (
     error instanceof Anthropic.BadRequestError ||
     error instanceof Anthropic.AuthenticationError ||
     error instanceof Anthropic.PermissionDeniedError ||
-    error instanceof Anthropic.NotFoundError
+    error instanceof Anthropic.NotFoundError ||
+    error instanceof Anthropic.APIUserAbortError ||
+    error instanceof GenerationDeadlineError ||
+    (error instanceof Error && error.name === "AbortError")
   );
 }
 

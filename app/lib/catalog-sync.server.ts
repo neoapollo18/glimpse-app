@@ -162,6 +162,42 @@ export async function enableCatalogSync(shopDomain: string): Promise<{ ok: boole
 }
 
 /**
+ * Undo enableCatalogSync after the FIRST page of a brand-new sync failed.
+ * Leaving the flag on with no synced rows made onboarding believe the
+ * store had been read ("0 products", no re-sync affordance) forever.
+ * Also clears the cursor so the next attempt starts from page 1.
+ */
+export async function revertCatalogSyncEnable(shopDomain: string): Promise<void> {
+  const { error } = await supabase
+    .from("shops")
+    .update({ catalog_sync_enabled: false, catalog_sync_cursor: null })
+    .eq("shop_domain", shopDomain)
+    .select("id");
+  if (error) console.error(`[CatalogSync] revert-enable failed for ${shopDomain}:`, error.message);
+}
+
+/** Drop a persisted resume cursor so the next page request starts over. */
+export async function clearCatalogSyncCursor(shopDomain: string): Promise<void> {
+  const { error } = await supabase
+    .from("shops")
+    .update({ catalog_sync_cursor: null })
+    .eq("shop_domain", shopDomain)
+    .select("id");
+  if (error) console.error(`[CatalogSync] clear-cursor failed for ${shopDomain}:`, error.message);
+}
+
+/**
+ * Shopify rejects a cursor that no longer points into the products
+ * connection (catalog edited since, API version bump, or a cursor from a
+ * different query shape) with a GraphQL error naming the cursor. Resuming
+ * such a sync fails on every visit until the cursor is cleared.
+ */
+export function isStaleCursorError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err ?? "");
+  return /GraphQL error/i.test(msg) && /cursor|\$after/i.test(msg);
+}
+
+/**
  * Sync one page (~8 products, up to 100 variants each) of the shop's
  * catalog. Resumable: pass the returned nextCursor back in; the cursor is
  * also persisted on the shops row so an abandoned sync can continue later.

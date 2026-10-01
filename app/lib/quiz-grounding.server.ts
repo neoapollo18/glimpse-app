@@ -3,8 +3,8 @@
  * validator disposes").
  *
  * Hard rule, enforced in code, never in the prompt: every generated
- * answer must map to ≥ 3 in-scope products (≥ 2 when the scope has < 15
- * products), and ≥ 80% of in-scope products must be reachable through at
+ * answer must map to ≥ productFloorFor(scope) in-scope products (3, or 2
+ * for small scopes), and ≥ 80% of in-scope products must be reachable through at
  * least one answer path. Answers that fail are DROPPED before a merchant
  * ever sees them; a question left with < 2 valid answers is dropped
  * whole. No plausible-sounding options that recommend nothing.
@@ -19,7 +19,7 @@
  */
 
 import type { CatalogProduct, GeneratedQuizConfig } from "./quiz-config-schema.server";
-import { isLiveProduct } from "./quiz-config-schema.server";
+import { isLiveProduct, productFloorFor } from "./quiz-config-schema.server";
 
 export interface GroundingReport {
   ok: boolean;
@@ -55,7 +55,10 @@ export function gradeGrounding(
   const inScope = catalog.filter(
     (p) => isLiveProduct(p) && (!scopeProductIds || scopeProductIds.has(p.id))
   );
-  const floor = inScope.length < 15 ? 2 : 3;
+  // One threshold everywhere (validator, enforcer, stock bank): the old
+  // local "< 15" disagreed with the validator's 20, so a bank answer could
+  // pass here and fail there.
+  const floor = productFloorFor(inScope.length);
   const haystacks = inScope.map((p) => ({ id: p.id, hay: productHaystack(p) }));
 
   // Rule-backed coverage: axisKey:value -> set of product ids.

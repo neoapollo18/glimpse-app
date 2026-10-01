@@ -20,7 +20,7 @@ import {
 } from "./supabase.server";
 import { isLiveProduct, isLiveVariant } from "./quiz-config-schema.server";
 import type { QuizDraft } from "./quiz-draft.server";
-import { getBrandProfile, lookFromProfile } from "./brand-profile.server";
+import { getBrandProfile, lookFromProfile, servedTemplateFor } from "./brand-profile.server";
 import { defaultEmailPlacement, isLookId, isTemplateId, resolveQuizTokens } from "./quiz-templates";
 
 const SWATCH_HEX_RE = /^#[0-9a-fA-F]{3,8}$/;
@@ -211,6 +211,13 @@ export async function buildPreviewQuizConfig(
   const brandProfile = config.quiz_template
     ? await getBrandProfile(shopDomain).catch(() => null)
     : null;
+  // Serve-time eligibility, same rule as the storefront (servedTemplateFor),
+  // so the Studio canvas shows what shoppers will get. Gallery strips pass
+  // an explicit template override and render it as-is (the card itself is
+  // dimmed when ineligible).
+  if (!overrides?.template) {
+    config.quiz_template = servedTemplateFor(config.quiz_template, brandProfile);
+  }
   // v3 (V3-CONTRACTS §2/§6), storefront-endpoint parity.
   const look = config.quiz_template ? config.quiz_look ?? lookFromProfile(brandProfile) : null;
   const emailPlacement = isTemplateId(config.quiz_template)

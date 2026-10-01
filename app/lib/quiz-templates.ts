@@ -693,9 +693,12 @@ export function selectLook(s: LookSignals): LookId {
 export function describeStoreType(assignment: TemplateAssignment, category: string | null): string | null {
   const cat = (category ?? "").replace(/[-_]/g, " ").trim();
   const base = cat || "store";
-  switch (assignment.template) {
+  // Stored pre-v3 profiles can lack `signals`; this runs after the paid
+  // model call, so it must never throw on a partial assignment.
+  const signals = Array.isArray(assignment?.signals) ? assignment.signals : [];
+  switch (assignment?.template) {
     case "t1":
-      return assignment.signals.includes("variant-density") ? `shade- or size-based ${base}` : `${base} with variant choices`;
+      return signals.includes("variant-density") ? `shade- or size-based ${base}` : `${base} with variant choices`;
     case "t2":
       return `considered-purchase ${base}`;
     case "t3":

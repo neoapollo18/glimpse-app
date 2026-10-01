@@ -21,6 +21,10 @@ export interface OnboardingScopeHandoff {
 
 export const ONBOARDING_SCOPE_KEY = "gleame.onboarding.scope";
 
+/** sessionStorage key: the generator's non-fatal warnings (string[]) from
+ * the last successful onboarding build, for the Studio to surface. */
+export const GEN_WARNINGS_KEY = "gleame:gen-warnings";
+
 export const EVERYTHING_CHIP: ScopeChip = {
   kind: "all",
   label: "Everything I sell",

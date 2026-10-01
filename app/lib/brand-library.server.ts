@@ -361,14 +361,51 @@ async function loadVariantsWithImages(
 // The generation agent imports this EXACT signature.
 // ---------------------------------------------------------------------
 
+const LIFESTYLE_LIBRARY_ROLES: LibraryRole[] = ["lifestyle", "banner", "hero"];
+
+/**
+ * brand_library lifestyle/banner/hero rows for the shop, for product_ids
+ * overlap matching. Tolerates a missing table (migration 075 pending) and
+ * any read error by returning [] - imagery resolution is never blocked on
+ * the library.
+ */
+async function loadLifestyleLibraryRows(
+  shopId: string
+): Promise<Array<{ url: string; role: string; productIds: string[] }>> {
+  const { data, error } = await supabase
+    .from("brand_library")
+    .select("url, role, product_ids")
+    .eq("shop_id", shopId)
+    .in("role", LIFESTYLE_LIBRARY_ROLES)
+    .order("role", { ascending: true }) // banner < hero < lifestyle; stable
+    .order("position", { ascending: true, nullsFirst: false })
+    .limit(500);
+  if (error) {
+    if (isMissingTableError(error)) warnMissingTableOnce();
+    else console.warn(`[BrandLibrary] lifestyle rows read failed: ${error.message}`);
+    return [];
+  }
+  return (data ?? [])
+    .filter((r: any) => typeof r.url === "string" && r.url)
+    .map((r: any) => ({
+      url: r.url as string,
+      role: String(r.role),
+      productIds: Array.isArray(r.product_ids) ? r.product_ids.filter((x: unknown) => typeof x === "string") : [],
+    }));
+}
+
 /**
  * For each facet (axis + value + the Supabase products.id uuids it maps
  * to), resolve the image the facet's answer tile should render:
  *   1. a variant image of the facet's products whose variant title
  *      mentions the facet value (the shade/size swatch itself),
- *   2. else any variant image of those products,
- *   3. else the first product image,
- *   4. else null (the validator regenerates/swaps per spec 4.2).
+ *   2. else a brand_library lifestyle/banner/hero image whose product_ids
+ *      overlap the facet's products (lifestyle first) - the Consult
+ *      template's per-question cards want these, and before this step the
+ *      resolver could only ever answer swatch/packshot,
+ *   3. else any variant image of those products,
+ *   4. else the first product image,
+ *   5. else null (the validator regenerates/swaps per spec 4.2).
  * Keyed `${axis}:${value}`. Never throws; DB failures resolve to null.
  */
 export async function resolveImagesForFacets(
@@ -386,7 +423,7 @@ export async function resolveImagesForFacets(
     const allProductIds = [...new Set(facets.flatMap((f) => f.productIds))].filter(Boolean);
     if (allProductIds.length === 0) return out;
 
-    const [variants, products] = await Promise.all([
+    const [variants, products, libraryRows] = await Promise.all([
       loadVariantsWithImages(allProductIds),
       (async () => {
         const rows: Array<{ id: string; image_url: string | null }> = [];
@@ -401,6 +438,7 @@ export async function resolveImagesForFacets(
         }
         return rows;
       })(),
+      loadLifestyleLibraryRows(shop.id).catch(() => []),
     ]);
 
     const variantsByProduct = new Map<string, Array<{ variant_title: string | null; image_url: string | null }>>();
@@ -411,6 +449,15 @@ export async function resolveImagesForFacets(
       variantsByProduct.set(v.product_id, list);
     }
     const productImage = new Map(products.map((p) => [p.id, p.image_url]));
+    // product id -> best lifestyle-class library image (lifestyle > hero >
+    // banner, then library position). Overlap is by product_ids membership.
+    const rolePriority = (role: string) => (role === "lifestyle" ? 0 : role === "hero" ? 1 : 2);
+    const libraryByProduct = new Map<string, { url: string; role: string }>();
+    for (const row of [...libraryRows].sort((a, b) => rolePriority(a.role) - rolePriority(b.role))) {
+      for (const pid of row.productIds) {
+        if (!libraryByProduct.has(pid)) libraryByProduct.set(pid, { url: row.url, role: row.role });
+      }
+    }
 
     for (const f of facets) {
       const key = `${f.axis}:${f.value}`;
@@ -418,6 +465,7 @@ export async function resolveImagesForFacets(
       let titleMatch: string | null = null;
       let anyVariant: string | null = null;
       let anyProduct: string | null = null;
+      let lifestyle: { url: string; role: string } | null = null;
       for (const pid of f.productIds) {
         for (const v of variantsByProduct.get(pid) ?? []) {
           if (!anyVariant) anyVariant = v.image_url;
@@ -426,14 +474,18 @@ export async function resolveImagesForFacets(
           }
         }
         if (!anyProduct) anyProduct = productImage.get(pid) ?? null;
+        if (!lifestyle) lifestyle = libraryByProduct.get(pid) ?? null;
         if (titleMatch) break;
       }
-      const url = titleMatch ?? anyVariant;
-      out[key] = url
-        ? { url, role: "swatch" }
-        : anyProduct
-          ? { url: anyProduct, role: "packshot" }
-          : null;
+      out[key] = titleMatch
+        ? { url: titleMatch, role: "swatch" }
+        : lifestyle
+          ? lifestyle
+          : anyVariant
+            ? { url: anyVariant, role: "swatch" }
+            : anyProduct
+              ? { url: anyProduct, role: "packshot" }
+              : null;
     }
   } catch (e) {
     console.warn(`[BrandLibrary] resolveImagesForFacets failed for ${shopDomain}:`, (e as Error).message);

@@ -338,3 +338,139 @@ describe("serializeCatalog", () => {
     expect(text).toMatch(/do not assume completeness/);
   });
 });
+
+// ---------------------------------------------------------------------
+// Generation-time floors (opts.floors) - regression coverage for the
+// quiz-gen fixes: shared product floor, Consult's per-question imagery
+// gate, and the tolerant phases schema.
+// ---------------------------------------------------------------------
+
+import {
+  productFloorFor,
+  SMALL_SCOPE_PRODUCT_COUNT,
+  MIN_QUESTIONS_FLOOR,
+} from "../quiz-config-schema.server";
+
+describe("productFloorFor", () => {
+  it("is 2 under the small-scope size and 3 from it onward", () => {
+    expect(productFloorFor(0)).toBe(2);
+    expect(productFloorFor(3)).toBe(2);
+    expect(productFloorFor(SMALL_SCOPE_PRODUCT_COUNT - 1)).toBe(2);
+    expect(productFloorFor(SMALL_SCOPE_PRODUCT_COUNT)).toBe(3);
+    expect(productFloorFor(500)).toBe(3);
+  });
+});
+
+/** Eight live products of one type, all sharing the tag "polish" so a
+ * single "polish" answer reaches every product; none carries an image. */
+function imagelessCatalog(n = 8): CatalogProduct[] {
+  return Array.from({ length: n }, (_, i) => ({
+    id: `p-${i + 1}`,
+    name: `Shade ${i + 1}`,
+    productType: "Nail Polish",
+    vendor: "Testbrand",
+    tags: ["polish"],
+    price: 10 + i,
+    variants: [],
+  }));
+}
+
+/** Four questions whose every answer is a universal (non-concrete) vibe
+ * answer, so each maps to the whole scope - the simplest config that
+ * passes every non-imagery floor. */
+function universalConfig(): GeneratedQuizConfig {
+  const axis = (key: string, label: string, values: Array<[string, string]>) => ({
+    key,
+    label,
+    source: "user_question" as const,
+    values: values.map(([value, l]) => ({ value, label: l })),
+  });
+  const question = (axisKey: string, prompt: string, values: Array<[string, string]>) => ({
+    axisKey,
+    prompt,
+    options: values.map(([value, label]) => ({ label, axisValueValue: value })),
+  });
+  const vibe: Array<[string, string]> = [["clean_classic", "Clean & classic"], ["bold_statement", "Bold statement"]];
+  const occasion: Array<[string, string]> = [["everyday", "Everyday"], ["evenings", "Evenings"]];
+  const experience: Array<[string, string]> = [["just_starting", "Just starting"], ["total_expert", "Total expert"]];
+  const priority: Array<[string, string]> = [["quality_first", "Quality first"], ["whats_trending", "What's trending"]];
+  return {
+    axes: [axis("vibe", "Vibe", vibe), axis("occasion", "Occasion", occasion), axis("experience", "Experience", experience), axis("priority", "Priority", priority)],
+    questions: [
+      question("vibe", "What's the vibe?", vibe),
+      question("occasion", "When?", occasion),
+      question("experience", "How experienced?", experience),
+      question("priority", "What matters?", priority),
+    ],
+    rules: [],
+    recommendationMode: "ai",
+    aiGuidance: "rank softly",
+    copy: { quiz_headline: "Find it", quiz_subtext: "Fast." },
+  };
+}
+
+describe("validateGeneratedConfig - Consult (t2) per-question imagery gate", () => {
+  it("degrades to t5 when no answer of any question resolves an image", () => {
+    const result = validateGeneratedConfig(universalConfig(), imagelessCatalog(), {
+      floors: { templateId: "t2", imagery: null },
+    });
+    expect(result.ok).toBe(true);
+    expect(result.degradedTo).toBe("t5");
+    expect(result.imageryFailures?.length).toBe(4);
+  });
+
+  it("accepts packshot/swatch library hits (role is no longer required to be lifestyle)", () => {
+    // resolveImagesForFacets only ever returned swatch/packshot before the
+    // fix, which made Consult unpassable; the store-level lifestyle gate
+    // already ran at assignment, so any resolved image counts here.
+    const imagery = {
+      "vibe:clean_classic": { url: "https://cdn/x1.jpg", role: "packshot" },
+      "occasion:everyday": { url: "https://cdn/x2.jpg", role: "swatch" },
+      "experience:total_expert": { url: "https://cdn/x3.jpg", role: "packshot" },
+      "priority:whats_trending": { url: "https://cdn/x4.jpg", role: "lifestyle" },
+    };
+    const result = validateGeneratedConfig(universalConfig(), imagelessCatalog(), {
+      floors: { templateId: "t2", imagery },
+    });
+    expect(result.ok).toBe(true);
+    expect(result.degradedTo).toBeUndefined();
+    expect(result.imageryFailures).toBeUndefined();
+  });
+
+  it("falls back to the facet's catalog image when the library has nothing for a question", () => {
+    const catalog = imagelessCatalog();
+    catalog[0].imageUrl = "https://cdn/p1.jpg"; // universal answers reach p-1
+    const result = validateGeneratedConfig(universalConfig(), catalog, {
+      floors: { templateId: "t2", imagery: { "vibe:clean_classic": null } },
+    });
+    expect(result.ok).toBe(true);
+    expect(result.degradedTo).toBeUndefined();
+  });
+
+  it("still degrades when more than 20% of questions have no image candidate", () => {
+    const imagery = { "vibe:clean_classic": { url: "https://cdn/x1.jpg", role: "packshot" } };
+    const result = validateGeneratedConfig(universalConfig(), imagelessCatalog(), {
+      floors: { templateId: "t2", imagery },
+    });
+    expect(result.ok).toBe(true);
+    expect(result.degradedTo).toBe("t5");
+  });
+
+  it("keeps the 4-question hard floor", () => {
+    const config = universalConfig();
+    config.questions = config.questions.slice(0, MIN_QUESTIONS_FLOOR - 1);
+    const result = validateGeneratedConfig(config, imagelessCatalog(), { floors: { templateId: "t5" } });
+    expect(result.ok).toBe(false);
+    expect(result.errors.join(" ")).toMatch(/hard minimum is 4/);
+  });
+});
+
+describe("GeneratedQuizConfigSchema.phases", () => {
+  it("tolerates a sloppy phases array instead of failing the parse (and the repair round)", () => {
+    const sloppy = {
+      ...validConfig(),
+      phases: [{ label: null, axisKeys: ["vibe", 7, null] }, { axisKeys: null }, { label: "Finish" }],
+    };
+    expect(GeneratedQuizConfigSchema.safeParse(sloppy).success).toBe(true);
+  });
+});

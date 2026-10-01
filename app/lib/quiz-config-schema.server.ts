@@ -184,8 +184,11 @@ export const GeneratedQuizConfigSchema = z.object({
   // named, contiguous phases. Optional - the generator validates the
   // partition (generation-report resolvePhases) and falls back to a
   // deterministic chunking; other templates ignore it.
+  // Deliberately tolerant (nullish label / any[] keys): resolvePhases
+  // disposes of garbage deterministically, so a model slip here must
+  // never burn the single repair round-trip on a cosmetic field.
   phases: z
-    .array(z.object({ label: z.string(), axisKeys: z.array(z.string()) }))
+    .array(z.object({ label: z.string().nullish(), axisKeys: z.array(z.any()).nullish() }))
     .nullish(),
 });
 
@@ -237,6 +240,11 @@ export const isLiveVariant = (v: { status?: string | null }) => v.status !== "de
 export const MIN_QUESTIONS_FLOOR = 4;
 /** In-scope catalogs under this size use the small-scope product floor of 2. */
 export const SMALL_SCOPE_PRODUCT_COUNT = 20;
+/** THE per-answer product floor, shared by the validator, the grounding
+ * enforcer and the stock bank (they used to disagree on the threshold). */
+export function productFloorFor(inScopeCount: number): number {
+  return inScopeCount < SMALL_SCOPE_PRODUCT_COUNT ? 2 : 3;
+}
 /** Rank band for materialized wildcard rules - low priority by construction
  * (lower rank wins, real rules are authored in the 1-2 digit range). */
 export const WILDCARD_RULE_RANK = 900;
@@ -680,7 +688,7 @@ export function validateGeneratedConfig(
     // non-empty facet (generic vibe answers with nothing behind them fail).
     const inScope = catalog.filter(isLiveProduct);
     const inScopeIds = new Set(inScope.map((p) => p.id));
-    const productFloor = inScope.length < SMALL_SCOPE_PRODUCT_COUNT ? 2 : 3;
+    const productFloor = productFloorFor(inScope.length);
     const answerMap = computeAnswerProductMap(config, catalog);
     const reachable = new Set<string>();
     type AnswerRef = {
@@ -748,29 +756,29 @@ export function validateGeneratedConfig(
         degradedTo = "t5";
       }
     } else if (model === "per-question") {
+      // A question is hit when ANY of its answers resolves to an image: the
+      // answer's own url, a brand-library entry of ANY role, or the facet's
+      // catalog image. The store-level Consult gate (lifestyle presence)
+      // was already applied at assignment by isTemplateEligible; demanding
+      // lifestyle roles per question again made Consult unpassable, since
+      // facet resolution legitimately returns swatch/packshot for most
+      // facets.
       let failing = 0;
       for (const q of config.questions) {
-        const keys = (q.options ?? [])
-          .filter((o) => o.axisValueValue && !o.selectAll)
-          .map((o) => `${q.axisKey}:${o.axisValueValue}`);
-        let hit = false;
-        if (imageryMap) {
-          hit = keys.some((k) => {
-            const e = imageryMap[k];
-            return Boolean(e?.url) && lifestyleRoles.has(e!.role);
-          });
-        } else {
-          // No brand-library data - fall back to catalog image_url only.
-          hit = keys.some((k) => catalogImageForProducts(answerMap.get(k) ?? [], catalog) !== null);
-        }
+        const answers = (q.options ?? []).filter((o) => o.axisValueValue && !o.selectAll);
+        const hit = answers.some((o) => {
+          const key = `${q.axisKey}:${o.axisValueValue}`;
+          if (trimOrNull(o.imageUrl)) return true;
+          if (imageryMap?.[key]?.url) return true;
+          return catalogImageForProducts(answerMap.get(key) ?? [], catalog) !== null;
+        });
         if (!hit) {
           failing++;
-          failures.push(`Question "${q.axisKey}" has no lifestyle/banner image candidate`);
+          failures.push(`Question "${q.axisKey}" has no image candidate behind any of its answers`);
         }
       }
-      // Consult gate (v3 spec 4.3): >= 1 lifestyle/banner image per visual
-      // question for >= 80% of them (every generated question is a
-      // lifestyle-card candidate at this point).
+      // Consult gate (v3 spec 4.3): >= 1 image per visual question for
+      // >= 80% of them (every generated question is a card candidate).
       if (failing / Math.max(1, config.questions.length) > 0.2) degradedTo = "t5";
     } else if (model === "hero") {
       let hit = false;

@@ -6,6 +6,8 @@ import { findShopByDomain, getRecommendationCounts } from "../lib/supabase.serve
 import { checkRateLimits, RATE_LIMITS } from "../lib/rate-limiter.server";
 import { isClaudeConfigured } from "../lib/claude.server";
 import { generateQuizConfig, type BrandBrief } from "../lib/quiz-generator.server";
+import { shopHasRealQuiz } from "../lib/quiz-draft.server";
+import { trackOverhaulEvent } from "../lib/overhaul-events.server";
 import {
   getGenStatus,
   isGenRunning,
@@ -26,11 +28,16 @@ import {
 //   {type:"error", error, warnings?}
 //   {type:"heartbeat"}
 // The onboarding Build screen advances ONLY on "step" events (contract §10).
+//
+// POST refusals (plain JSON, no stream, no quota consumed):
+//   409 {ok:false, running:true, error}       a run is already alive for the shop
+//   409 {ok:false, error}                     the shop already has a real quiz
+//   429 {ok:false, error, retryAfterSeconds}  quota (checked AFTER the above)
 
 // GET ?intent=status: is a generation still running for this shop, and
 // does a quiz already exist? The onboarding Build screen's "Try again"
-// asks this BEFORE starting another paid run (a client that gave up at
-// 120 s may have a server-side run that is still finishing).
+// asks this BEFORE starting another paid run (a client whose stream cut
+// may have a server-side run that is still finishing).
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   if (new URL(request.url).searchParams.get("intent") !== "status") {
     return new Response("Method Not Allowed", { status: 405 });
@@ -73,8 +80,32 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ ok: false, error: "AI quiz creation is not configured (missing ANTHROPIC_API_KEY)." }, { status: 503 });
   }
 
-  // Atomic across both windows: a blocked request must not burn the sibling
-  // window's quota (retrying while hourly-blocked used to drain the day).
+  const shop = await findShopByDomain(shopDomain);
+  if (!shop) return json({ ok: false, error: "Shop not found" }, { status: 404 });
+
+  // H1: one paid run per shop at a time. A client that gave up (or
+  // reloaded) while the server-side run is still finishing must WAIT on
+  // it, never start a second one; the Build screen reads `running` and
+  // switches to its wait-while-running mode. Checked before the quota so
+  // the refusal costs nothing.
+  if (isGenRunning(shop.id)) {
+    return json({ ok: false, running: true, error: "A build is already running for this store." }, { status: 409 });
+  }
+  // M4: cheap pre-check that the shop has no real quiz yet, also before the
+  // quota. The locked save inside generateQuizConfig re-checks under the
+  // lock and stays the authoritative guard; this only stops a refusal
+  // from burning a run.
+  if (await shopHasRealQuiz(shop.id)) {
+    return json(
+      { ok: false, error: "This store already has a quiz with content — edit it in the studio instead of generating over it." },
+      { status: 409 },
+    );
+  }
+
+  // Quota is consumed only once a real run is about to start (after the
+  // checks above). Atomic across both windows: a blocked request must not
+  // burn the sibling window's quota (retrying while hourly-blocked used to
+  // drain the day).
   const limit = checkRateLimits([
     { key: `quiz-generate:shop:${shopDomain}:hour`, limit: RATE_LIMITS.QUIZ_GENERATE_PER_SHOP_HOUR.limit, windowMs: RATE_LIMITS.QUIZ_GENERATE_PER_SHOP_HOUR.windowMs },
     { key: `quiz-generate:shop:${shopDomain}:day`, limit: RATE_LIMITS.QUIZ_GENERATE_PER_SHOP_DAY.limit, windowMs: RATE_LIMITS.QUIZ_GENERATE_PER_SHOP_DAY.windowMs },
@@ -87,9 +118,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         : `${Math.ceil(retryAfterSeconds / 60)} minutes`;
     return json({ ok: false, error: `Generation limit reached. Try again in ${wait}.`, retryAfterSeconds }, { status: 429 });
   }
-
-  const shop = await findShopByDomain(shopDomain);
-  if (!shop) return json({ ok: false, error: "Shop not found" }, { status: 404 });
 
   const formData = await request.formData();
   // v2 spec Part 0.1 (failure 4): generation consumes ONLY machine-derived
@@ -155,6 +183,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         send({ type: "heartbeat" });
         recordGenHeartbeat(shop.id, genToken);
       }, 10_000);
+      // L2: the last REAL step that completed rides on generation_failed so
+      // the funnel can say where server-side runs stop.
+      let lastStep: string | null = null;
+      const failed = (reason: string) =>
+        trackOverhaulEvent(shopDomain, "generation_failed", { step: lastStep, reason, source: "server" });
 
       try {
         const result = await generateQuizConfig({
@@ -163,8 +196,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           brief,
           accentColor: String(formData.get("accentColor") ?? "") || null,
           collectionCount,
+          // `streamed` (cumulative model output chars) is sent for drafting
+          // AND repair phases so the client can render real progress.
           onProgress: (phase, streamed) => send({ type: "progress", phase, streamed }),
           onStep: (step) => {
+            lastStep = step.key;
             recordGenStep(shop.id, genToken, step.key);
             send({ type: "step", key: step.key, detail: step.detail, ms: step.ms });
           },
@@ -184,12 +220,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           });
         } else {
           recordGenOutcome(shop.id, genToken, { error: result.error, warnings: result.warnings });
+          failed(result.error ?? "Generation failed");
           send({ type: "error", error: result.error, warnings: result.warnings });
         }
       } catch (err) {
         console.error("[quiz-generate] failed:", err);
-        recordGenOutcome(shop.id, genToken, { error: err instanceof Error ? err.message : "Generation failed" });
-        send({ type: "error", error: err instanceof Error ? err.message : "Generation failed" });
+        const reason = err instanceof Error ? err.message : "Generation failed";
+        recordGenOutcome(shop.id, genToken, { error: reason });
+        failed(reason);
+        send({ type: "error", error: reason });
       } finally {
         clearInterval(heartbeat);
         try {

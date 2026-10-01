@@ -2,8 +2,9 @@
 //
 // One card, no wizard. On mount the screen makes sure the store has been
 // read: catalog sync starts AUTOMATICALLY when it never ran (spinner,
-// "Reading your store…"), then it waits for the brand-library index
-// (≤ 60 s, proceeds either way), then makes sure a Brand Profile exists.
+// "Reading your store…"), then (only when no sync ran this visit) gives a
+// brand-library index that is genuinely building ≤ 10 s, then makes sure
+// a Brand Profile exists (extract capped at 20 s; presets otherwise).
 // Then: `{N} products in {M} collections` · store type → template · theme
 // → Look, each with an inline Change, and one CTA: Build my quiz.
 //
@@ -28,7 +29,8 @@ import {
   TextField,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
-import { getRecommendationCounts, supabase } from "../lib/supabase.server";
+import { ensureShopExists, supabase } from "../lib/supabase.server";
+import { shopHasRealQuiz } from "../lib/quiz-draft.server";
 import { useCatalogSync } from "../lib/use-catalog-sync";
 import { writeScopeHandoff, type ScopeChip } from "../lib/onboarding-scope";
 
@@ -50,24 +52,31 @@ export const shouldRevalidate = ({ formAction, defaultShouldRevalidate }: { form
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
+  // A first-ever document load (deep link straight here) can arrive before
+  // app.tsx's loader has created the shops row.
+  await ensureShopExists(session.shop);
   const shop = await supabase
     .from("shops")
-    .select("id, catalog_sync_enabled, catalog_sync_cursor")
+    .select("id, catalog_sync_enabled, catalog_sync_cursor, catalog_last_synced_at, catalog_product_count")
     .eq("shop_domain", session.shop)
     .single();
   if (shop.error || !shop.data) throw new Response("Shop not found", { status: 404 });
 
-  // Existing quiz = never onboard again. Every live merchant exits here.
-  const counts = await getRecommendationCounts(shop.data.id).catch(() => null);
-  if ((counts?.questions ?? 0) > 0) return redirect(studioUrl(request));
+  // Existing quiz (real, non-blank content) = never onboard again. Every
+  // live merchant exits here.
+  if (await shopHasRealQuiz(shop.data.id).catch(() => false)) return redirect(studioUrl(request));
 
   const syncEnabled = shop.data.catalog_sync_enabled === true;
   const syncCursor = (shop.data.catalog_sync_cursor as string | null) ?? null;
+  const lastSyncedAt = (shop.data.catalog_last_synced_at as string | null) ?? null;
+  const productCount = Number(shop.data.catalog_product_count ?? 0) || 0;
   return json({
     shopDomain: session.shop,
-    // Never synced, or a sync stopped mid-catalog: start (resume) it.
-    syncNeeded: !syncEnabled || syncCursor !== null,
-    syncCursor: syncEnabled ? syncCursor : null,
+    // Never synced, a sync stopped mid-catalog, or sync is "enabled" but no
+    // page ever landed (a first page that failed used to leave exactly that
+    // state): start (resume) it.
+    syncNeeded: !syncEnabled || syncCursor !== null || lastSyncedAt === null || productCount <= 0,
+    syncCursor: syncEnabled && lastSyncedAt !== null ? syncCursor : null,
   });
 };
 
@@ -100,13 +109,18 @@ const PREP_LINES: Record<Prep, string> = {
   ready: "",
 };
 
-const INDEX_BUDGET_MS = 60_000;
+const INDEX_BUDGET_MS = 10_000;
 const INDEX_POLL_MS = 2_000;
+const PROFILE_GET_TIMEOUT_MS = 10_000;
+const PROFILE_EXTRACT_TIMEOUT_MS = 20_000;
+// A quiz needs real choices; the generator still copes below this, but the
+// merchant should know the result will be thin.
+const SMALL_CATALOG = 5;
 
-function post(url: string, fields: Record<string, string>): Promise<any> {
+function post(url: string, fields: Record<string, string>, signal?: AbortSignal): Promise<any> {
   const fd = new FormData();
   for (const [k, v] of Object.entries(fields)) fd.append(k, v);
-  return fetch(url, { method: "POST", body: fd }).then((r) => r.json());
+  return fetch(url, { method: "POST", body: fd, signal }).then((r) => r.json());
 }
 
 function fireEvent(event: string, properties: Record<string, unknown> = {}) {
@@ -115,20 +129,21 @@ function fireEvent(event: string, properties: Record<string, unknown> = {}) {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Wait for the brand-library index: ready | failed | budget exhausted
- * all proceed. A response without a status field (endpoint predates the
- * status intent) proceeds immediately. */
+/** Wait for a brand-library index that is building RIGHT NOW (another
+ * tab's sync reached its last page; the build is time-boxed at 25 s).
+ * Only called when no sync ran this visit: a sync here already awaited
+ * its own library build. Every other state proceeds at once: ready and
+ * failed are terminal; null means never attempted; `pending` with no sync
+ * in flight is a sync that never reached its last page (stale). Budget
+ * ≤ 10 s, then proceed anyway. */
 async function waitForLibraryIndex(): Promise<void> {
   const started = Date.now();
   while (Date.now() - started < INDEX_BUDGET_MS) {
     try {
-      const d = await fetch("/app/api/brand-library?intent=status").then((r) => r.json());
-      const status = d?.status;
-      if (!("status" in (d ?? {}))) return;
-      if (status === "ready" || status === "failed") return;
-      // null = never attempted (sync never reached its last page, or an
-      // older row): nothing to wait for.
-      if (status === null || status === undefined) return;
+      const d = await fetch("/app/api/brand-library?intent=status", {
+        signal: AbortSignal.timeout(INDEX_BUDGET_MS),
+      }).then((r) => r.json());
+      if (d?.status !== "building") return;
     } catch {
       return;
     }
@@ -172,45 +187,51 @@ export default function OnboardingScope() {
       syncedThisVisit.current = true;
       syncFinished.current?.();
     },
-  });
-  useEffect(() => {
-    if (sync.syncError) {
+    onError: (message) => {
       // A sync failure is not a dead end: whatever is already synced still
       // feeds the profile and the quiz. Surface it, keep going.
-      setPrepNote(sync.syncError);
+      setPrepNote(message);
       syncFinished.current?.();
-    }
-  }, [sync.syncError]);
+    },
+  });
 
-  const started = useRef(false);
-  useEffect(() => {
-    if (started.current) return;
-    started.current = true;
-    (async () => {
+  // Runs the whole chain; re-runnable ("Re-read my store" after a 0-product
+  // read re-syncs from page 1 and then repeats the rest).
+  const prepare = useCallback(
+    async (opts: { sync: boolean; cursor: string | null }) => {
+      setLoadError(null);
+      setOptions(null);
       try {
-        if (syncNeeded) {
+        if (opts.sync) {
           setPrep("sync");
+          setPrepNote(null);
           await new Promise<void>((resolve) => {
             syncFinished.current = resolve;
-            sync.start(syncCursor ?? undefined);
+            sync.start(opts.cursor ?? undefined);
           });
           syncFinished.current = null;
         }
-        setPrep("index");
-        await waitForLibraryIndex();
+        if (!syncedThisVisit.current) {
+          // A sync this visit already awaited the library build on its last
+          // page; otherwise give an in-flight build a short, capped wait.
+          setPrep("index");
+          await waitForLibraryIndex();
+        }
 
         setPrep("profile");
         let hasProfile = false;
         try {
-          const g = await fetch("/app/api/brand-profile").then((r) => r.json());
+          const g = await fetch("/app/api/brand-profile", { signal: AbortSignal.timeout(PROFILE_GET_TIMEOUT_MS) }).then((r) => r.json());
           hasProfile = Boolean(g?.profile);
         } catch {
           hasProfile = false;
         }
-        // Missing, or stale because the catalog just changed under it.
+        // Missing, or stale because the catalog just changed under it. The
+        // extract reads the theme + homepage; past 20 s we go on with
+        // presets (a timeout here is "no profile", not a failure).
         if (!hasProfile || syncedThisVisit.current) {
           try {
-            await post("/app/api/brand-profile", { intent: "extract" });
+            await post("/app/api/brand-profile", { intent: "extract" }, AbortSignal.timeout(PROFILE_EXTRACT_TIMEOUT_MS));
           } catch {
             /* preset fallbacks downstream */
           }
@@ -222,13 +243,28 @@ export default function OnboardingScope() {
         setOptions(d);
         setTemplate(d.template);
         setLook(d.look);
+        setSelected(0);
         setPrep("ready");
       } catch (e) {
         setLoadError((e as Error).message);
       }
-    })();
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    void prepare({ sync: syncNeeded, cursor: syncCursor });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // "Re-read my store": a full sync from page 1, then the rest of the chain.
+  const reread = useCallback(() => {
+    void prepare({ sync: true, cursor: null });
+  }, [prepare]);
 
   // --- Free-text scope ---
   const resolveFreeText = useCallback(async () => {
@@ -349,6 +385,50 @@ export default function OnboardingScope() {
               )}
             </BlockStack>
           </Card>
+        </div>
+      </Page>
+    );
+  }
+
+  // Nothing to build from: no synced ACTIVE products. No Build CTA here (the
+  // generator would refuse or produce an empty quiz); say why and offer a
+  // re-read from page 1.
+  if (options.productCount === 0) {
+    return (
+      <Page narrowWidth>
+        <style>{SCOPE_CSS}</style>
+        <div className="gq-ob">
+          <Card padding="600">
+            <BlockStack gap="500">
+              <BlockStack gap="200">
+                <Text as="h1" variant="headingXl">
+                  We didn't find any products to build from
+                </Text>
+                <Text as="p" tone="subdued">
+                  {prepNote
+                    ? "Reading your store stopped before any products were saved, so there is nothing for a quiz to recommend yet."
+                    : "Your store has no products with the status Active, so there is nothing for a quiz to recommend yet. Draft and archived products are left out on purpose."}
+                </Text>
+              </BlockStack>
+              {prepNote && <Banner tone="warning">{prepNote}</Banner>}
+              <BlockStack gap="200">
+                <Text as="p">
+                  {prepNote
+                    ? "Try reading your store again. The message above says where it stopped."
+                    : "In Shopify, open Products and set the ones you sell to Active, then come back and read your store again."}
+                </Text>
+              </BlockStack>
+              <InlineStack gap="300" blockAlign="center">
+                <Button variant="primary" onClick={reread}>
+                  Re-read my store
+                </Button>
+                <Text as="span" variant="bodySm" tone="subdued">
+                  Reads every active product again · nothing goes live
+                </Text>
+              </InlineStack>
+            </BlockStack>
+          </Card>
+          <p className="gq-ob-foot">{shopDomain}</p>
         </div>
       </Page>
     );
@@ -550,6 +630,13 @@ export default function OnboardingScope() {
             {prepNote && (
               <Banner tone="warning">
                 {prepNote} — the quiz is built from what did sync.
+              </Banner>
+            )}
+            {options.productCount < SMALL_CATALOG && (
+              <Banner tone="info">
+                Only {plural(options.productCount, "active product")} to choose from. The quiz will be short and every
+                answer will land on the same few products. Add more active products in Shopify for a richer quiz, or
+                build now and come back later.
               </Banner>
             )}
 

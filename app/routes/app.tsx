@@ -17,6 +17,15 @@ import { syncShopDomains } from "../lib/domain-sync.server";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
+// Catalog sync submits one fetcher action per 8-product page; each would
+// otherwise re-run this layout loader (auth + billing + flag checks) on
+// top of the page's own (same guard as studio.tsx and the onboarding
+// scope route). The sync UIs render from the hook's own progress state.
+export const shouldRevalidate = ({ formAction, defaultShouldRevalidate }: { formAction?: string; defaultShouldRevalidate: boolean }) => {
+  if (formAction?.includes("/app/api/catalog-sync")) return false;
+  return defaultShouldRevalidate;
+};
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   // First, authenticate - this MUST complete before anything else
   const { session, admin } = await authenticate.admin(request);

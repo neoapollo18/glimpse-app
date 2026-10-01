@@ -117,6 +117,24 @@ export async function listVersions(shopId: string): Promise<VersionSummary[]> {
 }
 
 /**
+ * Cheap pre-check for generation: does this shop already have a quiz with
+ * real content (any question with a non-blank prompt)? Used by the
+ * generate route BEFORE it consumes rate-limit quota, so a merchant who
+ * already has a quiz is told so without burning a run. False on any read
+ * error - the locked save's hasRealContent guard stays the authoritative,
+ * fail-closed check.
+ */
+export async function shopHasRealQuiz(shopId: string): Promise<boolean> {
+  try {
+    const live = await captureLiveConfig(shopId);
+    return live.flow.questions.some((q) => (q.prompt ?? "").trim() !== "");
+  } catch (e) {
+    console.warn(`[quiz-live] shopHasRealQuiz read failed for ${shopId}: ${(e as Error).message}`);
+    return false;
+  }
+}
+
+/**
  * Capture the CURRENT live config in editor shape. THE read path for every
  * editing surface (studio loader, copilot turn start, preview, guidance).
  * A shop with no quiz yet returns an empty flow, not null.

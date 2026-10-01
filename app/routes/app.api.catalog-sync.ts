@@ -3,7 +3,14 @@ import { json } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import { shopNeedsBilling } from "../lib/billing-gate.server";
 import { findShopByDomain } from "../lib/supabase.server";
-import { enableCatalogSync, syncCatalogPage } from "../lib/catalog-sync.server";
+import {
+  clearCatalogSyncCursor,
+  enableCatalogSync,
+  isCatalogSyncEnabled,
+  isStaleCursorError,
+  revertCatalogSyncEnable,
+  syncCatalogPage,
+} from "../lib/catalog-sync.server";
 
 // Chunked catalog-sync resource route (admin-authenticated). Extracted from
 // the quiz-builder action so every surface that syncs (dashboard onboarding,
@@ -21,7 +28,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     ({ session, admin } = await authenticate.admin(request));
   } catch (err) {
     if (err instanceof Response) {
-      return json({ ok: false, error: "Session expired. Please reload." }, { status: 401 });
+      // App Bridge re-bounces the session token when this header survives
+      // the JSON conversion; dropping it leaves the client stuck on 401.
+      const headers: Record<string, string> = {};
+      const retry = err.headers.get("X-Shopify-Retry-Invalid-Session-Request");
+      if (retry) headers["X-Shopify-Retry-Invalid-Session-Request"] = retry;
+      return json({ ok: false, error: "Session expired. Please reload." }, { status: 401, headers });
     }
     throw err;
   }
@@ -36,11 +48,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   const formData = await request.formData();
   const intent = "sync-catalog";
+  // True only when THIS request flipped catalog_sync_enabled on. If the
+  // first page then fails, the flag is reverted: a shop whose first sync
+  // never wrote a product must look "never synced", not "synced, 0
+  // products" (that state had no re-sync affordance anywhere).
+  let enabledHere = false;
   try {
-    const cursor = (formData.get("cursor") as string) || null;
+    let cursor = (formData.get("cursor") as string) || null;
     if (!cursor) {
-      const enabled = await enableCatalogSync(shopDomain);
-      if (!enabled.ok) return json({ ok: false, error: enabled.error, intent });
+      if (!(await isCatalogSyncEnabled(shopDomain))) {
+        const enabled = await enableCatalogSync(shopDomain);
+        if (!enabled.ok) return json({ ok: false, error: enabled.error, intent }, { status: 403 });
+        enabledHere = true;
+      }
       // A sync has started: the library will be built on the final page.
       // `pending` lets Studio/onboarding tell "queued" from "never
       // attempted" (V3-CONTRACTS §9). Best-effort; never blocks the sync.
@@ -51,7 +71,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         console.warn(`[catalog-sync] library status (pending) failed for ${shopDomain}:`, err);
       }
     }
-    const page = await syncCatalogPage(admin, shopDomain, cursor);
+
+    let restarted = false;
+    let page: Awaited<ReturnType<typeof syncCatalogPage>>;
+    try {
+      page = await syncCatalogPage(admin, shopDomain, cursor);
+    } catch (err) {
+      // A persisted cursor Shopify no longer accepts would otherwise fail
+      // every resume forever: drop it and start the catalog over.
+      if (!cursor || !isStaleCursorError(err)) throw err;
+      console.warn(`[catalog-sync] ${shopDomain}: stale resume cursor, restarting from page 1:`, err);
+      await clearCatalogSyncCursor(shopDomain);
+      cursor = null;
+      restarted = true;
+      page = await syncCatalogPage(admin, shopDomain, null);
+    }
     // Per-page errors are WARNINGS, not terminal: ok:false made the client
     // stop the whole chain on one bad product, leaving a partial catalog
     // with sync marked enabled (so no sync affordance anywhere). Keep
@@ -117,10 +151,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       nextCursor: page.nextCursor,
       synced: page.synced,
       total: page.total,
+      restarted: restarted || undefined,
       library,
     });
   } catch (err) {
     console.error("[catalog-sync] failed:", err);
+    if (enabledHere) {
+      // Nothing was synced: undo the enable + the `pending` library status
+      // so the next visit starts the sync again instead of trusting an
+      // empty catalog. Both best-effort.
+      await revertCatalogSyncEnable(shopDomain);
+      try {
+        const { supabase } = await import("../lib/supabase.server");
+        await supabase
+          .from("shops")
+          .update({ library_index_status: null, library_index_error: null })
+          .eq("shop_domain", shopDomain);
+      } catch (statusErr) {
+        console.warn(`[catalog-sync] library status revert failed for ${shopDomain}:`, statusErr);
+      }
+    }
     return json(
       { ok: false, error: err instanceof Error ? err.message : "Sync failed", intent },
       { status: 500 },
