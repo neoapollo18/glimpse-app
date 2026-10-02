@@ -9,7 +9,7 @@ import {
   readTemplateContentFields,
   type TemplateContentFields,
 } from "../lib/quiz-preview.server";
-import { getBrandProfile, lookFromProfile, servedTemplateFor } from "../lib/brand-profile.server";
+import { getBrandProfile, servedTemplateFor } from "../lib/brand-profile.server";
 import { defaultEmailPlacement, isTemplateId, resolveQuizTokens } from "../lib/quiz-templates";
 
 const CORS_HEADERS = {
@@ -70,15 +70,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Shared with the Studio preview (servedTemplateFor) so the canvas and
   // the storefront render the same template.
   const servedTemplate = templatesLive ? servedTemplateFor(config.quiz_template, brandProfile) : null;
-  // v3 (V3-CONTRACTS §2/§6): Look = merchant column, else the Brand
-  // Profile's derived look, else Minimal. Email placement = merchant
-  // column, else the template default. Both absent for legacy shops.
-  const servedLook = servedTemplate ? config.quiz_look ?? lookFromProfile(brandProfile) : null;
+  // v3 (V3-CONTRACTS §6): email placement = merchant column, else the
+  // template default. Absent for legacy shops. The template owns its
+  // visual design (no separate Look since 2026-10-01).
   const servedEmailPlacement =
     servedTemplate && isTemplateId(servedTemplate)
       ? config.quiz_email_placement ?? defaultEmailPlacement(servedTemplate)
       : null;
-  const brandTokens = resolveQuizTokens(servedTemplate, servedLook, brandProfile?.tokens ?? null);
+  const brandTokens = resolveQuizTokens(servedTemplate, brandProfile?.tokens ?? null);
 
   // v2 template content (spec Parts 3 / 5.6): trust lines, results prose,
   // archetype copy, hero image, image slots. These live in the same
@@ -136,12 +135,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       // immersive backdrop no longer exists; the widget ignores null).
       screenImageUrl: null,
       // v3 template payload (V3-CONTRACTS §6), present ONLY when a template
-      // is assigned: look, email placement, Match phases, the Images-rail
+      // is assigned: email placement, Match phases, the Images-rail
       // slot map, and theme.heroImage (legacy v2 field the hero slot falls
       // back to when the slot map has no `hero`).
       ...(tplContent
         ? {
-            look: servedLook,
             emailPlacement: servedEmailPlacement,
             phases: config.quiz_phases ?? [],
             theme: { heroImage: tplContent.heroImage },

@@ -29,7 +29,6 @@ const themedProfile: ReportProfile = {
   homepage: { palette: ["#efe6da", "#d9c7b2"] },
   category: "color-cosmetics",
   templateAssignment: { template: "t1", scores: { t1: 4, t2: 0, t3: 0, t4: 0, t5: 0 }, signals: ["variant-density"], eligible: ["t1", "t5"] },
-  look: "editorial",
 };
 
 const presetProfile: ReportProfile = {
@@ -43,7 +42,6 @@ const presetProfile: ReportProfile = {
   homepage: { palette: [] },
   category: null,
   templateAssignment: { template: "t5", scores: { t1: 0, t2: 0, t3: 0, t4: 0, t5: 1 }, signals: [], eligible: ["t5"] },
-  look: "minimal",
 };
 
 const flow = {
@@ -107,7 +105,6 @@ const baseInput: GenerationReportInput = {
   ],
   profile: themedProfile,
   template: "t1",
-  look: "editorial",
   degradedFrom: null,
   imageSlots: null,
   steps: [
@@ -272,7 +269,6 @@ describe("buildGenerationReport", () => {
     expect(r.colors.length).toBe(5);
     expect(r.paletteWord).toBe("warm neutral");
     expect(r.template).toBe("t1");
-    expect(r.look).toBe("editorial");
     expect(r.degradedFrom).toBeNull();
     expect(r.imagesPlaced).toBe(3);
     expect(r.imagesTotal).toBe(5);
@@ -282,7 +278,7 @@ describe("buildGenerationReport", () => {
   });
 
   it("no theme font → headingFont.name null; no colors → paletteWord null", () => {
-    const r = buildGenerationReport({ ...baseInput, profile: presetProfile, template: "t5", look: "minimal", phases: null });
+    const r = buildGenerationReport({ ...baseInput, profile: presetProfile, template: "t5", phases: null });
     expect(r.headingFont).toEqual({ name: null, confidence: null });
     expect(r.colors).toEqual([]);
     expect(r.paletteWord).toBeNull();

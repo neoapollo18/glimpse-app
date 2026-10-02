@@ -16,18 +16,17 @@ import type { StudioActionData } from "../../routes/studio";
 import { postStudioAction } from "./studio-data";
 import {
   EMAIL_PLACEMENTS,
-  LOOKS,
-  LOOK_IDS,
   TEMPLATES,
+  TEMPLATE_STYLES,
   isTemplateId,
   type EmailPlacement,
-  type LookId,
 } from "../../lib/quiz-templates";
 import type { StudioColorKey, StudioColorSource } from "./types";
 
 // V3 Style panel (spec 8.2, contract §7): the template is chosen in the
 // Templates gallery, never here; this panel shows the CURRENT template
-// (from the loader, the single source of truth), the Look, and every
+// (from the loader, the single source of truth) with its built-in style,
+// and every
 // color with its REAL resolved value and where it came from. An empty
 // color field is not a state.
 
@@ -215,7 +214,7 @@ function CopyField({
 
 const SOURCE_CHIP: Record<StudioColorSource["source"], { label: string; bg: string; fg: string }> = {
   theme: { label: "From your theme", bg: "#E3F5EC", fg: "#0B6B3A" },
-  preset: { label: "Preset", bg: "#F1F1F1", fg: "#5C5F62" },
+  preset: { label: "Template", bg: "#F1F1F1", fg: "#5C5F62" },
   merchant: { label: "Yours", bg: "#EEF2FF", fg: "#3730A3" },
 };
 
@@ -287,7 +286,7 @@ function ColorField({
       autoComplete="off"
       labelAction={
         resolved && override !== ""
-          ? { content: fallback?.source === "theme" ? "Use theme value" : "Use preset value", onAction: () => setValue(fieldKey, "") }
+          ? { content: fallback?.source === "theme" ? "Use theme value" : "Use template value", onAction: () => setValue(fieldKey, "") }
           : undefined
       }
       connectedLeft={
@@ -943,11 +942,7 @@ export function ThemeEditor({
   chatBusy,
   onPreviewUpdate,
   template,
-  look,
-  lookSource,
-  lookBusy,
   colorSources,
-  onChangeLook,
   onOpenGallery,
 }: {
   settings: Record<string, unknown>;
@@ -955,21 +950,12 @@ export function ThemeEditor({
   onPreviewUpdate: (p: { flow?: unknown; config?: unknown }) => void;
   /** Single source of truth (loader `studio.template`), never local state. */
   template: string | null;
-  look: LookId;
-  lookSource: "merchant" | "brand" | "default";
-  lookBusy?: boolean;
   colorSources?: Record<StudioColorKey, StudioColorSource>;
-  onChangeLook?: (look: LookId) => void;
   onOpenGallery?: () => void;
 }) {
   const { schedule, saveState, error, clearError } = useSettingsAutosave(onPreviewUpdate);
   const hasTemplate = isTemplateId(template);
   const templateName = hasTemplate ? TEMPLATES[template].name : null;
-  // Look: rendered from props and re-seeded whenever the loader's value
-  // changes (B0: no cached copy survives a revalidation). The local copy
-  // only bridges the click → API → revalidate window.
-  const [lookLocal, setLookLocal] = useState<LookId>(look);
-  useEffect(() => setLookLocal(look), [look]);
   const [values, setValues] = useState<Record<string, string>>(() => ({
     quiz_accent_color: str(settings, "quiz_accent_color"),
     quiz_ink_color: str(settings, "quiz_ink_color"),
@@ -1020,12 +1006,6 @@ export function ThemeEditor({
     disabled,
     resolved: hasTemplate ? colorSources?.[key] : undefined,
   });
-  const lookHelp =
-    lookSource === "merchant"
-      ? "Your choice."
-      : lookSource === "brand"
-        ? "Chosen from your theme's fonts and colors."
-        : "Default until your brand is read.";
   return (
     <BlockStack gap="400">
       <EditorHeader title="Style" saveState={saveState} />
@@ -1042,25 +1022,16 @@ export function ThemeEditor({
                 Template
               </Text>
               <Text as="p" variant="bodySm" tone="subdued">
-                {templateName} · “{TEMPLATES[template].shopperQuestion}”
+                {templateName} · {TEMPLATE_STYLES[template].name} style
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                {TEMPLATE_STYLES[template].tagline}
               </Text>
             </BlockStack>
             <Button size="slim" onClick={onOpenGallery} disabled={disabled || !onOpenGallery}>
               Change in Templates
             </Button>
           </InlineStack>
-          <Select
-            label="Look"
-            options={LOOK_IDS.map((id) => ({ label: LOOKS[id].name, value: id }))}
-            value={lookLocal}
-            disabled={disabled || lookBusy || !onChangeLook}
-            onChange={(v) => {
-              if (v !== "editorial" && v !== "minimal" && v !== "bold") return;
-              setLookLocal(v);
-              onChangeLook?.(v);
-            }}
-            helpText={`${LOOKS[lookLocal].tagline}. ${lookHelp}`}
-          />
         </>
       )}
       <ColorField label="Accent color" {...colorProps("quiz_accent_color")} helpText="Highlights and **starred** headline words" />

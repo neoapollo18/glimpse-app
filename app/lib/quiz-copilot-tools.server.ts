@@ -448,17 +448,17 @@ const COPY_KEYS = new Set([
   // coercion would mangle them.
   "quiz_results_prose", "quiz_archetype_title", "quiz_archetype_line",
   "quiz_hero_image",
-  // v3 (migration 080): the Look and the email placement are merchant
-  // settings (Style panel / Lead editor). quiz_template still goes through
-  // app.api.quiz-template only; quiz_phases / quiz_founder /
-  // quiz_generation_report are generator-owned object columns, never copy.
-  "quiz_look", "quiz_email_placement",
+  // v3 (migration 080): the email placement is a merchant setting (Lead
+  // editor). quiz_look is retired (2026-10-01: templates own their design).
+  // quiz_template still goes through app.api.quiz-template only;
+  // quiz_phases / quiz_founder / quiz_generation_report are generator-owned
+  // object columns, never copy.
+  "quiz_email_placement",
 ]);
 
 // Copy keys with a closed value set — anything else is rejected, so a
 // stray string can never violate the migration-080 CHECK constraints.
 const ENUM_COPY_KEYS: Record<string, readonly string[]> = {
-  quiz_look: ["editorial", "minimal", "bold"],
   quiz_email_placement: ["hook_start", "gate_results", "after_results", "off"],
 };
 

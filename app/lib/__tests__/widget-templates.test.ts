@@ -233,7 +233,6 @@ function makeConfig(template: Tpl | null, overrides: Record<string, unknown> = {
   };
   if (template) {
     Object.assign(base, {
-      look: "minimal",
       emailPlacement: null,
       phases: [
         { label: "Skin profile", axisKeys: ["skin_type", "undertone"] },
@@ -336,7 +335,8 @@ describe("v3 widget templates", () => {
       for (const t of TEMPLATES) {
         const root = await boot(previewFor(t, step, false));
         expect(root.classList.contains("gq-" + t)).toBe(true);
-        expect(root.classList.contains("gq-look-minimal")).toBe(true);
+        // Templates own their design: no separate Look class (2026-10-01).
+        expect(Array.from(root.classList).some((c) => c.startsWith("gq-look-"))).toBe(false);
         sigs[`${t}:${step}`] = structure(root.querySelector(".gq-stage")!);
       }
       for (let i = 0; i < TEMPLATES.length; i++) {
@@ -401,10 +401,11 @@ describe("v3 widget templates", () => {
     }
     expect(new Set(sets).size).toBe(TEMPLATES.length);
 
-    // Consult + Editorial swaps to the split intro; the root component stays.
+    // A stale pre-2026-10 `look` in the payload changes nothing: Consult
+    // keeps its landing intro and no gq-look-* class is applied.
     const ed = await boot(previewFor("t2", "intro", false, { look: "editorial" }));
-    expect(ed.classList.contains("gq-look-editorial")).toBe(true);
-    expect(ed.querySelector(".gq-tpl-intro.gq-intro-split")).not.toBeNull();
+    expect(Array.from(ed.classList).some((c) => c.startsWith("gq-look-"))).toBe(false);
+    expect(ed.querySelector(".gq-tpl-intro.gq-intro-landing")).not.toBeNull();
     // Routine without founder data falls to Minimal.
     const t3min = await boot(previewFor("t3", "intro", false, { landing: { ...(makeConfig("t3").landing as object), founder: null } }));
     expect(t3min.querySelector(".gq-tpl-intro.gq-intro-minimal")).not.toBeNull();

@@ -36,7 +36,7 @@ import {
   type CatalogProduct,
   type GeneratedQuizConfig,
 } from "./quiz-config-schema.server";
-import { TEMPLATES, TEMPLATE_IDS, isTemplateEligible, isTemplateId, isLookId, type LookId, type TemplateId } from "./quiz-templates";
+import { TEMPLATES, TEMPLATE_IDS, isTemplateEligible, isTemplateId, type TemplateId } from "./quiz-templates";
 import type { GroundingReport } from "./quiz-grounding.server";
 import type { BrandProfile } from "./brand-profile.server";
 import { captureLiveConfig, saveLiveQuizConfig, type QuizDraft } from "./quiz-draft.server";
@@ -779,8 +779,6 @@ export async function generateQuizConfig(args: {
   const questionRange: [number, number] = assignedTemplate
     ? TEMPLATES[assignedTemplate].questionRange
     : [MIN_QUESTIONS_FLOOR, 6];
-  const persistedLook = existingConfig?.settings.quiz_look ?? null;
-  const resolvedLook: LookId = isLookId(persistedLook) ? persistedLook : (profile?.look ?? "minimal");
 
   // Step 2 - theme. Font only when it really came from the theme/homepage;
   // colors only when extracted (presets never count).
@@ -1078,7 +1076,6 @@ export async function generateQuizConfig(args: {
   let slotCount = { placed: 0, total: 0 };
   try {
     slotCount = countImageSlots(finalTemplate, reportFlow, existingSlots, {
-      look: resolvedLook,
       autoResolved: {
         // L1: stored pre-v3 profiles can lack `brand` entirely.
         hero: existingConfig?.settings.quiz_hero_image ?? profile?.brand?.coverImageUrl ?? null,
@@ -1152,7 +1149,6 @@ export async function generateQuizConfig(args: {
       phases,
       profile,
       template: finalTemplate,
-      look: resolvedLook,
       degradedFrom: degraded ? assignedTemplate : null,
       imageSlots: existingSlots,
       hasFounder: false, // quiz_founder stays null (Q13 default → intro type E)
@@ -1202,7 +1198,6 @@ export async function generateQuizConfig(args: {
     template: finalTemplate,
     template_source: templateSource,
     degraded_to: degradedTo,
-    look: resolvedLook,
     phases: phases?.length ?? 0,
     bank_filled: prepared.filledFromBank,
     wildcard_products: prepared.wildcardCount,

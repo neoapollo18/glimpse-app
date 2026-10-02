@@ -1,12 +1,12 @@
 /**
- * Template × Look registry — v3 (docs/overhaul/V3-SPEC.md Parts 2–5,
+ * Template registry — v3 (docs/overhaul/V3-SPEC.md Parts 2–5,
  * frozen in docs/overhaul/V3-CONTRACTS.md §1–3).
  *
  * A TEMPLATE is the shape of the decision the quiz makes (Match, Consult,
  * Routine, Discover, Clean): five structurally distinct root components in
- * the widget (TplMatch..TplClean, root classes gq-t1..gq-t5). A LOOK is a
- * token preset plus a handful of layout switches (Editorial, Minimal,
- * Bold) that applies to ANY template and never changes its root component.
+ * the widget (TplMatch..TplClean, root classes gq-t1..gq-t5). Each template
+ * also owns its visual design (TEMPLATE_STYLES); the v3 Look switcher was
+ * removed 2026-10-01 so every template reads as its own style.
  *
  * Storage keys are unchanged from v2 (quiz_template = t1..t5) but the
  * semantics are v3; migration 080 remaps pre-v3 values. Presets are
@@ -15,21 +15,16 @@
  */
 
 export type TemplateId = "t1" | "t2" | "t3" | "t4" | "t5";
-export type LookId = "editorial" | "minimal" | "bold";
 /** Intro types A..E (spec 5.1). */
 export type IntroType = "split" | "hero" | "landing" | "founder" | "minimal";
 export type EmailPlacement = "hook_start" | "gate_results" | "after_results" | "off";
 export type SlotKind = "hero" | "lifestyle" | "product" | "variant" | "swatch" | "icon" | "logo" | "thumb";
 
 export const TEMPLATE_IDS: TemplateId[] = ["t1", "t2", "t3", "t4", "t5"];
-export const LOOK_IDS: LookId[] = ["editorial", "minimal", "bold"];
 export const EMAIL_PLACEMENTS: EmailPlacement[] = ["hook_start", "gate_results", "after_results", "off"];
 
 export function isTemplateId(v: unknown): v is TemplateId {
   return typeof v === "string" && (TEMPLATE_IDS as string[]).includes(v);
-}
-export function isLookId(v: unknown): v is LookId {
-  return typeof v === "string" && (LOOK_IDS as string[]).includes(v);
 }
 export function isEmailPlacement(v: unknown): v is EmailPlacement {
   return typeof v === "string" && (EMAIL_PLACEMENTS as string[]).includes(v);
@@ -52,115 +47,144 @@ export interface BrandTokens {
 }
 
 // ---------------------------------------------------------------------
-// Looks (spec 2.3)
+// Template styles. Each template carries its OWN visual design (2026-10-01:
+// the orthogonal Look switcher is gone, so the gallery shows five
+// genuinely different designs and a merchant picks the one that looks
+// like their store). Template = decision shape AND design. The tokens are
+// the design's defaults; the widget stylesheet carries the rest of each
+// design (shape language, answer treatment, type, detailing) under the
+// gq-t{n} root class. Brand Profile only overlays the brand ACCENT and the
+// body font (see resolveQuizTokens); Studio Style-panel overrides still win
+// over everything.
 // ---------------------------------------------------------------------
 
-export interface LookDef {
-  id: LookId;
+export interface TemplateStyle {
   name: string;
   tagline: string;
   tokens: BrandTokens;
-  switches: {
-    introVariant: "split" | "centered" | "hero";
-    answerBorder: "hairline" | "bordered" | "filled";
-    radiusCap: number;
-    radiusMin: number;
-    headingTracking: string;
-    kickerTracking: string;
-    emojiAllowed: boolean;
-  };
+  /** Radius range the design accepts; brand/merchant radii are clamped into it. */
+  radiusMin: number;
+  radiusCap: number;
 }
 
-const SERIF = 'Georgia, "Iowan Old Style", "Times New Roman", serif';
+const SERIF = '"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif';
 const SANS =
   '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif';
+const GROTESK = '"Helvetica Neue", Helvetica, "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif';
+const HUMANIST = '"Avenir Next", Avenir, "Segoe UI", "Gill Sans", "Trebuchet MS", -apple-system, sans-serif';
 const ROUNDED =
-  '"Avenir Next Rounded", "Nunito", "Quicksand", "SF Pro Rounded", -apple-system, BlinkMacSystemFont, sans-serif';
+  'ui-rounded, "SF Pro Rounded", "Avenir Next Rounded", "Nunito", "Quicksand", -apple-system, BlinkMacSystemFont, sans-serif';
 
-export const LOOKS: Record<LookId, LookDef> = {
-  editorial: {
-    id: "editorial",
-    name: "Editorial",
-    tagline: "Serif headings, hairline answers, generous whitespace",
-    tokens: {
-      fontHeading: SERIF,
-      fontBody: SANS,
-      colorBg: "#f7f4ee",
-      colorText: "#1f1c18",
-      colorAccent: "#2f3b31",
-      colorAccentText: "#ffffff",
-      colorSurface: "#fbf9f4",
-      colorBorder: "rgba(31, 28, 24, 0.16)",
-      radiusButton: 2,
-      radiusCard: 4,
-      spaceUnit: 12,
-      maxWidth: 1200,
-    },
-    switches: {
-      introVariant: "split",
-      answerBorder: "hairline",
-      radiusCap: 4,
-      radiusMin: 0,
-      headingTracking: "-0.01em",
-      kickerTracking: "0.16em",
-      emojiAllowed: false,
-    },
-  },
-  minimal: {
-    id: "minimal",
-    name: "Minimal",
-    tagline: "Sans, centered column, bordered answers, 8–10 px radius",
+export const TEMPLATE_STYLES: Record<TemplateId, TemplateStyle> = {
+  // Match: a modern beauty counter. Blush-neutral ground, pill controls,
+  // soft elevated cards, photography-forward.
+  t1: {
+    name: "Counter",
+    tagline: "Soft modern beauty counter: pill buttons, elevated cards, blush neutrals",
     tokens: {
       fontHeading: SANS,
       fontBody: SANS,
-      colorBg: "#ffffff",
-      colorText: "#17181b",
-      colorAccent: "#24262b",
-      colorAccentText: "#ffffff",
-      colorSurface: "#f6f6f7",
-      colorBorder: "#e4e6ea",
-      radiusButton: 8,
-      radiusCard: 10,
-      spaceUnit: 8,
-      maxWidth: 880,
-    },
-    switches: {
-      introVariant: "centered",
-      answerBorder: "bordered",
-      radiusCap: 10,
-      radiusMin: 0,
-      headingTracking: "-0.005em",
-      kickerTracking: "0.12em",
-      emojiAllowed: false,
-    },
-  },
-  bold: {
-    id: "bold",
-    name: "Bold",
-    tagline: "Heavy rounded sans, chunky cards, filled selection",
-    tokens: {
-      fontHeading: ROUNDED,
-      fontBody: SANS,
-      colorBg: "#fff8ef",
-      colorText: "#221a12",
-      colorAccent: "#ff5c8a",
+      colorBg: "#fbf6f3",
+      colorText: "#231b1b",
+      colorAccent: "#a8476b",
       colorAccentText: "#ffffff",
       colorSurface: "#ffffff",
-      colorBorder: "#f0dcc4",
-      radiusButton: 16,
-      radiusCard: 20,
+      colorBorder: "#eddfd8",
+      radiusButton: 999,
+      radiusCard: 18,
+      spaceUnit: 8,
+      maxWidth: 1040,
+    },
+    radiusMin: 12,
+    radiusCap: 999,
+  },
+  // Consult: a magazine feature. Serif display, ivory paper, hairline
+  // rules instead of boxes, square corners, numbered answers.
+  t2: {
+    name: "Editorial",
+    tagline: "Magazine feature: serif display, ivory paper, hairline rules, square corners",
+    tokens: {
+      fontHeading: SERIF,
+      fontBody: SANS,
+      colorBg: "#f6f2ea",
+      colorText: "#1d1a16",
+      colorAccent: "#2f3b31",
+      colorAccentText: "#ffffff",
+      colorSurface: "#fbf8f2",
+      colorBorder: "rgba(29, 26, 22, 0.18)",
+      radiusButton: 0,
+      radiusCard: 2,
+      spaceUnit: 12,
+      maxWidth: 1200,
+    },
+    radiusMin: 0,
+    radiusCap: 3,
+  },
+  // Routine: an apothecary ritual. Stone and sage, numbered steps, soft
+  // capsule bars, calm humanist type.
+  t3: {
+    name: "Ritual",
+    tagline: "Calm apothecary: stone and sage, capsule answers, numbered steps",
+    tokens: {
+      fontHeading: HUMANIST,
+      fontBody: HUMANIST,
+      colorBg: "#f1efe8",
+      colorText: "#2a2b25",
+      colorAccent: "#56664a",
+      colorAccentText: "#ffffff",
+      colorSurface: "#faf9f4",
+      colorBorder: "#d9d6ca",
+      radiusButton: 999,
+      radiusCard: 24,
       spaceUnit: 10,
       maxWidth: 760,
     },
-    switches: {
-      introVariant: "hero",
-      answerBorder: "filled",
-      radiusCap: 28,
-      radiusMin: 16,
-      headingTracking: "-0.02em",
-      kickerTracking: "0.08em",
-      emojiAllowed: true,
+    radiusMin: 16,
+    radiusCap: 999,
+  },
+  // Discover: pop. Heavy rounded type, ink outlines with hard offset
+  // shadows, saturated accent, emoji allowed.
+  t4: {
+    name: "Pop",
+    tagline: "Playful pop: heavy rounded type, ink outlines, hard offset shadows",
+    tokens: {
+      fontHeading: ROUNDED,
+      fontBody: SANS,
+      colorBg: "#fff1e2",
+      colorText: "#1c1410",
+      colorAccent: "#ff4f87",
+      colorAccentText: "#ffffff",
+      colorSurface: "#ffffff",
+      colorBorder: "#1c1410",
+      radiusButton: 14,
+      radiusCard: 18,
+      spaceUnit: 10,
+      maxWidth: 760,
     },
+    radiusMin: 10,
+    radiusCap: 22,
+  },
+  // Clean: Swiss minimal. Pure white, monochrome ink, grotesk type, mono
+  // numerals, inverted (ink-filled) selection.
+  t5: {
+    name: "Swiss",
+    tagline: "Swiss minimal: monochrome grotesk, mono numerals, inverted selection",
+    tokens: {
+      fontHeading: GROTESK,
+      fontBody: GROTESK,
+      colorBg: "#ffffff",
+      colorText: "#111111",
+      colorAccent: "#111111",
+      colorAccentText: "#ffffff",
+      colorSurface: "#ffffff",
+      colorBorder: "#d6d6d6",
+      radiusButton: 6,
+      radiusCard: 6,
+      spaceUnit: 8,
+      maxWidth: 880,
+    },
+    radiusMin: 0,
+    radiusCap: 8,
   },
 };
 
@@ -179,7 +203,6 @@ export interface TemplateDef {
   questionRangeLabel: string;
   resultsShapeLabel: string;
   introType: IntroType;
-  introTypeByLook?: Partial<Record<LookId, IntroType>>;
   emailPlacementDefault: EmailPlacement;
   loading: "required" | "optional" | "absent";
   visualQuestions: "required" | "optional" | "absent";
@@ -221,7 +244,6 @@ export const TEMPLATES: Record<TemplateId, TemplateDef> = {
     questionRangeLabel: "6–8 questions",
     resultsShapeLabel: "lifestyle cards · a top pick with reasons and a comparison table",
     introType: "landing",
-    introTypeByLook: { editorial: "split" },
     emailPlacementDefault: "hook_start",
     loading: "optional",
     visualQuestions: "required",
@@ -277,7 +299,7 @@ export const TEMPLATES: Record<TemplateId, TemplateDef> = {
     outputShape: "A simple grid",
     questionRange: [4, 6],
     questionRangeLabel: "4–6 questions",
-    resultsShapeLabel: "The fallback. Every other template degrades here, keeping your Look.",
+    resultsShapeLabel: "The fallback. Every other template degrades here.",
     introType: "minimal",
     emailPlacementDefault: "after_results",
     loading: "absent",
@@ -289,9 +311,8 @@ export const TEMPLATES: Record<TemplateId, TemplateDef> = {
   },
 };
 
-export function defaultIntroType(template: TemplateId, look: LookId): IntroType {
-  const def = TEMPLATES[template];
-  return def.introTypeByLook?.[look] ?? def.introType;
+export function defaultIntroType(template: TemplateId): IntroType {
+  return TEMPLATES[template].introType;
 }
 
 export function defaultEmailPlacement(template: TemplateId): EmailPlacement {
@@ -369,10 +390,9 @@ function questionLabel(q: SlotFlowQuestion, index: number): string {
 export function declareSlots(
   template: TemplateId,
   flow: SlotFlow,
-  opts: { hasFounder?: boolean; look?: LookId } = {}
+  opts: { hasFounder?: boolean } = {}
 ): SlotDecl[] {
   const out: SlotDecl[] = [];
-  const look = opts.look ?? "minimal";
   const answerSlots = (kind: SlotKind, ratio: string, optional: boolean, sizePx?: number) => {
     flow.questions.forEach((q, i) => {
       if (!isVisualQuestion(q)) return;
@@ -409,7 +429,7 @@ export function declareSlots(
       out.push({
         key: "hero",
         kind: "hero",
-        ratio: look === "editorial" ? "4:5" : "16:9",
+        ratio: "16:9",
         screen: "intro",
         screenLabel: "Intro",
         label: "Hero photo",
@@ -496,37 +516,36 @@ export function phasesPartitionFlow(phases: unknown, axisKeysInOrder: string[]):
 }
 
 // ---------------------------------------------------------------------
-// Token resolution (Contract 2, v3): Look preset → Brand Profile overlay →
-// Look radius clamp. Null when no template is assigned (legacy shops).
+// Token resolution: the template's own style → Brand Profile accent + body
+// font → the style's radius clamp. Only the accent pair and the body font
+// come from the brand so the five designs stay visibly distinct (the
+// merchant's Style-panel overrides are applied on top by the widget).
+// Null when no template is assigned (legacy shops).
 // ---------------------------------------------------------------------
 
-export function resolveQuizTokens(
-  template: string | null,
-  look: LookId | null,
-  brandTokens: BrandTokens | null
-): BrandTokens | null {
+const BRAND_OVERLAY_KEYS: Array<keyof BrandTokens> = ["colorAccent", "colorAccentText", "fontBody"];
+
+export function resolveQuizTokens(template: string | null, brandTokens: BrandTokens | null): BrandTokens | null {
   if (!isTemplateId(template)) return null;
-  const lookDef = LOOKS[look && isLookId(look) ? look : "minimal"];
-  const base: BrandTokens = { ...lookDef.tokens };
+  const style = TEMPLATE_STYLES[template];
+  const base: BrandTokens = { ...style.tokens };
   if (brandTokens) {
-    for (const key of Object.keys(base) as Array<keyof BrandTokens>) {
+    for (const key of BRAND_OVERLAY_KEYS) {
       const v = brandTokens[key];
       if (v === null || v === undefined) continue;
       if (typeof v === "string" && !v.trim()) continue;
       (base as unknown as Record<string, unknown>)[key] = v;
     }
   }
-  const { radiusCap, radiusMin } = lookDef.switches;
-  const clamp = (n: number) => Math.max(radiusMin, Math.min(radiusCap, Math.round(n)));
+  const clamp = (n: number) => Math.max(style.radiusMin, Math.min(style.radiusCap, Math.round(n)));
   base.radiusButton = clamp(base.radiusButton);
-  base.radiusCard = clamp(Math.max(base.radiusCard, base.radiusButton));
+  base.radiusCard = clamp(base.radiusCard);
   return base;
 }
 
 // ---------------------------------------------------------------------
-// Deterministic selection — v3 (spec 2.4). Template from CATALOG STRUCTURE,
-// Look from BRAND PROFILE. Two independent scorers; same inputs → same
-// output; every assignment explainable via `signals`.
+// Deterministic selection — v3 (spec 2.4). Template from CATALOG STRUCTURE.
+// Same inputs → same output; every assignment explainable via `signals`.
 // ---------------------------------------------------------------------
 
 export interface TemplateSignals {
@@ -547,14 +566,6 @@ export interface TemplateSignals {
   imagePerAnswerCoverage: number | null;
   lifestyleImageCount: number;
   bannerCoverage: number | null;
-}
-
-export interface LookSignals {
-  serifHeading: boolean;
-  roundedHeading: boolean;
-  heavyHeading: boolean;
-  avgSaturation: number | null;
-  emojiInCopy: boolean;
 }
 
 export interface TemplateAssignment {
@@ -679,14 +690,6 @@ export function selectTemplate(s: TemplateSignals): TemplateAssignment {
   const out: TemplateAssignment = { template: winner, scores, signals: fired, eligible };
   if (winner === "t5" && degradedFrom) out.degradedFrom = degradedFrom;
   return out;
-}
-
-export function selectLook(s: LookSignals): LookId {
-  if (s.serifHeading) return "editorial";
-  if (s.heavyHeading || s.roundedHeading || s.emojiInCopy || (s.avgSaturation !== null && s.avgSaturation > 0.55)) {
-    return "bold";
-  }
-  return "minimal";
 }
 
 /** Human line for the scope screen: "shade-based beauty store". */

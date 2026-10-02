@@ -16,7 +16,6 @@ export interface OnboardingScopeHandoff {
   collectionCount: number;
   accentColor: string | null;
   template: string;
-  look: string;
 }
 
 export const ONBOARDING_SCOPE_KEY = "gleame.onboarding.scope";

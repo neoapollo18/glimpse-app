@@ -21,14 +21,11 @@
 
 import { supabase } from "./supabase.server";
 import {
-  LOOKS,
+  TEMPLATE_STYLES,
   isTemplateEligible,
   isTemplateId,
-  selectLook,
   selectTemplate,
   type BrandTokens,
-  type LookId,
-  type LookSignals,
   type TemplateAssignment,
   type TemplateId,
   type TemplateSignals,
@@ -75,10 +72,6 @@ export interface BrandProfile {
   category: string | null;
   tone: "playful" | "neutral" | "refined" | null;
   templateAssignment: TemplateAssignment;
-  /** v3 Look (spec 2.3/2.4): aesthetic preset chosen from brand signals,
-   * independent of the template. Older profiles lack it → "minimal". */
-  look?: LookId;
-  lookSignals?: LookSignals;
   /** v3: the template-selection inputs, kept so the template API and the
    * Studio can re-check eligibility without re-extracting. */
   templateSignals?: TemplateSignals;
@@ -690,8 +683,8 @@ export async function extractBrandProfile(
     return presetVal;
   };
 
-  // Neutral preset fallbacks come from the Minimal Look — never Bold.
-  const neutral = LOOKS.minimal.tokens;
+  // Neutral preset fallbacks come from the Swiss (Clean) style, never Pop.
+  const neutral = TEMPLATE_STYLES.t5.tokens;
 
   const fontHeading = pick("fontHeading", theme?.headingFont?.stack, homepage?.headingFont, neutral.fontHeading);
   const fontBody = pick("fontBody", theme?.bodyFont?.stack, homepage?.bodyFont, neutral.fontBody);
@@ -777,17 +770,7 @@ export async function extractBrandProfile(
       ? Math.max(variantCoverage, catalog.imageCoverage)
       : variantCoverage ?? catalog.imageCoverage;
 
-  const serifHeading = Boolean(
-    theme?.headingFont?.serif || homepage?.headingSerif || (/serif/i.test(fontHeading) && !/sans-serif/i.test(fontHeading))
-  );
-  const lookSignals: LookSignals = {
-    serifHeading,
-    roundedHeading: Boolean(theme?.headingFont?.rounded || homepage?.headingRounded),
-    heavyHeading: /\b(black|heavy|extra-?bold|800|900)\b/i.test(fontHeading),
-    avgSaturation: homepage?.avgSaturation ?? null,
-    emojiInCopy: /\p{Extended_Pictographic}/u.test(homepage?.copySample ?? ""),
-  };
-  // v3 (spec 2.4): template from CATALOG STRUCTURE, look from BRAND PROFILE.
+  // v3 (spec 2.4): template from CATALOG STRUCTURE.
   const signals: TemplateSignals = {
     variantOptionDensity: catalog.variantOptionDensity,
     avgPriceCents: catalog.avgPriceCents,
@@ -805,7 +788,6 @@ export async function extractBrandProfile(
     ),
     bannerCoverage: libraryBuilt ? stats!.bannerCoverage : null,
   };
-  const look = selectLook(lookSignals);
   const templateAssignment = selectTemplate(signals);
 
   const profile: BrandProfile = {
@@ -846,8 +828,6 @@ export async function extractBrandProfile(
     category: catalog.category,
     tone,
     templateAssignment,
-    look,
-    lookSignals,
     templateSignals: signals,
     trustStatements: extractTrustStatements(brand?.slogan ?? null, homepage?.copySample ?? ""),
   };
@@ -870,7 +850,6 @@ export async function extractBrandProfile(
   const { trackOverhaulEvent } = await import("./overhaul-events.server");
   trackOverhaulEvent(shopDomain, "template_assigned", {
     template: templateAssignment.template,
-    look,
     scores: templateAssignment.scores,
     signals: templateAssignment.signals,
     degraded_from: templateAssignment.degradedFrom ?? null,
@@ -921,11 +900,6 @@ export function servedTemplateFor(
   if (!isTemplateId(template)) return null;
   if (template === "t5" || !profile) return template;
   return isTemplateEligible(template, templateSignalsFromProfile(profile)) ? template : "t5";
-}
-
-/** The profile's Look, defaulting older profiles to Minimal (never Bold). */
-export function lookFromProfile(profile: BrandProfile | null): LookId {
-  return profile?.look ?? "minimal";
 }
 
 export async function getBrandProfile(shopDomain: string): Promise<BrandProfile | null> {

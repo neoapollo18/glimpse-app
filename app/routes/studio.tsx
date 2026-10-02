@@ -41,17 +41,15 @@ import { getBrandProfile, type BrandProfile } from "../lib/brand-profile.server"
 import { getLibraryStatus } from "../lib/brand-library.server";
 import { trackOverhaulEvent } from "../lib/overhaul-events.server";
 import {
-  LOOKS,
   TEMPLATES,
   TEMPLATE_IDS,
+  TEMPLATE_STYLES,
   declareSlots,
   defaultEmailPlacement,
-  isLookId,
   isTemplateId,
   resolveQuizTokens,
   type BrandTokens,
   type EmailPlacement,
-  type LookId,
   type SlotDecl,
   type TemplateId,
 } from "../lib/quiz-templates";
@@ -146,7 +144,9 @@ function colorSourcesFor(
   const out = {} as Record<StudioColorKey, StudioColorSource>;
   for (const key of STUDIO_COLOR_KEYS) {
     const token = COLOR_TOKEN[key];
-    const src = profile?.sources?.[token]?.source;
+    // Only the accent comes from the brand; every other color is the
+    // template's own style (resolveQuizTokens).
+    const src = token === "colorAccent" ? profile?.sources?.[token]?.source : "preset";
     const fallback: StudioColorSource["fallback"] = {
       value: String(tokens[token] ?? ""),
       source: src === "theme" || src === "brand_api" || src === "homepage" ? "theme" : "preset",
@@ -244,7 +244,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       getQuestionGuidance(shop.id),
       getRecommendationCounts(shop.id).catch(() => null),
       // THE fresh read of chat_assistant_config for this revalidation: the
-      // template, look, slots and report all derive from it (B0: no cached
+      // template, slots and report all derive from it (B0: no cached
       // draft capture feeds the Style panel or the banner).
       getChatAssistantConfig(shopDomain).catch(() => null),
       getBrandProfile(shopDomain).catch(() => null),
@@ -285,20 +285,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     surfaceEnabled && (surfaceMode == null || surfaceMode === "quiz" || surfaceMode === "both");
 
   // ---- Themed canvas + v3 Studio contract (V3-CONTRACTS §7) ----
-  // Single source of truth for the template/look: the live row read above.
+  // Single source of truth for the template: the live row read above. The
+  // template owns its design (no separate Look since 2026-10-01).
   // NULL template = legacy rendering; every v3 surface gates on it.
   const template: TemplateId | null = isTemplateId(liveConfig?.quiz_template) ? liveConfig.quiz_template : null;
-  const look: LookId = isLookId(liveConfig?.quiz_look)
-    ? liveConfig.quiz_look
-    : isLookId(brandProfile?.look)
-      ? brandProfile.look
-      : "minimal";
-  const lookSource: "merchant" | "brand" | "default" = isLookId(liveConfig?.quiz_look)
-    ? "merchant"
-    : isLookId(brandProfile?.look)
-      ? "brand"
-      : "default";
-  const tokens = resolveQuizTokens(template, look, brandProfile?.tokens ?? null);
+  const tokens = resolveQuizTokens(template, brandProfile?.tokens ?? null);
   const storeName = shopDomain
     .replace(".myshopify.com", "")
     .replace(/-/g, " ")
@@ -316,7 +307,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // per shop) only names the product behind an answer image.
   const slotFlow = (draft?.flow ?? null) as unknown as StudioFlow | null;
   const decls = template
-    ? declareSlots(template, { questions: slotFlow?.questions ?? [] }, { hasFounder: Boolean(liveConfig?.quiz_founder), look })
+    ? declareSlots(template, { questions: slotFlow?.questions ?? [] }, { hasFounder: Boolean(liveConfig?.quiz_founder) })
     : [];
   const catalogForTitles =
     decls.some((d) => d.key.startsWith("answer:")) ? await loadCatalogForShop(shop.id).catch(() => null) : null;
@@ -341,14 +332,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     canvasBorder: tokens?.colorBorder ?? "#C9CCCF",
     headingFont,
     template,
-    look,
-    lookSource,
     emailPlacement,
     templatesLive,
     report,
     slots,
     library,
-    colorSources: colorSourcesFor(settings, tokens ?? brandProfile?.tokens ?? LOOKS.minimal.tokens, brandProfile),
+    colorSources: colorSourcesFor(settings, tokens ?? brandProfile?.tokens ?? TEMPLATE_STYLES.t5.tokens, brandProfile),
     eligible,
     confidence: brandProfile?.confidence ?? null,
     imageSlots,
@@ -984,7 +973,6 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
   const [publishOpen, setPublishOpen] = useState(false);
   const [viewStoreBusy, setViewStoreBusy] = useState(false);
   const [tplBusy, setTplBusy] = useState(false);
-  const [lookBusy, setLookBusy] = useState(false);
   const [slotBusy, setSlotBusy] = useState(false);
   // A dashed slot clicked on the canvas (widget `gleame:pick-slot`): the
   // Images rail opens its picker for this key, then clears it.
@@ -1334,42 +1322,37 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
     }
   }, [showUndoToast]);
 
-  // Template / Look switching (V3-CONTRACTS §7): the ONLY write path for
-  // quiz_template and quiz_look from the Studio. After success the loader
-  // is revalidated (fresh read of the live row) and the preview reloads,
-  // so the Style panel, the banner and the canvas all agree (B0).
-  const setTemplateApi = useCallback(
-    async (input: { template?: TemplateId | null; look?: LookId | null; source: "gallery" | "style_panel" }) => {
-      const fd = new FormData();
-      fd.append("intent", "set");
-      if (input.template) fd.append("template", input.template);
-      if (input.look) fd.append("look", input.look);
-      fd.append("source", input.source);
-      const res = await fetch("/app/api/quiz-template", { method: "POST", body: fd });
-      return (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
-    },
-    [],
-  );
+  // Template switching (V3-CONTRACTS §7): the ONLY write path for
+  // quiz_template from the Studio. After success the loader is
+  // revalidated (fresh read of the live row) and the preview reloads, so
+  // the Style panel, the banner and the canvas all agree (B0).
+  const setTemplateApi = useCallback(async (input: { template: TemplateId; source: "gallery" }) => {
+    const fd = new FormData();
+    fd.append("intent", "set");
+    fd.append("template", input.template);
+    fd.append("source", input.source);
+    const res = await fetch("/app/api/quiz-template", { method: "POST", body: fd });
+    return (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+  }, []);
   const refreshAfterSwitch = useCallback(() => {
     revalidator.revalidate();
     reloadPreview();
   }, [revalidator, reloadPreview]);
 
   const applyGalleryTemplate = useCallback(
-    async (id: TemplateId, look: LookId | null) => {
+    async (id: TemplateId) => {
       setTplBusy(true);
-      const prior = { template: data.studio.template, look: data.studio.look };
-      const r = await setTemplateApi({ template: id, look, source: "gallery" });
+      const prior = data.studio.template;
+      const r = await setTemplateApi({ template: id, source: "gallery" });
       setTplBusy(false);
       if (r?.ok) {
         setOverlay(false);
         refreshAfterSwitch();
-        const lookNote = look ? ` · ${LOOKS[look].name} look` : "";
         showUndoToast(
-          `Switched to ${TEMPLATES[id].name}${lookNote}`,
-          prior.template
+          `Switched to ${TEMPLATES[id].name}`,
+          prior
             ? () => {
-                void setTemplateApi({ template: prior.template, look: prior.look, source: "gallery" }).then((rr) => {
+                void setTemplateApi({ template: prior, source: "gallery" }).then((rr) => {
                   if (rr?.ok) refreshAfterSwitch();
                 });
               }
@@ -1379,56 +1362,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
         showUndoToast(r?.error ?? "Switching templates failed");
       }
     },
-    [setTemplateApi, data.studio.template, data.studio.look, refreshAfterSwitch, setOverlay, showUndoToast],
-  );
-
-  // Gallery "Keep": the current template stays; only a changed Look applies.
-  const keepTemplate = useCallback(
-    async (look: LookId | null) => {
-      if (!look) {
-        setOverlay(false);
-        return;
-      }
-      setTplBusy(true);
-      const prior = data.studio.look;
-      const r = await setTemplateApi({ look, source: "gallery" });
-      setTplBusy(false);
-      setOverlay(false);
-      if (r?.ok) {
-        refreshAfterSwitch();
-        showUndoToast(`Switched to the ${LOOKS[look].name} look`, () => {
-          void setTemplateApi({ look: prior, source: "gallery" }).then((rr) => {
-            if (rr?.ok) refreshAfterSwitch();
-          });
-        });
-      } else {
-        showUndoToast(r?.error ?? "Switching looks failed");
-      }
-    },
-    [setTemplateApi, data.studio.look, refreshAfterSwitch, setOverlay, showUndoToast],
-  );
-
-  // Style panel Look select (source style_panel → look_switched).
-  const changeLook = useCallback(
-    async (look: LookId) => {
-      if (look === data.studio.look) return;
-      setLookBusy(true);
-      const prior = data.studio.look;
-      const r = await setTemplateApi({ look, source: "style_panel" });
-      setLookBusy(false);
-      if (r?.ok) {
-        refreshAfterSwitch();
-        showUndoToast(`${LOOKS[look].name} look applied`, () => {
-          void setTemplateApi({ look: prior, source: "style_panel" }).then((rr) => {
-            if (rr?.ok) refreshAfterSwitch();
-          });
-        });
-      } else {
-        showUndoToast(r?.error ?? "Changing the look failed");
-        refreshAfterSwitch(); // re-seed the select from the live value
-      }
-    },
-    [setTemplateApi, data.studio.look, refreshAfterSwitch, showUndoToast],
+    [setTemplateApi, data.studio.template, refreshAfterSwitch, setOverlay, showUndoToast],
   );
 
   // Images rail retry (spec 4.6): re-run library indexing, then re-read.
@@ -1508,7 +1442,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
   }, [needsOnboarding, generationError]);
 
   // Arrival banner (spec 6.5): assembled ONLY from the generation report.
-  const banner: ArrivalBanner = arrivalBannerChips(data.studio.report, data.studio.template, data.studio.look);
+  const banner: ArrivalBanner = arrivalBannerChips(data.studio.report, data.studio.template);
 
   // Images rail attention (contract §7): a required slot is unresolved, or
   // indexing failed. Optional slots never light the dot.
@@ -1658,8 +1592,6 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
             onSaveError={setTreeError}
             onSelectSlide={selectSlide}
             onOpenGallery={data.studio.template ? () => setOverlay(true) : undefined}
-            onChangeLook={data.studio.template ? (look) => void changeLook(look) : undefined}
-            lookBusy={lookBusy}
             onDeleteQuestion={(axisKey, fallbackSlide) => {
               // Hoisted here because the revalidation after a delete
               // unmounts the question editor: its own fetcher effect never
@@ -1723,12 +1655,11 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
             <TemplateGallery
               previewToken={data.previewToken}
               currentTemplate={data.studio.template}
-              currentLook={data.studio.look}
               eligible={(data.studio.eligible ?? []) as TemplateId[]}
               flow={(data.draft?.flow as unknown as StudioFlow | undefined) ?? null}
               busy={tplBusy}
-              onUse={(id, look) => void applyGalleryTemplate(id, look)}
-              onKeep={(look) => void keepTemplate(look)}
+              onUse={(id) => void applyGalleryTemplate(id)}
+              onKeep={() => setOverlay(false)}
               onFixImages={() => {
                 setOverlay(false);
                 selectSlide("images");

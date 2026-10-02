@@ -1,12 +1,10 @@
 import { useMemo, useState } from "react";
 import { Button, Text } from "@shopify/polaris";
 import {
-  LOOKS,
-  LOOK_IDS,
   TEMPLATE_IDS,
+  TEMPLATE_STYLES,
   TEMPLATES,
   isVisualQuestion,
-  type LookId,
   type TemplateId,
 } from "../../lib/quiz-templates";
 import type { StudioFlow } from "./types";
@@ -14,10 +12,11 @@ import type { StudioFlow } from "./types";
 // V3-SPEC Part 7: the Templates gallery is a top-level rail item that
 // opens full-screen inside the Studio. Every card is a THREE-SCREEN STRIP
 // (intro · the first visual question · results) rendered live from this
-// merchant's own quiz by the preview document, with the chosen Look
-// applied, so Look and Template read as independent. Never stock
-// screenshots. Ineligible templates dim with their reason chip and a link
-// into the Images rail.
+// merchant's own quiz by the preview document. Every template carries its
+// OWN design (TEMPLATE_STYLES), so the gallery is a set of genuinely
+// different styles and the merchant picks the one that looks like their
+// store. Never stock screenshots. Ineligible templates dim with their
+// reason chip and a link into the Images rail.
 
 const SCALE = 0.4;
 const MINI_HEIGHT = 236;
@@ -26,11 +25,7 @@ const STRIP_GAP = 8;
 const GALLERY_CSS = `
   .gq-gal { display: flex; flex-direction: column; min-height: 100%; background: #fff; }
   .gq-gal-head { display: flex; align-items: center; gap: 20px; padding: 18px 28px; border-bottom: 1px solid #E1E3E5; position: sticky; top: 0; background: rgba(255,255,255,.96); backdrop-filter: blur(6px); z-index: 2; }
-  .gq-gal-looks { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid #E1E3E5; border-radius: 999px; background: #F6F6F7; margin-left: auto; }
-  .gq-gal-look { border: 0; border-radius: 999px; padding: 6px 14px; font-size: 12.5px; font-weight: 600; color: #6D7175; background: transparent; cursor: pointer; transition: background 120ms ease, color 120ms ease; }
-  .gq-gal-look:hover { color: #202223; }
-  .gq-gal-look[data-on="true"] { background: #1A1C1E; color: #fff; }
-  .gq-gal-close { width: 32px; height: 32px; border-radius: 8px; border: 1px solid #E1E3E5; background: #fff; color: #6D7175; cursor: pointer; font-size: 14px; transition: background 120ms ease; }
+  .gq-gal-close { margin-left: auto; width: 32px; height: 32px; border-radius: 8px; border: 1px solid #E1E3E5; background: #fff; color: #6D7175; cursor: pointer; font-size: 14px; transition: background 120ms ease; }
   .gq-gal-close:hover { background: #F6F6F7; }
   .gq-gal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 24px 28px 40px; max-width: 1240px; margin: 0 auto; width: 100%; box-sizing: border-box; }
   .gq-gcard { position: relative; border: 1px solid #E1E3E5; border-radius: 14px; background: #fff; overflow: hidden; transition: border-color 150ms ease, box-shadow 150ms ease, opacity 150ms ease; }
@@ -40,13 +35,17 @@ const GALLERY_CSS = `
   .gq-chip { position: absolute; top: 12px; left: 12px; z-index: 3; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 4px 11px; letter-spacing: .02em; }
   .gq-chip[data-kind="current"] { background: #1A1C1E; color: #fff; }
   .gq-chip[data-kind="reason"] { background: #FFF4D6; color: #7A5A00; border: 1px solid #F1D48A; }
-  .gq-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: ${STRIP_GAP}px; padding: 12px 12px 0; background: #F6F6F7; border-bottom: 1px solid #E1E3E5; }
+  .gq-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: ${STRIP_GAP}px; padding: 12px 12px 0; background: var(--gq-strip-bg, #F6F6F7); border-bottom: 1px solid #E1E3E5; }
   .gq-mini { position: relative; height: ${MINI_HEIGHT + 22}px; }
   .gq-mini-frame { height: ${MINI_HEIGHT}px; overflow: hidden; border-radius: 8px; border: 1px solid #E1E3E5; background: #fff; position: relative; }
   .gq-mini-frame iframe { position: absolute; top: 0; left: 0; border: 0; pointer-events: none; display: block; transform-origin: top left; }
   .gq-mini-lbl { display: block; text-align: center; font-size: 10px; font-weight: 700; letter-spacing: .12em; color: #8A8F98; padding-top: 6px; }
   .gq-meta { display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px 16px; }
   .gq-meta-text { min-width: 0; flex: 1; }
+  .gq-meta-name { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .gq-style-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; letter-spacing: .02em; color: #303030; background: #F1F1F1; border-radius: 999px; padding: 3px 9px 3px 4px; }
+  .gq-style-dot { width: 13px; height: 13px; border-radius: 999px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
+  .gq-meta-tag { font-size: 12.5px; color: #4A4D52; margin: 6px 0 4px; }
   .gq-meta-q { font-size: 13px; color: #4A4D52; margin: 2px 0 4px; font-style: italic; }
   .gq-meta-shape { font-size: 12px; color: #6D7175; }
   .gq-fix { border: 0; background: none; padding: 0; color: #2C6ECB; font-weight: 600; font-size: 12.5px; cursor: pointer; }
@@ -96,7 +95,6 @@ function MiniFrame({ src, title }: { src: string; title: string }) {
 export function TemplateGallery({
   previewToken,
   currentTemplate,
-  currentLook,
   eligible,
   flow,
   busy,
@@ -107,20 +105,15 @@ export function TemplateGallery({
 }: {
   previewToken: string | null;
   currentTemplate: TemplateId | null;
-  /** The saved/derived Look; the switcher starts here. */
-  currentLook: LookId;
   eligible: TemplateId[];
   flow: StudioFlow | null;
   busy: boolean;
-  /** `look` is the switcher's value when it differs from currentLook, else null. */
-  onUse: (template: TemplateId, look: LookId | null) => void;
-  onKeep: (look: LookId | null) => void;
+  onUse: (template: TemplateId) => void;
+  onKeep: () => void;
   onFixImages: () => void;
   onClose: () => void;
 }) {
-  const [look, setLook] = useState<LookId>(currentLook);
   const [pending, setPending] = useState<TemplateId | null>(null);
-  const lookDelta: LookId | null = look !== currentLook ? look : null;
 
   // The question strip shows the first VISUAL question (spec Part 7): it
   // is the screen where templates differ most. Text-only quizzes fall
@@ -145,7 +138,7 @@ export function TemplateGallery({
 
   const srcFor = (id: TemplateId, step: string) =>
     previewToken
-      ? `/quiz-preview.html?token=${encodeURIComponent(previewToken)}&template=${id}&look=${look}&step=${step}`
+      ? `/quiz-preview.html?token=${encodeURIComponent(previewToken)}&template=${id}&step=${step}`
       : null;
 
   return (
@@ -157,23 +150,9 @@ export function TemplateGallery({
             What should your quiz do?
           </Text>
           <Text as="p" variant="bodySm" tone="subdued">
-            Switching never loses your content.
+            Each template has its own style. Pick the one that feels like your store; switching never loses your
+            content, and your colors can be fine-tuned in Style.
           </Text>
-        </div>
-        <div className="gq-gal-looks" role="radiogroup" aria-label="Look">
-          {LOOK_IDS.map((id) => (
-            <button
-              key={id}
-              role="radio"
-              aria-checked={look === id}
-              className="gq-gal-look"
-              data-on={look === id}
-              title={LOOKS[id].tagline}
-              onClick={() => setLook(id)}
-            >
-              {LOOKS[id].name}
-            </button>
-          ))}
         </div>
         <button className="gq-gal-close" onClick={onClose} aria-label="Close">
           ✕
@@ -186,6 +165,7 @@ export function TemplateGallery({
           const isCurrent = currentTemplate === id;
           // t5 is always eligible: it is where every other template degrades.
           const isEligible = id === "t5" || eligible.includes(id);
+          const style = TEMPLATE_STYLES[id];
           return (
             <div
               key={id}
@@ -193,6 +173,7 @@ export function TemplateGallery({
               data-current={isCurrent}
               data-ineligible={!isEligible}
               data-span={id === "t5"}
+              style={{ ["--gq-strip-bg" as string]: style.tokens.colorBg }}
             >
               {isCurrent && (
                 <span className="gq-chip" data-kind="current">
@@ -211,9 +192,16 @@ export function TemplateGallery({
               </div>
               <div className="gq-meta">
                 <div className="gq-meta-text">
-                  <Text as="h3" variant="headingSm">
-                    {def.name}
-                  </Text>
+                  <div className="gq-meta-name">
+                    <Text as="h3" variant="headingSm">
+                      {def.name}
+                    </Text>
+                    <span className="gq-style-pill">
+                      <span className="gq-style-dot" style={{ background: style.tokens.colorAccent }} />
+                      {style.name} style
+                    </span>
+                  </div>
+                  <div className="gq-meta-tag">{style.tagline}</div>
                   <div className="gq-meta-q">“{def.shopperQuestion}”</div>
                   <div className="gq-meta-shape">
                     {def.questionRangeLabel} · {def.resultsShapeLabel}
@@ -222,7 +210,7 @@ export function TemplateGallery({
                 {isCurrent ? (
                   <Button disabled={busy} loading={busy && pending === id} onClick={() => {
                     setPending(id);
-                    onKeep(lookDelta);
+                    onKeep();
                   }}>
                     Keep
                   </Button>
@@ -233,7 +221,7 @@ export function TemplateGallery({
                     disabled={busy}
                     onClick={() => {
                       setPending(id);
-                      onUse(id, lookDelta);
+                      onUse(id);
                     }}
                   >
                     Use this template

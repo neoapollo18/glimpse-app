@@ -5,11 +5,12 @@
 // "Reading your store…"), then (only when no sync ran this visit) gives a
 // brand-library index that is genuinely building ≤ 10 s, then makes sure
 // a Brand Profile exists (extract capped at 20 s; presets otherwise).
-// Then: `{N} products in {M} collections` · store type → template · theme
-// → Look, each with an inline Change, and one CTA: Build my quiz.
+// Then: `{N} products in {M} collections` · store type → template (each
+// template carries its own design) with an inline Change, and one CTA:
+// Build my quiz.
 //
 // Shops that already have a quiz never see this: the loader sends them to
-// the Studio. Nothing here writes quiz content; template/look choices go
+// the Studio. Nothing here writes quiz content; template choices go
 // through /app/api/quiz-template (eligibility enforced server-side).
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -92,10 +93,16 @@ interface ScopeOptions {
   collectionCount: number;
   storeType: string | null;
   template: string;
-  look: string;
   eligible: string[];
-  templates: Array<{ id: string; name: string; shopperQuestion: string; questionRangeLabel: string; ineligibleReason: string }>;
-  looks: Array<{ id: string; name: string; tagline: string }>;
+  templates: Array<{
+    id: string;
+    name: string;
+    styleName: string;
+    styleTagline: string;
+    shopperQuestion: string;
+    questionRangeLabel: string;
+    ineligibleReason: string;
+  }>;
   theme: { fontName: string | null; colorCount: number; paletteWord: string | null; accentColor: string | null };
 }
 
@@ -171,11 +178,9 @@ export default function OnboardingScope() {
     result: null,
   });
 
-  // Template / Look
+  // Template (each template carries its own design)
   const [template, setTemplate] = useState<string>("t5");
-  const [look, setLook] = useState<string>("minimal");
   const [templateOpen, setTemplateOpen] = useState(false);
-  const [lookOpen, setLookOpen] = useState(false);
   const [choiceError, setChoiceError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -242,7 +247,6 @@ export default function OnboardingScope() {
         if (!d.ok) throw new Error(d.error || "Couldn't read your store");
         setOptions(d);
         setTemplate(d.template);
-        setLook(d.look);
         setSelected(0);
         setPrep("ready");
       } catch (e) {
@@ -282,32 +286,28 @@ export default function OnboardingScope() {
     }
   }, [freeText]);
 
-  // --- Template / Look persistence (server enforces eligibility) ---
+  // --- Template persistence (server enforces eligibility) ---
   const persistChoice = useCallback(
-    async (patch: { template?: string; look?: string }) => {
+    async (patch: { template: string }) => {
       const prevTemplate = template;
-      const prevLook = look;
-      if (patch.template) setTemplate(patch.template);
-      if (patch.look) setLook(patch.look);
+      setTemplate(patch.template);
       setChoiceError(null);
       setSaving(true);
       try {
         const d = await post("/app/api/quiz-template", {
           intent: "set",
-          ...(patch.template ? { template: patch.template } : {}),
-          ...(patch.look ? { look: patch.look } : {}),
+          template: patch.template,
           source: "onboarding",
         });
         if (!d.ok) throw new Error(d.error || "Couldn't save that choice");
       } catch (e) {
         setTemplate(prevTemplate);
-        setLook(prevLook);
         setChoiceError((e as Error).message);
       } finally {
         setSaving(false);
       }
     },
-    [template, look],
+    [template],
   );
 
   // --- Build ---
@@ -322,9 +322,8 @@ export default function OnboardingScope() {
       collectionCount: options.collectionCount,
       accentColor: options.theme.accentColor,
       template,
-      look,
     });
-    fireEvent("scope_selected", { kind: currentChip.kind, count: currentChip.count, template, look });
+    fireEvent("scope_selected", { kind: currentChip.kind, count: currentChip.count, template });
     navigate("/app/onboarding/build");
   };
 
@@ -435,11 +434,7 @@ export default function OnboardingScope() {
   }
 
   const tplDef = options.templates.find((t) => t.id === template) ?? options.templates[options.templates.length - 1];
-  const lookDef = options.looks.find((l) => l.id === look) ?? options.looks[1];
   const scopeIsAll = !currentChip || currentChip.kind === "all";
-  const themeParts: string[] = [];
-  if (options.theme.fontName) themeParts.push(`${options.theme.fontName} headings`);
-  if (options.theme.paletteWord) themeParts.push(`${options.theme.paletteWord} palette`);
 
   return (
     <Page narrowWidth>
@@ -548,11 +543,12 @@ export default function OnboardingScope() {
                   <Text as="p">
                     {options.storeType ? (
                       <>
-                        Looks like a <strong>{options.storeType}</strong> → <strong>{tplDef.name}</strong> template
+                        Looks like a <strong>{options.storeType}</strong> → <strong>{tplDef.name}</strong> template,{" "}
+                        {tplDef.styleName} style
                       </>
                     ) : (
                       <>
-                        We'll use the <strong>{tplDef.name}</strong> template
+                        We'll use the <strong>{tplDef.name}</strong> template, {tplDef.styleName} style
                       </>
                     )}
                   </Text>
@@ -569,7 +565,9 @@ export default function OnboardingScope() {
                           return {
                             value: t.id,
                             label: `${t.name} · ${t.shopperQuestion}`,
-                            helpText: ok ? t.questionRangeLabel : t.ineligibleReason || "Not available for this store",
+                            helpText: ok
+                              ? `${t.styleTagline} · ${t.questionRangeLabel}`
+                              : t.ineligibleReason || "Not available for this store",
                             disabled: !ok,
                           };
                         })}
@@ -582,48 +580,6 @@ export default function OnboardingScope() {
                 </Button>
               </div>
 
-              {/* Row 3 — theme → look */}
-              <div className="gq-ob-row">
-                <span className="gq-ob-ic" aria-hidden>
-                  Aa
-                </span>
-                <div className="gq-ob-body">
-                  <Text as="p">
-                    {themeParts.length > 0 ? (
-                      <>
-                        Theme uses{" "}
-                        {themeParts.map((part, i) => (
-                          <span key={part}>
-                            {i > 0 && " · "}
-                            <strong>{part}</strong>
-                          </span>
-                        ))}
-                        {" → "}
-                        <strong>{lookDef.name}</strong> look
-                      </>
-                    ) : (
-                      <>
-                        Theme matched → <strong>{lookDef.name}</strong> look
-                      </>
-                    )}
-                  </Text>
-                  {lookOpen && (
-                    <div className="gq-ob-expand">
-                      <ChoiceList
-                        title="Look"
-                        titleHidden
-                        selected={[look]}
-                        onChange={(v) => v[0] && v[0] !== look && persistChoice({ look: v[0] })}
-                        disabled={saving}
-                        choices={options.looks.map((l) => ({ value: l.id, label: l.name, helpText: l.tagline }))}
-                      />
-                    </div>
-                  )}
-                </div>
-                <Button variant="plain" onClick={() => setLookOpen((v) => !v)}>
-                  {lookOpen ? "Done" : "Change"}
-                </Button>
-              </div>
             </div>
 
             {choiceError && <Banner tone="critical">{choiceError}</Banner>}

@@ -500,10 +500,11 @@
   // class (gq-t1..gq-t5); absent template = legacy rendering, untouched.
   function applyBrandTokens() {
     var t = config.brandTokens;
-    // v3 (V3-CONTRACTS §6): gq-t{n} + gq-look-{look} on the root, only when
-    // a template is assigned. Stale classes from a previous Studio update
-    // (template/look switch) are dropped first; legacy shops never carry
-    // either class, so this is a no-op for them.
+    // v3 (V3-CONTRACTS §6): gq-t{n} on the root, only when a template is
+    // assigned. Each template owns its design (no separate Look since
+    // 2026-10-01). Stale classes from a previous Studio update (template
+    // switch, or a pre-2026-10 gq-look-*) are dropped first; legacy shops
+    // never carry either class, so this is a no-op for them.
     var stale = [];
     for (var ci = 0; ci < root.classList.length; ci++) {
       if (/^gq-(t[1-5]|look-[a-z]+)$/.test(root.classList[ci])) stale.push(root.classList[ci]);
@@ -511,19 +512,18 @@
     for (var si = 0; si < stale.length; si++) root.classList.remove(stale[si]);
     if (config.template && /^t[1-5]$/.test(config.template)) {
       root.classList.add('gq-' + config.template);
-      root.classList.add('gq-look-' + activeLook());
     }
     if (!t) return;
     var set = function(name, val) {
       if (val !== null && val !== undefined && val !== '') root.style.setProperty(name, String(val));
     };
-    // On-store, the surrounding theme's already-loaded fonts are the truth
-    // (detectThemeTypography). The extracted font tokens only apply where
-    // no theme surrounds the quiz — the admin preview / Reveal frame.
-    if (PREVIEW) {
-      set('--gq-font-heading', t.fontHeading);
-      set('--gq-font-body', t.fontBody);
-    }
+    // The heading face is part of each template's design, so it applies
+    // on-store too (the merchant's Style-panel heading font still wins).
+    // Body text keeps the surrounding theme's already-loaded font
+    // (detectThemeTypography); the body token only applies where no theme
+    // surrounds the quiz — the admin preview / Reveal frame.
+    if (!config.headingFontOverride) set('--gq-font-heading', t.fontHeading);
+    if (PREVIEW && !config.bodyFontOverride) set('--gq-font-body', t.fontBody);
     set('--gq-bg', t.colorBg);
     if (t.colorText) {
       set('--gq-ink', t.colorText);
@@ -3076,9 +3076,8 @@
   //   t3 TplRoutine  - "What should I use together?" regimen + add-all
   //   t4 TplDiscover - "What's my type?"             archetype + kit of 3
   //   t5 TplClean    - any of the above, no imagery  simple grid
-  // A LOOK (config.look: editorial | minimal | bold) is a token preset plus
-  // a few layout switches applied through the gq-look-* root class; it
-  // never changes the root component. Every image position is an
+  // Each template also owns its visual design (gleame-quiz.css, keyed off
+  // the gq-t{n} root class); there is no separate Look since 2026-10-01. Every image position is an
   // ImageSlot (spec 4.2): Studio previews render a placeholder for an
   // unresolved slot, the storefront renders the per-kind collapse.
   // Everything behavioral (draft/commit machinery, showIf, multi-select,
@@ -3099,21 +3098,15 @@
     return null;
   }
 
-  var LOOK_IDS = ['editorial', 'minimal', 'bold'];
-  function activeLook() {
-    var l = config && config.look;
-    return LOOK_IDS.indexOf(l) !== -1 ? l : 'minimal';
-  }
-
   // Studio-only rendering (dashed slot placeholders). The app-proxy
   // on-store preview never sets PREVIEW.studio.
   function isStudio() {
     return Boolean(PREVIEW && PREVIEW.studio);
   }
 
-  // Emoji in answer copy render only under the Bold look or in Discover.
+  // Emoji in answer copy render only in Discover (the Pop design).
   function emojiAllowed() {
-    return activeLook() === 'bold' || (config && config.template === 't4');
+    return Boolean(config && config.template === 't4');
   }
 
   // Email placement (spec 5.2): merchant column, else the template default.
@@ -3610,11 +3603,10 @@
   // ---- Intro types A–E (spec 5.1): five distinct components ----
 
   function tplIntroType(tpl) {
-    var look = activeLook();
     var landing = config.landing || {};
     switch (tpl.id) {
       case 't1': return 'hero';
-      case 't2': return look === 'editorial' ? 'split' : 'landing';
+      case 't2': return 'landing';
       case 't3': return landing.founder && landing.founder.name ? 'founder' : 'minimal';
       case 't4': return 'hero';
       default: return 'minimal';

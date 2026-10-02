@@ -20,8 +20,8 @@ import {
 } from "./supabase.server";
 import { isLiveProduct, isLiveVariant } from "./quiz-config-schema.server";
 import type { QuizDraft } from "./quiz-draft.server";
-import { getBrandProfile, lookFromProfile, servedTemplateFor } from "./brand-profile.server";
-import { defaultEmailPlacement, isLookId, isTemplateId, resolveQuizTokens } from "./quiz-templates";
+import { getBrandProfile, servedTemplateFor } from "./brand-profile.server";
+import { defaultEmailPlacement, isTemplateId, resolveQuizTokens } from "./quiz-templates";
 
 const SWATCH_HEX_RE = /^#[0-9a-fA-F]{3,8}$/;
 const hexOrNull = (v: unknown): string | null =>
@@ -89,8 +89,6 @@ export function readTemplateContentFields(source: Record<string, unknown>): Temp
 
 export interface PreviewTemplateOverrides {
   template?: string;
-  /** v3: Look override (editorial|minimal|bold). */
-  look?: string;
   /** v3: boot the widget on this screen (intro | q1..qN | results). Not a
    * config field — the preview route passes it to the widget as
    * PREVIEW.overrides.step. */
@@ -105,8 +103,6 @@ export function templateOverridesFromUrl(url: URL): PreviewTemplateOverrides {
   const overrides: PreviewTemplateOverrides = {};
   const template = url.searchParams.get("template");
   if (template && /^t[1-5]$/.test(template)) overrides.template = template;
-  const look = url.searchParams.get("look");
-  if (isLookId(look)) overrides.look = look;
   const step = url.searchParams.get("step");
   if (step && /^(intro|results|lead|gate|q[1-9][0-9]?)$/.test(step)) overrides.step = step;
   if (url.searchParams.get("library") === "empty") overrides.library = "empty";
@@ -206,7 +202,6 @@ export async function buildPreviewQuizConfig(
   // the draft/live values so the template overlay can render live
   // previews without saving anything (parse with templateOverridesFromUrl).
   if (overrides?.template) config.quiz_template = overrides.template;
-  if (isLookId(overrides?.look)) config.quiz_look = overrides!.look as ChatAssistantConfig["quiz_look"];
   const renderTokens = (s: string) => (s ?? "").replace(/\{assistant_name\}/g, config.assistant_name);
   const brandProfile = config.quiz_template
     ? await getBrandProfile(shopDomain).catch(() => null)
@@ -218,8 +213,7 @@ export async function buildPreviewQuizConfig(
   if (!overrides?.template) {
     config.quiz_template = servedTemplateFor(config.quiz_template, brandProfile);
   }
-  // v3 (V3-CONTRACTS §2/§6), storefront-endpoint parity.
-  const look = config.quiz_template ? config.quiz_look ?? lookFromProfile(brandProfile) : null;
+  // v3 (V3-CONTRACTS §6), storefront-endpoint parity.
   const emailPlacement = isTemplateId(config.quiz_template)
     ? config.quiz_email_placement ?? defaultEmailPlacement(config.quiz_template)
     : null;
@@ -256,13 +250,12 @@ export async function buildPreviewQuizConfig(
     // Overhaul templates (Contract 2/3): same shape as the storefront
     // endpoint so the studio canvas and the published page can't diverge.
     template: config.quiz_template,
-    brandTokens: resolveQuizTokens(config.quiz_template, look, brandProfile?.tokens ?? null),
+    brandTokens: resolveQuizTokens(config.quiz_template, brandProfile?.tokens ?? null),
     screenImageUrl: null,
     // v3 template payload, mirroring the storefront endpoint exactly:
     // present only when a template is assigned, absent for legacy shops.
     ...(tplContent
       ? {
-          look,
           emailPlacement,
           phases: config.quiz_phases ?? [],
           theme: { heroImage: tplContent.heroImage },

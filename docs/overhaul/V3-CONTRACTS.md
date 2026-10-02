@@ -38,7 +38,27 @@ v2 ids meant different things (t1 Salon, t2 Studio, t3 Guide, t4 Pop). Migration
 non-null pre-v3 value: `t2→t1`, `t3→t2`, `t1→t5`, `t4→t4`, `t5→t5`. Presets (`quiz_preset`) are
 retired: the column stays, nothing reads it.
 
-## 2. Looks (token presets, orthogonal to template)
+## 2. Looks: RETIRED 2026-10-01, templates own their design
+
+Charlie (2026-10-01): the Look switcher (Editorial / Minimal / Bold toggle in the gallery and the
+Style panel) is removed. Every template has its OWN style so the gallery shows five genuinely
+different designs and a merchant picks the one that looks like their store:
+
+| id | Template | Style | Character |
+|---|---|---|---|
+| t1 | Match | Counter | soft modern beauty counter: pill buttons, elevated cards, blush neutrals |
+| t2 | Consult | Editorial | magazine feature: serif display, ivory paper, hairline rules, square corners |
+| t3 | Routine | Ritual | calm apothecary: stone and sage, capsule answers, numbered steps |
+| t4 | Discover | Pop | heavy rounded type, ink outlines, hard offset shadows |
+| t5 | Clean | Swiss | monochrome grotesk, mono numerals, inverted selection |
+
+`TEMPLATE_STYLES` in `app/lib/quiz-templates.ts` holds each style's tokens + radius range;
+`resolveQuizTokens(template, brandTokens)` overlays ONLY the brand accent pair and body font. The
+heading face belongs to the style (on-store too); Style-panel overrides still win. Root class is
+`gq-t{n}` only (no `gq-look-*`). `quiz_look` is no longer read or written (column kept). The
+original Look contract below is historical.
+
+### 2a. (historical) Looks
 
 `chat_assistant_config.quiz_look`: `editorial | minimal | bold`, NULL = derive from Brand
 Profile (`selectLook`), which falls to `minimal`. Root class `gq-look-{look}` on the widget root

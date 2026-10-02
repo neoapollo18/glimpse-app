@@ -1,10 +1,11 @@
-// Template / Look switching (v3, docs/overhaul/V3-CONTRACTS.md §7).
+// Template switching (v3, docs/overhaul/V3-CONTRACTS.md §7).
 //
-// POST intent=set: assign quiz_template (t1-t5) and/or quiz_look
-// (editorial|minimal|bold) for the session's shop. Used by the Templates
-// gallery and the Studio Style panel. Emits template_switched /
-// look_switched. Eligibility is enforced here too — an ineligible template
-// must be unreachable, not just visually disabled.
+// POST intent=set: assign quiz_template (t1-t5) for the session's shop.
+// Each template owns its visual design, so there is no separate Look
+// (removed 2026-10-01; the quiz_look column is no longer written or read).
+// Used by the Templates gallery and onboarding. Emits template_switched.
+// Eligibility is enforced here too — an ineligible template must be
+// unreachable, not just visually disabled.
 
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
@@ -18,7 +19,7 @@ import {
 } from "../lib/supabase.server";
 import { getBrandProfile, templateSignalsFromProfile } from "../lib/brand-profile.server";
 import { trackOverhaulEvent } from "../lib/overhaul-events.server";
-import { TEMPLATES, isLookId, isTemplateEligible, isTemplateId } from "../lib/quiz-templates";
+import { TEMPLATES, isTemplateEligible, isTemplateId } from "../lib/quiz-templates";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -32,24 +33,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   const templateRaw = form.get("template");
-  const lookRaw = form.get("look");
   const template = templateRaw === null || templateRaw === "" ? null : String(templateRaw);
-  const look = lookRaw === null || lookRaw === "" ? null : String(lookRaw);
   // v3 event delta: where the switch came from.
   const sourceRaw = String(form.get("source") ?? "");
   const source = ["gallery", "style_panel", "chat", "onboarding"].includes(sourceRaw) ? sourceRaw : "style_panel";
 
-  if (template === null && look === null) {
+  if (template === null) {
     return json({ ok: false, error: "Nothing to set" }, { status: 400 });
   }
-  if (template !== null && !isTemplateId(template)) {
+  if (!isTemplateId(template)) {
     return json({ ok: false, error: "Unknown template" }, { status: 400 });
   }
-  if (look !== null && !isLookId(look)) {
-    return json({ ok: false, error: "Unknown look" }, { status: 400 });
-  }
 
-  if (template !== null && template !== "t5") {
+  if (template !== "t5") {
     const profile = await getBrandProfile(session.shop).catch(() => null);
     if (profile) {
       const signals = templateSignalsFromProfile(profile);
@@ -68,7 +64,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // classic quiz. Assigning a template to it must be a deliberate,
   // separate step - never a side effect of a stray POST. Onboarding is the
   // one caller allowed to set the first template (the shop has no quiz yet).
-  if (template !== null && before.quiz_template === null && source !== "onboarding") {
+  if (before.quiz_template === null && source !== "onboarding") {
     const shop = await findShopByDomain(session.shop);
     const counts = shop ? await getRecommendationCounts(shop.id).catch(() => null) : null;
     if ((counts?.questions ?? 0) > 0) {
@@ -78,22 +74,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       );
     }
   }
-  await saveChatAssistantConfig(session.shop, {
-    ...(template !== null ? { quiz_template: template } : {}),
-    ...(look !== null ? { quiz_look: look } : {}),
-  });
+  await saveChatAssistantConfig(session.shop, { quiz_template: template });
 
-  if (template !== null && template !== before.quiz_template) {
+  if (template !== before.quiz_template) {
     trackOverhaulEvent(session.shop, "template_switched", {
       from: before.quiz_template,
       to: template,
-      look: look ?? before.quiz_look,
       source,
     });
   }
-  if (look !== null && look !== before.quiz_look) {
-    trackOverhaulEvent(session.shop, "look_switched", { from: before.quiz_look, to: look, source });
-  }
 
-  return json({ ok: true, template: template ?? before.quiz_template, look: look ?? before.quiz_look });
+  return json({ ok: true, template });
 };

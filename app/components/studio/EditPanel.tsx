@@ -23,7 +23,7 @@ import type { StudioFlow, StudioQuestion, StudioOption } from "./types";
 import { answerLabel } from "./types";
 import { slideIdForQuestion } from "./SlideTree";
 import { postStudioAction } from "./studio-data";
-import { defaultEmailPlacement, type LookId } from "../../lib/quiz-templates";
+import { defaultEmailPlacement } from "../../lib/quiz-templates";
 
 // Right panel: Edit | Chat tabs. Edit renders the contextual editor for the
 // selected slide; every manual edit goes through the SAME appliers the AI
@@ -69,8 +69,6 @@ export function EditPanel({
   flushEditor,
   onSaveError,
   onOpenGallery,
-  onChangeLook,
-  lookBusy,
   chat,
 }: {
   data: StudioLoaderData;
@@ -86,8 +84,6 @@ export function EditPanel({
   flushEditor?: () => void;
   onSaveError?: (message: string) => void;
   onOpenGallery?: () => void;
-  onChangeLook?: (look: LookId) => void;
-  lookBusy?: boolean;
   chat: React.ReactNode;
 }) {
   const editHidden = step !== "build";
@@ -134,8 +130,6 @@ export function EditPanel({
             registerFlush={registerFlush}
             onSaveError={onSaveError}
             onOpenGallery={onOpenGallery}
-            onChangeLook={onChangeLook}
-            lookBusy={lookBusy}
           />
         </div>
       )}
@@ -155,8 +149,6 @@ function EditBody({
   registerFlush,
   onSaveError,
   onOpenGallery,
-  onChangeLook,
-  lookBusy,
 }: {
   data: StudioLoaderData;
   selectedSlide: string;
@@ -169,8 +161,6 @@ function EditBody({
   registerFlush?: (fn: (() => void) | null) => void;
   onSaveError?: (message: string) => void;
   onOpenGallery?: () => void;
-  onChangeLook?: (look: LookId) => void;
-  lookBusy?: boolean;
 }) {
   const flow = data.draft?.flow as StudioFlow | undefined;
   if (!flow) {
@@ -216,11 +206,7 @@ function EditBody({
         chatBusy={chatBusy}
         onPreviewUpdate={onPreviewUpdate}
         template={data.studio.template}
-        look={data.studio.look}
-        lookSource={data.studio.lookSource}
-        lookBusy={lookBusy}
         colorSources={data.studio.colorSources}
-        onChangeLook={onChangeLook}
         onOpenGallery={onOpenGallery}
       />
     );

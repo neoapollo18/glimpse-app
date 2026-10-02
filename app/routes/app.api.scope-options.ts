@@ -1,7 +1,7 @@
 // Scope-screen data (v3 Part 6.1 "Confirm scope" — the ONLY pre-build
-// screen). GET also returns the card's three rows: product/collection
-// counts, the detected store type → template, and the theme line
-// (heading font + palette word, each OMITTED when not real) → Look.
+// screen). GET also returns the card's rows: product/collection counts and
+// the detected store type → template (each template owns its design; the
+// separate Look row was removed 2026-10-01).
 //
 // GET: chip derivation per spec §Screen 1 —
 //   1. "Everything I sell (N)" — always first, always default.
@@ -25,12 +25,10 @@ import { getBrandProfile, templateSignalsFromProfile } from "../lib/brand-profil
 import {
   TEMPLATE_IDS,
   TEMPLATES,
-  LOOKS,
+  TEMPLATE_STYLES,
   describeStoreType,
   isTemplateEligible,
-  isLookId,
   isTemplateId,
-  type LookId,
   type TemplateId,
 } from "../lib/quiz-templates";
 import {
@@ -180,7 +178,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
-  // Store type → template, theme → Look (v3 spec 6.1). Every value is
+  // Store type → template (v3 spec 6.1). Every value is
   // real or absent: no profile → no store-type line, no theme words.
   const [profile, config] = await Promise.all([
     getBrandProfile(session.shop).catch(() => null),
@@ -195,8 +193,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const persisted = config?.quiz_template ?? null;
   const template: TemplateId =
     isTemplateId(persisted) && eligible.includes(persisted) ? persisted : assignedTemplate;
-  const persistedLook = config?.quiz_look ?? null;
-  const look: LookId = isLookId(persistedLook) ? persistedLook : (profile?.look ?? "minimal");
   const headingFont = headingFontFromProfile(profile);
   const colors = extractedColorsFromProfile(profile);
   const paletteWord = paletteWordFor(colors, {
@@ -215,17 +211,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     storeType: assignment ? describeStoreType(assignment, profile?.category ?? null) : null,
     template,
     templateSource: template === persisted && persisted !== assignedTemplate ? "merchant" : "assigned",
-    look,
-    lookSource: isLookId(persistedLook) ? "merchant" : profile ? "brand" : "default",
     eligible,
     templates: TEMPLATE_IDS.map((id) => ({
       id,
       name: TEMPLATES[id].name,
+      styleName: TEMPLATE_STYLES[id].name,
+      styleTagline: TEMPLATE_STYLES[id].tagline,
       shopperQuestion: TEMPLATES[id].shopperQuestion,
       questionRangeLabel: TEMPLATES[id].questionRangeLabel,
       ineligibleReason: TEMPLATES[id].ineligibleReason,
     })),
-    looks: (Object.keys(LOOKS) as LookId[]).map((id) => ({ id, name: LOOKS[id].name, tagline: LOOKS[id].tagline })),
     theme: {
       fontName: headingFont.name,
       fontConfidence: headingFont.confidence,

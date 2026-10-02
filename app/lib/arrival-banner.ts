@@ -11,7 +11,7 @@
  * absent (app/lib/__tests__/arrival-banner.test.ts).
  */
 
-import { LOOKS, TEMPLATES, isLookId, isTemplateId, type LookId, type TemplateId } from "./quiz-templates";
+import { TEMPLATES, isTemplateId, type TemplateId } from "./quiz-templates";
 // Type-only: erased at compile time, so this module stays client-safe.
 // The generator owns the shape and the parser (parseGenerationReport);
 // the studio loader parses server-side and hands the result here.
@@ -35,32 +35,21 @@ const MIN_GROUNDED_QUESTIONS = 4;
  * Spec 6.5 truth rules, one chip per rule:
  *   lead   `Built from your {N} products.` needs groundedQuestions >= 4 AND
  *          productCount >= groundedQuestions.
- *   font   `{font} headings` needs a detected name with high|medium confidence.
- *   palette`{paletteWord} palette` needs >= 2 extracted colors and a word.
  *   template `{Template} template` reads the ASSIGNED template (argument).
- *   look   `{Look} look` reads the assigned look; only meaningful alongside
- *          a template (legacy shops have no Look applied).
+ * Font and palette chips were dropped 2026-10-01: each template now owns
+ * its design (only the brand accent is applied), so "{font} headings" /
+ * "{palette} palette" would claim styling the quiz does not use.
  * No report → nothing is claimed.
  */
 export function arrivalBannerChips(
   report: GenerationReport | null,
-  template: TemplateId | string | null,
-  look: LookId | string | null
+  template: TemplateId | string | null
 ): ArrivalBanner {
   if (!report) return { lead: FALLBACK_LEAD, chips: [], fallback: true };
 
   const chips: string[] = [];
-  const fontName = report.headingFont?.name ?? null;
-  const fontConfidence = report.headingFont?.confidence ?? null;
-  if (fontName && (fontConfidence === "high" || fontConfidence === "medium")) {
-    chips.push(`${fontName} headings`);
-  }
-  if ((report.colors?.length ?? 0) >= 2 && report.paletteWord) {
-    chips.push(`${report.paletteWord} palette`);
-  }
   if (isTemplateId(template)) {
     chips.push(`${TEMPLATES[template].name} template`);
-    if (isLookId(look)) chips.push(`${LOOKS[look].name} look`);
   }
 
   const grounded = report.groundedQuestions ?? 0;

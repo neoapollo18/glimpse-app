@@ -14,7 +14,6 @@ import {
   declareSlots,
   describeStoreType,
   isTemplateId,
-  type LookId,
   type SlotFlow,
   type TemplateAssignment,
   type TemplateId,
@@ -51,7 +50,6 @@ export interface GenerationReport {
   colors: string[];
   paletteWord: string | null;
   template: TemplateId;
-  look: LookId;
   degradedFrom: TemplateId | null;
   imagesPlaced: number;
   imagesTotal: number;
@@ -73,7 +71,6 @@ export interface ReportProfile {
   brand?: { primaryColor?: string | null } | null;
   category?: string | null;
   templateAssignment?: TemplateAssignment | null;
-  look?: LookId | null;
 }
 
 // ---------------------------------------------------------------------
@@ -287,7 +284,6 @@ export function countImageSlots(
   imageSlots: Record<string, string> | null | undefined,
   opts: {
     hasFounder?: boolean;
-    look?: LookId;
     /** Slots the runtime resolves without a merchant pick (hero from
      * quiz_hero_image / brand cover, founder portrait). Counted as placed
      * so the report agrees with what the Studio's Images rail shows. */
@@ -376,7 +372,6 @@ export interface GenerationReportInput {
   phases: QuizPhase[] | null;
   profile: ReportProfile | null;
   template: TemplateId;
-  look: LookId;
   degradedFrom: TemplateId | null;
   imageSlots: Record<string, string> | null;
   hasFounder?: boolean;
@@ -395,7 +390,6 @@ export function buildGenerationReport(input: GenerationReportInput): GenerationR
   const phases = template === "t1" ? (input.phases?.length ?? 0) : 0;
   const { placed, total } = countImageSlots(template, input.flow, input.imageSlots, {
     hasFounder: input.hasFounder,
-    look: input.look,
   });
   const assignment = input.profile?.templateAssignment ?? null;
   const storeType = assignment
@@ -414,7 +408,6 @@ export function buildGenerationReport(input: GenerationReportInput): GenerationR
     colors,
     paletteWord,
     template,
-    look: input.look,
     degradedFrom: input.degradedFrom && input.degradedFrom !== template ? input.degradedFrom : null,
     imagesPlaced: placed,
     imagesTotal: total,
