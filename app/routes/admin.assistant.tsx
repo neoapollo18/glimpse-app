@@ -22,9 +22,11 @@ import enTranslations from "@shopify/polaris/locales/en.json";
 import { authenticate } from "../shopify.server";
 import {
   getAllChatAssistantConfigs,
+  getChatAssistantConfig,
   saveChatAssistantConfig,
   type ChatAssistantConfig,
 } from "../lib/supabase.server";
+import { templateLivePatchForSave } from "../lib/template-live.server";
 import {
   ADMIN_ALLOWED_SHOPS,
   mintAdminToken,
@@ -60,7 +62,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return json({ success: false, error: "Missing shopDomain" }, { status: 400 });
     }
     const enabled = formData.get("enabled") === "true";
-    await saveChatAssistantConfig(shopDomain, { enabled });
+    // Same template go-live semantics as the merchant's own switch.
+    // Best-effort read (see app.assistant.tsx): never blocks the toggle.
+    const before = await getChatAssistantConfig(shopDomain, { throwOnError: true }).catch(() => null);
+    await saveChatAssistantConfig(shopDomain, {
+      enabled,
+      ...(before ? templateLivePatchForSave(before, { enabled }) : {}),
+    });
     return json({ success: true });
   }
 

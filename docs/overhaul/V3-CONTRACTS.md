@@ -15,9 +15,16 @@ premium DTC brand made them.
 - `quiz_template = NULL` = legacy rendering. The legacy widget path stays byte-identical.
   Nothing in v3 may touch a shop whose template is null (ORLY, L&M, Glamnetic and every
   other live merchant).
-- `QUIZ_TEMPLATES_LIVE` (env, default off) keeps gating the storefront. v3 does NOT flip it.
-  Spec 6.4: while it is off, Studio hides `View on my store`, hides the publish action for
-  template quizzes, and shows a `Preview only` chip.
+- 2026-10-04 (migration 081): the global `QUIZ_TEMPLATES_LIVE` gate (env, default off) is
+  replaced by a per-shop publish stamp, `chat_assistant_config.template_live_at`. The storefront
+  serves `quiz_template` only when the merchant published / turned on a template quiz (stamp
+  set); turning the quiz off clears it (any writer; enforced by migration 081's trigger), and
+  template payloads go only to a widget that declares the template contract (`tpl`), so a
+  lagging theme-extension build keeps the classic quiz. See app/lib/template-live.server.ts.
+  `QUIZ_TEMPLATES_LIVE` set to anything but unset/true/on/1/yes is now an emergency kill (fails closed): classic everywhere and publish
+  paused. Spec 6.4 applies while killed: Studio hides `View on my store` and the publish action
+  for template quizzes and shows a `Preview only` chip (Turn off stays available). Unset (or
+  any other value) no longer means templates are off.
 - Migrations are written to `supabase-migrations/` and run by Charlie BEFORE deploy. Code must
   tolerate missing columns (read defensively) but may write the new columns.
 - No deploys, no pushes, no scripts that wipe or rewrite live rows.
@@ -266,7 +273,8 @@ Loader `studio` object gains:
   look: LookId;                       // resolved (column or derived)
   lookSource: "merchant" | "brand" | "default";
   emailPlacement: EmailPlacement;     // resolved
-  templatesLive: boolean;             // process.env.QUIZ_TEMPLATES_LIVE === "true"
+  templatesLive: boolean;             // !templatesKilled(): template quizzes can be published
+  templateServed: boolean;            // shoppers see this template now (surface on, stamp set, not killed)
   report: GenerationReport | null;
   slots: Array<SlotDecl & { url: string | null; source: "merchant" | "answer" | "library" | "auto" | null; sourceLabel: string }>;
   library: { status: "pending" | "building" | "ready" | "failed" | null; error: string | null; imageCount: number; indexedAt: string | null };
@@ -372,7 +380,8 @@ store`, `No quiz here yet`, `Start with a blank question`, `Change template`, `B
   when a structural edit breaks the partition; the widget also falls back to the plain segmented
   header when phases don't map.
 - Generation writes `quiz_template` for every generated quiz (assigned / merchant-chosen /
-  degraded); the storefront still serves legacy until `QUIZ_TEMPLATES_LIVE=true`.
+  degraded); the storefront still serves legacy until the merchant publishes or turns on the
+  quiz (migration 081 `template_live_at` stamp).
 - The widget's `gate_results` ordering stays questions → lead → photo gate → results (gate is off
   for these shops in practice).
 - Discover's `YOUR {NOUN} TYPE` kicker uses `results.archetypeKicker` when present, else

@@ -64,11 +64,12 @@ import { PreviewCanvas, type CanvasTheme } from "../components/studio/PreviewCan
 import { EditPanel } from "../components/studio/EditPanel";
 import { ChatPanel } from "../components/studio/ChatPanel";
 import { CheckMatches } from "../components/studio/CheckMatches";
-import { LiveTab, PublishSheet } from "../components/studio/PublishStep";
+import { LiveTab, PublishSheet, isPreviewOnly, templateAwaitingPublish } from "../components/studio/PublishStep";
 import { TemplateGallery } from "../components/studio/TemplateGallery";
 import { ImagesRail } from "../components/studio/ImagesRail";
 import { FlowMap } from "../components/studio/FlowMap";
 import { draftProblems } from "../components/studio/draft-problems";
+import { templatesKilled, templateServedLive } from "../lib/template-live.server";
 import { navigateParent } from "../components/studio/navigate-parent";
 import { postStudioAction } from "../components/studio/studio-data";
 import {
@@ -299,7 +300,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const emailPlacement: EmailPlacement | null = template
     ? liveConfig?.quiz_email_placement ?? defaultEmailPlacement(template)
     : null;
-  const templatesLive = process.env.QUIZ_TEMPLATES_LIVE === "true";
+  // Per-shop template publishing (migration 081, template-live.server.ts).
+  // templatesLive = template quizzes CAN be published (false only under the
+  // QUIZ_TEMPLATES_LIVE=off emergency kill). templateServed = shoppers see
+  // this quiz's template right now (surface on + published + not killed).
+  const templatesLive = !templatesKilled();
+  const templateServed = liveConfig ? quizSurfaceEnabled && templateServedLive(liveConfig) : false;
   const report = parseGenerationReport(liveConfig?.quiz_generation_report ?? null);
 
   // Image slots (spec 4.3/4.4): declared by the registry for THIS quiz,
@@ -334,6 +340,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     template,
     emailPlacement,
     templatesLive,
+    templateServed,
     report,
     slots,
     library,
@@ -1019,9 +1026,10 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
     storeName: data.studio.storeName,
     logoUrl: data.studio.logoUrl,
   };
-  // Spec 6.4: a template quiz cannot reach the storefront while the flag
-  // is off. Legacy shops are never gated by it.
-  const previewOnly = Boolean(data.studio.template) && !data.studio.templatesLive;
+  // Spec 6.4: a template quiz cannot reach the storefront while the
+  // QUIZ_TEMPLATES_LIVE=off emergency kill is set. Otherwise it goes live
+  // per shop through Publish (migration 081). Legacy shops are never gated.
+  const previewOnly = isPreviewOnly(data);
 
   // Step we last COMMANDED the preview to show. The widget echoes every
   // render as gleame-preview-at; while an expectation is pending we treat
@@ -1106,14 +1114,18 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
   // Two-way sync: clicking through the quiz INSIDE the preview advances the
   // widget, which reports its step (gleame-preview-at) — follow it in the
   // tree + editor so the settings always match what's on screen. Scoped to
-  // the BUILD iframe: the Check-matches iframe echoes too, and its play
-  // path must never steal the rail selection.
+  // the BUILD iframe: the Check-matches iframe and the Live tab's version
+  // preview echo too, and must never steal the rail selection. With the
+  // Build canvas unmounted (other tabs, flow map) there is nothing to sync,
+  // so every echo is ignored; otherwise a version preview's step echo would
+  // rewrite ?slide=, re-run the loader, re-mint previewToken and reload the
+  // preview back to its intro.
   const selectedSlideRef = useRef(selectedSlide);
   selectedSlideRef.current = selectedSlide;
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       if (e.origin !== window.location.origin) return;
-      if (iframeRef.current && e.source !== iframeRef.current.contentWindow) return;
+      if (!iframeRef.current || e.source !== iframeRef.current.contentWindow) return;
       const d = e.data as { type?: string; step?: string; slotKey?: string; kind?: string } | null;
       if (!d) return;
       // Spec 4.2/4.5: a dashed image slot clicked on the canvas opens the
@@ -1469,6 +1481,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
             viewStoreBusy={viewStoreBusy}
             onPublishClick={() => setPublishOpen(true)}
             previewOnly={previewOnly}
+            templatePending={templateAwaitingPublish(data)}
           />
         }
         rail={

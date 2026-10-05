@@ -32,6 +32,7 @@ import {
   type ChatAssistantConfig,
   type RecommendationTuning,
 } from "../lib/supabase.server";
+import { templateLivePatchForSave } from "../lib/template-live.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -144,7 +145,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     try {
-      await saveChatAssistantConfig(shopDomain, config);
+      // Template go-live stamp (migration 081): turning the quiz surface on
+      // or off from this page has the same meaning as the Studio switch.
+      // Best-effort read: a read error must never block the save (that
+      // includes turning the quiz off). Without it no stamp is written, so a
+      // template quiz turned on here serves classic until published, and
+      // migration 081's trigger clears the stamp on any turn-off.
+      const before = await getChatAssistantConfig(shopDomain, { throwOnError: true }).catch(() => null);
+      await saveChatAssistantConfig(shopDomain, {
+        ...config,
+        ...(before ? templateLivePatchForSave(before, config) : {}),
+      });
     } catch (err) {
       return json({
         error: err instanceof Error ? err.message : "Failed to save assistant settings",

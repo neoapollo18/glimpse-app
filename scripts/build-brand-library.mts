@@ -10,9 +10,11 @@
 // non-zero when the build lands `failed` so ops runs notice.
 //
 // CAUTION (2026-09-25 incident): building brand data can change what the
-// live storefront serves for shops with quiz_template set. Check the
-// shop's chat_assistant_config.quiz_template and the QUIZ_TEMPLATES_LIVE
-// flag before running against a live merchant.
+// live storefront serves for shops with quiz_template set. Before running
+// against a live merchant, check the shop's chat_assistant_config
+// quiz_template AND template_live_at: since migration 081 a published
+// template serves even with QUIZ_TEMPLATES_LIVE unset (that env var is now
+// only an emergency kill: off/false/0).
 
 import { offlineAdminGraphql } from "./offline-admin.mts";
 

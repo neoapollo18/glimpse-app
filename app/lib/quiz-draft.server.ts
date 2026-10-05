@@ -16,14 +16,18 @@
 //      (getRecommendationFlow) filters them out, so shoppers only ever see
 //      the valid subset. The studio problems checklist reports these as
 //      "hidden from shoppers".
-//   3. `enabled` never flows through config saves: turning the quiz surface
-//      on/off is an explicit action, never an editing side effect.
+//   3. Surface state (`enabled` and `assistant_mode`, which together decide
+//      whether shoppers see the quiz) never flows through config saves:
+//      turning the quiz surface on/off is an explicit action, never an
+//      editing, restore or undo side effect.
 //
 // Concurrency: saveLiveQuizConfig does NOT take the shop save lock; every
 // caller already runs inside withShopSaveLock (studio actions, copilot tool
 // application, generator save). Taking it here too would deadlock.
 
 import { phasesPartitionFlow } from "./quiz-templates";
+import { templateLivePatch, TEMPLATES_NEED_MIGRATION_ERROR } from "./template-live.server";
+import { isMissingColumnError } from "./brand-library-status";
 import {
   supabase,
   saveRecommendationConfig,
@@ -61,9 +65,10 @@ const KEEP_VERSIONS = 30;
 /**
  * Only these chat_assistant_config fields may flow from a config save to
  * live. Everything else on that row (chat/hero/bundle settings, analytics
- * copy) is out of the builder's blast radius by construction. `enabled` is
- * in the allowlist for capture/restore fidelity but is stripped from every
- * write by saveLiveQuizConfig; only setQuizSurfaceEnabled writes it.
+ * copy) is out of the builder's blast radius by construction. `enabled` and
+ * `assistant_mode` are in the allowlist for capture fidelity but are
+ * stripped from every write by saveLiveQuizConfig; only the surface writer
+ * (writeQuizSurface) changes them.
  */
 const SETTINGS_KEY_ALLOWLIST = new Set([
   "enabled",
@@ -333,6 +338,65 @@ async function snapshotLive(
   return { ok: true };
 }
 
+/** Label prefix shared by every template-switch restore point. */
+const TEMPLATE_SWITCH_LABEL_PREFIX = "Before switching from ";
+
+/**
+ * Version-history insurance for a template switch, which bypasses
+ * saveLiveQuizConfig (it writes one chat_assistant_config column directly).
+ * MUST be called while holding withShopSaveLock(shopId).
+ *
+ * Coalesced per editing burst: when the newest version is already a
+ * template-switch restore point younger than SNAPSHOT_BUCKET_MS, it holds
+ * the quiz as it was before the merchant started switching, and a switch
+ * changes nothing but quiz_template, so every in-between state is one
+ * gallery click away. Forcing a row per click instead (switch, Undo,
+ * switch...) floods history and prunes the restore points that matter
+ * (before restore, before start over, the generated quiz) out of the
+ * KEEP_VERSIONS window.
+ */
+export async function snapshotBeforeTemplateSwitch(
+  shopId: string,
+  fromName: string,
+  toName: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const { data: newest } = await supabase
+    .from("quiz_config_versions")
+    .select("created_at, label")
+    .eq("shop_id", shopId)
+    .neq("status", "draft")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (
+    newest &&
+    typeof newest.label === "string" &&
+    newest.label.startsWith(TEMPLATE_SWITCH_LABEL_PREFIX) &&
+    Date.now() - new Date(newest.created_at as string).getTime() < SNAPSHOT_BUCKET_MS
+  ) {
+    return { ok: true };
+  }
+  const snap = await snapshotLive(shopId, {
+    label: `${TEMPLATE_SWITCH_LABEL_PREFIX}${fromName} to ${toName}`,
+    force: true,
+  });
+  if (snap.ok) await pruneVersions(shopId);
+  return snap;
+}
+
+/** One version's stored config, shop-checked (Studio version preview). */
+export async function getVersionConfig(shopId: string, versionId: string): Promise<QuizDraft | null> {
+  const { data, error } = await supabase
+    .from("quiz_config_versions")
+    .select("config, shop_id")
+    .eq("id", versionId)
+    .maybeSingle();
+  if (error || !data || data.shop_id !== shopId) return null;
+  const cfg = data.config as QuizDraft | null;
+  if (!cfg?.flow || !Array.isArray(cfg.flow.questions)) return null;
+  return cfg;
+}
+
 async function pruneVersions(shopId: string): Promise<void> {
   // Bound version history: full-config jsonb rows grow unboundedly otherwise.
   try {
@@ -405,11 +469,13 @@ export async function saveLiveQuizConfig(
   const flowResult = await saveRecommendationConfig(shopId, orderedFlow);
   if (!flowResult.ok) return { ok: false, error: flowResult.error };
 
-  // Settings: allowlisted keys, minus `enabled` (surface on/off is an
-  // explicit action, never an editing side effect), and only keys that
-  // actually CHANGED vs live. Both sides are default-coalesced, so writing
-  // everything would pin NULL columns to literal default values on every
-  // editor flush.
+  // Settings: allowlisted keys, minus the surface state (`enabled` and
+  // `assistant_mode`: turning the quiz on/off is an explicit action, never
+  // an editing side effect, and a restore or copilot undo of a snapshot
+  // taken while the shop was chat-only must not take a live quiz down),
+  // and only keys that actually CHANGED vs live. Both sides are
+  // default-coalesced, so writing everything would pin NULL columns to
+  // literal default values on every editor flush.
   const shopDomain = await domainForShop(shopId);
   const liveSettings = filterSettings(
     opts.preWriteConfig?.settings ?? (await getChatAssistantConfig(shopDomain)),
@@ -417,7 +483,7 @@ export async function saveLiveQuizConfig(
   const settingsToWrite: Record<string, unknown> = {};
   const droppedKeys: string[] = [];
   for (const [key, value] of Object.entries(filterSettings(config.settings))) {
-    if (key === "enabled") continue;
+    if (key === "enabled" || key === "assistant_mode") continue;
     // Only write keys that exist on the live row: a stale quiz_* key (an
     // old restored version predating a column rename, or an AI-invented
     // key) would fail the whole settings upsert AFTER the flow already
@@ -468,35 +534,92 @@ export async function saveLiveQuizConfig(
   return { ok: true, warning };
 }
 
+export type QuizSurfaceResult = { ok: boolean; error?: string; templateLive?: boolean };
+
 /**
- * The one write path for the quiz surface flag: what "publish" used to
- * gate. Turning ON also ensures assistant_mode includes the quiz surface
- * ('chat' becomes 'both', never silently killing the bubble).
+ * The one write for quiz-surface state (Studio Turn on/off, Publish /
+ * unpublish, the dashboard mode switch). The caller's `fields` (enabled /
+ * assistant_mode) and the template go-live stamp (migration 081,
+ * template-live.server.ts) land in ONE upsert, so the storefront can never
+ * see the surface on with a half-applied template state.
+ *
+ *   - quizOn=true reads with throwOnError: a failed read must not be
+ *     mistaken for "no template" (that would turn a template quiz on as
+ *     classic, silently).
+ *   - quizOn=false is the safety action and is never blocked by a read
+ *     error: the bare fields are written, and migration 081's trigger
+ *     clears the stamp whenever the surface ends up off.
+ *   - republish=false (dashboard mode switch): a quiz that is ALREADY on
+ *     keeps its stamp as is, so adding or removing the chat bubble never
+ *     publishes (or un-publishes) a template as a side effect. Publish and
+ *     Turn on pass republish=true: they are the deliberate publish acts.
+ */
+export async function writeQuizSurface(
+  shopDomain: string,
+  quizOn: boolean,
+  fields: (current: ChatAssistantConfig | null) => Partial<ChatAssistantConfig>,
+  opts: { republish?: boolean } = {},
+): Promise<QuizSurfaceResult> {
+  try {
+    let current: ChatAssistantConfig | null = null;
+    try {
+      current = await getChatAssistantConfig(shopDomain, { throwOnError: true });
+    } catch (readErr) {
+      if (quizOn) throw readErr;
+    }
+    const wasOn = Boolean(
+      current?.enabled && (current.assistant_mode === "quiz" || current.assistant_mode === "both"),
+    );
+    const unchanged: ReturnType<typeof templateLivePatch> = { ok: true, patch: {} };
+    const stamp =
+      !current || (quizOn && wasOn && !opts.republish) ? unchanged : templateLivePatch(current, quizOn);
+    if (!stamp.ok) return { ok: false, error: stamp.error };
+    await saveChatAssistantConfig(shopDomain, { ...fields(current), ...stamp.patch } as Partial<ChatAssistantConfig>);
+    return { ok: true, templateLive: Boolean(stamp.patch.template_live_at) };
+  } catch (e) {
+    const msg = (e as Error).message;
+    // Only a genuinely missing column means "migration 081 not run": any
+    // other error that merely names the column must surface as itself.
+    if (isMissingColumnError({ message: msg }) && msg.includes("template_live_at")) {
+      console.error(`[quiz-live] template_live_at write failed for ${shopDomain} (migration 081 not run?): ${msg}`);
+      return { ok: false, error: TEMPLATES_NEED_MIGRATION_ERROR };
+    }
+    return { ok: false, error: msg };
+  }
+}
+
+/**
+ * The Studio / publish surface switch: what "publish" used to gate.
+ * Turning ON also ensures assistant_mode includes the quiz surface ('chat'
+ * becomes 'both', never silently killing the bubble) and, for a template
+ * quiz, publishes the template (stamp); turning OFF un-publishes it.
  */
 export async function setQuizSurfaceEnabled(
   shopId: string,
   enabled: boolean,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<QuizSurfaceResult> {
   const shopDomain = await domainForShop(shopId);
-  try {
-    const patch: Partial<ChatAssistantConfig> = { enabled } as Partial<ChatAssistantConfig>;
-    if (enabled) {
-      const current = await getChatAssistantConfig(shopDomain);
-      (patch as Record<string, unknown>).assistant_mode =
-        current.assistant_mode === "chat" || current.assistant_mode === "both" ? "both" : "quiz";
-    }
-    await saveChatAssistantConfig(shopDomain, patch);
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, error: (e as Error).message };
-  }
+  return writeQuizSurface(
+    shopDomain,
+    enabled,
+    (current) =>
+      enabled
+        ? {
+            enabled: true,
+            assistant_mode:
+              current?.assistant_mode === "chat" || current?.assistant_mode === "both" ? "both" : "quiz",
+          }
+        : { enabled: false },
+    { republish: true },
+  );
 }
 
 /**
  * Restore a version straight to LIVE (the draft slot is gone). The current
  * live config is snapshotted first (forced, labeled), so a restore is
- * itself always undoable. `enabled` never flows through (saveLiveQuizConfig
- * strips it), so restoring an old version can't flip the surface.
+ * itself always undoable. Surface state (`enabled`, `assistant_mode`)
+ * never flows through (saveLiveQuizConfig strips both), so restoring an old
+ * version can't flip the surface.
  *
  * MUST be called while holding withShopSaveLock(shopId).
  */

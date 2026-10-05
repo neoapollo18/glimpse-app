@@ -33,14 +33,30 @@ const MODE_LABELS: Record<string, string> = {
 
 const THEME_EXT_UUID = "1013fc3f-b18d-aa39-07f6-10dfd57397a6749693b0";
 
-/** V3-SPEC 6.4: a template quiz cannot be published while the storefront
- * flag is off. Legacy shops (no template) are never gated by it. */
-function isPreviewOnly(data: StudioLoaderData): boolean {
+/** V3-SPEC 6.4: a template quiz cannot be published while the
+ * QUIZ_TEMPLATES_LIVE=off emergency kill is set. Otherwise templates go
+ * live per shop through Publish (migration 081). Legacy shops are never
+ * gated by it. Shared with the Studio top bar (studio.tsx). */
+export function isPreviewOnly(data: StudioLoaderData): boolean {
   return Boolean(data.studio.template) && !data.studio.templatesLive;
 }
 
+/** Template quiz that is on, but whose template the storefront isn't
+ * serving yet (never published since the quiz was turned on, e.g. turned on
+ * before per-shop publishing existed). Shoppers see the classic layout.
+ * Shared with the Studio top bar (studio.tsx), so the mismatch is visible
+ * from every tab (spec 6.4). */
+export function templateAwaitingPublish(data: StudioLoaderData): boolean {
+  return (
+    Boolean(data.studio.template) &&
+    data.studio.templatesLive &&
+    !data.studio.templateServed &&
+    data.quizSurfaceEnabled !== false
+  );
+}
+
 const PREVIEW_ONLY_LINE =
-  "Templates aren't live on storefronts yet, so publishing is paused for this quiz. Your shoppers keep seeing your current quiz.";
+  "Template quizzes are paused on storefronts right now, so publishing is paused for this quiz. While paused, shoppers see the classic quiz layout.";
 
 function themeEditorUrl(shopDomain: string): string {
   const handle = shopDomain.replace(".myshopify.com", "");
@@ -209,6 +225,15 @@ export function PublishSheet({
                     Dedicated page (recommended): Gleame creates a Find My Match page in your
                     Online Store and turns the quiz on.
                   </Text>
+                  {data.studio.template && !previewOnly && (
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {data.studio.templateServed
+                        ? "This template is already live. Publishing again keeps it live."
+                        : data.quizSurfaceEnabled !== false
+                          ? "Publishing puts this template live. Until then, shoppers see your previous quiz layout."
+                          : "Publishing turns your quiz on with this template."}
+                    </Text>
+                  )}
                   <Checkbox
                     label="Add to main menu"
                     checked={addToMenu}
@@ -263,6 +288,13 @@ export function LiveTab({
   const fetcher = useFetcher<StudioActionData>();
   const revalidator = useRevalidator();
   const [confirmingRestore, setConfirmingRestore] = useState<string | null>(null);
+  // The preview token is pinned when the preview opens: data.previewToken is
+  // re-minted on every loader run, and a src change would reload the
+  // preview back to its intro mid-click-through.
+  const [previewing, setPreviewing] = useState<{ id: string; token: string } | null>(null);
+  const previewingVersionRow = previewing
+    ? (data.versions as any[]).find((v) => v?.id === previewing.id) ?? null
+    : null;
   const processedRef = useRef<StudioActionData | null>(null);
 
   useEffect(() => {
@@ -284,6 +316,7 @@ export function LiveTab({
   const matrixWithoutRules = mode === "matrix" && ruleCount === 0;
   const liveUrl = `https://${data.shopDomain}/pages/find-my-match`;
   const previewOnly = isPreviewOnly(data);
+  const awaitingPublish = templateAwaitingPublish(data);
 
   const setLive = (enabled: boolean) => {
     const fd = new FormData();
@@ -307,7 +340,9 @@ export function LiveTab({
                   </a>
                 )}
               </InlineStack>
-              {previewOnly ? (
+              {/* The emergency kill pauses going live, never turning off: a
+                  live template quiz keeps its Turn off switch. */}
+              {previewOnly && !surfaceOn ? (
                 <Badge tone="new">Preview only</Badge>
               ) : surfaceOn ? (
                 <Button loading={toggling} onClick={() => setLive(false)}>
@@ -328,6 +363,25 @@ export function LiveTab({
               <Text as="p" variant="bodySm" tone="subdued">
                 {PREVIEW_ONLY_LINE}
               </Text>
+            )}
+            {awaitingPublish && (
+              <Banner tone="warning">
+                <BlockStack gap="200">
+                  <Text as="p" variant="bodySm">
+                    Your store is still showing your previous quiz layout. Put this template live
+                    to show it to shoppers where your quiz already appears.
+                  </Text>
+                  <InlineStack>
+                    {/* The quiz is already on and placed: only the template's
+                        go-live stamp is missing, so this re-sends Turn on
+                        (which stamps it) rather than the full Publish, which
+                        would also create a page and a main-menu link. */}
+                    <Button variant="primary" loading={toggling} onClick={() => setLive(true)}>
+                      Put template live
+                    </Button>
+                  </InlineStack>
+                </BlockStack>
+              </Banner>
             )}
             <Text as="p" variant="bodySm" tone="subdued">
               Edits save to {data.shopDomain} as you make them; shoppers see the quiz only while
@@ -360,24 +414,59 @@ export function LiveTab({
               <Text as="h3" variant="headingMd">
                 Version history
               </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Gleame saves restore points as you edit, and before template switches and
+                restores. Preview any version, then restore it if you want it back.
+              </Text>
               {data.versions
                 .filter((v: any) => v != null)
                 .map((v: any) => (
-                  <InlineStack key={v.id} align="space-between" blockAlign="center">
+                  <InlineStack key={v.id} align="space-between" blockAlign="center" wrap={false}>
                     <Text as="span" variant="bodySm">
-                      {v.label ||
-                        (v.createdBy === "ai"
-                          ? "Generated by Gleame"
-                          : v.createdBy === "system"
-                            ? "Auto-snapshot"
-                            : "Saved manually")}{" "}
-                      · {new Date(v.createdAt).toLocaleString()}
+                      {versionLabel(v)} · {new Date(v.createdAt).toLocaleString()}
                     </Text>
-                    <Button size="slim" onClick={() => setConfirmingRestore(v.id)}>
-                      Restore
-                    </Button>
+                    <InlineStack gap="100" wrap={false}>
+                      {data.previewToken && (
+                        <Button
+                          size="slim"
+                          variant="tertiary"
+                          onClick={() => data.previewToken && setPreviewing({ id: v.id, token: data.previewToken })}
+                        >
+                          Preview
+                        </Button>
+                      )}
+                      <Button size="slim" onClick={() => setConfirmingRestore(v.id)}>
+                        Restore
+                      </Button>
+                    </InlineStack>
                   </InlineStack>
                 ))}
+              <Modal
+                open={previewing !== null}
+                onClose={() => setPreviewing(null)}
+                title={previewingVersionRow ? `${versionLabel(previewingVersionRow)} · ${new Date(previewingVersionRow.createdAt).toLocaleString()}` : "Version preview"}
+                size="large"
+                primaryAction={{
+                  content: "Restore this version",
+                  onAction: () => {
+                    const id = previewing?.id ?? null;
+                    setPreviewing(null);
+                    setConfirmingRestore(id);
+                  },
+                }}
+                secondaryActions={[{ content: "Close", onAction: () => setPreviewing(null) }]}
+              >
+                <Modal.Section flush>
+                  {previewing && (
+                    <iframe
+                      key={previewing.id}
+                      title="Version preview"
+                      src={`/quiz-preview.html?token=${encodeURIComponent(previewing.token)}&version=${encodeURIComponent(previewing.id)}`}
+                      style={{ width: "100%", height: "70vh", border: 0, display: "block" }}
+                    />
+                  )}
+                </Modal.Section>
+              </Modal>
               <Modal
                 open={confirmingRestore !== null}
                 onClose={() => setConfirmingRestore(null)}
@@ -397,9 +486,10 @@ export function LiveTab({
               >
                 <Modal.Section>
                   <Text as="p">
-                    This version replaces your current quiz configuration. Your current setup is
-                    snapshotted first, so a restore is always reversible. If the quiz is on,
-                    shoppers see the restored version right away.
+                    This version replaces your current quiz configuration, including its template.
+                    Your current setup is saved first, so a restore is always reversible. If the
+                    quiz is on, shoppers see the restored version right away (a template that
+                    isn't live yet still needs to be put live from this tab).
                   </Text>
                 </Modal.Section>
               </Modal>
@@ -416,6 +506,16 @@ export function LiveTab({
       </div>
     </div>
   );
+}
+
+/** Readable name for a version row. Auto snapshots carry the literal
+ * label "auto-snapshot"; explicit ones carry a sentence ("before restore"). */
+function versionLabel(v: { label: string | null; createdBy: string }): string {
+  const label = (v.label ?? "").trim();
+  if (label && label !== "auto-snapshot") return label.charAt(0).toUpperCase() + label.slice(1);
+  if (v.createdBy === "ai") return "Generated by Gleame";
+  if (v.createdBy === "manual") return "Saved manually";
+  return "Auto-saved";
 }
 
 function ChecklistRow({ ok, warn, label }: { ok: boolean; warn?: boolean; label: string }) {

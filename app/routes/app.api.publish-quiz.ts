@@ -1,17 +1,20 @@
 // Publish / preview endpoint (Overhaul Part 4).
 //
 // intents:
-//   preview-link — mint the tokenized on-store preview URL (app proxy,
+//   preview-link:  mint the tokenized on-store preview URL (app proxy,
 //                  7-day shareable token). Fires store_preview_opened is
 //                  the widget's job; this only mints.
-//   publish      — one-click publish: page + optional nav link + surface
-//                  ON. Returns the live URL. Fires publish_completed.
-//   unpublish    — surface OFF + nav link removal (page left in place).
+//   publish:       one-click publish: page + optional nav link + surface
+//                  ON (+ template go-live stamp for template quizzes,
+//                  migration 081). Returns the live URL. Fires
+//                  publish_completed.
+//   unpublish:     surface OFF (+ template stamp cleared) + nav link
+//                  removal (page left in place).
 
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
-import { storePreviewUrl } from "../lib/app-proxy.server";
+import { isPreviewDraftId, storePreviewUrl } from "../lib/app-proxy.server";
 import { publishQuiz, unpublishQuiz } from "../lib/publish.server";
 import { trackOverhaulEvent } from "../lib/overhaul-events.server";
 
@@ -29,6 +32,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "preview-link") {
     const draftId = String(form.get("draftId") ?? "live");
+    if (!isPreviewDraftId(draftId)) {
+      return json({ ok: false, error: "Invalid preview id" }, { status: 400 });
+    }
     return json({ ok: true, url: storePreviewUrl(session.shop, draftId) });
   }
 
@@ -41,6 +47,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       trackOverhaulEvent(session.shop, "publish_completed", {
         path: result.path,
         nav_link_added: result.navLinkAdded,
+        template_live: result.templateLive ?? false,
       });
     }
     return json(result, { status: result.ok ? 200 : 422 });

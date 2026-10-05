@@ -11,6 +11,12 @@ import {
 } from "../lib/quiz-preview.server";
 import { getBrandProfile, servedTemplateFor } from "../lib/brand-profile.server";
 import { defaultEmailPlacement, isTemplateId, resolveQuizTokens } from "../lib/quiz-templates";
+import { templateRenderable, templateServedLive } from "../lib/template-live.server";
+import { verifyStorePreviewToken } from "../lib/app-proxy.server";
+
+/** Template contract the widget must declare (`&tpl=`) to receive template
+ * payloads. Mirrors TEMPLATE_PROTOCOL in gleame-quiz.js. */
+const WIDGET_TEMPLATE_PROTOCOL = "3";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -56,13 +62,32 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // "merchant chose a template" and "v2 is live", so stale column values
   // flipped real storefronts to structural templates at deploy time. Two
   // gates now sit between the column and a shopper:
-  //   1. QUIZ_TEMPLATES_LIVE env kill switch — until it's "true", every
-  //      shop serves legacy regardless of the column.
+  //   1. Per-shop publish stamp (migration 081, template-live.server.ts):
+  //      the template serves only after the merchant published / turned on
+  //      a template quiz. QUIZ_TEMPLATES_LIVE=off is the emergency kill that
+  //      forces every shop back to legacy.
   //   2. Serve-time eligibility — selection-time validation goes stale as
   //      imagery changes, and writers other than the template endpoint
   //      exist. An ineligible/unknown template degrades to t5 (renders
   //      with zero imagery), never to a broken layout.
-  const templatesLive = process.env.QUIZ_TEMPLATES_LIVE === "true";
+  // A signed "View on my store" preview (proxy.preview.$draftId) renders
+  // the assigned template before it's published, so the merchant previews
+  // what Publish will put live. The token is shop-bound (7-day, shareable
+  // via the preview bar's Copy link).
+  //
+  // Widget handshake: template payloads go only to a widget that declares
+  // it renders this template contract (`tpl`). Theme-app-block placements
+  // run the extension's deployed gleame-quiz.js, which can lag the app (the
+  // 09-25 build maps t1 to the retired v2 layout); an older widget keeps
+  // the classic quiz instead of mis-rendering a published template. Bump
+  // WIDGET_TEMPLATE_PROTOCOL together with gleame-quiz.js on contract
+  // changes.
+  const widgetRendersTemplates = url.searchParams.get("tpl") === WIDGET_TEMPLATE_PROTOCOL;
+  const previewToken = url.searchParams.get("previewToken") ?? "";
+  const previewId = url.searchParams.get("previewId") ?? "";
+  const isStorePreview = verifyStorePreviewToken(previewToken, verifiedShop.shop_domain, previewId);
+  const templatesLive =
+    widgetRendersTemplates && (isStorePreview ? templateRenderable(config) : templateServedLive(config));
   const brandProfile =
     templatesLive && config.quiz_template
       ? await getBrandProfile(verifiedShop.shop_domain).catch(() => null)
@@ -263,7 +288,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     {
       headers: {
         ...CORS_HEADERS,
-        "Cache-Control": "public, max-age=60",
+        // Preview responses differ from the public one: never share-cache.
+        "Cache-Control": isStorePreview ? "no-store" : "public, max-age=60",
       },
     }
   );

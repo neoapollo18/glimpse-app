@@ -2,7 +2,7 @@ import type { LoaderFunctionArgs } from "@remix-run/node";
 import fs from "node:fs";
 import path from "node:path";
 import jwt from "jsonwebtoken";
-import { captureLiveConfig } from "../lib/quiz-draft.server";
+import { captureLiveConfig, getVersionConfig } from "../lib/quiz-draft.server";
 import {
   buildPreviewFlow,
   buildPreviewQuizConfig,
@@ -63,7 +63,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Save = live: the studio edits the live config, so the preview reads it
   // too (unlike the storefront, it does NOT filter mid-edit blank
   // questions — the merchant needs to see what they're building).
-  const draft = await captureLiveConfig(payload.shopId);
+  //
+  // ?version=<id>: render a version-history snapshot instead (Live tab
+  // "Preview" before Restore). Shop-checked: the token's shop must own it.
+  const versionId = url.searchParams.get("version");
+  let draft;
+  if (versionId) {
+    const versionDraft = await getVersionConfig(payload.shopId, versionId);
+    if (!versionDraft) return new Response("Version not found", { status: 404 });
+    draft = versionDraft;
+  } else {
+    draft = await captureLiveConfig(payload.shopId);
+  }
 
   const overrides = templateOverridesFromUrl(new URL(request.url));
   const [config, sample] = await Promise.all([

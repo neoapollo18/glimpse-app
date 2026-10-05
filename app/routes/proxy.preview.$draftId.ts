@@ -14,6 +14,12 @@
 // token is a signed 7-day JWT bound to shop + draftId; any failure is a
 // plain 404 so the route never confirms its own existence. noindex via
 // X-Robots-Tag (the theme owns <head>).
+//
+// Template quizzes (migration 081): the widget forwards the verified token
+// to quiz-config, which then serves the assigned template even before the
+// merchant publishes it, so "View on my store" matches the Studio canvas.
+// draftId is written into this Liquid body, so verifyStorePreviewToken also
+// requires a plain id (isPreviewDraftId): no Liquid tags can ride along.
 
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import fs from "node:fs";
@@ -73,7 +79,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
      data-cart-token="{{ cart.token }}"
      data-customer-first-name="{{ customer.first_name | escape }}"></div>
 <style>${css}</style>
-<script>window.GLEAME_QUIZ_FORCE = true;</script>
+<script>window.GLEAME_QUIZ_FORCE = true; window.GLEAME_QUIZ_STORE_PREVIEW = ${JSON.stringify({ token, id: draftId }).replace(/</g, "\\u003c")};</script>
 <script>${js.replace(/<\/script>/gi, "<\\/script>")}</script>
 `;
 

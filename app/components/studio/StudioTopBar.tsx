@@ -7,14 +7,19 @@ import type { StudioTab } from "../../routes/studio";
 // segmented tabs Build / Check matches / Live; right side "View on my
 // store" (secondary) + "Publish" (primary, opens the publish sheet).
 //
-// V3-SPEC 6.4: while QUIZ_TEMPLATES_LIVE is off, a template quiz cannot
-// reach the storefront, so "View on my store" is hidden and a grey
-// `Preview only` chip sits next to the quiz name. Legacy shops unchanged.
+// V3-SPEC 6.4: while the QUIZ_TEMPLATES_LIVE=off emergency kill is set, a
+// template quiz cannot reach the storefront, so "View on my store" is
+// hidden and a grey `Preview only` chip sits next to the quiz name.
+// Otherwise templates go live per shop through Publish (migration 081).
+// Legacy shops unchanged.
 // V3-SPEC Part 1: no manual sync button exists; the only affordance left
 // is resuming a sync that was interrupted mid-catalog.
 
 const PREVIEW_ONLY_TIP =
-  "Templates aren't live on storefronts yet. Your shoppers still see your current quiz.";
+  "Template quizzes are paused on storefronts right now. While paused, shoppers see the classic quiz layout.";
+
+const TEMPLATE_PENDING_TIP =
+  "Your quiz is on, but shoppers still see your previous quiz layout. Open the Live tab to put this template live.";
 
 const TABS: Array<{ id: StudioTab; label: string }> = [
   { id: "build", label: "Build" },
@@ -34,6 +39,7 @@ export function StudioTopBar({
   viewStoreBusy,
   onPublishClick,
   previewOnly,
+  templatePending,
 }: {
   tab: StudioTab;
   onTabChange: (t: StudioTab) => void;
@@ -45,8 +51,11 @@ export function StudioTopBar({
   onViewStore: () => void;
   viewStoreBusy: boolean;
   onPublishClick: () => void;
-  /** Template quiz while the storefront flag is off (spec 6.4). */
+  /** Template quiz while the QUIZ_TEMPLATES_LIVE=off kill is set (spec 6.4). */
   previewOnly?: boolean;
+  /** Template quiz that is on but not put live yet: the canvas shows the
+   * template while shoppers get the classic layout (spec 6.4). */
+  templatePending?: boolean;
 }) {
   const [syncOpen, setSyncOpen] = useState(false);
   const sync = useCatalogSync();
@@ -114,6 +123,16 @@ export function StudioTopBar({
               <Badge tone="new">Preview only</Badge>
             </Tooltip>
           </span>
+        )}
+        {!previewOnly && templatePending && (
+          <button
+            onClick={() => onTabChange("live")}
+            style={{ border: 0, background: "transparent", padding: 0, cursor: "pointer", flexShrink: 0 }}
+          >
+            <Tooltip content={TEMPLATE_PENDING_TIP}>
+              <Badge tone="attention">Template not live</Badge>
+            </Tooltip>
+          </button>
         )}
         {problemCount > 0 && (
           <button

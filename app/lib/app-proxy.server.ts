@@ -41,9 +41,21 @@ export function verifyProxySignature(url: URL): boolean {
 
 const PREVIEW_TTL_SECONDS = 7 * 24 * 60 * 60;
 
+/**
+ * Preview draft ids are plain ids ("live", uuids). The proxy route writes
+ * the id into an application/liquid body, which Shopify renders as Liquid
+ * before serving it on the storefront: a crafted id carrying `{{ }}` /
+ * `{% %}` would be rendered into the inline script. Enforced at mint AND
+ * at verify.
+ */
+export function isPreviewDraftId(draftId: string): boolean {
+  return /^[A-Za-z0-9_-]{1,64}$/.test(draftId);
+}
+
 export function mintStorePreviewToken(shopDomain: string, draftId: string): string {
   const secret = process.env.SHOPIFY_API_SECRET;
   if (!secret) throw new Error("preview token: SHOPIFY_API_SECRET unset");
+  if (!isPreviewDraftId(draftId)) throw new Error("preview token: invalid draft id");
   return jwt.sign(
     { purpose: "store-preview", shopDomain, draftId },
     secret,
@@ -57,7 +69,7 @@ export function verifyStorePreviewToken(
   expectedDraftId: string
 ): boolean {
   const secret = process.env.SHOPIFY_API_SECRET;
-  if (!secret || !token) return false;
+  if (!secret || !token || !isPreviewDraftId(expectedDraftId)) return false;
   try {
     const decoded = jwt.verify(token, secret, { algorithms: ["HS256"] }) as Record<string, unknown>;
     return (

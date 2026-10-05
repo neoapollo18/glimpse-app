@@ -2,12 +2,16 @@
  * One-click publish (Overhaul Part 4 / D2).
  *
  * publishQuiz, in order:
- *   1. Page — pageCreate "Find My Match" whose body mounts the quiz via
+ *   0. Preconditions (questions exist; for a template quiz, templates are
+ *      not paused and migration 081 has run), all before any Shopify write.
+ *   1. Page: pageCreate "Find My Match" whose body mounts the quiz via
  *      /quiz-embed.js (zero theme writes; works on any theme). Idempotent:
- *      an existing page with our handle is reused, not duplicated.
- *   2. Nav — optional "Add to my main menu": menuUpdate appends a PAGE
+ *      an existing page with our handle is reused, not duplicated (and
+ *      re-published / re-mounted if the merchant hid or emptied it).
+ *   2. Nav: optional "Add to my main menu": menuUpdate appends a PAGE
  *      item to the shop's main menu (write_online_store_navigation).
- *   3. Surface — flips the quiz storefront switch ON.
+ *   3. Surface: flips the quiz storefront switch ON (and, for a template
+ *      quiz, stamps the template live in the same write).
  *
  * unpublishQuiz flips the surface off and removes the nav link; the page
  * is left in place (unpublished pages 404 shoppers anyway once the
@@ -22,8 +26,11 @@
  * Placements area for merchants who want the native app block instead.
  */
 
-import { supabase } from "./supabase.server";
+import { supabase, getChatAssistantConfig, getRecommendationCounts } from "./supabase.server";
 import { setQuizSurfaceEnabled } from "./quiz-draft.server";
+import { isTemplateId } from "./quiz-templates";
+import { templateLivePatch, TEMPLATES_NEED_MIGRATION_ERROR } from "./template-live.server";
+import { isMissingColumnError } from "./brand-library-status";
 import type { AdminGraphql } from "./brand-profile.server";
 
 const PAGE_HANDLE = "find-my-match";
@@ -35,17 +42,28 @@ export interface PublishResult {
   pageId?: string;
   navLinkAdded?: boolean;
   path?: "one-click";
+  /** The storefront now serves this quiz's template (template shops). */
+  templateLive?: boolean;
 }
 
 const PAGES_QUERY = `#graphql
   query GleamePages($query: String!) {
-    pages(first: 5, query: $query) { nodes { id handle title } }
+    pages(first: 5, query: $query) { nodes { id handle title isPublished body templateSuffix } }
   }
 `;
 
 const PAGE_CREATE = `#graphql
   mutation GleamePageCreate($page: PageCreateInput!) {
     pageCreate(page: $page) {
+      page { id handle }
+      userErrors { field message }
+    }
+  }
+`;
+
+const PAGE_UPDATE = `#graphql
+  mutation GleamePageUpdate($id: ID!, $page: PageUpdateInput!) {
+    pageUpdate(id: $id, page: $page) {
       page { id handle }
       userErrors { field message }
     }
@@ -103,6 +121,38 @@ export async function publishQuiz(
   const appUrl = (process.env.SHOPIFY_APP_URL ?? "").replace(/\/$/, "");
   const pageTitle = (opts.pageTitle ?? "Find My Match").trim() || "Find My Match";
   const addToMenu = opts.addToMenu !== false;
+  // Without the app URL the page body would load a relative /quiz-embed.js
+  // from the merchant's own domain: a page that silently renders nothing.
+  if (!/^https:\/\//.test(appUrl)) {
+    console.error(`[publish] SHOPIFY_APP_URL is not set to an https URL; refusing to publish ${shopDomain}`);
+    return { ok: false, error: "Publishing is unavailable right now. Please try again shortly." };
+  }
+
+  // 0. Preconditions, checked BEFORE any Shopify write so a refused publish
+  // never leaves a stray page or menu link behind. The UI checks these too;
+  // this is the authoritative copy (the endpoint is reachable directly).
+  const shopRow = await supabase.from("shops").select("id").eq("shop_domain", shopDomain).single();
+  if (shopRow.error || !shopRow.data) return { ok: false, error: shopRow.error?.message ?? "Shop not found" };
+  const [counts, cfg] = await Promise.all([
+    getRecommendationCounts(shopRow.data.id).catch(() => null),
+    getChatAssistantConfig(shopDomain, { throwOnError: true }).catch((e: Error) => e),
+  ]);
+  if (!counts) return { ok: false, error: "Couldn't read your quiz. Please try again." };
+  if (counts.questions === 0) return { ok: false, error: "Your quiz has no questions yet." };
+  if (cfg instanceof Error) return { ok: false, error: `Couldn't read your quiz settings: ${cfg.message}` };
+  if (isTemplateId(cfg.quiz_template)) {
+    // Step 3's go-live rule (setQuizSurfaceEnabled -> templateLivePatch),
+    // applied here first so a refusal can't strand a page + menu link.
+    const gate = templateLivePatch(cfg, true);
+    if (!gate.ok) return { ok: false, error: gate.error };
+    // Step 3 also WRITES template_live_at; the typed read above maps a
+    // missing column to null, so probe it (migration 081 not run yet).
+    const probe = await supabase.from("chat_assistant_config").select("template_live_at").limit(1);
+    if (probe.error && isMissingColumnError(probe.error)) {
+      console.error(`[publish] template_live_at missing (migration 081 not run?); refusing template publish for ${shopDomain}`);
+      return { ok: false, error: TEMPLATES_NEED_MIGRATION_ERROR };
+    }
+  }
 
   // 1. Page (reuse ours if it already exists — republish must not stack
   // duplicate pages).
@@ -113,6 +163,26 @@ export async function publishQuiz(
     const hit = existing?.pages?.nodes?.find((p: any) => p.handle === PAGE_HANDLE);
     if (hit) {
       pageId = hit.id;
+      // Republish after the merchant hid the page (or emptied it) must
+      // bring it back; otherwise "Open the live page" 404s. A page body the
+      // merchant customised is kept as long as it still mounts the quiz.
+      // A page on a theme template (templateSuffix, e.g. page.gleame-quiz
+      // with the native app block from Placements) renders the quiz from
+      // the theme: its body is never touched, since appending the embed
+      // there would mount the widget twice on one #gleame-quiz-root.
+      const body = typeof hit.body === "string" ? hit.body : "";
+      const onThemeTemplate = typeof hit.templateSuffix === "string" && hit.templateSuffix.trim() !== "";
+      const needsMount = !onThemeTemplate && !body.includes("gleame-quiz-root");
+      if (hit.isPublished === false || needsMount) {
+        const page: Record<string, unknown> = { isPublished: true };
+        if (needsMount) {
+          const mount = pageBody(shopDomain, appUrl);
+          page.body = body.trim() ? `${body}\n${mount}` : mount;
+        }
+        const updated = await adminGraphql(PAGE_UPDATE, { id: hit.id, page });
+        const errs = updated?.pageUpdate?.userErrors;
+        if (errs?.length) return { ok: false, error: `Page: ${errs[0].message}` };
+      }
     } else {
       const created = await adminGraphql(PAGE_CREATE, {
         page: {
@@ -167,8 +237,10 @@ export async function publishQuiz(
     }
   }
 
-  // 3. Storefront switch ON.
-  const surface = await setQuizSurfaceEnabled_byDomain(shopDomain);
+  // 3. Storefront switch ON. For a template quiz this is also the moment
+  // the template goes live (setQuizSurfaceEnabled stamps template_live_at
+  // in the same write).
+  const surface = await setQuizSurfaceEnabled(shopRow.data.id, true);
   if (!surface.ok) return { ok: false, error: surface.error };
 
   return {
@@ -177,6 +249,7 @@ export async function publishQuiz(
     pageId,
     navLinkAdded,
     path: "one-click",
+    templateLive: Boolean(surface.templateLive),
   };
 }
 
@@ -214,12 +287,4 @@ export async function unpublishQuiz(
     }
   }
   return { ok: true, navLinkRemoved };
-}
-
-async function setQuizSurfaceEnabled_byDomain(
-  shopDomain: string
-): Promise<{ ok: boolean; error?: string }> {
-  const shop = await supabase.from("shops").select("id").eq("shop_domain", shopDomain).single();
-  if (shop.error) return { ok: false, error: shop.error.message };
-  return setQuizSurfaceEnabled(shop.data.id, true);
 }

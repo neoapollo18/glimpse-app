@@ -170,17 +170,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       if (mode !== "chat" && mode !== "quiz" && mode !== "both") {
         return json({ ok: false, error: "Invalid mode" }, { status: 400 });
       }
-      const { saveChatAssistantConfig } = await import("../lib/supabase.server");
-      try {
-        await saveChatAssistantConfig(shopDomain, {
-          assistant_mode: mode,
-          ...(mode === "quiz" || mode === "both" ? { enabled: true } : {}),
-        });
-      } catch (err) {
-        return json(
-          { ok: false, error: err instanceof Error ? err.message : "Failed to save" },
-          { status: 500 },
-        );
+      const { writeQuizSurface } = await import("../lib/quiz-draft.server");
+      // Shared surface writer (migration 081 go-live stamp): showing a
+      // template quiz that was OFF publishes its template, switching to
+      // chat-only un-publishes it, and quiz <-> both on a quiz that is
+      // already on leaves the template's live state alone (adding the chat
+      // bubble must never publish a template as a side effect). Switching
+      // to chat-only is never blocked by a config read error.
+      const quizOn = mode === "quiz" || mode === "both";
+      const result = await writeQuizSurface(shopDomain, quizOn, () => ({
+        assistant_mode: mode,
+        ...(quizOn ? { enabled: true } : {}),
+      }));
+      if (!result.ok) {
+        return json({ ok: false, error: result.error ?? "Failed to save" }, { status: 422 });
       }
       return json({ ok: true, intent });
     }

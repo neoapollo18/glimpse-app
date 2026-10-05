@@ -3296,6 +3296,11 @@ export interface ChatAssistantConfig {
   // a template is assigned (Reveal or Studio Style panel).
   quiz_template: string | null;
   quiz_preset: string | null;
+  // Migration 081: when the merchant last published a template quiz. The
+  // storefront serves quiz_template ONLY when this is set (see
+  // template-live.server.ts); NULL = classic rendering. Not a quiz_* key on
+  // purpose, so version snapshots/restores and copilot writes never carry it.
+  template_live_at: string | null;
   // ---- v2 template content (migration 076, docs/overhaul/V2-SPEC.md) ----
   // All NULL for legacy shops; only read when quiz_template is set.
   quiz_trust_lines: string[] | null;
@@ -3520,6 +3525,7 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   quiz_match_footnote: null,
   quiz_template: null,
   quiz_preset: null,
+  template_live_at: null,
   quiz_trust_lines: null,
   quiz_results_prose: null,
   quiz_archetype_title: null,
@@ -3741,6 +3747,8 @@ function mapChatAssistantRow(data: any): ChatAssistantConfig {
         : CHAT_ASSISTANT_DEFAULTS.quiz_match_footnote,
     quiz_template: typeof data.quiz_template === 'string' ? data.quiz_template : null,
     quiz_preset: typeof data.quiz_preset === 'string' ? data.quiz_preset : null,
+    // Migration 081: absent column (un-run migration) = never published.
+    template_live_at: typeof data.template_live_at === 'string' ? data.template_live_at : null,
     // v2 template content (migration 076): tolerate the columns not
     // existing yet — undefined maps to null, same as legacy shops.
     quiz_trust_lines: Array.isArray(data.quiz_trust_lines)

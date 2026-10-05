@@ -5,8 +5,10 @@
 // CAUTION (2026-09-25 incident): this UPSERTS brand_profiles, which feeds
 // the storefront's template tokens and completed the serving pipeline for
 // a shop with a stale quiz_template — flipping its live quiz rendering.
-// Check chat_assistant_config.quiz_template and the QUIZ_TEMPLATES_LIVE
-// flag before running against a live merchant.
+// Before running against a live merchant, check chat_assistant_config
+// quiz_template AND template_live_at: since migration 081 a published
+// template (stamp set) serves even with QUIZ_TEMPLATES_LIVE unset (that env
+// var is now only an emergency kill: off/false/0).
 
 import { offlineAdminGraphql } from "./offline-admin.mts";
 

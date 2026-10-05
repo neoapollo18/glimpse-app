@@ -5349,11 +5349,26 @@
     });
   }
 
+  // Template contract this widget renders. quiz-config only sends template
+  // payloads to a widget that declares it, so an older deployed copy (the
+  // theme extension can lag the app) keeps the classic quiz instead of
+  // mis-rendering a published template. Mirrors WIDGET_TEMPLATE_PROTOCOL in
+  // api.storefront.quiz-config.ts; bump both on contract changes.
+  var TEMPLATE_PROTOCOL = '3';
+
+  // On-store preview (proxy.preview): forward the signed preview token so
+  // quiz-config serves an assigned template before it's published.
+  function storePreviewQuery() {
+    var sp = window.GLEAME_QUIZ_STORE_PREVIEW;
+    if (!sp || !sp.token) return '';
+    return '&previewToken=' + encodeURIComponent(sp.token) + '&previewId=' + encodeURIComponent(sp.id || '');
+  }
+
   function init() {
     Promise.all([
       PREVIEW
         ? Promise.resolve(PREVIEW.config)
-        : fetch(SHOPIFY_APP_URL + '/api/storefront/quiz-config?shopDomain=' + encodeURIComponent(shopDomain))
+        : fetch(SHOPIFY_APP_URL + '/api/storefront/quiz-config?shopDomain=' + encodeURIComponent(shopDomain) + '&tpl=' + TEMPLATE_PROTOCOL + storePreviewQuery())
             .then(function(res) { return res.json(); })
             .catch(function() { return null; }),
       PREVIEW
