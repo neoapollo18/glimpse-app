@@ -14,6 +14,13 @@ import {
 import type { StudioLoaderData, StudioActionData } from "../../routes/studio";
 import type { DraftProblem } from "./draft-problems";
 import { isQuestionServable } from "../../lib/option-visibility";
+import { useAppBridge } from "@shopify/app-bridge-react";
+
+// Optional scopes for one-click publish (shopify.app.glimpse-app.toml).
+const PAGE_SCOPE = "write_online_store_pages";
+const NAV_SCOPE = "write_online_store_navigation";
+const SCOPE_DECLINED_LINE =
+  "Publishing needs permission to add the Find My Match page to your Online Store. Click Publish again to allow it, or add the Gleame Quiz block from the theme editor instead.";
 
 // V2-SPEC Part 7: the 3-panel Live tab collapses to
 //   1. PublishSheet — a slide-over reachable from the topbar Publish
@@ -84,6 +91,7 @@ export function PublishSheet({
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ liveUrl: string | null; error: string | null } | null>(null);
   const revalidator = useRevalidator();
+  const shopify = useAppBridge();
 
   const flow = data.draft?.flow;
   const settings = (data.draft?.settings ?? {}) as Record<string, unknown>;
@@ -97,15 +105,52 @@ export function PublishSheet({
   ).length;
   const previewOnly = isPreviewOnly(data);
 
+  // One-click publish writes a page (and optionally a main-menu link),
+  // which needs optional access scopes most shops haven't granted (toml
+  // optional_scopes). Ask in context, right before the write, instead of a
+  // store-wide re-auth. Returns false only when the merchant declined.
+  const ensureScopes = async (needed: string[]): Promise<boolean> => {
+    try {
+      const { granted } = await shopify.scopes.query();
+      const missing = needed.filter((sc) => !granted.includes(sc));
+      if (missing.length === 0) return true;
+      const res = await shopify.scopes.request(missing);
+      return res.result === "granted-all";
+    } catch {
+      // Scopes API unavailable (not embedded, old host): let the server
+      // decide; it reports missingScopes if access is really absent.
+      return true;
+    }
+  };
+
   const publish = async () => {
     setBusy(true);
     setResult(null);
     try {
-      const fd = new FormData();
-      fd.append("intent", "publish");
-      fd.append("addToMenu", String(addToMenu));
-      const res = await fetch("/app/api/publish-quiz", { method: "POST", body: fd });
-      const body = await res.json().catch(() => null);
+      // The menu link is best-effort on the server, so only the page scope
+      // gates the publish; the nav scope rides along when the box is ticked.
+      const needed = addToMenu ? [PAGE_SCOPE, NAV_SCOPE] : [PAGE_SCOPE];
+      if (!(await ensureScopes(needed))) {
+        setResult({ liveUrl: null, error: SCOPE_DECLINED_LINE });
+        return;
+      }
+      const post = async () => {
+        const fd = new FormData();
+        fd.append("intent", "publish");
+        fd.append("addToMenu", String(addToMenu));
+        const res = await fetch("/app/api/publish-quiz", { method: "POST", body: fd });
+        return res.json().catch(() => null);
+      };
+      let body = await post();
+      // Server still saw no access (query raced the grant, or the API was
+      // unavailable above): request what it named, then retry once.
+      if (!body?.ok && Array.isArray(body?.missingScopes) && body.missingScopes.length > 0) {
+        if (!(await ensureScopes(body.missingScopes))) {
+          setResult({ liveUrl: null, error: SCOPE_DECLINED_LINE });
+          return;
+        }
+        body = await post();
+      }
       if (body?.ok) {
         setResult({ liveUrl: body.liveUrl ?? null, error: null });
         revalidator.revalidate();

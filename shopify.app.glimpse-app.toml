@@ -52,9 +52,16 @@ prefix = "apps"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-# read_themes: Brand Profile extraction (settings_data.json). Pages/nav:
-# one-click publish (Overhaul Part 4). Batched so merchants re-auth once.
-scopes = "write_products,read_reports,read_analytics,read_orders,read_themes,write_online_store_pages,write_online_store_navigation"
+# Required scopes: exactly what every installed shop has already granted, so
+# releasing this config never forces a re-consent wave.
+scopes = "write_products,read_reports,read_analytics,read_orders"
+# Optional scopes (2026-10-05), requested in context via App Bridge
+# shopify.scopes.request() instead of a store-wide re-auth:
+#   write_online_store_pages / write_online_store_navigation: one-click
+#     Publish (page + main-menu link); requested from the Publish sheet.
+#   read_themes: Brand Profile extraction (settings_data.json); extraction
+#     degrades to homepage analysis without it.
+optional_scopes = ["read_themes", "write_online_store_pages", "write_online_store_navigation"]
 
 [auth]
 redirect_urls = [

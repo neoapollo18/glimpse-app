@@ -44,6 +44,20 @@ export interface PublishResult {
   path?: "one-click";
   /** The storefront now serves this quiz's template (template shops). */
   templateLive?: boolean;
+  /** Optional access scopes the shop hasn't granted yet (toml
+   * optional_scopes). The Publish sheet requests them via App Bridge and
+   * retries. */
+  missingScopes?: string[];
+}
+
+export const PUBLISH_PAGE_SCOPE = "write_online_store_pages";
+export const PUBLISH_NAV_SCOPE = "write_online_store_navigation";
+
+/** Admin API "Access denied ... Required access: ..." for a scope the shop
+ * hasn't granted. */
+function isAccessDenied(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e ?? "");
+  return /access denied|required access|requires? .*scope|not approved to access/i.test(msg);
 }
 
 const PAGES_QUERY = `#graphql
@@ -198,6 +212,13 @@ export async function publishQuiz(
       handle = created?.pageCreate?.page?.handle ?? PAGE_HANDLE;
     }
   } catch (e) {
+    if (isAccessDenied(e)) {
+      return {
+        ok: false,
+        error: "Gleame needs permission to create the Find My Match page in your Online Store.",
+        missingScopes: [PUBLISH_PAGE_SCOPE],
+      };
+    }
     return { ok: false, error: `Page: ${(e as Error).message}` };
   }
   if (!pageId) return { ok: false, error: "Page: no id returned" };
