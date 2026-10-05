@@ -171,8 +171,10 @@ export function SlideTree({
   disabled?: boolean;
   readOnly?: boolean;
   onReturnToBuild?: () => void;
-  /** v3: Templates + Images are template-shop surfaces (V3-CONTRACTS §0);
-   * legacy shops (quiz_template null) keep the rail they have today. */
+  /** v3: Images is a template-shop surface (V3-CONTRACTS §0). Templates
+   * shows for every shop since 2026-10-05: a classic quiz may adopt one,
+   * and shoppers keep the classic quiz until the template is published
+   * (migration 081). */
   hasTemplate?: boolean;
   onOpenGallery?: () => void;
   /** Reason text when the Images item should carry the amber dot. */
@@ -359,7 +361,7 @@ export function SlideTree({
             Style
           </span>
         </div>
-        {hasTemplate && onOpenGallery && (
+        {onOpenGallery && (
           <div
             role="button"
             tabIndex={disabled ? -1 : 0}

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { dedupeRuleRanks } from "./rule-ranks";
 import { MAX_REFERENCE_IMAGES, parseReferenceImageUrls } from './reference-images';
 import { isOptionVisible } from './option-visibility';
 
@@ -4970,9 +4971,14 @@ export async function saveRecommendationConfig(
 
   // Single atomic rewrite — see migration 039. On any constraint failure
   // the transaction rolls back and the previous config is untouched.
+  // Rules are normalized first: recommendation_rules is UNIQUE (shop_id,
+  // criteria, rank), and LLM-authored rule sets (generator, copilot) do
+  // emit two targets at the same rank for one answer path, which failed
+  // the whole save ("duplicate key ... recommendation_rules_shop_id_
+  // criteria_rank_key").
   const { error } = await supabase.rpc('save_recommendation_config', {
     p_shop_id: shopId,
-    p_payload: input,
+    p_payload: { ...input, rules: dedupeRuleRanks(input.rules || []) },
   });
 
   if (error) {

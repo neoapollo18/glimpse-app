@@ -1034,6 +1034,21 @@ export function ThemeEditor({
           </InlineStack>
         </>
       )}
+      {!hasTemplate && onOpenGallery && (
+        <InlineStack align="space-between" blockAlign="center">
+          <BlockStack gap="050">
+            <Text as="h4" variant="headingSm">
+              Template
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Classic layout. Try a template: shoppers keep this quiz until you publish one.
+            </Text>
+          </BlockStack>
+          <Button size="slim" onClick={onOpenGallery} disabled={disabled}>
+            Browse templates
+          </Button>
+        </InlineStack>
+      )}
       <ColorField label="Accent color" {...colorProps("quiz_accent_color")} helpText="Highlights and **starred** headline words" />
       <ColorField label="Text color" {...colorProps("quiz_ink_color")} />
       <ColorField label="Card background" {...colorProps("quiz_card_bg_color")} />

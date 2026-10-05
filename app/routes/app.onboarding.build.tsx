@@ -53,14 +53,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 // Client
 // ---------------------------------------------------------------------
 
-type StepKey = "catalog" | "theme" | "questions" | "paths" | "images";
-const STEP_ORDER: StepKey[] = ["catalog", "theme", "questions", "paths", "images"];
+// "save" has no server step event: it is active from the moment "images"
+// completes until the result arrives, so a failed save is reported as
+// saving, not pinned on the (finished) images step.
+type StepKey = "catalog" | "theme" | "questions" | "paths" | "images" | "save";
+const STEP_ORDER: StepKey[] = ["catalog", "theme", "questions", "paths", "images", "save"];
 const STEP_LABELS: Record<StepKey, string> = {
   catalog: "Reading your catalog",
   theme: "Matching your theme",
   questions: "Writing questions",
   paths: "Checking every product has a path",
   images: "Placing your images",
+  save: "Saving your quiz",
 };
 // Lower-case, past-progressive form for "It stopped while {step}."
 const STEP_WHILE: Record<StepKey, string> = {
@@ -69,6 +73,7 @@ const STEP_WHILE: Record<StepKey, string> = {
   questions: "writing questions",
   paths: "checking every product has a path",
   images: "placing your images",
+  save: "saving your quiz",
 };
 
 type StepState = "todo" | "now" | "done" | "failed";
@@ -415,6 +420,24 @@ export default function OnboardingBuild() {
     return () => clearInterval(t);
   }, [failure]);
 
+  // Skip auto-generate after a failed build: seed a one-question starter
+  // and open the Studio (app.api.quiz-start-manual; a quiz that landed
+  // meanwhile is kept, never overwritten).
+  const [manualBusy, setManualBusy] = useState(false);
+  const [manualError, setManualError] = useState<string | null>(null);
+  const startManual = async () => {
+    setManualBusy(true);
+    setManualError(null);
+    try {
+      const d = await post("/app/api/quiz-start-manual", {});
+      if (!d?.ok) throw new Error(d?.error || "Couldn't start your quiz");
+      openStudio();
+    } catch (e) {
+      setManualError((e as Error).message);
+      setManualBusy(false);
+    }
+  };
+
   const getHelp = () => {
     const where = failure?.step ? `stopped while ${STEP_WHILE[failure.step]}` : failure ? "couldn't start" : "stopped";
     const text = `Hi — my quiz build on ${shopDomain} ${where}${failure ? ` (${failure.reason})` : ""}. Can you take a look?`;
@@ -484,12 +507,24 @@ export default function OnboardingBuild() {
             </ol>
 
             {failure ? (
-              <InlineStack gap="300">
-                <Button variant="primary" onClick={() => void retry()}>
-                  Try again
-                </Button>
-                <Button onClick={getHelp}>Get help</Button>
-              </InlineStack>
+              <BlockStack gap="200">
+                <InlineStack gap="300">
+                  <Button variant="primary" onClick={() => void retry()}>
+                    Try again
+                  </Button>
+                  <Button onClick={() => void startManual()} loading={manualBusy}>
+                    Set it up myself
+                  </Button>
+                  <Button variant="plain" onClick={getHelp}>
+                    Get help
+                  </Button>
+                </InlineStack>
+                {manualError && (
+                  <Text as="p" tone="critical" variant="bodySm">
+                    {manualError}
+                  </Text>
+                )}
+              </BlockStack>
             ) : waiting ? (
               <Text as="p" variant="bodySm" tone="subdued">
                 Checking every few seconds{elapsed >= 3 ? ` · ${elapsed}s` : ""}. Nothing goes live until you turn it on.

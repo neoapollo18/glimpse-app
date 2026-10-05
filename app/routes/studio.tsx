@@ -1338,7 +1338,8 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
   // quiz_template from the Studio. After success the loader is
   // revalidated (fresh read of the live row) and the preview reloads, so
   // the Style panel, the banner and the canvas all agree (B0).
-  const setTemplateApi = useCallback(async (input: { template: TemplateId; source: "gallery" }) => {
+  // "classic" = back to the classic layout (quiz_template NULL).
+  const setTemplateApi = useCallback(async (input: { template: TemplateId | "classic"; source: "gallery" }) => {
     const fd = new FormData();
     fd.append("intent", "set");
     fd.append("template", input.template);
@@ -1362,13 +1363,12 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
         refreshAfterSwitch();
         showUndoToast(
           `Switched to ${TEMPLATES[id].name}`,
-          prior
-            ? () => {
-                void setTemplateApi({ template: prior, source: "gallery" }).then((rr) => {
-                  if (rr?.ok) refreshAfterSwitch();
-                });
-              }
-            : undefined,
+          // A classic quiz's first template undoes back to classic.
+          () => {
+            void setTemplateApi({ template: prior ?? "classic", source: "gallery" }).then((rr) => {
+              if (rr?.ok) refreshAfterSwitch();
+            });
+          },
         );
       } else {
         showUndoToast(r?.error ?? "Switching templates failed");
@@ -1604,7 +1604,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
             // in the rail banner, which survives the switch.
             onSaveError={setTreeError}
             onSelectSlide={selectSlide}
-            onOpenGallery={data.studio.template ? () => setOverlay(true) : undefined}
+            onOpenGallery={() => setOverlay(true)}
             onDeleteQuestion={(axisKey, fallbackSlide) => {
               // Hoisted here because the revalidation after a delete
               // unmounts the question editor: its own fetcher effect never
@@ -1664,7 +1664,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
             ) : (
               <RoutingToScope />
             )
-          ) : overlayOpen && data.studio.template ? (
+          ) : overlayOpen ? (
             <TemplateGallery
               previewToken={data.previewToken}
               currentTemplate={data.studio.template}

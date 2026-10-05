@@ -15,11 +15,10 @@ import {
   saveChatAssistantConfig,
   getChatAssistantConfig,
   findShopByDomain,
-  getRecommendationCounts,
 } from "../lib/supabase.server";
 import { getBrandProfile, templateSignalsFromProfile } from "../lib/brand-profile.server";
 import { trackOverhaulEvent } from "../lib/overhaul-events.server";
-import { TEMPLATES, isTemplateEligible, isTemplateId } from "../lib/quiz-templates";
+import { TEMPLATES, isTemplateEligible, isTemplateId, type TemplateId } from "../lib/quiz-templates";
 import { snapshotBeforeTemplateSwitch } from "../lib/quiz-draft.server";
 import { withShopSaveLock } from "../lib/shop-save-lock.server";
 
@@ -43,17 +42,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (template === null) {
     return json({ ok: false, error: "Nothing to set" }, { status: 400 });
   }
-  if (!isTemplateId(template)) {
+  // "classic" = back to the classic layout (quiz_template NULL): the
+  // gallery's Undo after a classic quiz's first template, and the way back
+  // for any shop. Only quiz_template changes; every classic styling column
+  // was never touched by the template, so the classic quiz returns exactly.
+  const toClassic = template === "classic";
+  if (!toClassic && !isTemplateId(template)) {
     return json({ ok: false, error: "Unknown template" }, { status: 400 });
   }
+  const target: TemplateId | null = toClassic ? null : (template as TemplateId);
 
-  if (template !== "t5") {
+  if (target !== null && target !== "t5") {
     const profile = await getBrandProfile(session.shop).catch(() => null);
     if (profile) {
       const signals = templateSignalsFromProfile(profile);
-      if (!isTemplateEligible(template, signals)) {
+      if (!isTemplateEligible(target, signals)) {
         return json(
-          { ok: false, error: TEMPLATES[template].ineligibleReason || "Not eligible" },
+          { ok: false, error: TEMPLATES[target].ineligibleReason || "Not eligible" },
           { status: 422 }
         );
       }
@@ -61,23 +66,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   const before = await getChatAssistantConfig(session.shop);
-  if (template === before.quiz_template) return json({ ok: true, template });
+  if (target === before.quiz_template) return json({ ok: true, template: target });
   const shopRow = await findShopByDomain(session.shop);
   if (!shopRow) return json({ ok: false, error: "Shop not found" }, { status: 404 });
-  // Legacy guard (2026-09-25 incident): a shop whose quiz has never had a
-  // template (quiz_template NULL) and already has questions is a live
-  // classic quiz. Assigning a template to it must be a deliberate,
-  // separate step - never a side effect of a stray POST. Onboarding is the
-  // one caller allowed to set the first template (the shop has no quiz yet).
-  if (before.quiz_template === null && source !== "onboarding") {
-    const counts = await getRecommendationCounts(shopRow.id).catch(() => null);
-    if ((counts?.questions ?? 0) > 0) {
-      return json(
-        { ok: false, error: "This quiz uses the classic layout. Templates can't be switched on for it from here." },
-        { status: 409 }
-      );
-    }
-  }
+  // Classic quizzes may adopt a template (2026-10-05). The 09-25 incident
+  // guard that refused this is no longer needed: since migration 081 an
+  // assigned template never reaches shoppers until the merchant publishes
+  // it (template_live_at), so picking one only changes the Studio. A
+  // restore point is taken first (below), and "classic" switches back.
 
   // Version history: snapshot the quiz as it was BEFORE the switch, so the
   // previous template is one Restore away. Under the shop save lock so a
@@ -88,11 +84,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // edit without rollback insurance).
   const result = await withShopSaveLock(shopRow.id, async () => {
     const current = await getChatAssistantConfig(session.shop);
-    if (current.quiz_template === template) return { ok: true as const, from: null, changed: false };
+    if (current.quiz_template === target) return { ok: true as const, from: null, changed: false };
     const fromName = isTemplateId(current.quiz_template) ? TEMPLATES[current.quiz_template].name : "classic";
-    const snap = await snapshotBeforeTemplateSwitch(shopRow.id, fromName, TEMPLATES[template].name);
+    const toName = target ? TEMPLATES[target].name : "classic";
+    const snap = await snapshotBeforeTemplateSwitch(shopRow.id, fromName, toName);
     if (!snap.ok) return { ok: false as const, error: `Couldn't save a restore point: ${snap.error}` };
-    await saveChatAssistantConfig(session.shop, { quiz_template: template });
+    await saveChatAssistantConfig(session.shop, { quiz_template: target });
     return { ok: true as const, from: current.quiz_template, changed: true };
   });
   if (!result.ok) return json({ ok: false, error: result.error }, { status: 500 });
@@ -100,10 +97,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (result.changed) {
     trackOverhaulEvent(session.shop, "template_switched", {
       from: result.from,
-      to: template,
+      to: target,
       source,
     });
   }
 
-  return json({ ok: true, template });
+  return json({ ok: true, template: target });
 };

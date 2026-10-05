@@ -327,6 +327,24 @@ export default function OnboardingScope() {
     navigate("/app/onboarding/build");
   };
 
+  // Skip auto-generate: seed a one-question starter and open the Studio
+  // (app.api.quiz-start-manual). The template pick above is already saved.
+  const [manualBusy, setManualBusy] = useState(false);
+  const [manualError, setManualError] = useState<string | null>(null);
+  const startManual = async () => {
+    setManualBusy(true);
+    setManualError(null);
+    try {
+      const d = await post("/app/api/quiz-start-manual", {});
+      if (!d?.ok) throw new Error(d?.error || "Couldn't start your quiz");
+      fireEvent("scope_selected", { kind: "manual", template });
+      navigate("/app?open=studio");
+    } catch (e) {
+      setManualError((e as Error).message);
+      setManualBusy(false);
+    }
+  };
+
   // ------------------------------------------------------------------
   // Render
   // ------------------------------------------------------------------
@@ -609,6 +627,15 @@ export default function OnboardingScope() {
                 About 60 seconds · nothing goes live
               </Text>
             </InlineStack>
+            <InlineStack gap="200" blockAlign="center">
+              <Button variant="plain" onClick={() => void startManual()} loading={manualBusy} disabled={saving}>
+                Skip and set it up myself
+              </Button>
+              <Text as="span" variant="bodySm" tone="subdued">
+                Start from one simple question and edit everything in the Studio.
+              </Text>
+            </InlineStack>
+            {manualError && <Banner tone="critical">{manualError}</Banner>}
           </BlockStack>
         </Card>
         <p className="gq-ob-foot">{shopDomain}</p>
