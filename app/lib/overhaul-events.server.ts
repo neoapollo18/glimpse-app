@@ -35,7 +35,13 @@ export type OverhaulEvent =
   | "image_slot_changed"
   | "library_built"
   | "generation_failed"
-  | "look_switched";
+  | "look_switched"
+  // Recommendation Logic Spec v2, Part 8.
+  | "overview_viewed"
+  | "rule_viewed"
+  | "rule_edited"
+  | "global_rule_added"
+  | "rule_unresolved";
 
 export function trackOverhaulEvent(
   shopDomain: string,

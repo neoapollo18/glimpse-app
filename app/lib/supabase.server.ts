@@ -3302,6 +3302,10 @@ export interface ChatAssistantConfig {
   // template-live.server.ts); NULL = classic rendering. Not a quiz_* key on
   // purpose, so version snapshots/restores and copilot writes never carry it.
   template_live_at: string | null;
+  // Migration 082 (Recommendation Logic Spec v2): store-wide always/never
+  // rules, set through Chat on the Check matches tab. NULL = none. Shape
+  // normalized by normalizeGlobalRules (answer-rules-shared.ts).
+  quiz_global_rules: unknown | null;
   // ---- v2 template content (migration 076, docs/overhaul/V2-SPEC.md) ----
   // All NULL for legacy shops; only read when quiz_template is set.
   quiz_trust_lines: string[] | null;
@@ -3527,6 +3531,7 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   quiz_template: null,
   quiz_preset: null,
   template_live_at: null,
+  quiz_global_rules: null,
   quiz_trust_lines: null,
   quiz_results_prose: null,
   quiz_archetype_title: null,
@@ -3750,6 +3755,8 @@ function mapChatAssistantRow(data: any): ChatAssistantConfig {
     quiz_preset: typeof data.quiz_preset === 'string' ? data.quiz_preset : null,
     // Migration 081: absent column (un-run migration) = never published.
     template_live_at: typeof data.template_live_at === 'string' ? data.template_live_at : null,
+    // Migration 082: absent column = no store-wide rules.
+    quiz_global_rules: data.quiz_global_rules && typeof data.quiz_global_rules === 'object' ? data.quiz_global_rules : null,
     // v2 template content (migration 076): tolerate the columns not
     // existing yet — undefined maps to null, same as legacy shops.
     quiz_trust_lines: Array.isArray(data.quiz_trust_lines)

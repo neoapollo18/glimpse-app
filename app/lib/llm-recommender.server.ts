@@ -315,6 +315,14 @@ export async function llmOrderCandidates(params: {
   desiredCount: number;
   shopDomain: string;
   logTag: string;
+  /** Recommendation Logic Spec v2 (answer-rules-runtime.server.ts): the
+   * shopper's chosen answer sentences, verbatim and in question order, and
+   * product id -> question numbers whose sentence resolved to it. Absent
+   * for shops without active sentences: the prompt is then unchanged. */
+  answerSentences?: {
+    sentences: Array<{ questionIndex: number; label: string; sentence: string; mode: string }>;
+    tags: Map<string, number[]>;
+  };
 }): Promise<LlmRankResult | null> {
   const { criteria, flow, config, desiredCount, shopDomain, logTag } = params;
   const tuning = config.recommendation_tuning;
@@ -361,6 +369,8 @@ export async function llmOrderCandidates(params: {
       const d = allDistances.get(c);
       if (d !== undefined) entry.colorDistanceFromPick = d;
       if (prioritySet.has(c.product.id)) entry.merchantPriority = true;
+      const sentenceHits = params.answerSentences?.tags.get(c.product.id);
+      if (sentenceHits?.length) entry.fitsAnswerRules = sentenceHits;
       return entry;
     });
 
@@ -377,7 +387,15 @@ export async function llmOrderCandidates(params: {
       '- merchantPriority items are ones the store wants surfaced: prefer them over EQUALLY suitable alternatives, but never rank a poorly-matching priority item above a clearly better match.\n' +
       '- Avoid recommending multiple near-identical variants of the same product in the top picks unless the shopper\'s answers call for it.\n' +
       '- Each pick needs a short reason (max 140 characters) written TO the shopper, grounded in their answers. Warm and specific, no hype, no invented claims.\n' +
-      (guidance ? `Store guidance from the merchant (follow unless it conflicts with the rules above):\n${guidance}\n` : '');
+      (guidance ? `Store guidance from the merchant (follow unless it conflicts with the rules above):\n${guidance}\n` : '') +
+      (params.answerSentences?.sentences.length
+        ? 'Answer rules from the merchant, one per answer the shopper chose (weigh them together; "lean"/"prefer" means weight, not a filter). ' +
+          'fitsAnswerRules on a candidate lists the question numbers whose rule it matches: candidates that fit more of the chosen rules should rank higher.\n' +
+          params.answerSentences.sentences
+            .map((x) => `- Q${x.questionIndex} "${x.label}" [${x.mode}]: ${x.sentence}`)
+            .join('\n') +
+          '\n'
+        : '');
 
     const responseSchema = {
       type: 'object',

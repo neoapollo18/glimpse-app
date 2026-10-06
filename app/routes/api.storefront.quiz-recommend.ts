@@ -21,6 +21,13 @@ import {
 } from "../lib/recommendation-engine.server";
 import { llmOrderCandidates, guardAndPrioritize, applyPriorityOrdering } from "../lib/llm-recommender.server";
 import { checkRateLimit, getClientIP } from "../lib/rate-limiter.server";
+import {
+  loadAnswerLayer,
+  narrowPool,
+  chosenSentences,
+  sentenceTags,
+  applyAlways,
+} from "../lib/answer-rules-runtime.server";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -134,20 +141,44 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return json({ error: "Assistant not enabled" }, { status: 403, headers: CORS_HEADERS });
     }
 
-    const { pool } = await buildCandidatePool(verifiedDomain, chatConfig);
-    if (!pool) {
+    const { pool: basePool } = await buildCandidatePool(verifiedDomain, chatConfig);
+    if (!basePool) {
       return json(
         { matches: [], matrixApplied: false, partial: false, error: "No products available for recommendations" },
         { status: 200, headers: CORS_HEADERS }
       );
     }
 
-    const desiredCount = Math.max(1, Math.min(8, Number(chatConfig.num_recommendations) || 3));
-
-    // The flow is needed by both the LLM ranker (answer labels, swatch
-    // colors) and the matrix reason bullets — fetch at most once.
+    // The flow is needed by the answer layer, the LLM ranker (answer labels,
+    // swatch colors) and the matrix reason bullets — fetch at most once.
     let flowCache: Awaited<ReturnType<typeof getRecommendationFlow>> | null = null;
     const getFlow = async () => (flowCache ??= await getRecommendationFlow(verifiedShop.id));
+
+    // Recommendation Logic Spec v2 answer layer (answer-rules-runtime).
+    // null for every shop without ACTIVE answer sentences or store-wide
+    // always/never rules: then `pool` is basePool and nothing below
+    // changes. With a layer: never + "only" narrow the pool (all three
+    // arrays, so a matrix rule can't reach a removed product either).
+    let pool = basePool;
+    let layerSentences: Parameters<typeof llmOrderCandidates>[0]["answerSentences"] | undefined;
+    const answerLayer = await loadAnswerLayer(verifiedShop.id, chatConfig.quiz_global_rules).catch(() => null);
+    if (answerLayer) {
+      const narrowed = narrowPool(basePool.candidates, answerLayer, criteria, "quiz-recommend");
+      if (narrowed.candidates.length !== basePool.candidates.length) {
+        const keepProducts = new Set(narrowed.candidates.map((c) => c.product.id));
+        pool = {
+          products: basePool.products.filter((p) => keepProducts.has(p.id)),
+          variants: basePool.variants.filter((v) => keepProducts.has(v.product_id)),
+          candidates: narrowed.candidates,
+        };
+      }
+      const chosen = await chosenSentences(answerLayer, criteria, getFlow).catch(() => []);
+      if (chosen.length > 0) {
+        layerSentences = { sentences: chosen, tags: sentenceTags(answerLayer, chosen, criteria) };
+      }
+    }
+
+    const desiredCount = Math.max(1, Math.min(8, Number(chatConfig.num_recommendations) || 3));
 
     const mode = chatConfig.recommendation_mode;
     let aiOrdered = aiOrderCandidates(pool.candidates);
@@ -183,7 +214,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // keeps the admin promise that hybrid uses AI only where no rule
     // matches. Degrades to shuffle + mismatch guard + priority on any
     // failure (including its own rate limiter), so results never blank.
-    if (mode !== "matrix" && !outcome.matrixApplied && Object.keys(criteria).length > 0) {
+    // Active answer sentences bring the ranker in for matrix-mode shops
+    // too (only where no rule matched): the merchant wrote them to steer
+    // exactly these requests.
+    if ((mode !== "matrix" || layerSentences) && !outcome.matrixApplied && Object.keys(criteria).length > 0) {
       // Tighter caps than the endpoint limiter: this path spends Gemini
       // tokens on an unauthenticated route. Per-IP for ordinary abuse, and
       // per-SHOP as the backstop an X-Forwarded-For rotation can't evade.
@@ -201,6 +235,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             desiredCount,
             shopDomain: verifiedDomain,
             logTag: "quiz-recommend",
+            ...(layerSentences ? { answerSentences: layerSentences } : {}),
           })
         : null;
       if (ranked) {
@@ -243,6 +278,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       );
       outcome = { ...outcome, ordered: aiOrdered };
     }
+
+    // Spec v2 step 4: store-wide "always" products lead every result
+    // (deduped; a product also on the never list was already removed).
+    // applyAlways widens matrixCount for always products pulled in from
+    // outside the matrix segment, so no matrix pick is pushed out of the
+    // served slice. Applied before the stock filter so always products get
+    // probed too, and re-applied to shade-fallback re-matches below.
+    const always = answerLayer?.global.always ?? [];
+    outcome = applyAlways(outcome, always);
 
     // Stock-aware filtering (migration 047, opt-in per shop): drop matrix
     // targets that aren't purchasable right now. When that empties a shade's
@@ -289,7 +333,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           if (typeof current !== "string" || current === ANY_VALUE) continue;
           for (const adjacent of (byValue[current] ?? []).slice(0, MAX_FALLBACK_ATTEMPTS)) {
             const substituted: MultiCriteria = { ...criteria, [axisKey]: adjacent };
-            const attempt = await attemptMatch(substituted);
+            const attempt = applyAlways(await attemptMatch(substituted), always);
             if (!attempt.matrixApplied) continue;
             const attemptFiltered = await filterByStock(attempt);
             if (attemptFiltered && attemptFiltered.matrixCount > 0) {

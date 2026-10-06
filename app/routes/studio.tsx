@@ -5,7 +5,7 @@ import { boundary } from "@shopify/shopify-app-remix/server";
 import { AppProvider } from "@shopify/shopify-app-remix/react";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import { Banner, Button, Modal, Spinner, Text } from "@shopify/polaris";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import jwt from "jsonwebtoken";
 
 import { authenticate } from "../shopify.server";
@@ -63,13 +63,21 @@ import { SlideTree, slideIdForQuestion, buildScreens } from "../components/studi
 import { PreviewCanvas, type CanvasTheme } from "../components/studio/PreviewCanvas";
 import { EditPanel } from "../components/studio/EditPanel";
 import { ChatPanel } from "../components/studio/ChatPanel";
-import { CheckMatches } from "../components/studio/CheckMatches";
+import {
+  MatchesRail,
+  MatchesCenter,
+  MatchesChat,
+  useMatchesState,
+  type MatchingData,
+  type MatchesSelection,
+} from "../components/studio/MatchesTab";
 import { LiveTab, PublishSheet, isPreviewOnly, templateAwaitingPublish } from "../components/studio/PublishStep";
 import { TemplateGallery } from "../components/studio/TemplateGallery";
 import { ImagesRail } from "../components/studio/ImagesRail";
 import { FlowMap } from "../components/studio/FlowMap";
 import { draftProblems } from "../components/studio/draft-problems";
 import { templatesKilled, templateServedLive } from "../lib/template-live.server";
+import { loadMatchingView } from "../lib/answer-rules.server";
 import { navigateParent } from "../components/studio/navigate-parent";
 import { postStudioAction } from "../components/studio/studio-data";
 import {
@@ -366,7 +374,22 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ? jwt.sign({ user_id: shopDomain }, intercomSecretKey, { expiresIn: "1h" })
     : "";
 
+  // Check matches (Recommendation Logic Spec v2): sentences, store-wide
+  // rules and the silent combination check. Only computed on that tab so
+  // Build loads exactly as before.
+  const url = new URL(request.url);
+  const onMatches = url.searchParams.get("tab") === "matches" || url.searchParams.get("step") === "logic";
+  const matching = onMatches && draft
+    ? await loadMatchingView({
+        shopId: shop.id,
+        shopDomain,
+        questions: draft.flow.questions,
+        rawGlobal: liveConfig?.quiz_global_rules ?? null,
+      })
+    : null;
+
   return json({
+    matching,
     apiKey: process.env.SHOPIFY_API_KEY || "",
     intercomAppId: process.env.INTERCOM_APP_ID || "",
     intercomUserJwt,
@@ -973,7 +996,18 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
   }, [revalidator.state]);
   const [flashSlide, setFlashSlide] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const matchesIframeRef = useRef<HTMLIFrameElement | null>(null);
+  // Check matches (Recommendation Logic Spec v2): Overview first.
+  const [matchesSel, setMatchesSel] = useState<MatchesSelection>("overview");
+  const matchQuestions = useMemo(
+    () =>
+      (data.draft?.flow.questions ?? []).map((q) => ({
+        axisKey: q.axisKey,
+        prompt: q.prompt,
+        options: q.options.map((o) => ({ axisValueValue: o.axisValueValue, label: o.label })),
+      })),
+    [data.draft],
+  );
+  const matchesState = useMatchesState((data.matching ?? null) as MatchingData | null, matchQuestions);
   const [previewNonce, setPreviewNonce] = useState(0);
 
   // ---- V2 surfaces state ----
@@ -1485,7 +1519,17 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
           />
         }
         rail={
-          tab === "build" && selectedSlide === "images" && data.draft && data.studio.template ? (
+          tab === "matches" ? (
+            <MatchesRail
+              state={matchesState}
+              selection={matchesSel}
+              onSelect={setMatchesSel}
+              onFlowMap={() => {
+                setTab("build");
+                setFlowMapOpen(true);
+              }}
+            />
+          ) : tab === "build" && selectedSlide === "images" && data.draft && data.studio.template ? (
             <ImagesRail
               slots={data.studio.slots as StudioSlot[]}
               library={data.studio.library}
@@ -1523,12 +1567,13 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
         }
         canvas={
           tab === "matches" ? (
-            <CheckMatches
-              data={data}
-              chatBusy={chatBusy}
-              previewToken={data.previewToken}
+            <MatchesCenter
+              state={matchesState}
+              matching={(data.matching ?? null) as MatchingData | null}
+              selection={matchesSel}
+              onSelect={setMatchesSel}
               theme={canvasTheme}
-              iframeRef={matchesIframeRef}
+              onPublish={() => setPublishOpen(true)}
             />
           ) : tab === "live" ? (
             <LiveTab data={data} onOpenPublish={() => setPublishOpen(true)} />
@@ -1589,6 +1634,9 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
           )
         }
         panel={
+          tab === "matches" ? (
+            <MatchesChat state={matchesState} selection={matchesSel} aiConfigured={data.aiConfigured} />
+          ) : (
           <EditPanel
             data={data}
             step={tab}
@@ -1656,6 +1704,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
               />
             }
           />
+          )
         }
         overlay={
           needsOnboarding ? (

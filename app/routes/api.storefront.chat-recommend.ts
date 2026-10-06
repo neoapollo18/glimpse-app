@@ -18,6 +18,8 @@ import {
 import { transformCandidateImage } from "../lib/tryon-transform.server";
 import { classifyPhotoAxesForShop } from "../lib/photo-axis-classifier.server";
 import { checkRateLimit, getClientIP } from "../lib/rate-limiter.server";
+import { neverMatches } from "../lib/answer-rules-layer";
+import { normalizeGlobalRules } from "../lib/answer-rules-shared";
 import { isValidImageFile } from "../lib/storefront-api.server";
 
 const CORS_HEADERS = {
@@ -164,7 +166,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     // Eligible products → flat candidate pool (one entry per variant, plus
     // one per variant-less product).
-    const { pool, emptyReason } = await buildCandidatePool(verifiedDomain, chatConfig);
+    const { pool: basePool, emptyReason } = await buildCandidatePool(verifiedDomain, chatConfig);
+    // Store-wide "never" rules (Recommendation Logic Spec v2) apply to the
+    // chat assistant too. No-op for shops without never rules; never
+    // filters the pool down to nothing (it then falls back to the full pool).
+    const neverRules = normalizeGlobalRules(chatConfig.quiz_global_rules).never;
+    let pool = basePool;
+    if (basePool && neverRules.length > 0) {
+      const kept = basePool.candidates.filter((c) => !neverMatches(c, neverRules));
+      if (kept.length > 0 && kept.length < basePool.candidates.length) {
+        const keep = new Set(kept.map((c) => c.product.id));
+        pool = {
+          products: basePool.products.filter((p) => keep.has(p.id)),
+          variants: basePool.variants.filter((v) => keep.has(v.product_id)),
+          candidates: kept,
+        };
+      }
+    }
     if (!pool) {
       return json(
         {

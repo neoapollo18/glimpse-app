@@ -82,6 +82,33 @@ for pattern in "${BANNED_REGEX[@]}"; do
   report "regex" "$pattern" "$hits"
 done
 
+# Recommendation Logic Spec v2, Part 0.2: the Check matches route's DELETE
+# list, scoped to the files that render that route.
+MATCHES_FILES=(app/components/studio/MatchesTab.tsx)
+MATCHES_BANNED=(
+  "Advanced: edit matching notes"
+  "Products, collections, or traits that fit each answer"
+  "Store-wide notes"
+  "Save notes"
+  "Compile into matching logic"
+  "Answers not registering"
+  "No rule fires for this path yet"
+  "Looks right"
+  "Shorten the quiz"
+  "Make it more playful"
+  "Match my brand colors"
+  "Add a budget question"
+  "quiz-preview.html"
+)
+for pattern in "${MATCHES_BANNED[@]}"; do
+  hits=$(grep -n --fixed-strings "$pattern" "${MATCHES_FILES[@]}" 2>/dev/null \
+    | sed "s#^#${MATCHES_FILES[0]}:#" | grep -Ev "$COMMENT_LINE" || true)
+  report "matches route" "$pattern" "$hits"
+done
+if [ -e app/components/studio/CheckMatches.tsx ]; then
+  report "matches route" "CheckMatches.tsx" "app/components/studio/CheckMatches.tsx still exists"
+fi
+
 if [ "$FAILED" -ne 0 ]; then
   echo "check:v2 FAILED - remove the strings above (docs/overhaul/V2-SPEC.md Part 1.2, V3-CONTRACTS.md §12)."
   exit 1

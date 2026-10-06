@@ -17,6 +17,9 @@ const ALLOWED: OverhaulEvent[] = [
   // v3 (V3-CONTRACTS §11): the onboarding Build screen reports a failed or
   // timed-out generation {step, reason}.
   "generation_failed",
+  // Recommendation Logic Spec v2 (client-side views on Check matches).
+  "overview_viewed",
+  "rule_viewed",
 ];
 
 export const action = async ({ request }: ActionFunctionArgs) => {

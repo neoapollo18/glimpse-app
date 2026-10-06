@@ -1171,6 +1171,15 @@ export async function generateQuizConfig(args: {
     warnings.push("The generation report could not be saved; the Studio banner will use its fallback line.");
   }
 
+  // Recommendation Logic Spec v2: a brand-new quiz runs on its answer
+  // sentences, so draft them ACTIVE now. Fire-and-forget: it never delays
+  // or fails generation, and ensureAnswerRules serializes per shop, so the
+  // Studio opening on this quiz waits for these drafts instead of writing
+  // display-only ones.
+  void import("./answer-rules.server")
+    .then(({ ensureAnswerRules }) => ensureAnswerRules({ shopId, shopDomain, forceActive: true }))
+    .catch((e) => console.warn(`[quiz-generate] answer sentence draft failed for ${shopDomain}: ${(e as Error).message}`));
+
   console.log(
     `[quiz-generate] done shop=${shopDomain} total=${elapsedMs()}ms calls=${usage.length} fallback=${fallbackGeneration} ` +
       `repair=${repairUsed} tooSlow=${tooSlow || fallbackBecauseSlow} steps=${steps.map((s) => `${s.key}:${s.ms}`).join(",")}`,
