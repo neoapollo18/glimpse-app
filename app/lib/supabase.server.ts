@@ -23,12 +23,21 @@ export const supabase = createClient(
 export async function findShopByDomain(shopDomain: string) {
   console.log('🔍 Finding shop for domain:', shopDomain);
   
-  // Method 1: Exact match on shop_domain
-  const { data: exactMatch } = await supabase
+  // Method 1: Exact match on shop_domain. limit(1) + deterministic order,
+  // not .single(): shops had no unique constraint on shop_domain until
+  // migration 083, and .single() errors on 2+ rows, which turned a
+  // duplicated shop (mitucorazon, 2026-10-05) into "Shop not found" (a 404
+  // Studio) everywhere.
+  const { data: exactRows } = await supabase
     .from('shops')
     .select('id, shop_domain')
     .eq('shop_domain', shopDomain)
-    .single();
+    .order('id', { ascending: true })
+    .limit(2);
+  const exactMatch = exactRows?.[0];
+  if (exactRows && exactRows.length > 1) {
+    console.warn(`⚠️ Duplicate shops rows for ${shopDomain} — using ${exactMatch!.id}. Run migration 083.`);
+  }
 
   if (exactMatch) {
     console.log('✅ Found shop by exact domain match');
@@ -3027,11 +3036,19 @@ export async function ensureShopExists(shopDomain: string): Promise<void> {
   // every admin navigation via app.tsx). Uninstall evicts via
   // invalidateShopExistsCache.
   if (knownShopDomains.has(shopDomain)) return;
-  const { data } = await supabase
+  // limit(1), never .single(): with duplicate rows .single() returns an
+  // error, which read as "no shop" and inserted ANOTHER row on every admin
+  // load (mitucorazon reached 5 rows). A read error must not insert either.
+  const { data: rows, error: readError } = await supabase
     .from('shops')
     .select('id')
     .eq('shop_domain', shopDomain)
-    .single();
+    .limit(1);
+  if (readError) {
+    console.error(`ensureShopExists read failed for ${shopDomain}:`, readError.message);
+    return;
+  }
+  const data = rows?.[0];
   if (data) {
     knownShopDomains.add(shopDomain);
     return;
