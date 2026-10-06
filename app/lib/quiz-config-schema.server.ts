@@ -15,6 +15,7 @@
 
 // zod/v4 API (shipped inside the zod 3.25+ package under this subpath).
 import { z } from "zod/v4";
+import { formatShopPrice } from "./shop-currency-format";
 // Pure client-safe module (ids + questionRange + imageryModel) - the v2
 // floors read the per-template contract from the single registry.
 import { TEMPLATES, TEMPLATE_IDS, type TemplateId } from "./quiz-templates";
@@ -43,6 +44,8 @@ export interface CatalogProduct {
   status?: string | null;
   /** products.image_url (migration 057) - feeds the v2 imagery floor. */
   imageUrl?: string | null;
+  /** Store currency (ISO 4217, migration 084). null/absent = USD formatting. */
+  currency?: string | null;
   variants: CatalogVariant[];
 }
 
@@ -998,7 +1001,7 @@ export function serializeCatalog(
       flattenCatalogField(p.name),
       p.productType ? flattenCatalogField(p.productType) : "-",
       p.vendor ? flattenCatalogField(p.vendor) : "-",
-      p.price != null ? `$${p.price}` : "-",
+      p.price != null ? formatShopPrice(p.price, p.currency) : "-",
       p.tags && p.tags.length ? `tags:${[...p.tags].map(flattenCatalogField).sort().join("|")}` : "tags:-",
     ];
     const variants = p.variants

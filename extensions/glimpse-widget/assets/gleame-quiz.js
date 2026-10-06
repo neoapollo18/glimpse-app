@@ -120,7 +120,11 @@
   function formatMoney(cents) {
     var amount = (Number(cents) || 0) / 100;
     try {
-      var code = (window.Shopify && window.Shopify.currency && window.Shopify.currency.active) || 'USD';
+      // Shopper's presentment currency first (multi-currency stores), then
+      // the store currency from quiz-config (Studio preview and any page
+      // without window.Shopify), USD last.
+      var code = (window.Shopify && window.Shopify.currency && window.Shopify.currency.active) ||
+        (config && typeof config.currency === 'string' && config.currency) || 'USD';
       return new Intl.NumberFormat(undefined, { style: 'currency', currency: code }).format(amount);
     } catch (e) {
       return '$' + amount.toFixed(2);

@@ -78,6 +78,7 @@ import { FlowMap } from "../components/studio/FlowMap";
 import { draftProblems } from "../components/studio/draft-problems";
 import { templatesKilled, templateServedLive } from "../lib/template-live.server";
 import { loadMatchingView } from "../lib/answer-rules.server";
+import { rememberShopCurrency } from "../lib/shop-currency.server";
 import { navigateParent } from "../components/studio/navigate-parent";
 import { postStudioAction } from "../components/studio/studio-data";
 import {
@@ -222,7 +223,7 @@ function resolveSlots(
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shopDomain = session.shop;
   // Standalone route = not under app.tsx's billing gate; enforce it here.
   // NOT a redirect: the studio loads inside an App Bridge max-modal iframe,
@@ -235,6 +236,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
   const shop = await findShopByDomain(shopDomain);
   if (!shop) throw new Response("Shop not found", { status: 404 });
+  // Store currency (migration 084) for preview prices. One tiny Admin API
+  // query, only while unknown; never blocks the Studio on failure.
+  await rememberShopCurrency(shop.id, (q) => admin.graphql(q)).catch(() => null);
 
   // Lazy migration from the draft era: park any leftover draft row in
   // version history (restorable from the Live step) BEFORE reading live.

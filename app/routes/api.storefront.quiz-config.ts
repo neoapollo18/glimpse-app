@@ -12,6 +12,7 @@ import {
 import { getBrandProfile, servedTemplateFor } from "../lib/brand-profile.server";
 import { defaultEmailPlacement, isTemplateId, resolveQuizTokens } from "../lib/quiz-templates";
 import { templateRenderable, templateServedLive } from "../lib/template-live.server";
+import { getShopCurrency } from "../lib/shop-currency.server";
 import { verifyStorePreviewToken } from "../lib/app-proxy.server";
 
 /** Template contract the widget must declare (`&tpl=`) to receive template
@@ -53,7 +54,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return json({ error: "Subscription inactive" }, { status: 403, headers: CORS_HEADERS });
   }
 
-  const config = await getChatAssistantConfig(verifiedShop.shop_domain);
+  const [config, currency] = await Promise.all([
+    getChatAssistantConfig(verifiedShop.shop_domain),
+    // Store currency (migration 084): the widget's price fallback when the
+    // page has no window.Shopify.currency. null = unknown (USD fallback).
+    getShopCurrency(verifiedShop.id).catch(() => null),
+  ]);
 
   // Overhaul template system (migration 072): quiz_template NULL = legacy
   // rendering, brandTokens absent, nothing changes.
@@ -129,6 +135,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       // The section renders nothing when the quiz surface isn't active —
       // the block shows a setup hint in the theme editor instead.
       enabled: quizActive,
+      currency,
       assistantMode: config.assistant_mode,
       assistantName: config.assistant_name,
       avatarUrl: config.avatar_url,

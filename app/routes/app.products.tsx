@@ -26,6 +26,8 @@ import {
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
+import { rememberShopCurrency } from "../lib/shop-currency.server";
+import { formatMoneyDisplay } from "../lib/shop-currency-format";
 import {
   getConfiguredProductsWithCategory,
   getCategories,
@@ -196,7 +198,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Fetch all categories for the funnel UI dropdown
   const categories = await getCategories();
 
-  return { shopifyProducts, configuredProducts, categories, shop: session.shop, shopifyProductsError };
+  // Store currency (migration 084) so prices show in the shop's currency.
+  const currencyShop = await findShopByDomain(session.shop).catch(() => null);
+  const currency = currencyShop
+    ? await rememberShopCurrency(currencyShop.id, (q) => admin.graphql(q)).catch(() => null)
+    : null;
+  return { shopifyProducts, configuredProducts, categories, shop: session.shop, shopifyProductsError, currency };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -660,7 +667,7 @@ interface ClassificationSuggestion {
 }
 
 export default function Products() {
-  const { shopifyProducts, configuredProducts, categories, shopifyProductsError } = useLoaderData<typeof loader>();
+  const { shopifyProducts, configuredProducts, categories, shopifyProductsError, currency } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   // Which submission (if any) awaits the fetcher's result — modals close only
   // on success; failures keep them open and set modalError so the merchant
@@ -1304,7 +1311,7 @@ export default function Products() {
                 : product.title}
             </Text>
             <Text as="span" variant="bodySm" tone="subdued">
-              ${price} • {product.productType}
+              {formatMoneyDisplay(price, currency)} • {product.productType}
             </Text>
           </BlockStack>
         </InlineStack>
@@ -1671,7 +1678,7 @@ export default function Products() {
                                           <Text as="h5" variant="headingSm">{variant.title}</Text>
                                           {variant.price && parseFloat(variant.price) > 0 && (
                                             <Text as="p" variant="bodySm" tone="subdued">
-                                              ${variant.price} • {variant.availableForSale !== false ? 'Available' : 'Unavailable'}
+                                              {formatMoneyDisplay(variant.price, currency)} • {variant.availableForSale !== false ? 'Available' : 'Unavailable'}
                                             </Text>
                                           )}
                                         </BlockStack>

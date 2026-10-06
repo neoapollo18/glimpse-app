@@ -12,6 +12,7 @@
  */
 
 import type { CatalogProduct, GeneratedQuizConfig } from "./quiz-config-schema.server";
+import { formatShopPrice } from "./shop-currency-format";
 import {
   computeAnswerProductMap,
   isLiveProduct,
@@ -282,9 +283,12 @@ export function stockConfigFromCatalog(
   if (prices.length >= floor * 2) {
     const mid = prices[Math.floor(prices.length / 2)];
     if (prices[prices.length - 1] > prices[0] * 1.6) {
+      // Store currency (migration 084); unknown = "$" as before.
+      const currency = inScope.find((p) => p.currency)?.currency ?? null;
+      const bound = formatShopPrice(mid, currency, { whole: true });
       priceBands.push(
-        ["value", `Under $${Math.ceil(mid)}`],
-        ["premium", `$${Math.ceil(mid)} and up`]
+        ["value", `Under ${bound}`],
+        ["premium", `${bound} and up`]
       );
     }
   }

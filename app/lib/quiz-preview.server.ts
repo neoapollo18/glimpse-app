@@ -16,10 +16,12 @@
 import {
   supabase,
   getChatAssistantConfig,
+  findShopByDomain,
   type ChatAssistantConfig,
 } from "./supabase.server";
 import { isLiveProduct, isLiveVariant } from "./quiz-config-schema.server";
 import type { QuizDraft } from "./quiz-draft.server";
+import { getShopCurrency } from "./shop-currency.server";
 import { getBrandProfile, servedTemplateFor } from "./brand-profile.server";
 import { defaultEmailPlacement, isTemplateId, resolveQuizTokens } from "./quiz-templates";
 
@@ -196,7 +198,13 @@ export async function buildPreviewQuizConfig(
   draft: QuizDraft,
   overrides?: PreviewTemplateOverrides
 ) {
-  const live = await getChatAssistantConfig(shopDomain);
+  const [live, shopRow] = await Promise.all([
+    getChatAssistantConfig(shopDomain),
+    findShopByDomain(shopDomain).catch(() => null),
+  ]);
+  // Store currency (migration 084): the preview has no window.Shopify, so
+  // without it every price rendered as USD.
+  const currency = shopRow ? await getShopCurrency(shopRow.id).catch(() => null) : null;
   const config = { ...live, ...(draft.settings as Partial<ChatAssistantConfig>) } as ChatAssistantConfig;
   // Studio contract: &template=t1..t5&preset=<id> URL overrides win over
   // the draft/live values so the template overlay can render live
@@ -231,6 +239,7 @@ export async function buildPreviewQuizConfig(
 
   return {
     enabled: true,
+    currency,
     assistantMode: config.assistant_mode,
     assistantName: config.assistant_name,
     avatarUrl: config.avatar_url,

@@ -109,8 +109,15 @@ export async function loadCatalogForShop(shopId: string): Promise<CatalogProduct
     variantsByProduct.set(v.product_id, arr);
   }
 
+  // Store currency (migration 084) rides on every product so price text
+  // given to the AI and generated price answers use it. null = unknown
+  // (USD formatting, as before).
+  const { getShopCurrency } = await import("./shop-currency.server");
+  const currency = await getShopCurrency(shopId).catch(() => null);
+
   const catalog = products.map((p) => ({
     id: p.id,
+    currency,
     name: p.product_name ?? "",
     productType: p.product_type ?? null,
     vendor: p.vendor ?? null,

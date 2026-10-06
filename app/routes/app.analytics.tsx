@@ -1,6 +1,8 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { useLoaderData } from "@remix-run/react";
+import { formatMoneyWhole } from "../lib/shop-currency-format";
+import { rememberShopCurrency } from "../lib/shop-currency.server";
 import {
   Page,
   Text,
@@ -23,7 +25,7 @@ import {
 } from "@shopify/polaris-icons";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { getAnalytics, getConversionStats, getTopTrafficSources, getAssistantEngagement, getQuizAttribution, getQuizEngagement, getQuizLeadStats, shopHasTryOnConfig, type TrafficSourceStat, type AssistantEngagement, type AssistantFunnelCounts, type QuizAttributionStats, type QuizEngagement, type QuizFunnelCounts, type QuizLeadStats } from "../lib/supabase.server";
+import { findShopByDomain, getAnalytics, getConversionStats, getTopTrafficSources, getAssistantEngagement, getQuizAttribution, getQuizEngagement, getQuizLeadStats, shopHasTryOnConfig, type TrafficSourceStat, type AssistantEngagement, type AssistantFunnelCounts, type QuizAttributionStats, type QuizEngagement, type QuizFunnelCounts, type QuizLeadStats } from "../lib/supabase.server";
 import { useState, useCallback } from "react";
 
 interface WidgetBreakdown {
@@ -218,7 +220,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const attribution7 = buildAttribution(conversion7Days, sources7Days);
   const attribution30 = buildAttribution(conversion30Days, sources30Days);
 
+  // Store currency (migration 084): revenue is in the shop's currency.
+  const currencyShop = await findShopByDomain(session.shop).catch(() => null);
+  const currency = currencyShop
+    ? await rememberShopCurrency(currencyShop.id, (q) => admin.graphql(q)).catch(() => null)
+    : null;
+
   return json({
+    currency,
     showLegacy,
     quiz7: quiz7Days ?? EMPTY_QUIZ,
     quiz30: quiz30Days ?? EMPTY_QUIZ,
@@ -237,7 +246,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export default function Analytics() {
-  const { showLegacy, quiz7, quiz30, leads7, leads30, quizAttr7, quizAttr30, analytics7, analytics30, attribution7, attribution30, assistant7, assistant30, productImages } = useLoaderData<typeof loader>();
+  const { currency, showLegacy, quiz7, quiz30, leads7, leads30, quizAttr7, quizAttr30, analytics7, analytics30, attribution7, attribution30, assistant7, assistant30, productImages } = useLoaderData<typeof loader>();
   const [timeRange, setTimeRange] = useState("30");
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
 
@@ -646,7 +655,7 @@ export default function Analytics() {
                 <BlockStack gap="200">
                   <Text as="span" variant="bodySm" tone="subdued">Quiz-attributed revenue</Text>
                   <Text as="p" variant="headingXl" fontWeight="bold">
-                    ${quizAttr.quizAttributedRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    {formatMoneyWhole(quizAttr.quizAttributedRevenue, currency)}
                   </Text>
                   <Text as="span" variant="bodySm" tone="subdued">
                     from {quizAttr.quizAttributedOrders.toLocaleString()} {quizAttr.quizAttributedOrders === 1 ? "order" : "orders"} in carts that finished the quiz
@@ -665,7 +674,7 @@ export default function Analytics() {
                   <Text as="span" variant="bodySm" tone="subdued">
                     of {quizAttr.leadsTotal.toLocaleString()} {quizAttr.leadsTotal === 1 ? "lead" : "leads"} captured in this window
                     {quizAttr.leadAttributedRevenue > 0 &&
-                      ` · $${quizAttr.leadAttributedRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })} revenue`}
+                      ` · ${formatMoneyWhole(quizAttr.leadAttributedRevenue, currency)} revenue`}
                   </Text>
                 </BlockStack>
               </Card>
@@ -808,10 +817,10 @@ export default function Analytics() {
                   <BlockStack gap="200">
                     <Text as="span" variant="bodySm" tone="subdued">Widget-attributed revenue</Text>
                     <Text as="p" variant="headingXl" fontWeight="bold">
-                      ${currentAttribution.widgetAttributedRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      {formatMoneyWhole(currentAttribution.widgetAttributedRevenue, currency)}
                     </Text>
                     <Text as="span" variant="bodySm" tone="subdued">
-                      of ${currentAttribution.totalRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })} total
+                      of {formatMoneyWhole(currentAttribution.totalRevenue, currency)} total
                     </Text>
                   </BlockStack>
                 </Card>
@@ -835,7 +844,7 @@ export default function Analytics() {
                               {src.orders.toLocaleString()} {src.orders === 1 ? "order" : "orders"}
                             </Text>
                             <Text as="span" variant="bodyMd" fontWeight="semibold">
-                              ${src.revenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                              {formatMoneyWhole(src.revenue, currency)}
                             </Text>
                           </InlineStack>
                         </InlineStack>

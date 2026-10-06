@@ -1,6 +1,7 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
+import { rememberShopCurrency } from "../lib/shop-currency.server";
 import { shopNeedsBilling } from "../lib/billing-gate.server";
 import { findShopByDomain, getRecommendationCounts } from "../lib/supabase.server";
 import { checkRateLimits, RATE_LIMITS } from "../lib/rate-limiter.server";
@@ -61,8 +62,9 @@ const sse = (data: unknown) => encoder.encode(`data: ${JSON.stringify(data)}\n\n
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   let session;
+  let admin;
   try {
-    ({ session } = await authenticate.admin(request));
+    ({ session, admin } = await authenticate.admin(request));
   } catch (err) {
     if (err instanceof Response) {
       return json({ ok: false, error: "Session expired. Please reload." }, { status: 401 });
@@ -81,6 +83,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   const shop = await findShopByDomain(shopDomain);
+  // Store currency (migration 084) before the catalog is read, so generated
+  // price answers and the catalog prices the AI sees use it. Best-effort.
+  if (shop) await rememberShopCurrency(shop.id, (q) => admin.graphql(q)).catch(() => null);
   if (!shop) return json({ ok: false, error: "Shop not found" }, { status: 404 });
 
   // H1: one paid run per shop at a time. A client that gave up (or
