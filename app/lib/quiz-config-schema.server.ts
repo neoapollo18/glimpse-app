@@ -144,6 +144,7 @@ const GeneratedCopySchema = CopyFieldsSchema.nullish();
 const DesignTokenFieldsSchema = z.object({
   quiz_accent_color: z.string().nullish(),
   quiz_ink_color: z.string().nullish(),
+  quiz_bg_color: z.string().nullish(),
   quiz_card_bg_color: z.string().nullish(),
   quiz_line_color: z.string().nullish(),
   quiz_cta_color: z.string().nullish(),

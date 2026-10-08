@@ -30,7 +30,6 @@ const GALLERY_CSS = `
   .gq-gal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 24px 28px 40px; max-width: 1240px; margin: 0 auto; width: 100%; box-sizing: border-box; }
   .gq-gcard { position: relative; border: 1px solid #E1E3E5; border-radius: 14px; background: #fff; overflow: hidden; transition: border-color 150ms ease, box-shadow 150ms ease, opacity 150ms ease; }
   .gq-gcard[data-current="true"] { border-color: #1A1C1E; box-shadow: 0 0 0 1px #1A1C1E; }
-  .gq-gcard[data-ineligible="true"] .gq-strip, .gq-gcard[data-ineligible="true"] .gq-meta-text { opacity: .4; }
   .gq-gcard[data-span="true"] { grid-column: 1 / -1; max-width: 610px; }
   .gq-chip { position: absolute; top: 12px; left: 12px; z-index: 3; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 4px 11px; letter-spacing: .02em; }
   .gq-chip[data-kind="current"] { background: #1A1C1E; color: #fff; }
@@ -214,22 +213,27 @@ export function TemplateGallery({
                   }}>
                     Keep
                   </Button>
-                ) : isEligible ? (
-                  <Button
-                    variant="primary"
-                    loading={busy && pending === id}
-                    disabled={busy}
-                    onClick={() => {
-                      setPending(id);
-                      onUse(id);
-                    }}
-                  >
-                    Use this template
-                  </Button>
                 ) : (
-                  <button className="gq-fix" onClick={onFixImages}>
-                    Fix images →
-                  </button>
+                  // Image gates are advisory: every template can be used.
+                  // A thin-imagery warning (chip above) links to Images.
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                    <Button
+                      variant="primary"
+                      loading={busy && pending === id}
+                      disabled={busy}
+                      onClick={() => {
+                        setPending(id);
+                        onUse(id);
+                      }}
+                    >
+                      Use this template
+                    </Button>
+                    {!isEligible && (
+                      <button className="gq-fix" onClick={onFixImages}>
+                        Add images →
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             </div>

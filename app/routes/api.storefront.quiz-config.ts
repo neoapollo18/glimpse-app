@@ -151,6 +151,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       // Design tokens (migration 049). Null = the widget stylesheet's
       // defaults — the shipped design, unchanged.
       inkColor: config.quiz_ink_color,
+      bgColor: config.quiz_bg_color,
       cardBgColor: config.quiz_card_bg_color,
       lineColor: config.quiz_line_color,
       ctaColor: config.quiz_cta_color,

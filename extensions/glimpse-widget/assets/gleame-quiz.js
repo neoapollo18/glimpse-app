@@ -579,6 +579,47 @@
     if (config.animationStyle === 'minimal' || config.animationStyle === 'off') {
       root.classList.add('gq-anim-' + config.animationStyle);
     }
+    applyTemplateStyleOverrides();
+  }
+
+  // Template quizzes only (legacy never reaches past the guard): Style-panel
+  // values must beat the template's design. Inline custom properties on the
+  // root win over the stylesheet's per-template rules, so merchant radii
+  // bypass the design's radius range, the page background replaces the
+  // template ground (and its decorative wash), and Button color drives the
+  // template CTAs with a contrast-safe label color.
+  function applyTemplateStyleOverrides() {
+    root.classList.remove('gq-custom-bg');
+    root.classList.remove('gq-custom-cta');
+    if (!config.template || !/^t[1-5]$/.test(config.template)) return;
+    var hex = /^#[0-9a-fA-F]{6}$/;
+    if (config.bgColor && hex.test(config.bgColor)) {
+      root.style.setProperty('--gq-bg', config.bgColor);
+      root.classList.add('gq-custom-bg');
+    }
+    if (config.ctaColor && hex.test(config.ctaColor)) {
+      root.style.setProperty('--gq-cta', config.ctaColor);
+      root.style.setProperty('--gq-cta-text', readableOn(config.ctaColor));
+      root.classList.add('gq-custom-cta');
+    }
+    if (typeof config.buttonRadius === 'number') {
+      root.style.setProperty('--gq-r-btn', config.buttonRadius + 'px');
+    }
+    if (typeof config.cardRadius === 'number') {
+      root.style.setProperty('--gq-r-card', config.cardRadius + 'px');
+      root.style.setProperty('--gq-rc', config.cardRadius + 'px');
+    }
+  }
+
+  // #111 or #fff, whichever reads better on the given #rrggbb.
+  function readableOn(hexColor) {
+    var n = parseInt(hexColor.slice(1), 16);
+    var ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(function(c) {
+      c /= 255;
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    });
+    var lum = 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+    return lum > 0.4 ? '#111111' : '#ffffff';
   }
 
   // ---- History / step routing ----
@@ -768,9 +809,28 @@
 
   function quizRecommend() {
     if (PREVIEW) {
-      return Promise.resolve(
-        PREVIEW.sampleRecommend || { matches: [], matrixApplied: false, partial: false }
-      );
+      var sample = PREVIEW.sampleRecommend || { matches: [], matrixApplied: false, partial: false };
+      // Studio preview: run the real recommender on the merchant's answers
+      // so each path shows what a shopper would get. No answers (gallery
+      // strips, results-step boots) or any failure → the canned sample.
+      var hasAnswers = state && state.criteria && Object.keys(state.criteria).length > 0;
+      if (!PREVIEW.recommendUrl || !hasAnswers) return Promise.resolve(sample);
+      return fetch(PREVIEW.recommendUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ criteria: state.criteria }),
+      }).then(function(res) {
+        if (!res.ok) throw new Error('preview recommend ' + res.status);
+        return res.json();
+      }).then(function(d) {
+        // An honest empty result beats the canned sample here.
+        if (!d || !Array.isArray(d.matches)) return sample;
+        if (d.productJson) {
+          PREVIEW.productJson = PREVIEW.productJson || {};
+          for (var h in d.productJson) PREVIEW.productJson[h] = d.productJson[h];
+        }
+        return { matches: d.matches, matrixApplied: Boolean(d.matrixApplied), partial: Boolean(d.partial) };
+      }).catch(function() { return sample; });
     }
     return fetch(SHOPIFY_APP_URL + '/api/storefront/quiz-recommend', {
       method: 'POST',
@@ -1680,6 +1740,10 @@
   // so merchants can style it while it's off.
   function gateActive() {
     if (PREVIEW) return true;
+    // Template quizzes: with no photo question AND try-on off, the photo
+    // would feed nothing, so the step is skipped. (Legacy shops keep the
+    // shipped behavior.)
+    if (config && config.template && !shadeAxis() && config.tryonEnabled === false) return false;
     return !(config && config.gate && config.gate.enabled === false);
   }
 

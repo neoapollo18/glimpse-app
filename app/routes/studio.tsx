@@ -37,7 +37,7 @@ import { getGenStatus } from "../lib/gen-status.server";
 import { shopNeedsBilling } from "../lib/billing-gate.server";
 import { draftQuestionNotes, type NotesDraft } from "../lib/guidance-generator.server";
 import { GENERAL_GUIDANCE_KEY } from "../lib/quiz-guidance-shared";
-import { getBrandProfile, type BrandProfile } from "../lib/brand-profile.server";
+import { getBrandProfile, templateSignalsFromProfile, type BrandProfile } from "../lib/brand-profile.server";
 import { getLibraryStatus } from "../lib/brand-library.server";
 import { trackOverhaulEvent } from "../lib/overhaul-events.server";
 import {
@@ -46,6 +46,7 @@ import {
   TEMPLATE_STYLES,
   declareSlots,
   defaultEmailPlacement,
+  isTemplateEligible,
   isTemplateId,
   resolveQuizTokens,
   type BrandTokens,
@@ -141,6 +142,7 @@ export function ErrorBoundary() {
 const COLOR_TOKEN: Record<StudioColorKey, keyof BrandTokens> = {
   quiz_accent_color: "colorAccent",
   quiz_ink_color: "colorText",
+  quiz_bg_color: "colorBg",
   quiz_card_bg_color: "colorSurface",
   quiz_line_color: "colorBorder",
   quiz_cta_color: "colorAccent",
@@ -337,15 +339,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     catalog: catalogForTitles,
   });
 
-  // Eligibility from the brand profile's assignment; absent profile =
-  // everything selectable (spec 2.4 default). Clean is always eligible.
-  const eligibleRaw = (brandProfile?.templateAssignment?.eligible as TemplateId[] | undefined) ?? [...TEMPLATE_IDS];
-  const eligible = eligibleRaw.includes("t5") ? eligibleRaw : [...eligibleRaw, "t5" as TemplateId];
+  // Image-gate status per template, computed the SAME way the template API
+  // does (templateSignalsFromProfile), never from the stored assignment
+  // list, which was written by older gate code and disagreed with the API.
+  // Advisory only: the gallery warns, it doesn't block. No profile = no
+  // warnings. Clean is always fine.
+  const signalsForGates = brandProfile ? templateSignalsFromProfile(brandProfile) : null;
+  const eligible = TEMPLATE_IDS.filter(
+    (id) => id === "t5" || !signalsForGates || isTemplateEligible(id, signalsForGates),
+  );
 
   const studio = {
     storeName,
     logoUrl: brandProfile?.brand.logoUrl ?? null,
-    canvasBg: tokens?.colorBg ?? "#F6F6F7",
+    // The merchant's page background (migration 085) wins over the template's.
+    canvasBg:
+      (template && typeof settings.quiz_bg_color === "string" && /^#[0-9a-fA-F]{6}$/.test(settings.quiz_bg_color)
+        ? settings.quiz_bg_color
+        : null) ??
+      tokens?.colorBg ??
+      "#F6F6F7",
     canvasInk: tokens?.colorText ?? "#1A1C1E",
     canvasBorder: tokens?.colorBorder ?? "#C9CCCF",
     headingFont,
@@ -1383,7 +1396,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
     fd.append("template", input.template);
     fd.append("source", input.source);
     const res = await fetch("/app/api/quiz-template", { method: "POST", body: fd });
-    return (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+    return (await res.json().catch(() => null)) as { ok?: boolean; error?: string; warning?: string | null } | null;
   }, []);
   const refreshAfterSwitch = useCallback(() => {
     revalidator.revalidate();
@@ -1400,7 +1413,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
         setOverlay(false);
         refreshAfterSwitch();
         showUndoToast(
-          `Switched to ${TEMPLATES[id].name}`,
+          r.warning ? `Switched to ${TEMPLATES[id].name}. ${r.warning}: add some in Images.` : `Switched to ${TEMPLATES[id].name}`,
           // A classic quiz's first template undoes back to classic.
           () => {
             void setTemplateApi({ template: prior ?? "classic", source: "gallery" }).then((rr) => {

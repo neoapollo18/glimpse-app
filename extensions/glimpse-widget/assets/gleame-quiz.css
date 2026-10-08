@@ -1758,8 +1758,8 @@
 #gleame-quiz-root .gq-tpl-step .gq-add-btn,
 #gleame-quiz-root .gq-tpl-results .gq-add-btn,
 #gleame-quiz-root .gq-tpl-loading .gq-add-btn {
-  background: var(--gq-accent);
-  color: var(--gq-accent-text);
+  background: var(--gq-cta, var(--gq-accent));
+  color: var(--gq-cta-text, var(--gq-accent-text));
   border-radius: var(--gq-r-btn);
   text-transform: none;
   letter-spacing: 0.01em;
@@ -3043,13 +3043,13 @@
   font-size: 11px;
 }
 #gleame-quiz-root.gq-t1 .gq-tpl-headline { letter-spacing: -0.03em; }
-#gleame-quiz-root.gq-t1 .gq-intro-hero-slot { border-radius: 28px; box-shadow: var(--gq-lk-shadow); }
+#gleame-quiz-root.gq-t1 .gq-intro-hero-slot { border-radius: var(--gq-rc, 28px); box-shadow: var(--gq-lk-shadow); }
 #gleame-quiz-root.gq-t1 .gq-t1-phase::before,
 #gleame-quiz-root.gq-t1 .gq-t1-phase-fill { height: 6px; border-radius: 999px; }
 #gleame-quiz-root.gq-t1 .gq-t1-phases--plain .gq-t1-phase { height: 6px; }
 #gleame-quiz-root.gq-t1 .gq-t1-row {
   border-color: transparent;
-  border-radius: 18px;
+  border-radius: var(--gq-rc, 18px);
   padding: 18px 22px;
   box-shadow: var(--gq-lk-shadow);
   transition: box-shadow 160ms ease, transform 160ms var(--gq-tpl-ease), background 140ms ease, border-color 140ms ease;
@@ -3057,20 +3057,20 @@
 #gleame-quiz-root.gq-t1 .gq-t1-row:hover { border-color: transparent; box-shadow: var(--gq-lk-shadow-hover); transform: translateY(-1px); }
 #gleame-quiz-root.gq-t1 .gq-t1-row.is-selected { border-color: var(--gq-accent); background: var(--gq-card-bg); box-shadow: 0 0 0 1px var(--gq-accent), var(--gq-lk-shadow-hover); }
 #gleame-quiz-root.gq-t1 .gq-t1-row-tag { font-family: var(--gq-font-body); font-size: 15.5px; font-weight: 600; letter-spacing: -0.005em; text-transform: none; }
-#gleame-quiz-root.gq-t1 .gq-t1-tile-slot { border-radius: 22px; box-shadow: var(--gq-lk-shadow); }
+#gleame-quiz-root.gq-t1 .gq-t1-tile-slot { border-radius: var(--gq-rc, 22px); box-shadow: var(--gq-lk-shadow); }
 #gleame-quiz-root.gq-t1 .gq-t1-tile:hover .gq-t1-tile-slot { box-shadow: var(--gq-lk-shadow-hover); }
 #gleame-quiz-root.gq-t1 .gq-t1-tile.is-selected .gq-t1-tile-slot { box-shadow: 0 0 0 3px var(--gq-bg), 0 0 0 5px var(--gq-accent), var(--gq-lk-shadow-hover); }
 #gleame-quiz-root.gq-t1 .gq-t1-tile-label { font-weight: 600; margin-top: 12px; }
-#gleame-quiz-root.gq-t1 .gq-t1-tip { border-left: 0; border-radius: 16px; padding: 14px 18px; }
-#gleame-quiz-root.gq-t1 .gq-t1r-main { border-radius: 28px; box-shadow: var(--gq-lk-shadow-hover); }
-#gleame-quiz-root.gq-t1 .gq-t1r-thumb { border-radius: 14px; }
+#gleame-quiz-root.gq-t1 .gq-t1-tip { border-left: 0; border-radius: var(--gq-rc, 16px); padding: 14px 18px; }
+#gleame-quiz-root.gq-t1 .gq-t1r-main { border-radius: var(--gq-rc, 28px); box-shadow: var(--gq-lk-shadow-hover); }
+#gleame-quiz-root.gq-t1 .gq-t1r-thumb { border-radius: var(--gq-rc, 14px); }
 #gleame-quiz-root.gq-t1 .gq-t1r-name { font-size: 30px; letter-spacing: -0.03em; }
 #gleame-quiz-root.gq-t1 .gq-t1r-variant { border-radius: 999px; padding: 10px 18px; }
-#gleame-quiz-root.gq-t1 .gq-t1r-shade { border: 0; border-radius: 18px; box-shadow: var(--gq-lk-shadow); }
+#gleame-quiz-root.gq-t1 .gq-t1r-shade { border: 0; border-radius: var(--gq-rc, 18px); box-shadow: var(--gq-lk-shadow); }
 #gleame-quiz-root.gq-t1 .gq-t1-alts { border-top: 0; }
-#gleame-quiz-root.gq-t1 .gq-t1-alt { border-color: transparent; border-radius: 22px; box-shadow: var(--gq-lk-shadow); }
-#gleame-quiz-root.gq-t1 .gq-t1-alt-slot { border-radius: 14px; }
-#gleame-quiz-root.gq-t1 .gq-tpl-lead-card--inline { border: 0; border-radius: 24px; box-shadow: var(--gq-lk-shadow); }
+#gleame-quiz-root.gq-t1 .gq-t1-alt { border-color: transparent; border-radius: var(--gq-rc, 22px); box-shadow: var(--gq-lk-shadow); }
+#gleame-quiz-root.gq-t1 .gq-t1-alt-slot { border-radius: var(--gq-rc, 14px); }
+#gleame-quiz-root.gq-t1 .gq-tpl-lead-card--inline { border: 0; border-radius: var(--gq-rc, 24px); box-shadow: var(--gq-lk-shadow); }
 
 /* ---------- t2 · Editorial: magazine feature ---------- */
 #gleame-quiz-root.gq-t2 .gq-tpl-kicker {
@@ -3176,7 +3176,7 @@
 }
 #gleame-quiz-root.gq-t3 .gq-t3-bars { gap: 12px; max-width: 380px; }
 #gleame-quiz-root.gq-t3 .gq-t3-bar {
-  border-radius: 999px;
+  border-radius: var(--gq-rc, 999px);
   padding: 16px 28px;
   font-size: 15.5px;
   background: var(--gq-card-bg);
@@ -3190,7 +3190,7 @@
   box-shadow: 0 8px 24px color-mix(in srgb, var(--gq-accent) 25%, transparent);
 }
 #gleame-quiz-root.gq-t3 .gq-t3-bar.is-selected .gq-t3-bar-desc { color: var(--gq-accent-text); opacity: 0.8; }
-#gleame-quiz-root.gq-t3 .gq-t3-icon { border-radius: 28px; min-height: 168px; }
+#gleame-quiz-root.gq-t3 .gq-t3-icon { border-radius: var(--gq-rc, 28px); min-height: 168px; }
 #gleame-quiz-root.gq-t3 .gq-t3-icon:hover { box-shadow: var(--gq-lk-shadow); }
 #gleame-quiz-root.gq-t3 .gq-t3-icon.is-selected { background: var(--gq-accent-08); box-shadow: inset 0 0 0 1px var(--gq-accent); }
 #gleame-quiz-root.gq-t3 .gq-t3-icon-slot { border-radius: 999px; }
@@ -3198,8 +3198,8 @@
 #gleame-quiz-root.gq-t3 .gq-intro-founder-slot { box-shadow: 0 0 0 6px var(--gq-bg), 0 0 0 7px var(--gq-accent); }
 #gleame-quiz-root.gq-t3 .gq-t3r-headline { font-weight: 400; }
 #gleame-quiz-root.gq-t3 .gq-t3r-concern { background: transparent; border: 1px solid var(--gq-line); }
-#gleame-quiz-root.gq-t3 .gq-t3r-why { border: 0; border-radius: 24px; background: var(--gq-accent-08); padding: 22px 26px; }
-#gleame-quiz-root.gq-t3 .gq-t3r-regimen { border-radius: 28px; counter-reset: gq-step; }
+#gleame-quiz-root.gq-t3 .gq-t3r-why { border: 0; border-radius: var(--gq-rc, 24px); background: var(--gq-accent-08); padding: 22px 26px; }
+#gleame-quiz-root.gq-t3 .gq-t3r-regimen { border-radius: var(--gq-rc, 28px); counter-reset: gq-step; }
 #gleame-quiz-root.gq-t3 .gq-t3r-regimen-head { padding: 22px 26px; }
 #gleame-quiz-root.gq-t3 .gq-t3r-regimen-title { font-weight: 500; font-size: 19px; }
 #gleame-quiz-root.gq-t3 .gq-t3r-group { padding: 18px 26px 6px; letter-spacing: 0.2em; }
@@ -3216,7 +3216,7 @@
 }
 #gleame-quiz-root.gq-t3 .gq-t3r-step-add { border-radius: 999px; }
 #gleame-quiz-root.gq-t3 .gq-t3r-total { border-radius: 999px; padding: 12px 12px 12px 28px; }
-#gleame-quiz-root.gq-t3 .gq-tpl-lead-card--inline { border: 0; border-radius: 28px; background: var(--gq-accent-08); }
+#gleame-quiz-root.gq-t3 .gq-tpl-lead-card--inline { border: 0; border-radius: var(--gq-rc, 28px); background: var(--gq-accent-08); }
 
 /* ---------- t4 · Pop: ink outlines, hard offset shadows ---------- */
 #gleame-quiz-root.gq-t4 {
@@ -3306,6 +3306,13 @@
 #gleame-quiz-root.gq-t5 .gq-t5r-name { font-weight: 700; letter-spacing: -0.02em; }
 #gleame-quiz-root.gq-t5 .gq-t5r-price { font-family: var(--gq-mono); font-weight: 500; font-size: 14px; }
 #gleame-quiz-root.gq-t5 .gq-tpl-lead-card--inline { border: 0; border-top: 2px solid var(--gq-ink); border-radius: 0; background: transparent; text-align: left; padding-left: 0; padding-right: 0; }
+
+/* A merchant page background replaces the template ground and its wash. */
+#gleame-quiz-root.gq-custom-bg { background-image: none; }
+
+/* A merchant button color can match the page (white on white): keep an edge. */
+#gleame-quiz-root.gq-custom-cta .gq-tpl-step .gq-add-btn,
+#gleame-quiz-root.gq-custom-cta .gq-tpl-results .gq-add-btn { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gq-cta-text) 22%, transparent); }
 
 /* Try-on upsell inside each design (shared legacy component). */
 #gleame-quiz-root.gq-t1 .gq-upsell { border: 0; border-radius: 24px; background: var(--gq-card-bg); box-shadow: var(--gq-lk-shadow); }

@@ -959,6 +959,7 @@ export function ThemeEditor({
   const [values, setValues] = useState<Record<string, string>>(() => ({
     quiz_accent_color: str(settings, "quiz_accent_color"),
     quiz_ink_color: str(settings, "quiz_ink_color"),
+    quiz_bg_color: str(settings, "quiz_bg_color"),
     quiz_card_bg_color: str(settings, "quiz_card_bg_color"),
     quiz_line_color: str(settings, "quiz_line_color"),
     quiz_cta_color: str(settings, "quiz_cta_color"),
@@ -1051,9 +1052,14 @@ export function ThemeEditor({
       )}
       <ColorField label="Accent color" {...colorProps("quiz_accent_color")} helpText="Highlights and **starred** headline words" />
       <ColorField label="Text color" {...colorProps("quiz_ink_color")} />
-      <ColorField label="Card background" {...colorProps("quiz_card_bg_color")} />
+      {/* Page background is a template-only control (migration 085); the
+          classic quiz inherits the theme's page. */}
+      {hasTemplate && (
+        <ColorField label="Background color" {...colorProps("quiz_bg_color")} helpText="The quiz page behind everything" />
+      )}
+      <ColorField label="Card background" {...colorProps("quiz_card_bg_color")} helpText="Answer cards and panels" />
       <ColorField label="Border color" {...colorProps("quiz_line_color")} helpText="Card and option borders" />
-      <ColorField label="Button color" {...colorProps("quiz_cta_color")} />
+      <ColorField label="Button color" {...colorProps("quiz_cta_color")} helpText="Main buttons (text color adjusts for contrast)" />
       <InlineStack gap="200">
         <div style={{ flex: 1, minWidth: 120 }}>
           <TextField label="Button radius" type="number" value={values.quiz_button_radius} onChange={(v) => setNumber("quiz_button_radius", v)} disabled={disabled} placeholder="Default" suffix="px" autoComplete="off" />

@@ -883,23 +883,22 @@ export function templateSignalsFromProfile(profile: BrandProfile): TemplateSigna
 
 /**
  * The template a shop actually RENDERS (storefront + Studio canvas share
- * this so they can never disagree). Serve-time eligibility re-check, v3:
- * - null stays null (legacy rendering);
- * - t5 is always eligible;
- * - with a Brand Profile, an image gate that no longer passes degrades to
- *   t5 (imagery changes after assignment; see the 2026-09-25 incident);
- * - WITHOUT a profile the column is trusted: every writer of quiz_template
- *   (generation, the template API, onboarding) already enforced
- *   eligibility, and degrading here made the Studio show Match while the
- *   storefront served Clean.
+ * this so they can never disagree). null stays null (legacy rendering);
+ * any valid id renders as chosen.
+ *
+ * 2026-10-07: the serve-time image-gate degrade to t5 is gone. The image
+ * gates are store-level guesses (often stale), so a merchant who picked
+ * Match in the gallery got Clean on the canvas and the storefront with no
+ * way to fix it. Every template renders without imagery (ImageSlot
+ * collapses unresolved slots on the storefront), the gallery warns when
+ * images look thin, and QUIZ_TEMPLATES_LIVE remains the emergency kill.
+ * The profile argument is kept so callers don't change.
  */
 export function servedTemplateFor(
   template: string | null | undefined,
-  profile: BrandProfile | null
+  _profile: BrandProfile | null
 ): TemplateId | null {
-  if (!isTemplateId(template)) return null;
-  if (template === "t5" || !profile) return template;
-  return isTemplateEligible(template, templateSignalsFromProfile(profile)) ? template : "t5";
+  return isTemplateId(template) ? template : null;
 }
 
 export async function getBrandProfile(shopDomain: string): Promise<BrandProfile | null> {

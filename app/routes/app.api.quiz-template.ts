@@ -4,8 +4,8 @@
 // Each template owns its visual design, so there is no separate Look
 // (removed 2026-10-01; the quiz_look column is no longer written or read).
 // Used by the Templates gallery and onboarding. Emits template_switched.
-// Eligibility is enforced here too — an ineligible template must be
-// unreachable, not just visually disabled.
+// Image-gate eligibility is advisory: a pick is saved and a `warning` is
+// returned when the store's images look thin for that template.
 
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
@@ -52,16 +52,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
   const target: TemplateId | null = toClassic ? null : (template as TemplateId);
 
+  // Image gates are advisory (2026-10-07): a merchant's explicit pick is
+  // honored. The store-level image signals are guesses that often go stale,
+  // and blocking here (422) left merchants unable to switch at all; the
+  // gallery shows the reason as a warning instead and every template
+  // renders without imagery.
+  let warning: string | null = null;
   if (target !== null && target !== "t5") {
     const profile = await getBrandProfile(session.shop).catch(() => null);
-    if (profile) {
-      const signals = templateSignalsFromProfile(profile);
-      if (!isTemplateEligible(target, signals)) {
-        return json(
-          { ok: false, error: TEMPLATES[target].ineligibleReason || "Not eligible" },
-          { status: 422 }
-        );
-      }
+    if (profile && !isTemplateEligible(target, templateSignalsFromProfile(profile))) {
+      warning = TEMPLATES[target].ineligibleReason || null;
     }
   }
 
@@ -102,5 +102,5 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
   }
 
-  return json({ ok: true, template: target });
+  return json({ ok: true, template: target, warning });
 };

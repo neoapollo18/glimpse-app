@@ -48,6 +48,9 @@ export interface PublishResult {
    * optional_scopes). The Publish sheet requests them via App Bridge and
    * retries. */
   missingScopes?: string[];
+  /** Scopes the installation actually holds, reported on access-denied so
+   * a failed publish says what Shopify granted (diagnostics). */
+  grantedScopes?: string[];
 }
 
 export const PUBLISH_PAGE_SCOPE = "write_online_store_pages";
@@ -213,10 +216,19 @@ export async function publishQuiz(
     }
   } catch (e) {
     if (isAccessDenied(e)) {
+      let grantedScopes: string[] | undefined;
+      try {
+        const inst = await adminGraphql(`query { currentAppInstallation { accessScopes { handle } } }`);
+        grantedScopes = (inst?.currentAppInstallation?.accessScopes ?? []).map((a: any) => String(a.handle));
+      } catch {
+        /* diagnostics only */
+      }
+      console.warn(`[publish] ${shopDomain}: page access denied; granted scopes:`, grantedScopes ?? "unknown");
       return {
         ok: false,
         error: "Gleame needs permission to create the Find My Match page in your Online Store.",
         missingScopes: [PUBLISH_PAGE_SCOPE],
+        grantedScopes,
       };
     }
     return { ok: false, error: `Page: ${(e as Error).message}` };

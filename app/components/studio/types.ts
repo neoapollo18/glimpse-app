@@ -102,6 +102,7 @@ export interface StudioLibraryStatus {
 export type StudioColorKey =
   | "quiz_accent_color"
   | "quiz_ink_color"
+  | "quiz_bg_color"
   | "quiz_card_bg_color"
   | "quiz_line_color"
   | "quiz_cta_color";
@@ -109,6 +110,7 @@ export type StudioColorKey =
 export const STUDIO_COLOR_KEYS: StudioColorKey[] = [
   "quiz_accent_color",
   "quiz_ink_color",
+  "quiz_bg_color",
   "quiz_card_bg_color",
   "quiz_line_color",
   "quiz_cta_color",

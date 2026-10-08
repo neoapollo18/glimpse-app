@@ -75,9 +75,11 @@ export function FlowMap({
       place(1 + depths[si], "screen", slideIdForQuestion(flow.questions[s.indices[0]].axisKey), s.indices);
     });
     const photoCol = maxDepth + 2;
-    const hasPhoto = flow.axes.some((a) => a.source === "photo");
-    if (hasPhoto) place(photoCol, "photo", "photo");
-    place(hasPhoto ? photoCol + 1 : photoCol, "results", "results");
+    // The photo step always exists in the shopper flow (it can be switched
+    // off on its slide), so the map always shows it.
+    const hasPhoto = true;
+    place(photoCol, "photo", "photo");
+    place(photoCol + 1, "results", "results");
 
     const colCount = Math.max(...nodes.map((n) => n.col)) + 1;
     const columns: MapNode[][] = Array.from({ length: colCount }, () => []);

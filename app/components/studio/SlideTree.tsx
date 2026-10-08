@@ -198,7 +198,6 @@ export function SlideTree({
   };
   const problems = flow ? draftProblems(flow) : [];
   const screens = flow ? buildScreens(flow) : [];
-  const hasPhotoAxis = (flow?.axes ?? []).some((a) => a.source === "photo");
 
   const row = (
     slideId: string,
@@ -449,7 +448,10 @@ export function SlideTree({
         ))}
 
         {row("lead", "Email capture", { icon: EmailIcon })}
-        {hasPhotoAxis && row("photo", "Photo", { icon: CameraIcon })}
+        {/* Always listed: the widget shows the photo step and the try-on
+            upsell even without a photo question, so its on/off switches
+            must always be reachable. */}
+        {row("photo", "Photo & try-on", { icon: CameraIcon })}
         {row("results", "Results", { icon: FlagIcon })}
 
         {!readOnly && onAdd && (

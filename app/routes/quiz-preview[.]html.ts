@@ -126,6 +126,9 @@ window.GLEAME_QUIZ_PREVIEW = ${JSON.stringify({
     // boots the widget on a specific screen for the gallery strips.
     studio: true,
     overrides: { step: overrides.step ?? null },
+    // Real recommendations for answered paths (routes/quiz-preview-recommend);
+    // sampleRecommend stays the fallback (gallery strips, no answers yet).
+    recommendUrl: `/quiz-preview-recommend?token=${encodeURIComponent(token)}`,
   }).replace(/</g, "\\u003c")};
 </script>
 <script>${js}</script>

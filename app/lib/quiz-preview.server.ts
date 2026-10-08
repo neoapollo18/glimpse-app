@@ -249,6 +249,7 @@ export async function buildPreviewQuizConfig(
     bodyFontOverride: config.quiz_body_font_override,
     headingWeightOverride: config.quiz_heading_weight_override,
     inkColor: config.quiz_ink_color,
+    bgColor: config.quiz_bg_color,
     cardBgColor: config.quiz_card_bg_color,
     lineColor: config.quiz_line_color,
     ctaColor: config.quiz_cta_color,

@@ -108,18 +108,22 @@ export function PublishSheet({
   // One-click publish writes a page (and optionally a main-menu link),
   // which needs optional access scopes most shops haven't granted (toml
   // optional_scopes). Ask in context, right before the write, instead of a
-  // store-wide re-auth. Returns false only when the merchant declined.
-  const ensureScopes = async (needed: string[]): Promise<boolean> => {
+  // store-wide re-auth. Returns null when access is (or may be) there, or
+  // the line to show. A FAILED request is not a grant: treating it as one
+  // hid the real error behind the server's "needs permission" card.
+  const ensureScopes = async (needed: string[]): Promise<string | null> => {
+    // Scopes API absent (not embedded, old host): let the server decide;
+    // it reports missingScopes if access is really absent.
+    if (!shopify?.scopes) return null;
     try {
       const { granted } = await shopify.scopes.query();
       const missing = needed.filter((sc) => !granted.includes(sc));
-      if (missing.length === 0) return true;
+      if (missing.length === 0) return null;
       const res = await shopify.scopes.request(missing);
-      return res.result === "granted-all";
-    } catch {
-      // Scopes API unavailable (not embedded, old host): let the server
-      // decide; it reports missingScopes if access is really absent.
-      return true;
+      return res.result === "granted-all" ? null : SCOPE_DECLINED_LINE;
+    } catch (e) {
+      console.error("[publish] scopes request failed", e);
+      return `Shopify couldn't ask for permission to add the page (${(e as Error)?.message || "unknown error"}). Reload the app and try again, or add the Gleame Quiz block from the theme editor instead.`;
     }
   };
 
@@ -130,8 +134,9 @@ export function PublishSheet({
       // The menu link is best-effort on the server, so only the page scope
       // gates the publish; the nav scope rides along when the box is ticked.
       const needed = addToMenu ? [PAGE_SCOPE, NAV_SCOPE] : [PAGE_SCOPE];
-      if (!(await ensureScopes(needed))) {
-        setResult({ liveUrl: null, error: SCOPE_DECLINED_LINE });
+      const scopeError = await ensureScopes(needed);
+      if (scopeError) {
+        setResult({ liveUrl: null, error: scopeError });
         return;
       }
       const post = async () => {
@@ -145,11 +150,22 @@ export function PublishSheet({
       // Server still saw no access (query raced the grant, or the API was
       // unavailable above): request what it named, then retry once.
       if (!body?.ok && Array.isArray(body?.missingScopes) && body.missingScopes.length > 0) {
-        if (!(await ensureScopes(body.missingScopes))) {
-          setResult({ liveUrl: null, error: SCOPE_DECLINED_LINE });
+        const retryError = await ensureScopes(body.missingScopes);
+        if (retryError) {
+          setResult({ liveUrl: null, error: retryError });
           return;
         }
         body = await post();
+        // Granted on the client but the server still can't write: say so
+        // instead of repeating the same permission card.
+        if (!body?.ok && Array.isArray(body?.missingScopes) && body.missingScopes.length > 0) {
+          console.error("[publish] server still missing scopes after grant", body.missingScopes, body.grantedScopes);
+          body = {
+            ...body,
+            error:
+              "Shopify shows the permission as granted, but the page still couldn't be created. Reload the app and publish again; if it keeps happening, contact support.",
+          };
+        }
       }
       if (body?.ok) {
         setResult({ liveUrl: body.liveUrl ?? null, error: null });

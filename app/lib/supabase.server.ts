@@ -3268,6 +3268,8 @@ export interface ChatAssistantConfig {
   // Design tokens (migration 049). All NULL = the widget stylesheet's
   // defaults — the shipped design is untouched until a merchant opts in.
   quiz_ink_color: string | null;
+  // Page background (migration 085). NULL = the template's own ground.
+  quiz_bg_color: string | null;
   quiz_card_bg_color: string | null;
   quiz_line_color: string | null;
   quiz_cta_color: string | null;
@@ -3525,6 +3527,7 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   quiz_body_font_override: null,
   quiz_heading_weight_override: null,
   quiz_ink_color: null,
+  quiz_bg_color: null,
   quiz_card_bg_color: null,
   quiz_line_color: null,
   quiz_cta_color: null,
@@ -3740,6 +3743,7 @@ function mapChatAssistantRow(data: any): ChatAssistantConfig {
     quiz_body_font_override: data.quiz_body_font_override ?? CHAT_ASSISTANT_DEFAULTS.quiz_body_font_override,
     quiz_heading_weight_override: data.quiz_heading_weight_override ?? CHAT_ASSISTANT_DEFAULTS.quiz_heading_weight_override,
     quiz_ink_color: data.quiz_ink_color ?? CHAT_ASSISTANT_DEFAULTS.quiz_ink_color,
+    quiz_bg_color: data.quiz_bg_color ?? CHAT_ASSISTANT_DEFAULTS.quiz_bg_color,
     quiz_card_bg_color: data.quiz_card_bg_color ?? CHAT_ASSISTANT_DEFAULTS.quiz_card_bg_color,
     quiz_line_color: data.quiz_line_color ?? CHAT_ASSISTANT_DEFAULTS.quiz_line_color,
     quiz_cta_color: data.quiz_cta_color ?? CHAT_ASSISTANT_DEFAULTS.quiz_cta_color,
