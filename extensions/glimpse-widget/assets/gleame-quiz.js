@@ -971,11 +971,23 @@
     // (every live merchant today) means the legacy renderers, untouched.
     var tpl = activeTpl();
     var next;
+    // Leaving the photo step ends the Studio's "editing it" exception, so
+    // playing on from here follows the shopper rule again.
+    if (state.screen !== 'gate') previewGateForced = false;
     switch (state.screen) {
       case 'question': next = tpl ? tplQuestionScreen(tpl) : renderScreen(); break;
       case 'lead':     next = tpl ? tplLeadScreen(tpl) : renderLead(); break;
       case 'name':     next = tpl ? tplNameScreen(tpl) : renderIntro(); break; // v3 Routine name capture
-      case 'gate':     next = renderGate(); break;
+      case 'gate':
+        next = renderGate();
+        // Studio editing a switched-off step: say so on the canvas.
+        if (PREVIEW && previewGateForced && !gateOnForShoppers()) {
+          next.insertBefore(
+            el('div', 'gq-preview-off', 'Off: shoppers skip this step. Turn on “Show the photo step” to use it.'),
+            next.firstChild
+          );
+        }
+        break;
       case 'results':  next = tpl ? tplResultsScreen(tpl) : renderResults(); break;
       case 'intro':
       default:         next = tpl ? tplIntroScreen(tpl) : renderIntro(); break;
@@ -1738,13 +1750,23 @@
   // step entirely — questions route straight to results. Absent (older
   // cached config) means enabled. The studio preview always shows the gate
   // so merchants can style it while it's off.
-  function gateActive() {
-    if (PREVIEW) return true;
+  // Whether shoppers see the photo step.
+  function gateOnForShoppers() {
     // Template quizzes: with no photo question AND try-on off, the photo
     // would feed nothing, so the step is skipped. (Legacy shops keep the
     // shipped behavior.)
     if (config && config.template && !shadeAxis() && config.tryonEnabled === false) return false;
     return !(config && config.gate && config.gate.enabled === false);
+  }
+
+  // Set only while the Studio has the "Photo & try-on" slide open, so a
+  // switched-off step can still be edited. Playing the quiz in the editor
+  // follows the shopper rule: an off step is skipped, never shown.
+  var previewGateForced = false;
+
+  function gateActive() {
+    if (PREVIEW && previewGateForced) return true;
+    return gateOnForShoppers();
   }
 
   // Where the flow goes once the questions are exhausted: the lead step
@@ -5305,6 +5327,7 @@
   // several questions on one screen.
   function previewGoto(step) {
     if (!PREVIEW || !stageEl) return;
+    previewGateForced = step === 'gate';
     if (step === 'intro') {
       state.screen = 'intro';
       state.screenIndex = 0;

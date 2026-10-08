@@ -200,7 +200,10 @@ function makeConfig(template: Tpl | null, overrides: Record<string, unknown> = {
       altAudienceLabel: null,
       altAudienceUrl: null,
     },
-    gate: { enabled: false, headline: null, helper: null, photoLabel: null, skipLabel: null, privacyNote: null },
+    // On: the walk-throughs below cross the photo step (the preview used to
+    // show it regardless; it now follows the shopper rule, see the
+    // "photo step off" test).
+    gate: { enabled: true, headline: null, helper: null, photoLabel: null, skipLabel: null, privacyNote: null },
     results: {
       headlinePhoto: null,
       headlineNoPhoto: null,
@@ -654,8 +657,9 @@ describe("v3 widget templates", () => {
         expect(lead.querySelector(".gq-tpl-lead .gq-tpl-lead-form"), t).not.toBeNull();
         expect(lead.querySelector(".gq-tpl-skip"), t).not.toBeNull();
       }
-      // 'off': answering the last question goes straight to the (preview) gate, never a lead screen.
-      const off = await boot(previewFor(t, "q5", false, { emailPlacement: "off" }));
+      // 'off': answering the last question goes straight to the photo step
+      // (try-on on here, so the step is shown), never a lead screen.
+      const off = await boot(previewFor(t, "q5", false, { emailPlacement: "off", tryonEnabled: true }));
       (off.querySelector(".gq-option-block button") as HTMLElement).click();
       await wait(220 + SWAP);
       expect(off.querySelector(".gq-tpl-lead"), t).toBeNull();
@@ -665,16 +669,33 @@ describe("v3 widget templates", () => {
     }
   });
 
+  it("photo step off: the preview skips it on play-through, shows it marked Off only when opened", async () => {
+    const gateOff = { gate: { ...(makeConfig("t5").gate as object), enabled: false } };
+    // Play-through from the last question goes past the step.
+    const played = await boot(previewFor("t5", "q5", false, { ...gateOff, emailPlacement: "off" }));
+    (played.querySelector(".gq-option-block button") as HTMLElement).click();
+    await wait(220 + SWAP);
+    expect(stageChild(played).classList.contains("gq-step--gate"), "no gate on play-through").toBe(false);
+    expect(played.querySelector(".gq-preview-off")).toBeNull();
+    // The Studio opening the Photo & try-on slide still shows it, flagged.
+    const opened = await boot(previewFor("t5", "gate", false, gateOff));
+    expect(stageChild(opened).classList.contains("gq-step--gate")).toBe(true);
+    expect(opened.querySelector(".gq-preview-off")).not.toBeNull();
+    // Step on (and try-on on, so the template rule keeps it): no Off notice.
+    const on = await boot(previewFor("t5", "gate", false, { tryonEnabled: true }));
+    expect(on.querySelector(".gq-preview-off")).toBeNull();
+  });
+
   it("(8d) the Match loading screen reaches results within 4s", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
     try {
       mount(previewFor("t1", "q5", false));
       await vi.advanceTimersByTimeAsync(5);
       const root = document.getElementById("gleame-quiz-root")!;
+      // No photo question + try-on off: the photo step is skipped, so the
+      // last answer lands on the loading screen directly.
       (root.querySelector(".gq-t1-row") as HTMLElement).click();
       await vi.advanceTimersByTimeAsync(220 + SWAP);
-      (root.querySelector(".gq-step--gate-solo .gq-skip-link") as HTMLElement).click();
-      await vi.advanceTimersByTimeAsync(SWAP);
       expect(stageChild(root).classList.contains("gq-tpl-loading")).toBe(true);
       await vi.advanceTimersByTimeAsync(4000 + SWAP);
       expect(stageChild(root).classList.contains("gq-t1r")).toBe(true);
@@ -725,14 +746,10 @@ describe("v3 widget templates", () => {
     const root = await boot({
       ...previewFor("t1", "q5", false),
     });
-    // Answer the last question, skip the (preview-only) photo gate, and the
-    // recommend round trip lands on the required loading screen.
+    // Answer the last question (the photo step is skipped: no photo question,
+    // try-on off) and the recommend round trip lands on the loading screen.
     (root.querySelector(".gq-t1-row") as HTMLElement).click();
     await new Promise((r) => setTimeout(r, 450));
-    const gateSkip = root.querySelector(".gq-step--gate .gq-skip-link, .gq-step--gate-solo .gq-skip-link") as HTMLElement;
-    expect(gateSkip).not.toBeNull();
-    gateSkip.click();
-    await new Promise((r) => setTimeout(r, 250)); // screen swap is 160ms
     const loading = root.querySelector(".gq-tpl-loading");
     expect(loading).not.toBeNull();
     expect(loading!.querySelector(".gq-tpl-loading-rot")!.textContent).toBe("Made for every skin tone.");

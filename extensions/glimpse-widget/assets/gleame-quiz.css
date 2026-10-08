@@ -1451,6 +1451,20 @@
   #gleame-quiz-root .gq-results { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
 }
 
+/* Studio-only notice on a switched-off photo step (never on storefronts). */
+#gleame-quiz-root .gq-preview-off {
+  margin: 0 auto 16px;
+  max-width: 560px;
+  padding: 10px 14px;
+  border: 1px dashed currentColor;
+  border-radius: 8px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+  text-align: center;
+  color: #8a6100;
+  background: #fff8e6;
+}
+
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   #gleame-quiz-root .gq-option,

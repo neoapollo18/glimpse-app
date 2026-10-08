@@ -25,7 +25,7 @@ import {
   type GlobalRules,
   type EmptyCombination,
 } from "../../lib/answer-rules-shared";
-import { StoreContextStrip, type CanvasTheme } from "./PreviewCanvas";
+import type { CanvasTheme } from "./PreviewCanvas";
 
 export interface MatchingData {
   rules: AnswerRule[];
@@ -458,7 +458,6 @@ export function MatchesCenter({
   const q = state.questions.find((x) => x.axisKey === selection) ?? null;
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: "auto", background: "#fff", display: "flex", flexDirection: "column" }}>
-      <StoreContextStrip theme={theme} />
       <div style={{ flex: 1, padding: "36px 32px 60px", display: "flex", justifyContent: "center", alignItems: "flex-start" }}>
         {q ? (
           <RuleCard state={state} question={q} index={state.questions.indexOf(q)} onSelect={onSelect} />

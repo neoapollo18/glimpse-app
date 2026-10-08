@@ -554,7 +554,7 @@ export function PhotoEditor({
           setGateEnabled(v);
           schedule("copy", "quiz_gate_enabled", v);
         }}
-        helpText="When off, shoppers go straight from the questions to their results. This preview keeps showing the step so you can style it; the results page's shade picker and try-on offer are unaffected."
+        helpText="When off, shoppers go straight from the questions to their results, and so does the preview when you play the quiz. It only appears here, marked Off, so you can still edit it. The results page's shade picker and try-on offer are unaffected."
       />
       {!gateEnabled && (
         <Banner tone="info">

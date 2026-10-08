@@ -1,10 +1,11 @@
 import { useLayoutEffect, useRef, useState, type MutableRefObject } from "react";
 
 // V2-SPEC 2.1: the quiz renders FULL-BLEED on the themed canvas. The
-// canvas background is the quiz's own background token, the top edge is a
-// 32px store-context strip (store logo/name, enough to read as "my store"
-// without faking a browser), and the Desktop/Mobile toggle floats at the
-// bottom-center. No white card, no browser chrome, no drop shadow.
+// canvas background is the quiz's own background token and the
+// Desktop/Mobile toggle floats at the bottom-center. No white card, no
+// browser chrome, no drop shadow. (The store-name strip across the top was
+// removed 2026-10-08: it never appears on the published page and showed
+// the raw myshopify handle, e.g. "KPFU0S 11".)
 
 type Device = "mobile" | "desktop";
 
@@ -23,39 +24,6 @@ export interface CanvasTheme {
   headingFont: string;
   storeName: string;
   logoUrl: string | null;
-}
-
-export function StoreContextStrip({ theme }: { theme: CanvasTheme }) {
-  return (
-    <div
-      style={{
-        height: 32,
-        flexShrink: 0,
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-        padding: "0 18px",
-        background: theme.bg,
-        borderBottom: "1px solid rgba(0,0,0,0.06)",
-      }}
-    >
-      {theme.logoUrl ? (
-        <img src={theme.logoUrl} alt="" style={{ maxHeight: 20, maxWidth: 120, display: "block" }} />
-      ) : (
-        <span
-          style={{
-            fontFamily: theme.headingFont,
-            fontSize: 13,
-            letterSpacing: "0.14em",
-            textTransform: "uppercase",
-            color: theme.ink,
-          }}
-        >
-          {theme.storeName}
-        </span>
-      )}
-    </div>
-  );
 }
 
 export function DeviceToggle({
@@ -167,7 +135,6 @@ export function PreviewCanvas({
         background: theme.bg,
       }}
     >
-      <StoreContextStrip theme={theme} />
       <div
         ref={frameHostRef}
         style={{
