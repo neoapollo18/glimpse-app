@@ -20,6 +20,7 @@ import {
   type ChatAssistantConfig,
 } from "./supabase.server";
 import { isLiveProduct, isLiveVariant } from "./quiz-config-schema.server";
+import { buildCandidatePool } from "./recommendation-engine.server";
 import type { QuizDraft } from "./quiz-draft.server";
 import { getShopCurrency } from "./shop-currency.server";
 import { getBrandProfile, servedTemplateFor } from "./brand-profile.server";
@@ -364,7 +365,7 @@ export async function buildPreviewQuizConfig(
  * rule targets (or the shop's first products when there are no rules, e.g.
  * ai mode), resolved to names via the synced catalog.
  */
-export async function buildPreviewSampleRecommend(shopId: string, draft: QuizDraft, count = 6) {
+export async function buildPreviewSampleRecommend(shopId: string, draft: QuizDraft, count = 6, shopDomain?: string) {
   const targets: Array<{ productId: string | null; variantId: string | null; quantity: number; rank: number }> = [];
   const seen = new Set<string>();
   for (const rule of [...draft.flow.rules].sort((a, b) => a.rank - b.rank)) {
@@ -400,12 +401,30 @@ export async function buildPreviewSampleRecommend(shopId: string, draft: QuizDra
     );
   }
   if (targets.length === 0) {
-    // No rules (ai/hybrid draft): sample the first LIVE products so the
-    // results screen demonstrates the layout with items the published quiz
-    // could actually recommend.
-    productRows = (((await supabase.from("products").select("*").eq("shop_id", shopId).order("id").limit(count * 3)).data ?? [])
-      .filter((p: any) => isLiveProduct(p)))
-      .slice(0, count);
+    // No rules (ai/hybrid draft): sample from the quiz's own recommendation
+    // pool (product scope applied), so the results screen only ever shows
+    // items the published quiz could actually recommend. 2026-10-08: this
+    // used to take the first live products by id from the WHOLE catalog,
+    // which put Glamnetic's Nail Strengthener / nail glue / lash kits on the
+    // Studio results screen of a press-on-only quiz.
+    let poolIds: string[] = [];
+    if (shopDomain) {
+      try {
+        const live = await getChatAssistantConfig(shopDomain);
+        const scopeConfig = { ...live, ...(draft.settings as Partial<ChatAssistantConfig>) };
+        const { pool } = await buildCandidatePool(shopDomain, scopeConfig);
+        poolIds = [...new Set((pool?.candidates ?? []).map((c) => c.product.id))].slice(0, count);
+      } catch (e) {
+        console.warn("[quiz-preview] sample pool failed", e);
+      }
+    }
+    productRows = poolIds.length
+      ? (((await supabase.from("products").select("*").in("id", poolIds).eq("shop_id", shopId)).data ?? []).filter((p: any) =>
+          isLiveProduct(p),
+        ) as any[]).sort((a, b) => poolIds.indexOf(a.id) - poolIds.indexOf(b.id))
+      : (((await supabase.from("products").select("*").eq("shop_id", shopId).order("id").limit(count * 3)).data ?? [])
+          .filter((p: any) => isLiveProduct(p)))
+          .slice(0, count);
     for (const p of productRows) {
       targets.push({ productId: p.id, variantId: null, quantity: 1, rank: targets.length + 1 });
     }

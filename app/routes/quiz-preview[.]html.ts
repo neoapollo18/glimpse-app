@@ -79,7 +79,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const overrides = templateOverridesFromUrl(new URL(request.url));
   const [config, sample] = await Promise.all([
     buildPreviewQuizConfig(payload.shopDomain, draft, overrides),
-    buildPreviewSampleRecommend(payload.shopId, draft),
+    buildPreviewSampleRecommend(payload.shopId, draft, 6, payload.shopDomain),
   ]);
   const { productJson, ...sampleRecommend } = sample;
   const flow = buildPreviewFlow(draft);
