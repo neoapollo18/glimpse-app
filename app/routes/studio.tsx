@@ -56,7 +56,7 @@ import {
 } from "../lib/quiz-templates";
 import { arrivalBannerChips, FALLBACK_HINT, type ArrivalBanner } from "../lib/arrival-banner";
 import { parseGenerationReport } from "../lib/generation-report.server";
-import type { CatalogProduct } from "../lib/quiz-config-schema.server";
+import { isLiveProduct, type CatalogProduct } from "../lib/quiz-config-schema.server";
 
 import { StudioShell } from "../components/studio/StudioShell";
 import { StudioTopBar } from "../components/studio/StudioTopBar";
@@ -80,6 +80,16 @@ import { draftProblems } from "../components/studio/draft-problems";
 import { templatesKilled, templateServedLive } from "../lib/template-live.server";
 import { loadMatchingView } from "../lib/answer-rules.server";
 import { rememberShopCurrency } from "../lib/shop-currency.server";
+import { getQuizOffers, saveQuizOffers, syncManagedBundleDiscount, validateOffersPatch, type QuizOffers } from "../lib/quiz-offers.server";
+import {
+  connectKlaviyo,
+  disconnectKlaviyo,
+  getKlaviyoLists,
+  getKlaviyoStatus,
+  saveKlaviyoSettings,
+  unavailableIntegrationStatus,
+  type IntegrationStatus,
+} from "../lib/integrations.server";
 import { navigateParent } from "../components/studio/navigate-parent";
 import { postStudioAction } from "../components/studio/studio-data";
 import {
@@ -117,8 +127,22 @@ export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 // otherwise re-run this heavy loader (a 400-product store = ~50 loader
 // runs). The sync UIs render from the hook's own progress state, and the
 // completion handler revalidates explicitly.
-export const shouldRevalidate = ({ formAction, defaultShouldRevalidate }: { formAction?: string; defaultShouldRevalidate: boolean }) => {
+export const shouldRevalidate = ({
+  formAction,
+  formData,
+  defaultShouldRevalidate,
+}: {
+  formAction?: string;
+  formData?: FormData;
+  defaultShouldRevalidate: boolean;
+}) => {
   if (formAction?.includes("/app/api/catalog-sync")) return false;
+  // Sell more editors keep their own state from each response; re-running
+  // this loader (and the cross-sell catalog read) per autosave buys nothing.
+  const intent = formData?.get("intent");
+  if (typeof intent === "string" && (intent === "save-offers" || intent === "sync-bundle-discount" || intent.startsWith("klaviyo-"))) {
+    return false;
+  }
   return defaultShouldRevalidate;
 };
 
@@ -222,6 +246,36 @@ function resolveSlots(
     }
     return { ...d, ...unresolved };
   });
+}
+
+/** Lightweight live-product list for the cross-sell picker: what a
+ * merchant needs to recognize an add-on, nothing more. */
+async function loadOfferCatalog(shopId: string) {
+  const rows: Array<Record<string, unknown>> = [];
+  for (let from = 0; from < 5000; from += 1000) {
+    const { data, error } = await supabase
+      .from("products")
+      .select("shopify_id, handle, product_name, image_url, price, status, product_type")
+      .eq("shop_id", shopId)
+      .order("product_name", { ascending: true })
+      .range(from, from + 999);
+    if (error) {
+      console.error("[studio] offer catalog load failed:", error.message);
+      break;
+    }
+    rows.push(...((data ?? []) as Array<Record<string, unknown>>));
+    if (!data || data.length < 1000) break;
+  }
+  return rows
+    .filter((p) => isLiveProduct(p as { status?: string | null }) && typeof p.handle === "string" && /^\d+$/.test(String(p.shopify_id ?? "")))
+    .map((p) => ({
+      productId: String(p.shopify_id),
+      handle: String(p.handle),
+      title: String(p.product_name ?? p.handle),
+      imageUrl: typeof p.image_url === "string" ? p.image_url : null,
+      price: typeof p.price === "number" ? p.price : null,
+      productType: typeof p.product_type === "string" ? p.product_type : null,
+    }));
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -405,8 +459,24 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       })
     : null;
 
+  // Sell more (Studio Offers + Integrations, migration 086): loaded only
+  // while one of those slides is open, like Check matches above.
+  const slideParam = url.searchParams.get("slide") ?? "";
+  const onOffers = slideParam === "offers-bundle" || slideParam === "offers-crosssell";
+  const onIntegrations = slideParam === "integrations";
+  const [offers, offerCatalog, klaviyo] = await Promise.all([
+    onOffers ? getQuizOffers(shop.id) : Promise.resolve(null as QuizOffers | null),
+    slideParam === "offers-crosssell" ? loadOfferCatalog(shop.id) : Promise.resolve(null),
+    onIntegrations
+      ? getKlaviyoStatus(shop.id).catch(() => unavailableIntegrationStatus())
+      : Promise.resolve(null as IntegrationStatus | null),
+  ]);
+
   return json({
     matching,
+    offers,
+    offerCatalog,
+    klaviyo,
     apiKey: process.env.SHOPIFY_API_KEY || "",
     intercomAppId: process.env.INTERCOM_APP_ID || "",
     intercomUserJwt,
@@ -438,6 +508,13 @@ export type StudioActionData = {
   error?: string;
   intent?: string;
   needsConfirm?: boolean;
+  /** Sell more intents: fresh state for the editors. */
+  offers?: QuizOffers;
+  klaviyo?: IntegrationStatus;
+  klaviyoLists?: Array<{ id: string; name: string; optInProcess: string | null }>;
+  /** Optional access scopes the merchant must grant first. */
+  missingScopes?: string[];
+  message?: string;
   /** Fresh preview payloads after a successful apply-tool, for the
    * no-reload gleame-preview-update postMessage. */
   previewFlow?: unknown;
@@ -449,10 +526,25 @@ export type StudioActionData = {
 const NOTE_KEY_RE = /^[a-z_][a-z0-9_]*$/;
 const NOTE_MAX_LEN = 4000;
 
+type AdminClient = Awaited<ReturnType<typeof authenticate.admin>>["admin"];
+
+/** Admin GraphQL → data, throwing on top-level errors (the discount sync
+ * reads access-denied out of the message, same as publish). */
+function adminGraphqlFor(admin: AdminClient) {
+  return async (query: string, variables?: Record<string, unknown>) => {
+    const res = await admin.graphql(query, variables ? { variables } : undefined);
+    const body = (await res.json()) as { data?: any; errors?: Array<{ message?: string }> | { message?: string } };
+    const errors = Array.isArray(body.errors) ? body.errors : body.errors ? [body.errors] : [];
+    if (errors.length) throw new Error(errors[0]?.message ?? "graphql error");
+    return body.data;
+  };
+}
+
 export const action = async ({ request }: ActionFunctionArgs) => {
   let session;
+  let admin;
   try {
-    ({ session } = await authenticate.admin(request));
+    ({ session, admin } = await authenticate.admin(request));
   } catch (err) {
     if (err instanceof Response) {
       return json({ ok: false, error: "Session expired. Please reload." }, { status: 401 });
@@ -754,6 +846,87 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
         return json({ ok: true, intent });
       }
+      case "save-offers": {
+        // Studio Offers (migration 086): a partial patch from the bundle or
+        // cross-sell editor. Managed-discount bookkeeping is never client
+        // writable; the generated code belongs to the sync below.
+        let raw: unknown;
+        try {
+          raw = JSON.parse(String(formData.get("patch") ?? "{}"));
+        } catch {
+          return json({ ok: false, error: "Malformed offers", intent }, { status: 400 });
+        }
+        const v = validateOffersPatch(raw);
+        if (!v.ok) return json({ ok: false, error: v.error, intent });
+        const before = await getQuizOffers(shop.id);
+        const nextMode = v.patch.bundleDiscountMode ?? before.bundleDiscountMode;
+        if (nextMode === "managed") delete v.patch.bundleDiscountCode;
+        // Leaving managed mode: forget the generated code client-side too,
+        // so 'code' mode starts empty instead of pointing at our discount.
+        if (before.bundleDiscountMode === "managed" && nextMode !== "managed" && !("bundleDiscountCode" in v.patch)) {
+          v.patch.bundleDiscountCode = null;
+        }
+        const discountFieldsChanged = ["bundleDiscountMode", "bundleDiscountType", "bundleDiscountValue", "bundleDiscountMinQty"].some(
+          (k) => k in v.patch,
+        );
+        // A managed discount already in Shopify follows the edit (update,
+        // or deactivate when switched off). Shopify first, then the DB:
+        // the sync persists the patch only on success. First creation is
+        // an explicit merchant action (sync-bundle-discount), which is
+        // where the discount scope is requested.
+        if (discountFieldsChanged && before.bundleDiscountShopifyId) {
+          const cfg = await getChatAssistantConfig(shopDomain).catch(() => null);
+          const synced = await syncManagedBundleDiscount(shop.id, adminGraphqlFor(admin), {
+            bundleSize: cfg?.quiz_bundle_size ?? 0,
+            pendingPatch: v.patch,
+          });
+          if (!synced.ok) {
+            return json({ ok: false, error: synced.error, missingScopes: synced.missingScopes, offers: before, intent });
+          }
+          return json({ ok: true, offers: synced.offers, message: synced.message, intent });
+        }
+        const saved = await saveQuizOffers(shop.id, v.patch);
+        if (!saved.ok) return json({ ok: false, error: saved.error, intent });
+        return json({ ok: true, offers: saved.offers, intent });
+      }
+      case "sync-bundle-discount": {
+        const cfg = await getChatAssistantConfig(shopDomain).catch(() => null);
+        const synced = await syncManagedBundleDiscount(shop.id, adminGraphqlFor(admin), {
+          bundleSize: cfg?.quiz_bundle_size ?? 0,
+        });
+        if (!synced.ok) return json({ ok: false, error: synced.error, missingScopes: synced.missingScopes, intent });
+        return json({ ok: true, offers: synced.offers, message: synced.message, intent });
+      }
+      case "klaviyo-connect": {
+        const key = String(formData.get("apiKey") ?? "");
+        const connected = await connectKlaviyo(shop.id, key);
+        if (!connected.ok) return json({ ok: false, error: connected.error, intent });
+        return json({ ok: true, klaviyo: connected.status, klaviyoLists: connected.lists, intent });
+      }
+      case "klaviyo-lists": {
+        const listed = await getKlaviyoLists(shop.id);
+        if (!listed.ok) return json({ ok: false, error: listed.error, intent });
+        return json({ ok: true, klaviyoLists: listed.lists, intent });
+      }
+      case "klaviyo-save": {
+        let raw: any;
+        try {
+          raw = JSON.parse(String(formData.get("patch") ?? "{}"));
+        } catch {
+          return json({ ok: false, error: "Malformed settings", intent }, { status: 400 });
+        }
+        const saved = await saveKlaviyoSettings(shop.id, {
+          enabled: typeof raw?.enabled === "boolean" ? raw.enabled : undefined,
+          settings: raw?.settings && typeof raw.settings === "object" ? raw.settings : undefined,
+        });
+        if (!saved.ok) return json({ ok: false, error: saved.error, intent });
+        return json({ ok: true, klaviyo: saved.status, intent });
+      }
+      case "klaviyo-disconnect": {
+        const res = await disconnectKlaviyo(shop.id);
+        if (!res.ok) return json({ ok: false, error: res.error, intent });
+        return json({ ok: true, klaviyo: await getKlaviyoStatus(shop.id), intent });
+      }
       default:
         return json({ ok: false, error: "Unknown intent" }, { status: 400 });
     }
@@ -960,7 +1133,18 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
   const questions = data.draft?.flow.questions ?? [];
   const selectedSlide = ((): string => {
     const s = params.get("slide");
-    if (s === "intro" || s === "photo" || s === "results" || s === "theme" || s === "images" || s === "lead") return s;
+    if (
+      s === "intro" ||
+      s === "photo" ||
+      s === "results" ||
+      s === "theme" ||
+      s === "images" ||
+      s === "lead" ||
+      s === "offers-bundle" ||
+      s === "offers-crosssell" ||
+      s === "integrations"
+    )
+      return s;
     if (s?.startsWith("q:") && questions.some((q) => slideIdForQuestion(q.axisKey) === s)) return s;
     return questions.length > 0 ? slideIdForQuestion(questions[0].axisKey) : "intro";
   })();
@@ -1097,9 +1281,9 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
   const stepForSlide = useCallback(
     (slideId: string) => {
       if (slideId === "intro" || slideId === "theme" || slideId === "images") return "intro";
-      if (slideId === "lead") return "lead";
+      if (slideId === "lead" || slideId === "integrations") return "lead";
       if (slideId === "photo") return "gate";
-      if (slideId === "results") return "results";
+      if (slideId === "results" || slideId === "offers-bundle" || slideId === "offers-crosssell") return "results";
       const qi = questions.findIndex((q) => slideIdForQuestion(q.axisKey) === slideId);
       if (qi < 0) return "intro";
       // Normalize to the screen's FIRST question: the widget renders and
@@ -1231,13 +1415,19 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
         if (q) slideId = slideIdForQuestion(q.axisKey);
       }
       if (!slideId) return;
-      // Theme/Images map their goto to the intro step — don't let an echo
-      // steal that selection.
+      // Theme/Images map their goto to the intro step, Sell more to results
+      // or the lead step — don't let an echo steal those selections.
       if (
         (selectedSlideRef.current === "theme" || selectedSlideRef.current === "images") &&
         slideId === "intro"
       )
         return;
+      if (
+        (selectedSlideRef.current === "offers-bundle" || selectedSlideRef.current === "offers-crosssell") &&
+        slideId === "results"
+      )
+        return;
+      if (selectedSlideRef.current === "integrations" && slideId === "lead") return;
       // Grouped screens report their FIRST question; if the current
       // selection lives on that same screen, keep it (otherwise later
       // questions in a group were unselectable).

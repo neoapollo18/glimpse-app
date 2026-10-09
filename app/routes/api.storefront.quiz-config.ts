@@ -13,6 +13,7 @@ import { getBrandProfile, servedTemplateFor } from "../lib/brand-profile.server"
 import { defaultEmailPlacement, isTemplateId, resolveQuizTokens } from "../lib/quiz-templates";
 import { templateRenderable, templateServedLive } from "../lib/template-live.server";
 import { getShopCurrency } from "../lib/shop-currency.server";
+import { getQuizOffers, publicOffersPayload } from "../lib/quiz-offers.server";
 import { verifyStorePreviewToken } from "../lib/app-proxy.server";
 
 /** Template contract the widget must declare (`&tpl=`) to receive template
@@ -54,12 +55,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return json({ error: "Subscription inactive" }, { status: 403, headers: CORS_HEADERS });
   }
 
-  const [config, currency] = await Promise.all([
+  const [config, currency, offers] = await Promise.all([
     getChatAssistantConfig(verifiedShop.shop_domain),
     // Store currency (migration 084): the widget's price fallback when the
     // page has no window.Shopify.currency. null = unknown (USD fallback).
     getShopCurrency(verifiedShop.id).catch(() => null),
+    // Studio Offers (migration 086); a missing table reads as all off.
+    getQuizOffers(verifiedShop.id),
   ]);
+  const publicOffers = publicOffersPayload(offers, {
+    bundleEnabled: config.quiz_bundle_enabled,
+    bundleSize: config.quiz_bundle_size,
+  });
 
   // Overhaul template system (migration 072): quiz_template NULL = legacy
   // rendering, brandTokens absent, nothing changes.
@@ -159,6 +166,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       progressStyle: config.quiz_progress_style,
       introLayout: config.quiz_intro_layout,
       animationStyle: config.quiz_animation_style,
+      // Classic compact layout (migration 086). Templates own their layout,
+      // so it's only ever true for the classic renderer.
+      compactLayout: config.quiz_compact_layout && !servedTemplate,
       // Overhaul templates (Contract 2/3): template id sets the widget's
       // root layout class; brandTokens map onto the --gq-* vars before the
       // merchant overrides above. Both absent for legacy shops.
@@ -197,6 +207,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         visualCaption: renderTokens(config.quiz_visual_caption),
         altAudienceLabel: config.quiz_alt_audience_label,
         altAudienceUrl: config.quiz_alt_audience_url,
+        // "You'll add a pic at the end" line (migration 086). Null = hidden.
+        photoNote: config.quiz_photo_note ? renderTokens(config.quiz_photo_note) : null,
         // v3 intro types (spec 5.1), template shops only. `rating` is
         // ALWAYS null until a review-app reader exists — never typed by
         // default. `founder` feeds intro type D; null falls to type E.
@@ -246,6 +258,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         matchFootnote: config.quiz_match_footnote
           ? renderTokens(config.quiz_match_footnote)
           : null,
+        // Studio Offers (migration 086). Both null when off. The bundle
+        // discount CODE is not here: quiz-bundle-discount serves it after
+        // the bundle add.
+        crossSell: publicOffers.crossSell,
+        bundleDiscount: publicOffers.bundleDiscount,
         // v2 template results content (spec 5.6 / Part 3), only when a
         // template is assigned: T2's computation-screen trust lines,
         // T1's consultation prose template, T4's archetype reveal copy.

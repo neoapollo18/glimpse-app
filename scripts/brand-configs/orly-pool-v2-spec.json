@@ -1,0 +1,2408 @@
+{
+ "source": "ORLY Recommendation Backfill v2.md",
+ "section": "§6 THE POOL",
+ "parsedAt": "2026-10-09T08:14:01.008Z",
+ "rows": [
+  {
+   "handle": "reddy-or-not",
+   "name": "Reddy or Not",
+   "chips": [],
+   "finishes": [
+    "creme",
+    "sheer_glossy"
+   ],
+   "depth": "deep",
+   "formula": "Breathable",
+   "hex": "#65000A",
+   "class": "color"
+  },
+  {
+   "handle": "after-school-special",
+   "name": "After School Special",
+   "chips": [],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#BEC2BA",
+   "class": "topper"
+  },
+  {
+   "handle": "disco-drop",
+   "name": "Disco Drop",
+   "chips": [],
+   "finishes": [
+    "full_sparkle",
+    "chrome_metallic"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#C9BAB5",
+   "class": "topper"
+  },
+  {
+   "handle": "twinkling-veil",
+   "name": "Twinkling Veil",
+   "chips": [],
+   "finishes": [
+    "soft_shimmer",
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#CFCAC8",
+   "class": "topper"
+  },
+  {
+   "handle": "bubblegum-pop",
+   "name": "Bubblegum Pop",
+   "chips": [],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "Lacquer",
+   "hex": "#FF709E",
+   "class": "color"
+  },
+  {
+   "handle": "liquid-vinyl-gel-nail-color",
+   "name": "Liquid Vinyl - Gel Nail Color",
+   "chips": [
+    "blacks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "GELFX",
+   "hex": "#00000C",
+   "class": "color"
+  },
+  {
+   "handle": "breathable-mind-over-matter",
+   "name": "Mind Over Matter",
+   "chips": [
+    "blacks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "Breathable",
+   "hex": "#000002",
+   "class": "color"
+  },
+  {
+   "handle": "i-m-easily-suede",
+   "name": "I’m Easily Suede",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "Breathable",
+   "hex": "#144154",
+   "class": "color"
+  },
+  {
+   "handle": "last-run",
+   "name": "Last Run",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "Lacquer",
+   "hex": "#001C5B",
+   "class": "color"
+  },
+  {
+   "handle": "last-run-gel-nail-color",
+   "name": "Last Run - Gel Nail Color",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "GELFX",
+   "hex": "#072049",
+   "class": "color"
+  },
+  {
+   "handle": "bell-bottom-blues",
+   "name": "Bell Bottom Blues",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "soft_shimmer"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#BEE3F7",
+   "class": "color"
+  },
+  {
+   "handle": "bell-bottom-blues-gel-nail-color-1",
+   "name": "Bell Bottom Blues - Gel Nail Color",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "soft_shimmer"
+   ],
+   "depth": "light",
+   "formula": "GELFX",
+   "hex": "#BEE3F7",
+   "class": "color"
+  },
+  {
+   "handle": "dreamcatcher",
+   "name": "Dreamcatcher",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#2FBBC8",
+   "class": "color"
+  },
+  {
+   "handle": "dreamcatcher-gel-nail-color",
+   "name": "Dreamcatcher  - Gel Nail Color",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "GELFX",
+   "hex": "#2FBBC8",
+   "class": "color"
+  },
+  {
+   "handle": "flip-phone",
+   "name": "Flip Phone",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#A9BACF",
+   "class": "color"
+  },
+  {
+   "handle": "flip-phone-gel-nail-color",
+   "name": "Flip Phone  - Gel Nail Color",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "formula": "GELFX",
+   "hex": "#A9BACF",
+   "class": "color"
+  },
+  {
+   "handle": "fresh-powder-gel-nail-color",
+   "name": "Fresh Powder - Gel Nail Color",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "GELFX",
+   "hex": "#E1F0E8",
+   "class": "color"
+  },
+  {
+   "handle": "looking-glass",
+   "name": "Looking Glass",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#B1B2C8",
+   "class": "topper"
+  },
+  {
+   "handle": "shore-thing",
+   "name": "Shore Thing",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "soft_shimmer"
+   ],
+   "depth": "light",
+   "formula": "Breathable",
+   "hex": "#A6C2CA",
+   "class": "color"
+  },
+  {
+   "handle": "among-the-stars",
+   "name": "Among the Stars",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "mid",
+   "formula": "Lacquer",
+   "hex": "#5191B2",
+   "class": "topper"
+  },
+  {
+   "handle": "be-kind-rewind",
+   "name": "Be Kind Rewind",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "Lacquer",
+   "hex": "#0082B6",
+   "class": "color"
+  },
+  {
+   "handle": "be-kind-rewind-gel-nail-color",
+   "name": "Be Kind Rewind  - Gel Nail Color",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "GELFX",
+   "hex": "#0082B6",
+   "class": "color"
+  },
+  {
+   "handle": "freudian-flip",
+   "name": "Freudian Flip",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "chrome_metallic"
+   ],
+   "depth": "mid",
+   "formula": "Breathable",
+   "hex": "#245F71",
+   "class": "color"
+  },
+  {
+   "handle": "glass-act",
+   "name": "Glass Act",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "chrome_metallic"
+   ],
+   "depth": "mid",
+   "formula": "Breathable",
+   "hex": "#4384CB",
+   "class": "color"
+  },
+  {
+   "handle": "mallrat",
+   "name": "Mallrat",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "Lacquer",
+   "hex": "#33BAC1",
+   "class": "color"
+  },
+  {
+   "handle": "mallrat-gel-nail-color",
+   "name": "Mallrat - Gel Nail Color",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "GELFX",
+   "hex": "#33BAC1",
+   "class": "color"
+  },
+  {
+   "handle": "skystone",
+   "name": "Skystone",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "Lacquer",
+   "hex": "#007B88",
+   "class": "color"
+  },
+  {
+   "handle": "fleece-to-meet-you",
+   "name": "Fleece to Meet You",
+   "chips": [
+    "greens"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "Breathable",
+   "hex": "#194E3D",
+   "class": "color"
+  },
+  {
+   "handle": "fresh-start",
+   "name": "Fresh Start",
+   "chips": [
+    "greens"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "Breathable",
+   "hex": "#C1E5CB",
+   "class": "color"
+  },
+  {
+   "handle": "hey-bestie",
+   "name": "Hey Bestie",
+   "chips": [
+    "greens"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#77BE29",
+   "class": "topper"
+  },
+  {
+   "handle": "dear-abby",
+   "name": "Dear Abby",
+   "chips": [
+    "greens"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "Lacquer",
+   "hex": "#007B7A",
+   "class": "color"
+  },
+  {
+   "handle": "rollin-with-my-homies-gel-nail-color",
+   "name": "Rollin With My Homies  - Gel Nail Color",
+   "chips": [
+    "greens"
+   ],
+   "finishes": [
+    "chrome_metallic"
+   ],
+   "depth": "mid",
+   "formula": "GELFX",
+   "hex": "#A693BA",
+   "class": "color"
+  },
+  {
+   "handle": "sea-me-now",
+   "name": "Sea Me Now",
+   "chips": [
+    "greens"
+   ],
+   "finishes": [
+    "creme",
+    "sheer_glossy"
+   ],
+   "depth": "mid",
+   "formula": "Breathable",
+   "hex": "#749F89",
+   "class": "color"
+  },
+  {
+   "handle": "touch-grass",
+   "name": "Touch Grass",
+   "chips": [
+    "greens"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "Lacquer",
+   "hex": "#01743D",
+   "class": "color"
+  },
+  {
+   "handle": "yule-love-this",
+   "name": "Yule Love This",
+   "chips": [
+    "greens"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "mid",
+   "formula": "Lacquer",
+   "hex": "#668C44",
+   "class": "color"
+  },
+  {
+   "handle": "yule-love-this-gel-nail-color",
+   "name": "Yule Love This - Gel Nail Color",
+   "chips": [
+    "greens"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "mid",
+   "formula": "GELFX",
+   "hex": "#668C44",
+   "class": "color"
+  },
+  {
+   "handle": "rollin-with-my-homies",
+   "name": "Rollin With My Homies",
+   "chips": [
+    "greens",
+    "purples"
+   ],
+   "finishes": [
+    "soft_shimmer",
+    "chrome_metallic"
+   ],
+   "depth": "mid",
+   "formula": "Lacquer",
+   "hex": "#A693BA",
+   "class": "color"
+  },
+  {
+   "handle": "chillax",
+   "name": "Chillax",
+   "chips": [
+    "greys"
+   ],
+   "finishes": [
+    "creme",
+    "soft_shimmer",
+    "chrome_metallic"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#B6B9BB",
+   "class": "color"
+  },
+  {
+   "handle": "chillax-gel-nail-color",
+   "name": "Chillax  - Gel Nail Color",
+   "chips": [
+    "greys"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "GELFX",
+   "hex": "#B6B9BB",
+   "class": "color"
+  },
+  {
+   "handle": "double-diamond",
+   "name": "Double Diamond",
+   "chips": [
+    "greys"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#B4BDC6",
+   "class": "color"
+  },
+  {
+   "handle": "double-diamond-gel-nail-color",
+   "name": "Double Diamond - Gel Nail Color",
+   "chips": [
+    "greys"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "formula": "GELFX",
+   "hex": "#B4BDC7",
+   "class": "color"
+  },
+  {
+   "handle": "shine-gel-nail-color",
+   "name": "Shine - Gel Nail Color",
+   "chips": [
+    "greys"
+   ],
+   "finishes": [
+    "soft_shimmer",
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "formula": "GELFX",
+   "hex": "#DEE0E3",
+   "class": "color"
+  },
+  {
+   "handle": "sleigh-yes",
+   "name": "Sleigh Yes!",
+   "chips": [
+    "greys"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#C0BABA",
+   "class": "color"
+  },
+  {
+   "handle": "typing",
+   "name": "Typing...",
+   "chips": [
+    "greys"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "mid",
+   "formula": "Lacquer",
+   "hex": "#96939B",
+   "class": "color"
+  },
+  {
+   "handle": "grunge-glam",
+   "name": "Grunge Glam",
+   "chips": [
+    "greys",
+    "blacks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "Lacquer",
+   "hex": "#232326",
+   "class": "color"
+  },
+  {
+   "handle": "grunge-glam-gel-nail-color",
+   "name": "Grunge Glam - Gel Nail Color",
+   "chips": [
+    "greys",
+    "blacks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "GELFX",
+   "hex": "#232326",
+   "class": "color"
+  },
+  {
+   "handle": "beach-you-to-it",
+   "name": "Beach You To It!",
+   "chips": [
+    "nudes"
+   ],
+   "finishes": [
+    "soft_shimmer"
+   ],
+   "depth": "light",
+   "formula": "Breathable",
+   "hex": "#EAB391",
+   "class": "color"
+  },
+  {
+   "handle": "leather-you-like-it-or-not",
+   "name": "Leather You Like It or Not",
+   "chips": [
+    "nudes",
+    "browns"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "Breathable",
+   "hex": "#612E2A",
+   "class": "color"
+  },
+  {
+   "handle": "nude-attitude",
+   "name": "Nude Attitude",
+   "chips": [
+    "nudes",
+    "browns"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "Breathable",
+   "hex": "#CFEDE1",
+   "class": "color"
+  },
+  {
+   "handle": "sunkissed",
+   "name": "Sunkissed",
+   "chips": [
+    "nudes",
+    "browns"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "Breathable",
+   "hex": "#B95943",
+   "class": "color"
+  },
+  {
+   "handle": "chalet-getaway",
+   "name": "Chalet Getaway",
+   "chips": [
+    "nudes",
+    "browns",
+    "greys"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#BF9C86",
+   "class": "color"
+  },
+  {
+   "handle": "chalet-getaway-gel-nail-color",
+   "name": "Chalet Getaway - Gel Nail Color",
+   "chips": [
+    "nudes",
+    "browns",
+    "greys"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "GELFX",
+   "hex": "#AC8B78",
+   "class": "color"
+  },
+  {
+   "handle": "acid-trip",
+   "name": "Acid Trip",
+   "chips": [
+    "oranges"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "deep",
+   "formula": "Lacquer",
+   "hex": "#832409",
+   "class": "color"
+  },
+  {
+   "handle": "acid-trip-gel-nail-color",
+   "name": "Acid Trip - Gel Nail Color",
+   "chips": [
+    "oranges"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "deep",
+   "formula": "GELFX",
+   "hex": "#832409",
+   "class": "color"
+  },
+  {
+   "handle": "hunky-dory-gel-nail-color",
+   "name": "Hunky Dory - Gel Nail Color",
+   "chips": [
+    "oranges"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "GELFX",
+   "hex": "#F2A752",
+   "class": "color"
+  },
+  {
+   "handle": "shaggin-wagon",
+   "name": "Shaggin Wagon",
+   "chips": [
+    "oranges"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#E2AD8E",
+   "class": "color"
+  },
+  {
+   "handle": "shaggin-wagon-gel-nail-color",
+   "name": "Shaggin Wagon - Gel Nail Color",
+   "chips": [
+    "oranges"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "GELFX",
+   "hex": "#E2AD8E",
+   "class": "color"
+  },
+  {
+   "handle": "so-fetch",
+   "name": "So Fetch",
+   "chips": [
+    "oranges"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#FE9F7E",
+   "class": "color"
+  },
+  {
+   "handle": "so-fetch-gel-nail-color",
+   "name": "So Fetch - Gel Nail Color",
+   "chips": [
+    "oranges"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "GELFX",
+   "hex": "#FE9F7E",
+   "class": "color"
+  },
+  {
+   "handle": "a-vibe",
+   "name": "A Vibe",
+   "chips": [
+    "oranges"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "Lacquer",
+   "hex": "#FF6120",
+   "class": "color"
+  },
+  {
+   "handle": "cloud-nine-gel-nail-color",
+   "name": "Cloud Nine - Gel Nail Color",
+   "chips": [
+    "oranges",
+    "nudes"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "GELFX",
+   "hex": "#F7F1EA",
+   "class": "color"
+  },
+  {
+   "handle": "sheer-nude-gel-nail-color",
+   "name": "Sheer Nude - Gel Nail Color",
+   "chips": [
+    "oranges",
+    "nudes"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "GELFX",
+   "hex": "#EBAE83",
+   "class": "color"
+  },
+  {
+   "handle": "coral-crush",
+   "name": "Coral Crush",
+   "chips": [
+    "oranges",
+    "pinks"
+   ],
+   "finishes": [
+    "soft_shimmer",
+    "full_sparkle"
+   ],
+   "depth": "deep",
+   "formula": "Lacquer",
+   "hex": "#F30124",
+   "class": "color"
+  },
+  {
+   "handle": "aphromite",
+   "name": "Aphromite",
+   "chips": [
+    "oranges",
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "Breathable",
+   "hex": "#FE454D",
+   "class": "color"
+  },
+  {
+   "handle": "hits-different",
+   "name": "Hits Different",
+   "chips": [
+    "oranges",
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "Lacquer",
+   "hex": "#FF3A41",
+   "class": "color"
+  },
+  {
+   "handle": "most-definitely",
+   "name": "Most Definitely",
+   "chips": [
+    "oranges",
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "Lacquer",
+   "hex": "#FE4D62",
+   "class": "color"
+  },
+  {
+   "handle": "most-definitely-gel-nail-color",
+   "name": "Most Definitely  - Gel Nail Color",
+   "chips": [
+    "oranges",
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "GELFX",
+   "hex": "#FE4D62",
+   "class": "color"
+  },
+  {
+   "handle": "nail-superfood",
+   "name": "Nail Superfood",
+   "chips": [
+    "oranges",
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "Breathable",
+   "hex": "#FE6374",
+   "class": "color"
+  },
+  {
+   "handle": "night-fever",
+   "name": "Night Fever",
+   "chips": [
+    "oranges",
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "Lacquer",
+   "hex": "#F16A52",
+   "class": "color"
+  },
+  {
+   "handle": "bell-bottom-blues-gel-nail-color",
+   "name": "Night Fever - Gel Nail Color",
+   "chips": [
+    "oranges",
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "GELFX",
+   "hex": "#F16A52",
+   "class": "color"
+  },
+  {
+   "handle": "no-coral-ation",
+   "name": "No Coral-ation",
+   "chips": [
+    "oranges",
+    "pinks"
+   ],
+   "finishes": [
+    "creme",
+    "sheer_glossy"
+   ],
+   "depth": "mid",
+   "formula": "Breathable",
+   "hex": "#E56954",
+   "class": "color"
+  },
+  {
+   "handle": "meet-cute-gel-nail-color-1",
+   "name": "Meet Cute - Gel Nail Color",
+   "chips": [
+    "oranges",
+    "purples",
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "GELFX",
+   "hex": "#F9737A",
+   "class": "color"
+  },
+  {
+   "handle": "hunky-dory",
+   "name": "Hunky Dory",
+   "chips": [
+    "oranges",
+    "yellows"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#F2A752",
+   "class": "color"
+  },
+  {
+   "handle": "bronze-in-a-lifetime",
+   "name": "Bronze In A Lifetime",
+   "chips": [
+    "oranges",
+    "yellows",
+    "browns"
+   ],
+   "finishes": [
+    "soft_shimmer",
+    "full_sparkle"
+   ],
+   "depth": "mid",
+   "formula": "Breathable",
+   "hex": "#A3580F",
+   "class": "color"
+  },
+  {
+   "handle": "gilded-dune",
+   "name": "Gilded Dune",
+   "chips": [
+    "oranges",
+    "yellows",
+    "browns"
+   ],
+   "finishes": [
+    "soft_shimmer"
+   ],
+   "depth": "mid",
+   "formula": "Lacquer",
+   "hex": "#C78024",
+   "class": "color"
+  },
+  {
+   "handle": "earthfire-gel-nail-color-copy",
+   "name": "Gilded Dune - Gel Nail Color",
+   "chips": [
+    "oranges",
+    "yellows",
+    "browns"
+   ],
+   "finishes": [
+    "soft_shimmer"
+   ],
+   "depth": "mid",
+   "formula": "GELFX",
+   "hex": "#C78024",
+   "class": "color"
+  },
+  {
+   "handle": "berry-bliss",
+   "name": "Berry Bliss",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "Lacquer",
+   "hex": "#ED004B",
+   "class": "color"
+  },
+  {
+   "handle": "berry-bliss-gel-nail-color",
+   "name": "Berry Bliss  - Gel Nail Color",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "GELFX",
+   "hex": "#ED004B",
+   "class": "color"
+  },
+  {
+   "handle": "power-pink",
+   "name": "Power Pink",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "sheer_glossy"
+   ],
+   "depth": "deep",
+   "formula": "Lacquer",
+   "hex": "#DE0037",
+   "class": "color"
+  },
+  {
+   "handle": "golden-french-drip",
+   "name": "Golden French Drip",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "chrome_metallic"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#F2C9BE",
+   "class": "color"
+  },
+  {
+   "handle": "happy-and-healthy",
+   "name": "Happy And Healthy",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "Breathable",
+   "hex": "#EBA09B",
+   "class": "color"
+  },
+  {
+   "handle": "it-started-with-pink",
+   "name": "It Started With Pink",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#FFBFC3",
+   "class": "color"
+  },
+  {
+   "handle": "it-started-with-pink-gel-nail-color",
+   "name": "It Started With Pink - Gel Nail Color",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "GELFX",
+   "hex": "#FFBFC3",
+   "class": "color"
+  },
+  {
+   "handle": "itll-always-be-pink",
+   "name": "It'll Always Be Pink",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#FF91C2",
+   "class": "color"
+  },
+  {
+   "handle": "itll-always-be-pink-gel-nail-color",
+   "name": "It'll Always Be Pink - Gel Nail Color",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "GELFX",
+   "hex": "#FF91C2",
+   "class": "color"
+  },
+  {
+   "handle": "kiss-the-bride-gel-nail-color",
+   "name": "Kiss The Bride - Gel Nail Color",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "GELFX",
+   "hex": "#FAD7DE",
+   "class": "color"
+  },
+  {
+   "handle": "leave-britney-alone",
+   "name": "Leave Britney Alone",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#FFA7C3",
+   "class": "color"
+  },
+  {
+   "handle": "leave-britney-alone-gel-nail-color",
+   "name": "Leave Britney Alone  - Gel Nail Color",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "GELFX",
+   "hex": "#FEA6C4",
+   "class": "color"
+  },
+  {
+   "handle": "orly-pink",
+   "name": "ORLY Pink",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#FCD7DB",
+   "class": "color"
+  },
+  {
+   "handle": "orly-pink-gel-nail-color",
+   "name": "ORLY Pink - Gel Nail Color",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "GELFX",
+   "hex": "#FED8DD",
+   "class": "color"
+  },
+  {
+   "handle": "scales-tales",
+   "name": "Scales & Tales",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "soft_shimmer",
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#E9AC9E",
+   "class": "topper"
+  },
+  {
+   "handle": "shell-we-dance",
+   "name": "Shell We Dance?",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme",
+    "sheer_glossy"
+   ],
+   "depth": "light",
+   "formula": "Breathable",
+   "hex": "#FE91C0",
+   "class": "color"
+  },
+  {
+   "handle": "strawberry-cream",
+   "name": "Strawberry Cream",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#FED8D9",
+   "class": "color"
+  },
+  {
+   "handle": "totally-clueless",
+   "name": "Totally Clueless",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#E3AAB7",
+   "class": "color"
+  },
+  {
+   "handle": "ph-perfector-cool-blush",
+   "name": "pH Perfector - Cool Blush",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#E7DEE2",
+   "class": "color"
+  },
+  {
+   "handle": "ph-perfector-warm-blush",
+   "name": "pH Perfector - Warm Blush",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "soft_shimmer",
+    "sheer_glossy"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#F0C6AD",
+   "class": "color"
+  },
+  {
+   "handle": "juicy-velour",
+   "name": "Juicy Velour",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "Lacquer",
+   "hex": "#FE4866",
+   "class": "color"
+  },
+  {
+   "handle": "juicy-velour-gel-nail-color",
+   "name": "Juicy Velour  - Gel Nail Color",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "GELFX",
+   "hex": "#FE4866",
+   "class": "color"
+  },
+  {
+   "handle": "moonstone-aura",
+   "name": "Moonstone Aura",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "full_sparkle",
+    "chrome_metallic"
+   ],
+   "depth": "mid",
+   "formula": "Lacquer",
+   "hex": "#405F72",
+   "class": "topper"
+  },
+  {
+   "handle": "shut-up-heather",
+   "name": "Shut Up Heather",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "Lacquer",
+   "hex": "#CB4779",
+   "class": "color"
+  },
+  {
+   "handle": "shut-up-heather-gel-nail-color",
+   "name": "Shut Up Heather  - Gel Nail Color",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "GELFX",
+   "hex": "#CB4779",
+   "class": "color"
+  },
+  {
+   "handle": "thats-hot",
+   "name": "That's Hot",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "Lacquer",
+   "hex": "#DD3871",
+   "class": "color"
+  },
+  {
+   "handle": "dont-juno",
+   "name": "Don't Juno",
+   "chips": [
+    "pinks",
+    "nudes"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "Breathable",
+   "hex": "#F4B0A7",
+   "class": "color"
+  },
+  {
+   "handle": "first-bloom",
+   "name": "First Bloom",
+   "chips": [
+    "pinks",
+    "nudes"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#EDCBCB",
+   "class": "color"
+  },
+  {
+   "handle": "first-bloom-gel-nail-color",
+   "name": "First Bloom - Gel Nail Color",
+   "chips": [
+    "pinks",
+    "nudes"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "GELFX",
+   "hex": "#EDCBCB",
+   "class": "color"
+  },
+  {
+   "handle": "sweet-cheeks",
+   "name": "Sweet Cheeks",
+   "chips": [
+    "pinks",
+    "nudes"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "Breathable",
+   "hex": "#CFEDE1",
+   "class": "color"
+  },
+  {
+   "handle": "all-eyes-on-her",
+   "name": "All Eyes on Her",
+   "chips": [
+    "purples"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "Lacquer",
+   "hex": "#3C288A",
+   "class": "color"
+  },
+  {
+   "handle": "alloy-matey",
+   "name": "Alloy Matey",
+   "chips": [
+    "purples"
+   ],
+   "finishes": [
+    "soft_shimmer"
+   ],
+   "depth": "deep",
+   "formula": "Breathable",
+   "hex": "#6F03B9",
+   "class": "color"
+  },
+  {
+   "handle": "starlit-shale",
+   "name": "Starlit Shale",
+   "chips": [
+    "purples"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "Lacquer",
+   "hex": "#3C154C",
+   "class": "color"
+  },
+  {
+   "handle": "stay-rad",
+   "name": "Stay Rad",
+   "chips": [
+    "purples"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "Lacquer",
+   "hex": "#690C5D",
+   "class": "color"
+  },
+  {
+   "handle": "stay-rad-gel-nail-color",
+   "name": "Stay Rad  - Gel Nail Color",
+   "chips": [
+    "purples"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "GELFX",
+   "hex": "#690C5D",
+   "class": "color"
+  },
+  {
+   "handle": "self-reef-lection",
+   "name": "Self Reef-lection",
+   "chips": [
+    "purples"
+   ],
+   "finishes": [
+    "soft_shimmer",
+    "sheer_glossy"
+   ],
+   "depth": "light",
+   "formula": "Breathable",
+   "hex": "#C6B0C8",
+   "class": "color"
+  },
+  {
+   "handle": "ube-cloud",
+   "name": "Ube Cloud",
+   "chips": [
+    "purples"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#F2DDF4",
+   "class": "color"
+  },
+  {
+   "handle": "wanderlust",
+   "name": "Wanderlust",
+   "chips": [
+    "purples"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#C0A4CC",
+   "class": "color"
+  },
+  {
+   "handle": "wanderlust-gel-nail-color",
+   "name": "Wanderlust  - Gel Nail Color",
+   "chips": [
+    "purples"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "GELFX",
+   "hex": "#C0A4CC",
+   "class": "color"
+  },
+  {
+   "handle": "now-or-boucleter",
+   "name": "Now or Bouclé-ter",
+   "chips": [
+    "purples",
+    "greys"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "Breathable",
+   "hex": "#53354F",
+   "class": "color"
+  },
+  {
+   "handle": "check-yes-or-no-gel-nail-color-1",
+   "name": "Check Yes Or No - Gel Nail Color",
+   "chips": [
+    "purples",
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "GELFX",
+   "hex": "#D6609D",
+   "class": "color"
+  },
+  {
+   "handle": "soul-sister",
+   "name": "Soul Sister",
+   "chips": [
+    "purples",
+    "pinks"
+   ],
+   "finishes": [
+    "soft_shimmer",
+    "chrome_metallic"
+   ],
+   "depth": "mid",
+   "formula": "Breathable",
+   "hex": "#BD9395",
+   "class": "color"
+  },
+  {
+   "handle": "goddess-some-bronze",
+   "name": "Goddess Some Bronze",
+   "chips": [
+    "purples",
+    "pinks",
+    "browns"
+   ],
+   "finishes": [
+    "full_sparkle",
+    "chrome_metallic"
+   ],
+   "depth": "mid",
+   "formula": "Breathable",
+   "hex": "#813D2C",
+   "class": "color"
+  },
+  {
+   "handle": "party-popper",
+   "name": "Party Popper",
+   "chips": [
+    "purples",
+    "pinks",
+    "greys"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "mid",
+   "formula": "Lacquer",
+   "hex": "#E65895",
+   "class": "topper"
+  },
+  {
+   "handle": "yeah-for-sherpa",
+   "name": "Yeah, For Sherpa",
+   "chips": [
+    "purples",
+    "pinks",
+    "nudes",
+    "browns"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "Breathable",
+   "hex": "#6B4445",
+   "class": "color"
+  },
+  {
+   "handle": "on-a-break-gel-nail-color",
+   "name": "On a Break - Gel Nail Color",
+   "chips": [
+    "purples",
+    "whites"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "GELFX",
+   "hex": "#E6E5EB",
+   "class": "color"
+  },
+  {
+   "handle": "on-a-break",
+   "name": "On a Break",
+   "chips": [
+    "purples",
+    "whites",
+    "greys"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#E6E5EB",
+   "class": "color"
+  },
+  {
+   "handle": "clause-a-commotion",
+   "name": "Clause a Commotion",
+   "chips": [
+    "reds"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "Lacquer",
+   "hex": "#D90000",
+   "class": "color"
+  },
+  {
+   "handle": "clause-a-commotion-gel-nail-color",
+   "name": "Clause a Commotion - Gel Nail Color",
+   "chips": [
+    "reds"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "GELFX",
+   "hex": "#D90000",
+   "class": "color"
+  },
+  {
+   "handle": "grlpwr",
+   "name": "GRLPWR",
+   "chips": [
+    "reds"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "Lacquer",
+   "hex": "#E40407",
+   "class": "color"
+  },
+  {
+   "handle": "oh-la-la",
+   "name": "Oh La La",
+   "chips": [
+    "reds"
+   ],
+   "finishes": [
+    "soft_shimmer"
+   ],
+   "depth": "deep",
+   "formula": "Lacquer",
+   "hex": "#D50121",
+   "class": "color"
+  },
+  {
+   "handle": "oh-la-la-gel-nail-color",
+   "name": "Oh La La  - Gel Nail Color",
+   "chips": [
+    "reds"
+   ],
+   "finishes": [
+    "soft_shimmer"
+   ],
+   "depth": "deep",
+   "formula": "GELFX",
+   "hex": "#D50121",
+   "class": "color"
+  },
+  {
+   "handle": "red-hot",
+   "name": "Red Hot",
+   "chips": [
+    "reds"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "Lacquer",
+   "hex": "#D7002D",
+   "class": "color"
+  },
+  {
+   "handle": "red-hot-gel-nail-color",
+   "name": "Red Hot - Gel Nail Color",
+   "chips": [
+    "reds"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "GELFX",
+   "hex": "#D7002D",
+   "class": "color"
+  },
+  {
+   "handle": "star-spangled-gel-nail-color",
+   "name": "Star Spangled - Gel Nail Color",
+   "chips": [
+    "reds"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "deep",
+   "formula": "GELFX",
+   "hex": "#690324",
+   "class": "color"
+  },
+  {
+   "handle": "thats-my-jam",
+   "name": "That's My Jam",
+   "chips": [
+    "reds"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "Lacquer",
+   "hex": "#B00026",
+   "class": "color"
+  },
+  {
+   "handle": "red-hot-copy",
+   "name": "Hit the Gas",
+   "chips": [
+    "reds"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "Lacquer",
+   "hex": "#E31F20",
+   "class": "color"
+  },
+  {
+   "handle": "hit-the-gas-gel-nail-color",
+   "name": "Hit the Gas - Gel Nail Color",
+   "chips": [
+    "reds"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "GELFX",
+   "hex": "#E31F20",
+   "class": "color"
+  },
+  {
+   "handle": "vixen-gel-nail-color",
+   "name": "Vixen – Gel Nail Color",
+   "chips": [
+    "reds",
+    "browns"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "GELFX",
+   "hex": "#490011",
+   "class": "color"
+  },
+  {
+   "handle": "we-flannel-ly-made-it",
+   "name": "We Flannel-ly Made It",
+   "chips": [
+    "reds",
+    "browns"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "Breathable",
+   "hex": "#7D2D36",
+   "class": "color"
+  },
+  {
+   "handle": "artemis-me",
+   "name": "Artemis Me",
+   "chips": [
+    "reds",
+    "browns"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "Breathable",
+   "hex": "#B02A1E",
+   "class": "color"
+  },
+  {
+   "handle": "rustic-root-gel-nail-color",
+   "name": "Rustic Root - Gel Nail Color",
+   "chips": [
+    "reds",
+    "oranges"
+   ],
+   "finishes": [
+    "soft_shimmer"
+   ],
+   "depth": "deep",
+   "formula": "GELFX",
+   "hex": "#78010C",
+   "class": "color"
+  },
+  {
+   "handle": "earthfire",
+   "name": "Earthfire",
+   "chips": [
+    "reds",
+    "oranges"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "Lacquer",
+   "hex": "#D42E22",
+   "class": "color"
+  },
+  {
+   "handle": "earthfire-gel-nail-color",
+   "name": "Earthfire - Gel Nail Color",
+   "chips": [
+    "reds",
+    "oranges"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "GELFX",
+   "hex": "#D42E22",
+   "class": "color"
+  },
+  {
+   "handle": "spice-up-your-life",
+   "name": "Spice Up Your Life",
+   "chips": [
+    "reds",
+    "oranges",
+    "browns"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "Lacquer",
+   "hex": "#853113",
+   "class": "color"
+  },
+  {
+   "handle": "spice-up-your-life-gel-nail-color",
+   "name": "Spice Up Your Life - Gel Nail Color",
+   "chips": [
+    "reds",
+    "oranges",
+    "browns"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "GELFX",
+   "hex": "#853113",
+   "class": "color"
+  },
+  {
+   "handle": "vixen-gel-nail-color-1",
+   "name": "Naughty - Gel Nail Color",
+   "chips": [
+    "reds",
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "GELFX",
+   "hex": "#4B0210",
+   "class": "color"
+  },
+  {
+   "handle": "stiletto-on-the-run-gel-nail-color",
+   "name": "Stiletto On The Run - Gel Nail Color",
+   "chips": [
+    "reds",
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "GELFX",
+   "hex": "#6F0E1F",
+   "class": "color"
+  },
+  {
+   "handle": "kiss-n-tell",
+   "name": "Kiss N Tell",
+   "chips": [
+    "reds",
+    "pinks"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "mid",
+   "formula": "Lacquer",
+   "hex": "#EE6B9B",
+   "class": "topper"
+  },
+  {
+   "handle": "oh-darling-gel-nail-color-1",
+   "name": "Oh Darling - Gel Nail Color",
+   "chips": [
+    "reds",
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "formula": "GELFX",
+   "hex": "#E11A41",
+   "class": "color"
+  },
+  {
+   "handle": "bedrock-bloom",
+   "name": "Bedrock Bloom",
+   "chips": [
+    "reds",
+    "purples",
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "Lacquer",
+   "hex": "#9F0045",
+   "class": "color"
+  },
+  {
+   "handle": "bedrock-bloom-gel-nail-color",
+   "name": "Bedrock Bloom - Gel Nail Color",
+   "chips": [
+    "reds",
+    "purples",
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "formula": "GELFX",
+   "hex": "#9F0045",
+   "class": "color"
+  },
+  {
+   "handle": "cherries",
+   "name": "Cherries",
+   "chips": [
+    "whites"
+   ],
+   "finishes": [
+    "soft_shimmer"
+   ],
+   "depth": "deep",
+   "formula": "Lacquer",
+   "hex": "#000000",
+   "class": "color"
+  },
+  {
+   "handle": "ceci-nest-pas-blanc-gel-nail-color",
+   "name": "Ceci N'Est Pas Blanc - Gel Nail Color",
+   "chips": [
+    "whites"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "GELFX",
+   "hex": "#E0D9D1",
+   "class": "color"
+  },
+  {
+   "handle": "siren-me-crazy",
+   "name": "Siren Me Crazy",
+   "chips": [
+    "whites"
+   ],
+   "finishes": [
+    "soft_shimmer",
+    "chrome_metallic"
+   ],
+   "depth": "light",
+   "formula": "Breathable",
+   "hex": "#DED1BD",
+   "class": "color"
+  },
+  {
+   "handle": "white-tips-gel-nail-color",
+   "name": "White Tips - Gel Nail Color",
+   "chips": [
+    "whites"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "GELFX",
+   "hex": "#F7F7F7",
+   "class": "color"
+  },
+  {
+   "handle": "bohemian-child",
+   "name": "Bohemian Child",
+   "chips": [
+    "whites",
+    "greys"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#CCCFD1",
+   "class": "color"
+  },
+  {
+   "handle": "bohemian-child-gel-nail-color",
+   "name": "Bohemian Child - Gel Nail Color",
+   "chips": [
+    "whites",
+    "greys"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "formula": "GELFX",
+   "hex": "#D0D2D4",
+   "class": "color"
+  },
+  {
+   "handle": "hello-yellow",
+   "name": "Hello Yellow",
+   "chips": [
+    "yellows"
+   ],
+   "finishes": [
+    "soft_shimmer"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#D4D00C",
+   "class": "color"
+  },
+  {
+   "handle": "morning-sunshine",
+   "name": "Morning, Sunshine",
+   "chips": [
+    "yellows"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#E5DB83",
+   "class": "color"
+  },
+  {
+   "handle": "morning-sunshine-gel-nail-color",
+   "name": "Morning, Sunshine  - Gel Nail Color",
+   "chips": [
+    "yellows"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "GELFX",
+   "hex": "#E5DB83",
+   "class": "color"
+  },
+  {
+   "handle": "snatched",
+   "name": "Snatched",
+   "chips": [
+    "yellows"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#D9ED00",
+   "class": "color"
+  },
+  {
+   "handle": "glow-getter",
+   "name": "Glow Getter",
+   "chips": [
+    "yellows",
+    "browns"
+   ],
+   "finishes": [
+    "soft_shimmer",
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "formula": "Breathable",
+   "hex": "#CFEDE1",
+   "class": "topper"
+  },
+  {
+   "handle": "golden-age",
+   "name": "Golden Age",
+   "chips": [
+    "yellows",
+    "browns"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#BEC2BA",
+   "class": "topper"
+  },
+  {
+   "handle": "harry-potter™-butterbeer™-scented-iridescent-topper",
+   "name": "Harry Potter™ BUTTERBEER™ Scented Iridescent Topper",
+   "chips": [
+    "yellows",
+    "browns"
+   ],
+   "finishes": [
+    "soft_shimmer",
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#DDA96D",
+   "class": "topper"
+  },
+  {
+   "handle": "star-fire",
+   "name": "Star Fire",
+   "chips": [
+    "yellows",
+    "greens",
+    "pinks",
+    "browns"
+   ],
+   "finishes": [
+    "full_sparkle",
+    "chrome_metallic"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#E5B5AA",
+   "class": "topper"
+  },
+  {
+   "handle": "blush-it-off",
+   "name": "Blush It Off",
+   "chips": [
+    "yellows",
+    "pinks",
+    "browns"
+   ],
+   "finishes": [
+    "soft_shimmer"
+   ],
+   "depth": "light",
+   "formula": "Breathable",
+   "hex": "#CFEDE1",
+   "class": "color"
+  },
+  {
+   "handle": "gloss-over-it",
+   "name": "Gloss Over It",
+   "chips": [
+    "yellows",
+    "pinks",
+    "browns"
+   ],
+   "finishes": [
+    "soft_shimmer"
+   ],
+   "depth": "light",
+   "formula": "Breathable",
+   "hex": "#F18793",
+   "class": "color"
+  },
+  {
+   "handle": "party-in-pink",
+   "name": "Party in Pink",
+   "chips": [
+    "yellows",
+    "pinks",
+    "browns"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "formula": "Lacquer",
+   "hex": "#EAD4E3",
+   "class": "topper"
+  }
+ ]
+}

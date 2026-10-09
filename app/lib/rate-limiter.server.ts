@@ -224,6 +224,17 @@ export const RATE_LIMITS = {
     limit: 500,
     windowMs: 60 * 60 * 1000,
   },
+  // Lead results callback (migration 086): one per results render, token-
+  // gated, so a modest per-IP cap is plenty.
+  QUIZ_LEAD_RESULTS_PER_IP_MINUTE: {
+    limit: 10,
+    windowMs: 60 * 1000,
+  },
+  // Bundle discount code fetch (migration 086): one per bundle add.
+  BUNDLE_DISCOUNT_PER_IP_MINUTE: {
+    limit: 10,
+    windowMs: 60 * 1000,
+  },
   // Analyze-skin API - vision LLM call, more expensive than transform per call
   // but feature is gated to allowlisted shops so volume is bounded. Stricter
   // per-IP limits to discourage casual abuse on the public endpoint.

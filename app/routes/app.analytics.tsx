@@ -340,13 +340,14 @@ export default function Analytics() {
       return `"${guarded.replace(/"/g, '""')}"`;
     };
     const rows = [
-      ["Email", "Phone", "Device", "Captured at", "Quiz answers"],
+      ["Email", "Phone", "Device", "Captured at", "Quiz answers", "Matches shown"],
       ...leadStats.leads.map((lead) => [
         lead.email ?? "",
         lead.phone ?? "",
         lead.deviceType ?? "",
         new Date(lead.createdAt).toISOString(),
         leadAnswerSummary(lead),
+        (lead.matchesShown ?? []).join(" · "),
       ]),
     ];
     const csv = "\uFEFF" + rows.map((r) => r.map(esc).join(",")).join("\r\n");

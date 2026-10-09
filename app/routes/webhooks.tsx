@@ -23,6 +23,11 @@ import {
  *   cascades from the shops row (deleteShopData).
  * - Buyer email on order rows (migration 078): joins purchases to quiz
  *   leads for attribution. Redacted (nulled) on customers/redact.
+ * - Klaviyo (migration 086): when a merchant connects Klaviyo, quiz leads
+ *   are forwarded to the MERCHANT's own Klaviyo account (they are the
+ *   controller there). Gleame keeps no copy beyond quiz_leads, which the
+ *   redact below deletes; the merchant's key is stored encrypted in
+ *   shop_integrations and deleted with the shop.
  * - NO customer photos (processed in memory only, never persisted)
  */
 
@@ -87,7 +92,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         console.log(
           `[GDPR] Response: ${leads.length} quiz lead record(s) stored for customer ${data?.customer?.id}` +
             (leads.length > 0
-              ? ` — fields: email/phone, quiz answer snapshot, device type, captured-at (row ids: ${leads.map((l) => l.id).join(', ')})`
+              ? ` — fields: email/phone, quiz answer snapshot, matches shown, device type, captured-at (row ids: ${leads.map((l) => l.id).join(', ')})`
               : '') +
             `; ${orderEmailCount} order record(s) holding the customer's email (widget_orders.customer_email)`
         );

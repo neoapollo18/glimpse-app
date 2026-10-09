@@ -438,6 +438,8 @@ const COPY_KEYS = new Set([
   "quiz_bundle_enabled", "quiz_bundle_label", "quiz_bundle_size",
   // Per-card note under every results match (migration 074)
   "quiz_match_footnote",
+  // Classic compact layout + photo-expectation line (migration 086)
+  "quiz_compact_layout", "quiz_photo_note",
   // quiz_template/quiz_preset are deliberately NOT copy keys: template
   // switches must go through app.api.quiz-template, the only path that
   // enforces isTemplateEligible and emits template_switched telemetry.
@@ -471,6 +473,7 @@ const BOOL_COPY_KEYS = new Set([
   "quiz_lead_enabled",
   "quiz_lead_collect_phone",
   "quiz_bundle_enabled",
+  "quiz_compact_layout",
 ]);
 
 // Copy keys that are integers on the live config row — same typed-column
@@ -725,6 +728,11 @@ const optionSchema = {
         meterPct: { type: "number" },
         swatch: { type: "string" },
         swatch2: { type: "string" },
+        texture: {
+          type: "string",
+          enum: ["creme", "matte", "shimmer", "sparkle", "chrome", "sheer"],
+          description: "finish preview drawn on the card (nail/lip finishes)",
+        },
       },
     },
   },

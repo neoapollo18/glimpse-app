@@ -85,6 +85,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       'quiz_lead_skipped',
       // Discount reveal after lead submit (migration 077).
       'quiz_lead_discount_shown',
+      // Studio Offers (migration 086): bundle code applied to the cart,
+      // cross-sell row seen / add-on added.
+      'quiz_bundle_discount_applied',
+      'quiz_cross_sell_view',
+      'quiz_cross_sell_add',
     ];
     const isAssistantEvent = allowedAssistantEvents.includes(eventType);
 

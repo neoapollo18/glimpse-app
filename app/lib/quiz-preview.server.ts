@@ -17,6 +17,7 @@ import {
   supabase,
   getChatAssistantConfig,
   findShopByDomain,
+  textureOrUndefined,
   type ChatAssistantConfig,
 } from "./supabase.server";
 import { isLiveProduct, isLiveVariant } from "./quiz-config-schema.server";
@@ -25,6 +26,7 @@ import type { QuizDraft } from "./quiz-draft.server";
 import { getShopCurrency } from "./shop-currency.server";
 import { getBrandProfile, servedTemplateFor } from "./brand-profile.server";
 import { defaultEmailPlacement, isTemplateId, resolveQuizTokens } from "./quiz-templates";
+import { getQuizOffers, publicOffersPayload, OFFERS_DEFAULTS } from "./quiz-offers.server";
 
 const SWATCH_HEX_RE = /^#[0-9a-fA-F]{3,8}$/;
 const hexOrNull = (v: unknown): string | null =>
@@ -133,6 +135,7 @@ function sanitizeDisplayMeta(raw: unknown) {
     meterPct: typeof meta.meterPct === "number" ? Math.max(0, Math.min(100, meta.meterPct)) : undefined,
     swatch: hexOrNull(meta.swatch) ?? undefined,
     swatch2: hexOrNull(meta.swatch2) ?? undefined,
+    texture: textureOrUndefined(meta.texture),
   };
 }
 
@@ -205,7 +208,12 @@ export async function buildPreviewQuizConfig(
   ]);
   // Store currency (migration 084): the preview has no window.Shopify, so
   // without it every price rendered as USD.
-  const currency = shopRow ? await getShopCurrency(shopRow.id).catch(() => null) : null;
+  const [currency, offers] = shopRow
+    ? await Promise.all([
+        getShopCurrency(shopRow.id).catch(() => null),
+        getQuizOffers(shopRow.id),
+      ])
+    : [null, { ...OFFERS_DEFAULTS, crossSellItems: [] }];
   const config = { ...live, ...(draft.settings as Partial<ChatAssistantConfig>) } as ChatAssistantConfig;
   // Studio contract: &template=t1..t5&preset=<id> URL overrides win over
   // the draft/live values so the template overlay can render live
@@ -237,6 +245,10 @@ export async function buildPreviewQuizConfig(
         ...((draft.settings ?? {}) as Record<string, unknown>),
       })
     : null;
+  const publicOffers = publicOffersPayload(offers, {
+    bundleEnabled: config.quiz_bundle_enabled,
+    bundleSize: config.quiz_bundle_size,
+  });
 
   return {
     enabled: true,
@@ -258,6 +270,7 @@ export async function buildPreviewQuizConfig(
     progressStyle: config.quiz_progress_style,
     introLayout: config.quiz_intro_layout,
     animationStyle: config.quiz_animation_style,
+    compactLayout: config.quiz_compact_layout === true && !config.quiz_template,
     // Overhaul templates (Contract 2/3): same shape as the storefront
     // endpoint so the studio canvas and the published page can't diverge.
     template: config.quiz_template,
@@ -288,6 +301,7 @@ export async function buildPreviewQuizConfig(
       visualCaption: renderTokens(config.quiz_visual_caption),
       altAudienceLabel: config.quiz_alt_audience_label,
       altAudienceUrl: config.quiz_alt_audience_url,
+      photoNote: config.quiz_photo_note ? renderTokens(config.quiz_photo_note) : null,
       ...(tplContent
         ? {
             founder: config.quiz_founder,
@@ -323,6 +337,8 @@ export async function buildPreviewQuizConfig(
       matchFootnote: config.quiz_match_footnote
         ? renderTokens(config.quiz_match_footnote)
         : null,
+      crossSell: publicOffers.crossSell,
+      bundleDiscount: publicOffers.bundleDiscount,
       // v2 template results content (storefront-endpoint parity).
       ...(tplContent
         ? {
@@ -484,6 +500,33 @@ export async function buildPreviewSampleRecommend(shopId: string, draft: QuizDra
         },
       ],
     };
+  }
+
+  // Cross-sell add-ons (Studio Offers) get the same stubs so the preview's
+  // "complete the look" row shows real titles, images and prices.
+  const offers = await getQuizOffers(shopId);
+  const addOnHandles = offers.crossSellEnabled
+    ? offers.crossSellItems.map((i) => i.handle).filter((h) => !(h in productJson))
+    : [];
+  if (addOnHandles.length > 0) {
+    const { data: addOnRows } = await supabase
+      .from("products")
+      .select("handle, image_url, price, shopify_id, status")
+      .eq("shop_id", shopId)
+      .in("handle", addOnHandles);
+    for (const p of (addOnRows ?? []) as any[]) {
+      if (!p.handle || !isLiveProduct(p)) continue;
+      const image = p.image_url ?? null;
+      productJson[p.handle] = {
+        id: Number(p.shopify_id) || 0,
+        handle: p.handle,
+        available: true,
+        featured_image: image,
+        images: image ? [image] : [],
+        price: cents(p.price),
+        variants: [{ id: 0, price: cents(p.price), available: true, featured_image: null }],
+      };
+    }
   }
 
   return { matches, matrixApplied: draft.flow.rules.length > 0, partial: false, productJson };

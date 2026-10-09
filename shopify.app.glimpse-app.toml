@@ -61,7 +61,10 @@ scopes = "write_products,read_reports,read_analytics,read_orders"
 #     Publish (page + main-menu link); requested from the Publish sheet.
 #   read_themes: Brand Profile extraction (settings_data.json); extraction
 #     degrades to homepage analysis without it.
-optional_scopes = ["read_themes", "write_online_store_pages", "write_online_store_navigation"]
+#   write_discounts (2026-10-09): Studio Sell more → Bundle & discount, when
+#     the merchant lets Gleame create the bundle discount code; requested
+#     from that panel. "Use my own code" mode never needs it.
+optional_scopes = ["read_themes", "write_online_store_pages", "write_online_store_navigation", "write_discounts"]
 
 [auth]
 redirect_urls = [

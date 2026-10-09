@@ -415,6 +415,7 @@ export interface NormalizedDraft {
           meterPct?: number;
           swatch?: string;
           swatch2?: string;
+          texture?: string;
         } | null;
         position: number;
       }>;

@@ -1,0 +1,4059 @@
+{
+ "shopDomain": "orlybeauty.myshopify.com",
+ "spec": "ORLY Recommendation Backfill v2, §6 (derivation §2)",
+ "generatedAt": "2026-10-09T08:16:22.975Z",
+ "pendingOnboard": 0,
+ "products": [
+  {
+   "schema": "v2",
+   "gleameId": "6ae4ee81-45b9-4cb9-9f19-4ee3b9a3af6a",
+   "handle": "reddy-or-not",
+   "shopifyId": "7888806936675",
+   "name": "Reddy or Not",
+   "specName": "Reddy or Not",
+   "chips": [],
+   "finishes": [
+    "creme",
+    "sheer_glossy"
+   ],
+   "depth": "deep",
+   "luminance": 0.087,
+   "hex": "#65000A",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 39,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "e92e9d8e-2ffa-444c-8545-f7932dc4cce3",
+   "handle": "after-school-special",
+   "shopifyId": "7811430809699",
+   "name": "After School Special",
+   "specName": "After School Special",
+   "chips": [],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "luminance": 0.7552,
+   "hex": "#BEC2BA",
+   "formula": "Lacquer",
+   "class": "topper",
+   "topper": true,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 6,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "4c1778e6-80eb-4e57-b698-f5584f4de55c",
+   "handle": "disco-drop",
+   "shopifyId": "7614756126819",
+   "name": "Disco Drop",
+   "specName": "Disco Drop",
+   "chips": [],
+   "finishes": [
+    "full_sparkle",
+    "chrome_metallic"
+   ],
+   "depth": "light",
+   "luminance": 0.7405,
+   "hex": "#C9BAB5",
+   "formula": "Lacquer",
+   "class": "topper",
+   "topper": true,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 65,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "b44bc488-fd20-4337-81fd-76504cbe22a5",
+   "handle": "twinkling-veil",
+   "shopifyId": "7565208518755",
+   "name": "Twinkling Veil",
+   "specName": "Twinkling Veil",
+   "chips": [],
+   "finishes": [
+    "soft_shimmer",
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "luminance": 0.7958,
+   "hex": "#CFCAC8",
+   "formula": "Lacquer",
+   "class": "topper",
+   "topper": true,
+   "available": false,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "aa40b112-d5b6-4562-8a22-71917d42cdd4",
+   "handle": "bubblegum-pop",
+   "shopifyId": "7614751899747",
+   "name": "Bubblegum Pop",
+   "specName": "Bubblegum Pop",
+   "chips": [],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.5715,
+   "hex": "#FF709E",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 25,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "5521c4b4-4e01-43a7-a906-5f70ccce95c8",
+   "handle": "liquid-vinyl-gel-nail-color",
+   "shopifyId": "7734188507235",
+   "name": "Liquid Vinyl - Gel Nail Color",
+   "specName": "Liquid Vinyl - Gel Nail Color",
+   "chips": [
+    "blacks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.0034,
+   "hex": "#00000C",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "e4300660-91f9-415d-b499-8c68d1f75563",
+   "handle": "breathable-mind-over-matter",
+   "shopifyId": "1499488125027",
+   "name": "Mind Over Matter",
+   "specName": "Mind Over Matter",
+   "chips": [
+    "blacks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.0006,
+   "hex": "#000002",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 2,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "048369dc-5316-4e77-a78f-fc642d12892d",
+   "handle": "i-m-easily-suede",
+   "shopifyId": "7649727840355",
+   "name": "I’m Easily Suede",
+   "specName": "I’m Easily Suede",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.2228,
+   "hex": "#144154",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 18,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "ce5fbe2a-6874-447d-bd72-43f7457b7cdf",
+   "handle": "last-run",
+   "shopifyId": "7668567801955",
+   "name": "Last Run",
+   "specName": "Last Run",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.1043,
+   "hex": "#001C5B",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 53,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "8e7baf8a-bbc6-4f2c-89a6-2f466202be4c",
+   "handle": "last-run-gel-nail-color",
+   "shopifyId": "7668599881827",
+   "name": "Last Run - Gel Nail Color",
+   "specName": "Last Run - Gel Nail Color",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.1163,
+   "hex": "#072049",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 83,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "d4d92e00-6e4c-4a4e-aef5-acd1c15d2f90",
+   "handle": "bell-bottom-blues",
+   "shopifyId": "7715702112355",
+   "name": "Bell Bottom Blues",
+   "specName": "Bell Bottom Blues",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "soft_shimmer"
+   ],
+   "depth": "light",
+   "luminance": 0.865,
+   "hex": "#BEE3F7",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "3e2f58db-4747-40db-aa4c-1b5f98617f2e",
+   "handle": "bell-bottom-blues-gel-nail-color-1",
+   "shopifyId": "7715709681763",
+   "name": "Bell Bottom Blues - Gel Nail Color",
+   "specName": "Bell Bottom Blues - Gel Nail Color",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "soft_shimmer"
+   ],
+   "depth": "light",
+   "luminance": 0.865,
+   "hex": "#BEE3F7",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 84,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "a151457a-6c11-4a9a-8a86-c4de59e947f4",
+   "handle": "dreamcatcher",
+   "shopifyId": "7957080408163",
+   "name": "Dreamcatcher",
+   "specName": "Dreamcatcher",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.6203,
+   "hex": "#2FBBC8",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 22,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "861daa3e-7ea9-4cd9-8a5a-1a49a6075d42",
+   "handle": "dreamcatcher-gel-nail-color",
+   "shopifyId": "7957085061219",
+   "name": "Dreamcatcher  - Gel Nail Color",
+   "specName": "Dreamcatcher  - Gel Nail Color",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.6203,
+   "hex": "#2FBBC8",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 102,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "511f3c51-9bf1-4520-bbb7-c1ee0b49deff",
+   "handle": "flip-phone",
+   "shopifyId": "7904566509667",
+   "name": "Flip Phone",
+   "specName": "Flip Phone",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "luminance": 0.7212,
+   "hex": "#A9BACF",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "c0f82f95-38e7-48b0-88fd-1f10b630d959",
+   "handle": "flip-phone-gel-nail-color",
+   "shopifyId": "7904771866723",
+   "name": "Flip Phone  - Gel Nail Color",
+   "specName": "Flip Phone  - Gel Nail Color",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "luminance": 0.7212,
+   "hex": "#A9BACF",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 100,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "47fb64f5-dc60-4349-ac1e-1599ab679b8d",
+   "handle": "fresh-powder-gel-nail-color",
+   "shopifyId": "7668617543779",
+   "name": "Fresh Powder - Gel Nail Color",
+   "specName": "Fresh Powder - Gel Nail Color",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.9264,
+   "hex": "#E1F0E8",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 90,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "c11ea06f-de7e-47b0-815d-4bf34911afde",
+   "handle": "looking-glass",
+   "shopifyId": "7565208911971",
+   "name": "Looking Glass",
+   "specName": "Looking Glass",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "luminance": 0.7034,
+   "hex": "#B1B2C8",
+   "formula": "Lacquer",
+   "class": "topper",
+   "topper": true,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 57,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "15ecde94-ffb3-45e1-8277-089c1b609e3f",
+   "handle": "shore-thing",
+   "shopifyId": "7761085235299",
+   "name": "Shore Thing",
+   "specName": "Shore Thing",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "soft_shimmer"
+   ],
+   "depth": "light",
+   "luminance": 0.7397,
+   "hex": "#A6C2CA",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 16,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "266c5ec2-27a0-42d0-b41c-5c8e13e2de82",
+   "handle": "among-the-stars",
+   "shopifyId": "7565207863395",
+   "name": "Among the Stars",
+   "specName": "Among the Stars",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "mid",
+   "luminance": 0.5246,
+   "hex": "#5191B2",
+   "formula": "Lacquer",
+   "class": "topper",
+   "topper": true,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 26,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "f9eade57-be02-4be8-95d5-df5738cc62f0",
+   "handle": "be-kind-rewind",
+   "shopifyId": "7771352924259",
+   "name": "Be Kind Rewind",
+   "specName": "Be Kind Rewind",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.4161,
+   "hex": "#0082B6",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 48,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "f458372d-7341-45c0-a246-e3b6a8e3da8e",
+   "handle": "be-kind-rewind-gel-nail-color",
+   "shopifyId": "7771357053027",
+   "name": "Be Kind Rewind  - Gel Nail Color",
+   "specName": "Be Kind Rewind  - Gel Nail Color",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.4161,
+   "hex": "#0082B6",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "cee37e00-f5f7-46c4-a3f7-3e19194c5a4a",
+   "handle": "freudian-flip",
+   "shopifyId": "1499487961187",
+   "name": "Freudian Flip",
+   "specName": "Freudian Flip",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "chrome_metallic"
+   ],
+   "depth": "mid",
+   "luminance": 0.3285,
+   "hex": "#245F71",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 1,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "d4daeaab-8836-44b2-859a-d1ba4b8a6f9b",
+   "handle": "glass-act",
+   "shopifyId": "7219389792355",
+   "name": "Glass Act",
+   "specName": "Glass Act",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "chrome_metallic"
+   ],
+   "depth": "mid",
+   "luminance": 0.4836,
+   "hex": "#4384CB",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 4,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "5076119d-e2cc-41db-9363-2870d507df17",
+   "handle": "mallrat",
+   "shopifyId": "7771354595427",
+   "name": "Mallrat",
+   "specName": "Mallrat",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.6188,
+   "hex": "#33BAC1",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 33,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "24196c19-8206-407b-994e-272febff50a6",
+   "handle": "mallrat-gel-nail-color",
+   "shopifyId": "7771358003299",
+   "name": "Mallrat - Gel Nail Color",
+   "specName": "Mallrat - Gel Nail Color",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.6188,
+   "hex": "#33BAC1",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "ba7234dd-68f4-4cee-ab6d-9a168b51b4a0",
+   "handle": "skystone",
+   "shopifyId": "7581681811555",
+   "name": "Skystone",
+   "specName": "Skystone",
+   "chips": [
+    "blues"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.3835,
+   "hex": "#007B88",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 14,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "84c36fda-75e5-4723-befe-66f0166a422f",
+   "handle": "fleece-to-meet-you",
+   "shopifyId": "7649729085539",
+   "name": "Fleece to Meet You",
+   "specName": "Fleece to Meet You",
+   "chips": [
+    "greens"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.2569,
+   "hex": "#194E3D",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 43,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "3ec85812-6358-48f7-a2eb-db6c8a227f0e",
+   "handle": "fresh-start",
+   "shopifyId": "1495864737891",
+   "name": "Fresh Start",
+   "specName": "Fresh Start",
+   "chips": [
+    "greens"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.8607,
+   "hex": "#C1E5CB",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 5,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "29e71c1f-882b-4950-965e-0563cc6ac6f5",
+   "handle": "hey-bestie",
+   "shopifyId": "7460423008355",
+   "name": "Hey Bestie",
+   "specName": "Hey Bestie",
+   "chips": [
+    "greens"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "luminance": 0.6437,
+   "hex": "#77BE29",
+   "formula": "Lacquer",
+   "class": "topper",
+   "topper": true,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 44,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "309116d5-3b09-4f90-b623-4d31ec102c2f",
+   "handle": "dear-abby",
+   "shopifyId": "7614753570915",
+   "name": "Dear Abby",
+   "specName": "Dear Abby",
+   "chips": [
+    "greens"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.3795,
+   "hex": "#007B7A",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 15,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "2b8d47d1-f891-4325-b859-22e4db700360",
+   "handle": "rollin-with-my-homies-gel-nail-color",
+   "shopifyId": "7904772358243",
+   "name": "Rollin With My Homies  - Gel Nail Color",
+   "specName": "Rollin With My Homies  - Gel Nail Color",
+   "chips": [
+    "greens"
+   ],
+   "finishes": [
+    "chrome_metallic"
+   ],
+   "depth": "mid",
+   "luminance": 0.6034,
+   "hex": "#A693BA",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 104,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "7a918012-d5e6-42d3-8831-ab930924e98a",
+   "handle": "sea-me-now",
+   "shopifyId": "7761084022883",
+   "name": "Sea Me Now",
+   "specName": "Sea Me Now",
+   "chips": [
+    "greens"
+   ],
+   "finishes": [
+    "creme",
+    "sheer_glossy"
+   ],
+   "depth": "mid",
+   "luminance": 0.5815,
+   "hex": "#749F89",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 59,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "49158814-a4ab-4c59-8d20-8591bd561410",
+   "handle": "touch-grass",
+   "shopifyId": "7565209305187",
+   "name": "Touch Grass",
+   "specName": "Touch Grass",
+   "chips": [
+    "greens"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.3435,
+   "hex": "#01743D",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 56,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "ca52dab3-217b-499e-9d42-c4683c167e54",
+   "handle": "yule-love-this",
+   "shopifyId": "7673190383715",
+   "name": "Yule Love This",
+   "specName": "Yule Love This",
+   "chips": [
+    "greens"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "mid",
+   "luminance": 0.497,
+   "hex": "#668C44",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 31,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "5a827631-d655-4ac1-9806-47a227c4981f",
+   "handle": "yule-love-this-gel-nail-color",
+   "shopifyId": "7673581273187",
+   "name": "Yule Love This - Gel Nail Color",
+   "specName": "Yule Love This - Gel Nail Color",
+   "chips": [
+    "greens"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "mid",
+   "luminance": 0.497,
+   "hex": "#668C44",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "7a156979-30a7-45f1-93e1-bff6930b23f7",
+   "handle": "rollin-with-my-homies",
+   "shopifyId": "7904566673507",
+   "name": "Rollin With My Homies",
+   "specName": "Rollin With My Homies",
+   "chips": [
+    "greens",
+    "purples"
+   ],
+   "finishes": [
+    "soft_shimmer",
+    "chrome_metallic"
+   ],
+   "depth": "mid",
+   "luminance": 0.6034,
+   "hex": "#A693BA",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "a688c538-7f87-47a5-979c-1f4150202732",
+   "handle": "chillax",
+   "shopifyId": "7904564445283",
+   "name": "Chillax",
+   "specName": "Chillax",
+   "chips": [
+    "greys"
+   ],
+   "finishes": [
+    "creme",
+    "soft_shimmer",
+    "chrome_metallic"
+   ],
+   "depth": "light",
+   "luminance": 0.7236,
+   "hex": "#B6B9BB",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "7eaa77f3-13dc-4ef3-814d-b599415643e2",
+   "handle": "chillax-gel-nail-color",
+   "shopifyId": "7904771702883",
+   "name": "Chillax  - Gel Nail Color",
+   "specName": "Chillax  - Gel Nail Color",
+   "chips": [
+    "greys"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.7236,
+   "hex": "#B6B9BB",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 110,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "d2807ab8-08bb-48df-8c61-c87a3139bd2c",
+   "handle": "double-diamond",
+   "shopifyId": "7668574126179",
+   "name": "Double Diamond",
+   "specName": "Double Diamond",
+   "chips": [
+    "greys"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "luminance": 0.7362,
+   "hex": "#B4BDC6",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": false,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "2b893353-1bce-43a8-8bc2-b31d83516131",
+   "handle": "double-diamond-gel-nail-color",
+   "shopifyId": "7668603027555",
+   "name": "Double Diamond - Gel Nail Color",
+   "specName": "Double Diamond - Gel Nail Color",
+   "chips": [
+    "greys"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "luminance": 0.7365,
+   "hex": "#B4BDC7",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 87,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "43ee6e2b-33c3-45c6-82cc-eac6c38668cd",
+   "handle": "shine-gel-nail-color",
+   "shopifyId": "7867327807587",
+   "name": "Shine - Gel Nail Color",
+   "specName": "Shine - Gel Nail Color",
+   "chips": [
+    "greys"
+   ],
+   "finishes": [
+    "soft_shimmer",
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "luminance": 0.8776,
+   "hex": "#DEE0E3",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "bce4a11d-c85c-4354-914a-b4d687a2a8a4",
+   "handle": "sleigh-yes",
+   "shopifyId": "7673280528483",
+   "name": "Sleigh Yes!",
+   "specName": "Sleigh Yes!",
+   "chips": [
+    "greys"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "luminance": 0.7344,
+   "hex": "#C0BABA",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 60,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "96a56a12-7da9-48a1-8e12-821b61607abb",
+   "handle": "typing",
+   "shopifyId": "7950522548323",
+   "name": "Typing...",
+   "specName": "Typing...",
+   "chips": [
+    "greys"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "mid",
+   "luminance": 0.5812,
+   "hex": "#96939B",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 79,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "281c5f6c-e217-489d-a2f7-b90591ed5ba1",
+   "handle": "grunge-glam",
+   "shopifyId": "7842078064739",
+   "name": "Grunge Glam",
+   "specName": "Grunge Glam",
+   "chips": [
+    "greys",
+    "blacks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.1381,
+   "hex": "#232326",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "0aa04d7f-ab45-458c-b629-1f4c4fd4d7f8",
+   "handle": "grunge-glam-gel-nail-color",
+   "shopifyId": "7842093334627",
+   "name": "Grunge Glam - Gel Nail Color",
+   "specName": "Grunge Glam - Gel Nail Color",
+   "chips": [
+    "greys",
+    "blacks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.1381,
+   "hex": "#232326",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 95,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "c548c067-f8d8-48b6-9f67-600fda0669a3",
+   "handle": "beach-you-to-it",
+   "shopifyId": "7761086939235",
+   "name": "Beach You To It!",
+   "specName": "Beach You To It!",
+   "chips": [
+    "nudes"
+   ],
+   "finishes": [
+    "soft_shimmer"
+   ],
+   "depth": "light",
+   "luminance": 0.7382,
+   "hex": "#EAB391",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 28,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "7faeb181-2d18-4899-b0da-47795e2cdafa",
+   "handle": "leather-you-like-it-or-not",
+   "shopifyId": "7649724137571",
+   "name": "Leather You Like It or Not",
+   "specName": "Leather You Like It or Not",
+   "chips": [
+    "nudes",
+    "browns"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.2218,
+   "hex": "#612E2A",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "927e5e8d-4d8f-466c-8c7f-75b81d43963d",
+   "handle": "nude-attitude",
+   "shopifyId": "7985063297123",
+   "name": "Nude Attitude",
+   "specName": "Nude Attitude",
+   "chips": [
+    "nudes",
+    "browns"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.901,
+   "hex": "#CFEDE1",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 81,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "d2b4d376-daae-4db5-9f02-02b09aa6853e",
+   "handle": "sunkissed",
+   "shopifyId": "3510536372323",
+   "name": "Sunkissed",
+   "specName": "Sunkissed",
+   "chips": [
+    "nudes",
+    "browns"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.4228,
+   "hex": "#B95943",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "ee5e471f-741e-4365-b246-5d4c6379dfa6",
+   "handle": "chalet-getaway",
+   "shopifyId": "7668592541795",
+   "name": "Chalet Getaway",
+   "specName": "Chalet Getaway",
+   "chips": [
+    "nudes",
+    "browns",
+    "greys"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.6347,
+   "hex": "#BF9C86",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": false,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "62860c49-0c52-43b9-85d7-3a4cd2a67984",
+   "handle": "chalet-getaway-gel-nail-color",
+   "shopifyId": "7668751925347",
+   "name": "Chalet Getaway - Gel Nail Color",
+   "specName": "Chalet Getaway - Gel Nail Color",
+   "chips": [
+    "nudes",
+    "browns",
+    "greys"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.5672,
+   "hex": "#AC8B78",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 93,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "981130c2-b80d-4d04-b6f6-4d656777ea51",
+   "handle": "acid-trip",
+   "shopifyId": "7715700736099",
+   "name": "Acid Trip",
+   "specName": "Acid Trip",
+   "chips": [
+    "oranges"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "deep",
+   "luminance": 0.2127,
+   "hex": "#832409",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 24,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "8f3d8a75-761c-4644-a345-3de5e444252a",
+   "handle": "acid-trip-gel-nail-color",
+   "shopifyId": "7715703029859",
+   "name": "Acid Trip - Gel Nail Color",
+   "specName": "Acid Trip - Gel Nail Color",
+   "chips": [
+    "oranges"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "deep",
+   "luminance": 0.2127,
+   "hex": "#832409",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 106,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "1a118b09-094f-4b33-b33f-3b92c1845b9c",
+   "handle": "hunky-dory-gel-nail-color",
+   "shopifyId": "7715707781219",
+   "name": "Hunky Dory - Gel Nail Color",
+   "specName": "Hunky Dory - Gel Nail Color",
+   "chips": [
+    "oranges"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.6934,
+   "hex": "#F2A752",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 111,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "716ddf46-ab72-4962-a8fc-5cc6f0d98fa7",
+   "handle": "shaggin-wagon",
+   "shopifyId": "7715701325923",
+   "name": "Shaggin Wagon",
+   "specName": "Shaggin Wagon",
+   "chips": [
+    "oranges"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.7138,
+   "hex": "#E2AD8E",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 51,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "c9268733-2a24-42ce-9f66-f8e960821f6c",
+   "handle": "shaggin-wagon-gel-nail-color",
+   "shopifyId": "7715704569955",
+   "name": "Shaggin Wagon - Gel Nail Color",
+   "specName": "Shaggin Wagon - Gel Nail Color",
+   "chips": [
+    "oranges"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.7138,
+   "hex": "#E2AD8E",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 99,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "ca9205cf-ee85-43f6-b877-a20217540d7d",
+   "handle": "so-fetch",
+   "shopifyId": "7904567066723",
+   "name": "So Fetch",
+   "specName": "So Fetch",
+   "chips": [
+    "oranges"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.6934,
+   "hex": "#FE9F7E",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 71,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "66a4c80f-5029-4a36-a315-dec34755eb0c",
+   "handle": "so-fetch-gel-nail-color",
+   "shopifyId": "7904773767267",
+   "name": "So Fetch - Gel Nail Color",
+   "specName": "So Fetch - Gel Nail Color",
+   "chips": [
+    "oranges"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.6934,
+   "hex": "#FE9F7E",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 114,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "ef7638d7-4f61-42eb-bc3b-8db3c04c0a3d",
+   "handle": "a-vibe",
+   "shopifyId": "7460424286307",
+   "name": "A Vibe",
+   "specName": "A Vibe",
+   "chips": [
+    "oranges"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.4937,
+   "hex": "#FF6120",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 9,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "05cf3cd5-9a1b-458b-8f80-507e5c2b26fc",
+   "handle": "cloud-nine-gel-nail-color",
+   "shopifyId": "7798636249187",
+   "name": "Cloud Nine - Gel Nail Color",
+   "specName": "Cloud Nine - Gel Nail Color",
+   "chips": [
+    "oranges",
+    "nudes"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.9481,
+   "hex": "#F7F1EA",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "3d64ea1f-90e8-4a6f-9bb2-022ec84187ba",
+   "handle": "sheer-nude-gel-nail-color",
+   "shopifyId": "7729659871331",
+   "name": "Sheer Nude - Gel Nail Color",
+   "specName": "Sheer Nude - Gel Nail Color",
+   "chips": [
+    "oranges",
+    "nudes"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.721,
+   "hex": "#EBAE83",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "5c0a76b6-3e97-4243-a3a0-b90851dc4fe4",
+   "handle": "coral-crush",
+   "shopifyId": "7565209665635",
+   "name": "Coral Crush",
+   "specName": "Coral Crush",
+   "chips": [
+    "oranges",
+    "pinks"
+   ],
+   "finishes": [
+    "soft_shimmer",
+    "full_sparkle"
+   ],
+   "depth": "deep",
+   "luminance": 0.2156,
+   "hex": "#F30124",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 8,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "103af154-5fff-40c1-bc58-de5fcf957606",
+   "handle": "aphromite",
+   "shopifyId": "7888808149091",
+   "name": "Aphromite",
+   "specName": "Aphromite",
+   "chips": [
+    "oranges",
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.4271,
+   "hex": "#FE454D",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 73,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "1d9dce2a-eb75-4cea-a11a-f63fcd9742ba",
+   "handle": "hits-different",
+   "shopifyId": "7460424745059",
+   "name": "Hits Different",
+   "specName": "Hits Different",
+   "chips": [
+    "oranges",
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.3937,
+   "hex": "#FF3A41",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 54,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "8ecb0c97-a281-4b11-8f68-af170966e41d",
+   "handle": "most-definitely",
+   "shopifyId": "7771354136675",
+   "name": "Most Definitely",
+   "specName": "Most Definitely",
+   "chips": [
+    "oranges",
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.4555,
+   "hex": "#FE4D62",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "7e8096e3-9cb5-4c69-8d9b-f62a3a62bfee",
+   "handle": "most-definitely-gel-nail-color",
+   "shopifyId": "7771357413475",
+   "name": "Most Definitely  - Gel Nail Color",
+   "specName": "Most Definitely  - Gel Nail Color",
+   "chips": [
+    "oranges",
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.4555,
+   "hex": "#FE4D62",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "63f81620-942a-47cb-aaa5-1a5e9a6dbbec",
+   "handle": "nail-superfood",
+   "shopifyId": "1495873093731",
+   "name": "Nail Superfood",
+   "specName": "Nail Superfood",
+   "chips": [
+    "oranges",
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.5223,
+   "hex": "#FE6374",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "b7c946d7-2373-433e-bc80-bf07be5f9d49",
+   "handle": "night-fever",
+   "shopifyId": "7715702243427",
+   "name": "Night Fever",
+   "specName": "Night Fever",
+   "chips": [
+    "oranges",
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.5214,
+   "hex": "#F16A52",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 36,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "a5f054f6-4707-47fe-97a4-2206d750d175",
+   "handle": "bell-bottom-blues-gel-nail-color",
+   "shopifyId": "7715709550691",
+   "name": "Night Fever - Gel Nail Color",
+   "specName": "Night Fever - Gel Nail Color",
+   "chips": [
+    "oranges",
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.5214,
+   "hex": "#F16A52",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 103,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "c6232385-3736-47b2-b991-0392fd08b1c5",
+   "handle": "no-coral-ation",
+   "shopifyId": "7761086578787",
+   "name": "No Coral-ation",
+   "specName": "No Coral-ation",
+   "chips": [
+    "oranges",
+    "pinks"
+   ],
+   "finishes": [
+    "creme",
+    "sheer_glossy"
+   ],
+   "depth": "mid",
+   "luminance": 0.5092,
+   "hex": "#E56954",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 37,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "15f936c3-0e4e-4a8d-b2f8-637d9c95858f",
+   "handle": "meet-cute-gel-nail-color-1",
+   "shopifyId": "7533496238179",
+   "name": "Meet Cute - Gel Nail Color",
+   "specName": "Meet Cute - Gel Nail Color",
+   "chips": [
+    "oranges",
+    "purples",
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.5647,
+   "hex": "#F9737A",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 98,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "721c5021-d0f3-4e23-8e08-ae9f33d0942c",
+   "handle": "hunky-dory",
+   "shopifyId": "7715701588067",
+   "name": "Hunky Dory",
+   "specName": "Hunky Dory",
+   "chips": [
+    "oranges",
+    "yellows"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.6934,
+   "hex": "#F2A752",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 41,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "3e362f6d-e0a8-4aa2-9834-4ec1a6d8dbf0",
+   "handle": "bronze-in-a-lifetime",
+   "shopifyId": "7985062576227",
+   "name": "Bronze In A Lifetime",
+   "specName": "Bronze In A Lifetime",
+   "chips": [
+    "oranges",
+    "yellows",
+    "browns"
+   ],
+   "finishes": [
+    "soft_shimmer",
+    "full_sparkle"
+   ],
+   "depth": "mid",
+   "luminance": 0.387,
+   "hex": "#A3580F",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 74,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "0fd917fa-f34a-4172-b70f-2f8270d45f70",
+   "handle": "gilded-dune",
+   "shopifyId": "7581681025123",
+   "name": "Gilded Dune",
+   "specName": "Gilded Dune",
+   "chips": [
+    "oranges",
+    "yellows",
+    "browns"
+   ],
+   "finishes": [
+    "soft_shimmer"
+   ],
+   "depth": "mid",
+   "luminance": 0.5351,
+   "hex": "#C78024",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 40,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "8552f042-35e5-4c38-9acc-fc97f590b6ad",
+   "handle": "earthfire-gel-nail-color-copy",
+   "shopifyId": "7581715791971",
+   "name": "Gilded Dune - Gel Nail Color",
+   "specName": "Gilded Dune - Gel Nail Color",
+   "chips": [
+    "oranges",
+    "yellows",
+    "browns"
+   ],
+   "finishes": [
+    "soft_shimmer"
+   ],
+   "depth": "mid",
+   "luminance": 0.5351,
+   "hex": "#C78024",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 109,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "68f28810-310d-4c72-9fe6-4941b586f1a9",
+   "handle": "berry-bliss",
+   "shopifyId": "7957081489507",
+   "name": "Berry Bliss",
+   "specName": "Berry Bliss",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.2188,
+   "hex": "#ED004B",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 17,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "e4ae52e1-ddcc-4d64-8c26-47fe8b1372ea",
+   "handle": "berry-bliss-gel-nail-color",
+   "shopifyId": "7957085880419",
+   "name": "Berry Bliss  - Gel Nail Color",
+   "specName": "Berry Bliss  - Gel Nail Color",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.2188,
+   "hex": "#ED004B",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 85,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "1aa2697f-af56-4b8d-b237-48d45f8447d0",
+   "handle": "power-pink",
+   "shopifyId": "7565210746979",
+   "name": "Power Pink",
+   "specName": "Power Pink",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "sheer_glossy"
+   ],
+   "depth": "deep",
+   "luminance": 0.2007,
+   "hex": "#DE0037",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 19,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "2a04d712-ddad-43bf-a7b4-594083b55403",
+   "handle": "golden-french-drip",
+   "shopifyId": "7598643544163",
+   "name": "Golden French Drip",
+   "specName": "Golden French Drip",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "chrome_metallic"
+   ],
+   "depth": "light",
+   "luminance": 0.8193,
+   "hex": "#F2C9BE",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": true,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "94376206-4998-4600-8312-1c04d52a3552",
+   "handle": "happy-and-healthy",
+   "shopifyId": "1495864672355",
+   "name": "Happy And Healthy",
+   "specName": "Happy And Healthy",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.6886,
+   "hex": "#EBA09B",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "f8043c58-af95-4566-9ffb-96c93515e945",
+   "handle": "it-started-with-pink",
+   "shopifyId": "7811438837859",
+   "name": "It Started With Pink",
+   "specName": "It Started With Pink",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.8035,
+   "hex": "#FFBFC3",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": false,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "9c13070e-d732-4611-8d25-24b6a0a0e7b7",
+   "handle": "it-started-with-pink-gel-nail-color",
+   "shopifyId": "7811440607331",
+   "name": "It Started With Pink - Gel Nail Color",
+   "specName": "It Started With Pink - Gel Nail Color",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.8035,
+   "hex": "#FFBFC3",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 101,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "bf072f5b-ce58-46ef-98b6-5b4da9de6c30",
+   "handle": "itll-always-be-pink",
+   "shopifyId": "7811438018659",
+   "name": "It'll Always Be Pink",
+   "specName": "It'll Always Be Pink",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.6742,
+   "hex": "#FF91C2",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 58,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "679984dc-b360-4586-82fd-675ff6b67e98",
+   "handle": "itll-always-be-pink-gel-nail-color",
+   "shopifyId": "7811440279651",
+   "name": "It'll Always Be Pink - Gel Nail Color",
+   "specName": "It'll Always Be Pink - Gel Nail Color",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.6742,
+   "hex": "#FF91C2",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 88,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "6822be89-411f-4b9e-8e6c-6d8781ece8bf",
+   "handle": "kiss-the-bride-gel-nail-color",
+   "shopifyId": "7695772844131",
+   "name": "Kiss The Bride - Gel Nail Color",
+   "specName": "Kiss The Bride - Gel Nail Color",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.8743,
+   "hex": "#FAD7DE",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "ac71ba2d-7c8e-4f55-950b-ad131fc94d17",
+   "handle": "leave-britney-alone",
+   "shopifyId": "7904565362787",
+   "name": "Leave Britney Alone",
+   "specName": "Leave Britney Alone",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.7362,
+   "hex": "#FFA7C3",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "5e4e4a13-19d3-4dfb-9c2c-71beee295ddf",
+   "handle": "leave-britney-alone-gel-nail-color",
+   "shopifyId": "7904771407971",
+   "name": "Leave Britney Alone  - Gel Nail Color",
+   "specName": "Leave Britney Alone  - Gel Nail Color",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.7328,
+   "hex": "#FEA6C4",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 80,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "d527fdf8-7680-4944-b6a0-cec5d2ce6e70",
+   "handle": "orly-pink",
+   "shopifyId": "7811431432291",
+   "name": "ORLY Pink",
+   "specName": "ORLY Pink",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.8751,
+   "hex": "#FCD7DB",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 55,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "f360435a-9654-4266-9f8c-815120dfd48c",
+   "handle": "orly-pink-gel-nail-color",
+   "shopifyId": "7811439788131",
+   "name": "ORLY Pink - Gel Nail Color",
+   "specName": "ORLY Pink - Gel Nail Color",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.8802,
+   "hex": "#FED8DD",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 92,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "d702a6ae-617a-4bc6-b7f1-30ed8eb616d8",
+   "handle": "scales-tales",
+   "shopifyId": "7614758682723",
+   "name": "Scales & Tales",
+   "specName": "Scales & Tales",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "soft_shimmer",
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "luminance": 0.7214,
+   "hex": "#E9AC9E",
+   "formula": "Lacquer",
+   "class": "topper",
+   "topper": true,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 49,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "f3e05d2a-1741-448b-a120-e79ce44cbe8b",
+   "handle": "shell-we-dance",
+   "shopifyId": "7761085988963",
+   "name": "Shell We Dance?",
+   "specName": "Shell We Dance?",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme",
+    "sheer_glossy"
+   ],
+   "depth": "light",
+   "luminance": 0.6728,
+   "hex": "#FE91C0",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "13d6ac64-f617-446a-af7f-620ae425a657",
+   "handle": "strawberry-cream",
+   "shopifyId": "7966644109411",
+   "name": "Strawberry Cream",
+   "specName": "Strawberry Cream",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.879,
+   "hex": "#FED8D9",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "45ecd350-4b3e-4d97-8466-b4b6316b20d0",
+   "handle": "totally-clueless",
+   "shopifyId": "7842079473763",
+   "name": "Totally Clueless",
+   "specName": "Totally Clueless",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.7179,
+   "hex": "#E3AAB7",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "6f7eea06-5e54-459b-8d8a-990eedad3ef9",
+   "handle": "ph-perfector-cool-blush",
+   "shopifyId": "7903995592803",
+   "name": "pH Perfector - Cool Blush",
+   "specName": "pH Perfector - Cool Blush",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.8792,
+   "hex": "#E7DEE2",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 52,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "3bc2fa49-a31e-4ede-9bd3-a158f49bb190",
+   "handle": "ph-perfector-warm-blush",
+   "shopifyId": "7903994347619",
+   "name": "pH Perfector - Warm Blush",
+   "specName": "pH Perfector - Warm Blush",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "soft_shimmer",
+    "sheer_glossy"
+   ],
+   "depth": "light",
+   "luminance": 0.8044,
+   "hex": "#F0C6AD",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 47,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "07f535f7-dd47-41a8-8df0-c136da90d84c",
+   "handle": "juicy-velour",
+   "shopifyId": "7904564904035",
+   "name": "Juicy Velour",
+   "specName": "Juicy Velour",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.4426,
+   "hex": "#FE4866",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 46,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "ca132ab2-e157-43c8-b165-9b42e2435d80",
+   "handle": "juicy-velour-gel-nail-color",
+   "shopifyId": "7904771178595",
+   "name": "Juicy Velour  - Gel Nail Color",
+   "specName": "Juicy Velour  - Gel Nail Color",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.4426,
+   "hex": "#FE4866",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 91,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "14122225-6ee3-457a-a3dd-16080fa0960c",
+   "handle": "moonstone-aura",
+   "shopifyId": "7614758027363",
+   "name": "Moonstone Aura",
+   "specName": "Moonstone Aura",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "full_sparkle",
+    "chrome_metallic"
+   ],
+   "depth": "mid",
+   "luminance": 0.3521,
+   "hex": "#405F72",
+   "formula": "Lacquer",
+   "class": "topper",
+   "topper": true,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 32,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "59c57280-a95e-44c3-8ce6-cfd380b58a6a",
+   "handle": "shut-up-heather",
+   "shopifyId": "7771353907299",
+   "name": "Shut Up Heather",
+   "specName": "Shut Up Heather",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.4026,
+   "hex": "#CB4779",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 29,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "02e93782-c3a9-429f-bbad-cdf087cda1b2",
+   "handle": "shut-up-heather-gel-nail-color",
+   "shopifyId": "7771357216867",
+   "name": "Shut Up Heather  - Gel Nail Color",
+   "specName": "Shut Up Heather  - Gel Nail Color",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.4026,
+   "hex": "#CB4779",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "807dacfa-c55e-41d3-b711-b09d8db75bb6",
+   "handle": "thats-hot",
+   "shopifyId": "7460427038819",
+   "name": "That's Hot",
+   "specName": "That's Hot",
+   "chips": [
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.3733,
+   "hex": "#DD3871",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 11,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "af00fb4a-7206-4285-ad43-93c43772c028",
+   "handle": "dont-juno",
+   "shopifyId": "7888808607843",
+   "name": "Don't Juno",
+   "specName": "Don't Juno",
+   "chips": [
+    "pinks",
+    "nudes"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.7443,
+   "hex": "#F4B0A7",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 64,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "0ce28801-eaa4-4e55-af8d-aafb07670bf7",
+   "handle": "first-bloom",
+   "shopifyId": "7957081555043",
+   "name": "First Bloom",
+   "specName": "First Bloom",
+   "chips": [
+    "pinks",
+    "nudes"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.8244,
+   "hex": "#EDCBCB",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 70,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "f76ef732-9b2f-4044-810a-740eef7016f7",
+   "handle": "first-bloom-gel-nail-color",
+   "shopifyId": "7957086109795",
+   "name": "First Bloom - Gel Nail Color",
+   "specName": "First Bloom - Gel Nail Color",
+   "chips": [
+    "pinks",
+    "nudes"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.8244,
+   "hex": "#EDCBCB",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 94,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "b2698824-7765-404d-a90a-b156d9abb6c3",
+   "handle": "sweet-cheeks",
+   "shopifyId": "7985063723107",
+   "name": "Sweet Cheeks",
+   "specName": "Sweet Cheeks",
+   "chips": [
+    "pinks",
+    "nudes"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.901,
+   "hex": "#CFEDE1",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 77,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "06d56a39-4cea-4d53-85cb-40c67da671b2",
+   "handle": "all-eyes-on-her",
+   "shopifyId": "7614754553955",
+   "name": "All Eyes on Her",
+   "specName": "All Eyes on Her",
+   "chips": [
+    "purples"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.2013,
+   "hex": "#3C288A",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": false,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "203959c4-8294-441e-ae5f-c34e91c2ebea",
+   "handle": "alloy-matey",
+   "shopifyId": "7219390873699",
+   "name": "Alloy Matey",
+   "specName": "Alloy Matey",
+   "chips": [
+    "purples"
+   ],
+   "finishes": [
+    "soft_shimmer"
+   ],
+   "depth": "deep",
+   "luminance": 0.1533,
+   "hex": "#6F03B9",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 7,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "b5d01a44-1bc2-4887-b3dc-080f7f8991ef",
+   "handle": "starlit-shale",
+   "shopifyId": "7581661134947",
+   "name": "Starlit Shale",
+   "specName": "Starlit Shale",
+   "chips": [
+    "purples"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.1304,
+   "hex": "#3C154C",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 21,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "880a4284-d01d-411e-af83-b38737434671",
+   "handle": "stay-rad",
+   "shopifyId": "7771351515235",
+   "name": "Stay Rad",
+   "specName": "Stay Rad",
+   "chips": [
+    "purples"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.1475,
+   "hex": "#690C5D",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "64631f8e-b1d2-406d-b404-fa53627ad7c5",
+   "handle": "stay-rad-gel-nail-color",
+   "shopifyId": "7771356790883",
+   "name": "Stay Rad  - Gel Nail Color",
+   "specName": "Stay Rad  - Gel Nail Color",
+   "chips": [
+    "purples"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.1475,
+   "hex": "#690C5D",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "a3b5333d-d89c-400a-b1a6-0ec443aa7ee3",
+   "handle": "self-reef-lection",
+   "shopifyId": "7761085759587",
+   "name": "Self Reef-lection",
+   "specName": "Self Reef-lection",
+   "chips": [
+    "purples"
+   ],
+   "finishes": [
+    "soft_shimmer",
+    "sheer_glossy"
+   ],
+   "depth": "light",
+   "luminance": 0.7153,
+   "hex": "#C6B0C8",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "7aeadeaf-a8c7-455e-8da2-f19feface97c",
+   "handle": "ube-cloud",
+   "shopifyId": "7966643519587",
+   "name": "Ube Cloud",
+   "specName": "Ube Cloud",
+   "chips": [
+    "purples"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.8907,
+   "hex": "#F2DDF4",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 50,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "e4b394ea-d76d-4cc0-b9d0-f109fedca1b0",
+   "handle": "wanderlust",
+   "shopifyId": "7957080703075",
+   "name": "Wanderlust",
+   "specName": "Wanderlust",
+   "chips": [
+    "purples"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.6778,
+   "hex": "#C0A4CC",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 38,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "db18d39c-6c13-4592-970d-1dec5e01621f",
+   "handle": "wanderlust-gel-nail-color",
+   "shopifyId": "7957085454435",
+   "name": "Wanderlust  - Gel Nail Color",
+   "specName": "Wanderlust  - Gel Nail Color",
+   "chips": [
+    "purples"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.6778,
+   "hex": "#C0A4CC",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 108,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "7d197681-8040-41d7-a79a-1823b0a0030f",
+   "handle": "now-or-boucleter",
+   "shopifyId": "7649726726243",
+   "name": "Now or Bouclé-ter",
+   "specName": "Now or Bouclé-ter",
+   "chips": [
+    "purples",
+    "greys"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.2402,
+   "hex": "#53354F",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "df4b2f63-7795-4bed-89ba-c8dc8a691cc4",
+   "handle": "check-yes-or-no-gel-nail-color-1",
+   "shopifyId": "7533495124067",
+   "name": "Check Yes Or No - Gel Nail Color",
+   "specName": "Check Yes Or No - Gel Nail Color",
+   "chips": [
+    "purples",
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.4921,
+   "hex": "#D6609D",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 107,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "c6c70d46-bf7a-444e-ba60-6403fe593649",
+   "handle": "soul-sister",
+   "shopifyId": "1495873585251",
+   "name": "Soul Sister",
+   "specName": "Soul Sister",
+   "chips": [
+    "purples",
+    "pinks"
+   ],
+   "finishes": [
+    "soft_shimmer",
+    "chrome_metallic"
+   ],
+   "depth": "mid",
+   "luminance": 0.6121,
+   "hex": "#BD9395",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 3,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "58772e2c-d74e-42d5-8dd1-a72559e152f5",
+   "handle": "goddess-some-bronze",
+   "shopifyId": "7888805724259",
+   "name": "Goddess Some Bronze",
+   "specName": "Goddess Some Bronze",
+   "chips": [
+    "purples",
+    "pinks",
+    "browns"
+   ],
+   "finishes": [
+    "full_sparkle",
+    "chrome_metallic"
+   ],
+   "depth": "mid",
+   "luminance": 0.2911,
+   "hex": "#813D2C",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 20,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "b73a3f86-98cc-43ef-bfd9-3c7ec882ff7c",
+   "handle": "party-popper",
+   "shopifyId": "7805517922403",
+   "name": "Party Popper",
+   "specName": "Party Popper",
+   "chips": [
+    "purples",
+    "pinks",
+    "greys"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "mid",
+   "luminance": 0.4808,
+   "hex": "#E65895",
+   "formula": "Lacquer",
+   "class": "topper",
+   "topper": true,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 68,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "668e8cf3-e82f-4300-acb9-b4681c5f28f5",
+   "handle": "yeah-for-sherpa",
+   "shopifyId": "7649730953315",
+   "name": "Yeah, For Sherpa",
+   "specName": "Yeah, For Sherpa",
+   "chips": [
+    "purples",
+    "pinks",
+    "nudes",
+    "browns"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.2995,
+   "hex": "#6B4445",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "aa1b88cf-9fb6-4efc-886a-ba6867ed3290",
+   "handle": "on-a-break-gel-nail-color",
+   "shopifyId": "7842096709731",
+   "name": "On a Break - Gel Nail Color",
+   "specName": "On a Break - Gel Nail Color",
+   "chips": [
+    "purples",
+    "whites"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.9006,
+   "hex": "#E6E5EB",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 97,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "e9a984c2-b124-4df9-b920-55610cc5155c",
+   "handle": "on-a-break",
+   "shopifyId": "7842083340387",
+   "name": "On a Break",
+   "specName": "On a Break",
+   "chips": [
+    "purples",
+    "whites",
+    "greys"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.9006,
+   "hex": "#E6E5EB",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "9b6f5e40-7d6b-42ce-9662-34d943fca033",
+   "handle": "clause-a-commotion",
+   "shopifyId": "7673191792739",
+   "name": "Clause a Commotion",
+   "specName": "Clause a Commotion",
+   "chips": [
+    "reds"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.1809,
+   "hex": "#D90000",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 61,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "9a384d10-5330-43be-a7fb-aa666d95d018",
+   "handle": "clause-a-commotion-gel-nail-color",
+   "shopifyId": "7673707167843",
+   "name": "Clause a Commotion - Gel Nail Color",
+   "specName": "Clause a Commotion - Gel Nail Color",
+   "chips": [
+    "reds"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.1809,
+   "hex": "#D90000",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": false,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "60130cd8-043c-44fa-bb8d-75eb0aa2a44e",
+   "handle": "grlpwr",
+   "shopifyId": "7842073739363",
+   "name": "GRLPWR",
+   "specName": "GRLPWR",
+   "chips": [
+    "reds"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.2033,
+   "hex": "#E40407",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "0acd1396-3dec-4e1a-b104-5588210838a2",
+   "handle": "oh-la-la",
+   "shopifyId": "7957079392355",
+   "name": "Oh La La",
+   "specName": "Oh La La",
+   "chips": [
+    "reds"
+   ],
+   "finishes": [
+    "soft_shimmer"
+   ],
+   "depth": "deep",
+   "luminance": 0.1897,
+   "hex": "#D50121",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 72,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "f3654393-e413-4284-95bd-6d93d00f7ca6",
+   "handle": "oh-la-la-gel-nail-color",
+   "shopifyId": "7957084471395",
+   "name": "Oh La La  - Gel Nail Color",
+   "specName": "Oh La La  - Gel Nail Color",
+   "chips": [
+    "reds"
+   ],
+   "finishes": [
+    "soft_shimmer"
+   ],
+   "depth": "deep",
+   "luminance": 0.1897,
+   "hex": "#D50121",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "9328e997-2adf-4020-8d95-79dab467c3bf",
+   "handle": "red-hot",
+   "shopifyId": "7521569505379",
+   "name": "Red Hot",
+   "specName": "Red Hot",
+   "chips": [
+    "reds"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.192,
+   "hex": "#D7002D",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "bf34939d-1a60-4cb6-aeea-66f30a038c7c",
+   "handle": "red-hot-gel-nail-color",
+   "shopifyId": "7521578549347",
+   "name": "Red Hot - Gel Nail Color",
+   "specName": "Red Hot - Gel Nail Color",
+   "chips": [
+    "reds"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.192,
+   "hex": "#D7002D",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "05e757fd-10e3-4191-845b-4e48b9ab4cee",
+   "handle": "star-spangled-gel-nail-color",
+   "shopifyId": "7805598629987",
+   "name": "Star Spangled - Gel Nail Color",
+   "specName": "Star Spangled - Gel Nail Color",
+   "chips": [
+    "reds"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "deep",
+   "luminance": 0.1061,
+   "hex": "#690324",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": false,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "f7f8a18a-7cd2-4779-88f6-1d0e96efad1d",
+   "handle": "thats-my-jam",
+   "shopifyId": "7521575895139",
+   "name": "That's My Jam",
+   "specName": "That's My Jam",
+   "chips": [
+    "reds"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.1575,
+   "hex": "#B00026",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 23,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "d5244fbc-5fd4-4254-a4c2-d0a364849c4b",
+   "handle": "red-hot-copy",
+   "shopifyId": "7521574191203",
+   "name": "Hit the Gas",
+   "specName": "Hit the Gas",
+   "chips": [
+    "reds"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.2853,
+   "hex": "#E31F20",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 75,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "8a0790f2-ad9b-4fb1-8eb5-0553d2109909",
+   "handle": "hit-the-gas-gel-nail-color",
+   "shopifyId": "7521579827299",
+   "name": "Hit the Gas - Gel Nail Color",
+   "specName": "Hit the Gas - Gel Nail Color",
+   "chips": [
+    "reds"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.2853,
+   "hex": "#E31F20",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 105,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "25d799d7-3b92-493a-a231-75efe3f9f3f9",
+   "handle": "vixen-gel-nail-color",
+   "shopifyId": "7805597679715",
+   "name": "Vixen – Gel Nail Color",
+   "specName": "Vixen – Gel Nail Color",
+   "chips": [
+    "reds",
+    "browns"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.0657,
+   "hex": "#490011",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "ff743234-8ba8-48ec-85ef-ecd7946d2746",
+   "handle": "we-flannel-ly-made-it",
+   "shopifyId": "7649730101347",
+   "name": "We Flannel-ly Made It",
+   "specName": "We Flannel-ly Made It",
+   "chips": [
+    "reds",
+    "browns"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.2457,
+   "hex": "#7D2D36",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 10,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "dd879128-18f8-4b95-8704-694f8b629b83",
+   "handle": "artemis-me",
+   "shopifyId": "7888807723107",
+   "name": "Artemis Me",
+   "specName": "Artemis Me",
+   "chips": [
+    "reds",
+    "browns"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.273,
+   "hex": "#B02A1E",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 62,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "e16698f5-6366-48e4-85b9-f1c409c36683",
+   "handle": "rustic-root-gel-nail-color",
+   "shopifyId": "7586142322787",
+   "name": "Rustic Root - Gel Nail Color",
+   "specName": "Rustic Root - Gel Nail Color",
+   "chips": [
+    "reds",
+    "oranges"
+   ],
+   "finishes": [
+    "soft_shimmer"
+   ],
+   "depth": "deep",
+   "luminance": 0.1062,
+   "hex": "#78010C",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 86,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "7d46d9dc-ad18-4ac6-ae24-160690259467",
+   "handle": "earthfire",
+   "shopifyId": "7581680140387",
+   "name": "Earthfire",
+   "specName": "Earthfire",
+   "chips": [
+    "reds",
+    "oranges"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.3154,
+   "hex": "#D42E22",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 12,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "9499a787-1186-4031-ac9a-e1ca44a07505",
+   "handle": "earthfire-gel-nail-color",
+   "shopifyId": "7581715267683",
+   "name": "Earthfire - Gel Nail Color",
+   "specName": "Earthfire - Gel Nail Color",
+   "chips": [
+    "reds",
+    "oranges"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.3154,
+   "hex": "#D42E22",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 96,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "a2d70150-bbc4-4dc3-a1c6-96b4457fc790",
+   "handle": "spice-up-your-life",
+   "shopifyId": "7842084257891",
+   "name": "Spice Up Your Life",
+   "specName": "Spice Up Your Life",
+   "chips": [
+    "reds",
+    "oranges",
+    "browns"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.2537,
+   "hex": "#853113",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "d06e5829-532a-46c4-af5a-c2efa4d715b3",
+   "handle": "spice-up-your-life-gel-nail-color",
+   "shopifyId": "7842098544739",
+   "name": "Spice Up Your Life - Gel Nail Color",
+   "specName": "Spice Up Your Life - Gel Nail Color",
+   "chips": [
+    "reds",
+    "oranges",
+    "browns"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.2537,
+   "hex": "#853113",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 89,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "cef7c7f1-c797-49fe-a2a6-7e1ecadc8048",
+   "handle": "vixen-gel-nail-color-1",
+   "shopifyId": "7805599514723",
+   "name": "Naughty - Gel Nail Color",
+   "specName": "Naughty - Gel Nail Color",
+   "chips": [
+    "reds",
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.0727,
+   "hex": "#4B0210",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "36b71bf1-fce2-482c-9d74-d589508756ea",
+   "handle": "stiletto-on-the-run-gel-nail-color",
+   "shopifyId": "7805597909091",
+   "name": "Stiletto On The Run - Gel Nail Color",
+   "specName": "Stiletto On The Run - Gel Nail Color",
+   "chips": [
+    "reds",
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.1406,
+   "hex": "#6F0E1F",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": false,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "535fbec2-a082-4b12-8063-b25c443d0439",
+   "handle": "kiss-n-tell",
+   "shopifyId": "7723035361379",
+   "name": "Kiss N Tell",
+   "specName": "Kiss N Tell",
+   "chips": [
+    "reds",
+    "pinks"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "mid",
+   "luminance": 0.5424,
+   "hex": "#EE6B9B",
+   "formula": "Lacquer",
+   "class": "topper",
+   "topper": true,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 27,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "4011e655-2eb5-4999-8072-9f18def7521c",
+   "handle": "oh-darling-gel-nail-color-1",
+   "shopifyId": "7533492109411",
+   "name": "Oh Darling - Gel Nail Color",
+   "specName": "Oh Darling - Gel Nail Color",
+   "chips": [
+    "reds",
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "mid",
+   "luminance": 0.2789,
+   "hex": "#E11A41",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 112,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "d9a79f7a-e63f-4654-b1e7-a2fc0322a6bc",
+   "handle": "bedrock-bloom",
+   "shopifyId": "7581679353955",
+   "name": "Bedrock Bloom",
+   "specName": "Bedrock Bloom",
+   "chips": [
+    "reds",
+    "purples",
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.1521,
+   "hex": "#9F0045",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "916a2175-8683-4631-854e-9fd1687024ff",
+   "handle": "bedrock-bloom-gel-nail-color",
+   "shopifyId": "7581709926499",
+   "name": "Bedrock Bloom - Gel Nail Color",
+   "specName": "Bedrock Bloom - Gel Nail Color",
+   "chips": [
+    "reds",
+    "purples",
+    "pinks"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "deep",
+   "luminance": 0.1521,
+   "hex": "#9F0045",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 78,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "870975cc-aba0-4f92-9241-70b823f5ad45",
+   "handle": "cherries",
+   "shopifyId": "7598643708003",
+   "name": "Cherries",
+   "specName": "Cherries",
+   "chips": [
+    "whites"
+   ],
+   "finishes": [
+    "soft_shimmer"
+   ],
+   "depth": "deep",
+   "luminance": 0,
+   "hex": "#000000",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": true,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "05a1328d-7094-4bfe-a55a-79b844bb3c30",
+   "handle": "ceci-nest-pas-blanc-gel-nail-color",
+   "shopifyId": "7533499580515",
+   "name": "Ceci N'Est Pas Blanc - Gel Nail Color",
+   "specName": "Ceci N'Est Pas Blanc - Gel Nail Color",
+   "chips": [
+    "whites"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.8546,
+   "hex": "#E0D9D1",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "13fe65f2-e949-485a-90f2-2e7adaa25603",
+   "handle": "siren-me-crazy",
+   "shopifyId": "7888808935523",
+   "name": "Siren Me Crazy",
+   "specName": "Siren Me Crazy",
+   "chips": [
+    "whites"
+   ],
+   "finishes": [
+    "soft_shimmer",
+    "chrome_metallic"
+   ],
+   "depth": "light",
+   "luminance": 0.8248,
+   "hex": "#DED1BD",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 34,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "985eb47f-800c-4ec4-bc03-ff7e949290be",
+   "handle": "white-tips-gel-nail-color",
+   "shopifyId": "7712895336547",
+   "name": "White Tips - Gel Nail Color",
+   "specName": "White Tips - Gel Nail Color",
+   "chips": [
+    "whites"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.9686,
+   "hex": "#F7F7F7",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "9931b6a9-c4b2-4962-828d-ecda39d5e502",
+   "handle": "bohemian-child",
+   "shopifyId": "7715701882979",
+   "name": "Bohemian Child",
+   "specName": "Bohemian Child",
+   "chips": [
+    "whites",
+    "greys"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "luminance": 0.8098,
+   "hex": "#CCCFD1",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 13,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "f1e2e89e-7412-4346-a1ba-f693f11c994a",
+   "handle": "bohemian-child-gel-nail-color",
+   "shopifyId": "7715709386851",
+   "name": "Bohemian Child - Gel Nail Color",
+   "specName": "Bohemian Child - Gel Nail Color",
+   "chips": [
+    "whites",
+    "greys"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "luminance": 0.8224,
+   "hex": "#D0D2D4",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 82,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "2b42dcbb-981d-453a-8c90-2fbfc7561045",
+   "handle": "hello-yellow",
+   "shopifyId": "7565210189923",
+   "name": "Hello Yellow",
+   "specName": "Hello Yellow",
+   "chips": [
+    "yellows"
+   ],
+   "finishes": [
+    "soft_shimmer"
+   ],
+   "depth": "light",
+   "luminance": 0.7635,
+   "hex": "#D4D00C",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 63,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "b9793b6c-43d0-4138-8fec-330259afed66",
+   "handle": "morning-sunshine",
+   "shopifyId": "7957080244323",
+   "name": "Morning, Sunshine",
+   "specName": "Morning, Sunshine",
+   "chips": [
+    "yellows"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.8422,
+   "hex": "#E5DB83",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 67,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "d1bff9e5-a1f8-4efd-8207-026ea1b2045f",
+   "handle": "morning-sunshine-gel-nail-color",
+   "shopifyId": "7957084799075",
+   "name": "Morning, Sunshine  - Gel Nail Color",
+   "specName": "Morning, Sunshine  - Gel Nail Color",
+   "chips": [
+    "yellows"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.8422,
+   "hex": "#E5DB83",
+   "formula": "GELFX",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 113,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "47f0140d-20a7-4d1b-978e-44c0c2380bef",
+   "handle": "snatched",
+   "shopifyId": "7460423598179",
+   "name": "Snatched",
+   "specName": "Snatched",
+   "chips": [
+    "yellows"
+   ],
+   "finishes": [
+    "creme"
+   ],
+   "depth": "light",
+   "luminance": 0.8456,
+   "hex": "#D9ED00",
+   "formula": "Lacquer",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 42,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "5c563574-2bc4-4b64-8cc0-e558dd863663",
+   "handle": "glow-getter",
+   "shopifyId": "7985062805603",
+   "name": "Glow Getter",
+   "specName": "Glow Getter",
+   "chips": [
+    "yellows",
+    "browns"
+   ],
+   "finishes": [
+    "soft_shimmer",
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "luminance": 0.901,
+   "hex": "#CFEDE1",
+   "formula": "Breathable",
+   "class": "topper",
+   "topper": true,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 76,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "13218787-503f-41d5-892c-2d1876b53190",
+   "handle": "golden-age",
+   "shopifyId": "7916414566499",
+   "name": "Golden Age",
+   "specName": "Golden Age",
+   "chips": [
+    "yellows",
+    "browns"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "luminance": 0.7552,
+   "hex": "#BEC2BA",
+   "formula": "Lacquer",
+   "class": "topper",
+   "topper": true,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 35,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "6aa8145c-6a54-4c8a-bfed-9fae7344edd7",
+   "handle": "harry-potter™-butterbeer™-scented-iridescent-topper",
+   "shopifyId": "7728221421667",
+   "name": "Harry Potter™ BUTTERBEER™ Scented Iridescent Topper",
+   "specName": "Harry Potter™ BUTTERBEER™ Scented Iridescent Topper",
+   "chips": [
+    "yellows",
+    "browns"
+   ],
+   "finishes": [
+    "soft_shimmer",
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "luminance": 0.6891,
+   "hex": "#DDA96D",
+   "formula": "Lacquer",
+   "class": "topper",
+   "topper": true,
+   "available": false,
+   "duoKit": false,
+   "bestsellerRank": null,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "fcaa84ea-c43b-4f21-a7ba-acf4d7d8615b",
+   "handle": "star-fire",
+   "shopifyId": "7614755471459",
+   "name": "Star Fire",
+   "specName": "Star Fire",
+   "chips": [
+    "yellows",
+    "greens",
+    "pinks",
+    "browns"
+   ],
+   "finishes": [
+    "full_sparkle",
+    "chrome_metallic"
+   ],
+   "depth": "light",
+   "luminance": 0.7467,
+   "hex": "#E5B5AA",
+   "formula": "Lacquer",
+   "class": "topper",
+   "topper": true,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 30,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "3d26f52e-84b2-4a9a-bc81-d7868db0edfb",
+   "handle": "blush-it-off",
+   "shopifyId": "7985064214627",
+   "name": "Blush It Off",
+   "specName": "Blush It Off",
+   "chips": [
+    "yellows",
+    "pinks",
+    "browns"
+   ],
+   "finishes": [
+    "soft_shimmer"
+   ],
+   "depth": "light",
+   "luminance": 0.901,
+   "hex": "#CFEDE1",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 66,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "e092fb13-cf73-4780-bc0f-847dcf67acbb",
+   "handle": "gloss-over-it",
+   "shopifyId": "7985064411235",
+   "name": "Gloss Over It",
+   "specName": "Gloss Over It",
+   "chips": [
+    "yellows",
+    "pinks",
+    "browns"
+   ],
+   "finishes": [
+    "soft_shimmer"
+   ],
+   "depth": "light",
+   "luminance": 0.6212,
+   "hex": "#F18793",
+   "formula": "Breathable",
+   "class": "color",
+   "topper": false,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 45,
+   "retired": false
+  },
+  {
+   "schema": "v2",
+   "gleameId": "a6f91e2c-cc3d-4bc0-a881-a3ce4ab19a49",
+   "handle": "party-in-pink",
+   "shopifyId": "7805517561955",
+   "name": "Party in Pink",
+   "specName": "Party in Pink",
+   "chips": [
+    "yellows",
+    "pinks",
+    "browns"
+   ],
+   "finishes": [
+    "full_sparkle"
+   ],
+   "depth": "light",
+   "luminance": 0.854,
+   "hex": "#EAD4E3",
+   "formula": "Lacquer",
+   "class": "topper",
+   "topper": true,
+   "available": true,
+   "duoKit": false,
+   "bestsellerRank": 69,
+   "retired": false
+  }
+ ]
+}

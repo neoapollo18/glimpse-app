@@ -1606,6 +1606,438 @@
 }
 #gleame-quiz-root .gq-lead-code-copy:hover { border-color: var(--gq-accent); }
 
+/* =======================================================================
+ * FINISH PREVIEWS (displayMeta.texture, migration 086)
+ * A small swatch drawn in CSS so shoppers can SEE a finish instead of
+ * picturing the word. --gq-tx (displayMeta.swatch) tints the flat ones.
+ * ===================================================================== */
+#gleame-quiz-root .gq-texture {
+  --gq-tx: #d8536f;
+  display: block;
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(22, 22, 26, 0.1);
+}
+#gleame-quiz-root .gq-texture--creme { background: var(--gq-tx); }
+#gleame-quiz-root .gq-texture--matte {
+  background: var(--gq-tx);
+  background-image: linear-gradient(rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.14));
+}
+#gleame-quiz-root .gq-texture--shimmer {
+  background: linear-gradient(140deg, #f3c9cf 0%, #e3a3b0 38%, #fbe7ea 55%, #d98fa2 100%);
+}
+#gleame-quiz-root .gq-texture--sparkle {
+  background-color: #8e3c63;
+  background-image:
+    radial-gradient(circle at 28% 30%, #ffffff 1.4px, transparent 1.7px),
+    radial-gradient(circle at 68% 42%, #ffe9a8 1.6px, transparent 1.9px),
+    radial-gradient(circle at 44% 70%, #ffffff 1.3px, transparent 1.6px),
+    radial-gradient(circle at 76% 76%, #bfe9ff 1.4px, transparent 1.7px),
+    radial-gradient(circle at 20% 62%, #ffd6e8 1.2px, transparent 1.5px);
+}
+#gleame-quiz-root .gq-texture--chrome {
+  background: linear-gradient(130deg, #f2f3f5 0%, #aeb4bd 26%, #6e757f 48%, #d7dbe0 68%, #8d949e 100%);
+}
+#gleame-quiz-root .gq-texture--sheer {
+  background: color-mix(in srgb, var(--gq-tx) 34%, transparent);
+  box-shadow: inset 0 0 0 1px rgba(22, 22, 26, 0.1), inset -6px -6px 14px rgba(255, 255, 255, 0.65);
+}
+#gleame-quiz-root .gq-option--rich .gq-texture { margin-bottom: 4px; }
+#gleame-quiz-root .gq-option--boxed .gq-texture { margin: 0 auto 4px; }
+
+/* "You'll add a pic at the end" heads-up under the first question */
+#gleame-quiz-root .gq-photo-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: var(--gq-space-5) 0 0;
+  padding-top: var(--gq-space-4);
+  border-top: 1px solid var(--gq-line);
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--gq-ink-soft);
+}
+#gleame-quiz-root .gq-photo-note svg { flex: none; color: var(--gq-accent); }
+
+/* Bundle discount note under the "add all" button */
+#gleame-quiz-root .gq-bundle-note {
+  margin: var(--gq-space-2) 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--gq-ink-soft);
+}
+#gleame-quiz-root .gq-bundle-note:empty { display: none; }
+#gleame-quiz-root .gq-bundle-note.is-applied::after { content: " \2713"; color: var(--gq-accent); }
+
+/* =======================================================================
+ * UPSELL / CROSS-SELL — "complete the look" (Studio Offers, migration 086)
+ * Token-only styling so it sits inside classic AND template results.
+ * ===================================================================== */
+#gleame-quiz-root .gq-xsell {
+  margin-top: var(--gq-space-6);
+  padding-top: var(--gq-space-5);
+  border-top: 1px solid var(--gq-line);
+}
+#gleame-quiz-root .gq-xsell-head { margin-bottom: var(--gq-space-4); }
+#gleame-quiz-root .gq-xsell-title {
+  margin: 0;
+  font-family: var(--gq-font-heading);
+  font-weight: var(--gq-heading-weight);
+  font-size: 20px;
+  line-height: 1.2;
+  color: var(--gq-ink);
+  text-transform: none;
+  letter-spacing: -0.01em;
+}
+#gleame-quiz-root .gq-xsell-sub { margin: 4px 0 0; font-size: 14px; color: var(--gq-ink-soft); }
+#gleame-quiz-root .gq-xsell-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--gq-space-3);
+}
+#gleame-quiz-root .gq-xsell-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  background: var(--gq-card-bg, #ffffff);
+  border: 1.5px solid var(--gq-line);
+  border-radius: var(--gq-radius-card);
+}
+#gleame-quiz-root .gq-xsell-media {
+  display: block;
+  aspect-ratio: 1 / 1;
+  border-radius: calc(var(--gq-radius-card) - 6px);
+  overflow: hidden;
+  background: var(--gq-tint);
+}
+#gleame-quiz-root .gq-xsell-img { display: block; width: 100%; height: 100%; object-fit: cover; border: 0; }
+#gleame-quiz-root .gq-xsell-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+#gleame-quiz-root .gq-xsell-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--gq-ink);
+  text-decoration: none;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+#gleame-quiz-root .gq-xsell-price { font-size: 13px; color: var(--gq-ink-soft); }
+#gleame-quiz-root .gq-xsell-add {
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 10px 12px;
+  background: transparent;
+  border: 1.5px solid var(--gq-ink);
+  border-radius: 999px;
+  font-family: var(--gq-font-body);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  color: var(--gq-ink);
+  min-height: 40px;
+  box-sizing: border-box;
+  transition: background 160ms ease, color 160ms ease;
+}
+#gleame-quiz-root .gq-xsell-add:hover:not(:disabled) { background: var(--gq-ink); color: #ffffff; }
+#gleame-quiz-root .gq-xsell-add.is-added { background: var(--gq-accent); border-color: var(--gq-accent); color: var(--gq-accent-text); }
+#gleame-quiz-root .gq-xsell .gq-preview-off { grid-column: 1 / -1; margin: 0; }
+@media (max-width: 640px) {
+  /* Swipeable row on phones: two and a bit cards say "there's more". */
+  #gleame-quiz-root .gq-xsell-row {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    gap: 10px;
+    margin: 0 -16px;
+    padding: 0 16px 4px;
+    scrollbar-width: none;
+  }
+  #gleame-quiz-root .gq-xsell-row::-webkit-scrollbar { display: none; }
+  #gleame-quiz-root .gq-xsell-card { flex: 0 0 42%; scroll-snap-align: start; }
+  #gleame-quiz-root .gq-xsell-row--1 .gq-xsell-card { flex-basis: 60%; }
+}
+
+/* =======================================================================
+ * COMPACT LAYOUT (quiz_compact_layout, migration 086, ORLY mobile rebuild)
+ * Structure and spacing only: colors, fonts and the brand accent are the
+ * merchant's, untouched. Phone goals: promise → proof → ask above the
+ * fold, every question step fits one screen with its CTA visible.
+ * ===================================================================== */
+
+/* ---- Landing: one DOM order, two arrangements ---- */
+#gleame-quiz-root.gq-compact .gq-intro--compact .gq-intro-main {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  grid-template-areas:
+    "head proof"
+    "trust proof"
+    "ask proof";
+  grid-template-rows: auto auto 1fr;
+  column-gap: var(--gq-space-8);
+  row-gap: var(--gq-space-4);
+  align-items: start;
+}
+#gleame-quiz-root.gq-compact .gq-intro--noproof .gq-intro-main {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "head" "trust" "ask";
+  max-width: 760px;
+  margin: 0 auto;
+}
+#gleame-quiz-root.gq-compact .gq-ci-head { grid-area: head; }
+#gleame-quiz-root.gq-compact .gq-ci-proof { grid-area: proof; align-self: center; }
+#gleame-quiz-root.gq-compact .gq-ci-trust { grid-area: trust; }
+#gleame-quiz-root.gq-compact .gq-ci-ask { grid-area: ask; min-width: 0; }
+#gleame-quiz-root.gq-compact .gq-intro--compact .gq-subtext { margin-bottom: 0; }
+#gleame-quiz-root.gq-compact .gq-ci-trust {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--gq-ink-soft);
+}
+#gleame-quiz-root.gq-compact .gq-ci-ask-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gq-space-3);
+  margin-top: var(--gq-space-2);
+}
+#gleame-quiz-root.gq-compact .gq-ci-ask-head .gq-intro-question-title { margin: 0; }
+#gleame-quiz-root.gq-compact .gq-ci-count {
+  flex: none;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gq-accent);
+  white-space: nowrap;
+}
+#gleame-quiz-root.gq-compact .gq-ci-ask .gq-intro-question-helper { margin: 4px 0 0; }
+#gleame-quiz-root.gq-compact .gq-ci-ask > .gq-rich-list,
+#gleame-quiz-root.gq-compact .gq-ci-ask > .gq-option-grid,
+#gleame-quiz-root.gq-compact .gq-ci-ask > .gq-vibe-grid,
+#gleame-quiz-root.gq-compact .gq-ci-ask > .gq-chip-row { margin-top: 12px; }
+/* Answer tiles go 2-up (8 single-column cards became 4 rows). */
+#gleame-quiz-root.gq-compact .gq-ci-ask .gq-rich-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+#gleame-quiz-root.gq-compact .gq-ci-ask .gq-option--rich {
+  justify-content: center;
+  gap: 3px;
+  min-height: 72px;
+  padding: 13px;
+  border-radius: 14px;
+}
+#gleame-quiz-root.gq-compact .gq-ci-ask .gq-option-rich-title { font-size: 15px; line-height: 1.25; }
+#gleame-quiz-root.gq-compact .gq-ci-ask .gq-option-sub { font-size: 12px; margin-top: 0; }
+
+/* ---- Question steps ---- */
+#gleame-quiz-root.gq-compact .gq-step-header { margin-bottom: 26px; }
+#gleame-quiz-root.gq-compact .gq-question-title { letter-spacing: -0.02em; line-height: 1.08; }
+#gleame-quiz-root.gq-compact .gq-question-helper { margin: 7px 0 0; font-size: 14px; }
+#gleame-quiz-root.gq-compact .gq-step-body > .gq-option-block { margin-top: 20px; }
+#gleame-quiz-root.gq-compact .gq-option-block { gap: 11px; }
+/* Color chips: a swatch per chip, in a grid instead of a ragged wrap. */
+#gleame-quiz-root.gq-compact .gq-step-body .gq-chip-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+#gleame-quiz-root.gq-compact .gq-step-body .gq-chip {
+  justify-content: flex-start;
+  min-height: 52px;
+  padding: 12px 16px;
+  text-align: left;
+}
+#gleame-quiz-root.gq-compact .gq-chip-dot {
+  width: 22px;
+  height: 22px;
+  box-shadow: inset 0 0 0 1px rgba(22, 22, 26, 0.1);
+  border: 0;
+}
+#gleame-quiz-root.gq-compact .gq-option-any { min-height: 48px; border-radius: 999px; }
+/* Finish / rich cards: preview on top, label + one line under it. */
+#gleame-quiz-root.gq-compact .gq-step-body .gq-rich-list {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px;
+}
+#gleame-quiz-root.gq-compact .gq-step-body .gq-option--rich {
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  min-height: 150px;
+  padding: 20px 14px;
+  border-radius: 18px;
+}
+#gleame-quiz-root.gq-compact .gq-step-body .gq-option--rich .gq-texture { width: 54px; height: 54px; }
+#gleame-quiz-root.gq-compact .gq-continue-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 52px;
+  margin: 26px auto 0;
+}
+
+/* Desktop: steps are a centered column in the viewport, not a top strip
+   with the bottom 60% empty. */
+@media (min-width: 901px) {
+  #gleame-quiz-root.gq-compact .gq-step:not(.gq-step--gate):not(.gq-step--lead) {
+    max-width: 960px;
+    min-height: min(680px, 72vh);
+    display: flex;
+    flex-direction: column;
+  }
+  #gleame-quiz-root.gq-compact .gq-step:not(.gq-step--gate):not(.gq-step--lead) .gq-step-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    width: 100%;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  #gleame-quiz-root.gq-compact .gq-step-body > .gq-question-title,
+  #gleame-quiz-root.gq-compact .gq-step-body > .gq-question-subtitle,
+  #gleame-quiz-root.gq-compact .gq-step-body > .gq-question-helper {
+    text-align: center;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  #gleame-quiz-root.gq-compact .gq-step-body .gq-chip-row { max-width: 760px; margin-left: auto; margin-right: auto; width: 100%; }
+  #gleame-quiz-root.gq-compact .gq-step-body .gq-option-any { max-width: 360px; margin: 0 auto; }
+}
+
+/* Phones */
+@media (max-width: 900px) {
+  #gleame-quiz-root.gq-compact .gq-intro--compact .gq-intro-main {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "head" "proof" "trust" "ask";
+    grid-template-rows: none;
+    row-gap: 0;
+  }
+  #gleame-quiz-root.gq-compact .gq-ci-proof { max-width: none; margin: 16px 0 0; align-self: stretch; }
+  #gleame-quiz-root.gq-compact .gq-ci-trust { margin-top: 13px; font-size: 10px; text-align: center; }
+  #gleame-quiz-root.gq-compact .gq-ci-ask { margin-top: 16px; }
+  /* The proof is a strip, not a showcase: two short frames side by side. */
+  #gleame-quiz-root.gq-compact .gq-ci-proof .gq-ba-frames {
+    gap: 8px;
+    padding: 0;
+    background: transparent;
+    border-radius: 0;
+  }
+  #gleame-quiz-root.gq-compact .gq-ci-proof .gq-ba-frame {
+    aspect-ratio: auto;
+    height: 132px;
+    border-radius: 12px;
+    box-shadow: none;
+  }
+  #gleame-quiz-root.gq-compact .gq-ci-proof .gq-ba-tag {
+    top: 8px;
+    left: 8px;
+    padding: 5px 9px;
+    font-size: 9px;
+    font-weight: 800;
+    color: var(--gq-ink);
+  }
+  #gleame-quiz-root.gq-compact .gq-ci-proof .gq-ba-tag-after { color: var(--gq-accent); }
+  #gleame-quiz-root.gq-compact .gq-ci-proof .gq-ba-caption { margin-top: 8px; font-size: 12px; }
+  #gleame-quiz-root.gq-compact .gq-rich-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  /* Dead space: the section's own top padding never exceeds 12px. */
+  #gleame-quiz-root.gq-compact { padding-top: min(var(--gq-pad-top, 24px), 12px); padding-left: 20px; padding-right: 20px; }
+  #gleame-quiz-root.gq-compact .gq-intro--compact .gq-eyebrow { margin-bottom: 7px; font-size: 11px; }
+  #gleame-quiz-root.gq-compact .gq-intro--compact .gq-headline {
+    margin: 0;
+    font-size: 34px;
+    line-height: 1.07;
+    letter-spacing: -0.03em;
+  }
+  #gleame-quiz-root.gq-compact .gq-intro--compact .gq-subtext {
+    margin: 9px 0 0;
+    font-size: 15px;
+    line-height: 1.4;
+  }
+  #gleame-quiz-root.gq-compact .gq-ci-ask .gq-intro-question-title { font-size: 19px; }
+  #gleame-quiz-root.gq-compact .gq-photo-note { margin-top: 22px; }
+
+  #gleame-quiz-root.gq-compact .gq-step-header { margin-bottom: 22px; }
+  #gleame-quiz-root.gq-compact .gq-question-title { font-size: 30px; }
+  #gleame-quiz-root.gq-compact .gq-step-body > .gq-option-block { margin-top: 18px; }
+  #gleame-quiz-root.gq-compact .gq-option-block { gap: 11px; }
+  #gleame-quiz-root.gq-compact .gq-step-body .gq-chip-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 9px;
+  }
+  #gleame-quiz-root.gq-compact .gq-step-body .gq-chip {
+    gap: 8px;
+    min-height: 48px;
+    padding: 12px;
+    font-size: 13px;
+  }
+  #gleame-quiz-root.gq-compact .gq-chip-dot { width: 20px; height: 20px; }
+  /* Cards 2-up; an odd last card spans the row as a horizontal card. */
+  #gleame-quiz-root.gq-compact .gq-step-body .gq-rich-list,
+  #gleame-quiz-root.gq-compact .gq-step-body .gq-option-grid--boxed {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 11px;
+  }
+  #gleame-quiz-root.gq-compact .gq-step-body .gq-option--rich {
+    align-items: flex-start;
+    text-align: left;
+    gap: 9px;
+    min-height: 112px;
+    padding: 14px 13px;
+    border-radius: 16px;
+  }
+  #gleame-quiz-root.gq-compact .gq-step-body .gq-option--rich .gq-texture { width: 42px; height: 42px; }
+  #gleame-quiz-root.gq-compact .gq-step-body .gq-option-rich-title { font-size: 14px; }
+  #gleame-quiz-root.gq-compact .gq-step-body .gq-option--rich .gq-option-sub { font-size: 11px; margin-top: 0; }
+  #gleame-quiz-root.gq-compact .gq-step-body .gq-rich-list > .gq-option--rich:last-child:nth-child(odd),
+  #gleame-quiz-root.gq-compact .gq-step-body .gq-option-grid--boxed > .gq-option--boxed:last-child:nth-child(odd) {
+    grid-column: span 2;
+    min-height: 84px;
+  }
+  /* Swatch on the left, label over its line on the right. */
+  #gleame-quiz-root.gq-compact .gq-step-body .gq-rich-list > .gq-option--rich:last-child:nth-child(odd):has(.gq-texture) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-content: center;
+    align-items: center;
+    column-gap: 13px;
+    row-gap: 2px;
+  }
+  #gleame-quiz-root.gq-compact .gq-step-body .gq-rich-list > .gq-option--rich:last-child:nth-child(odd) .gq-texture {
+    grid-row: 1 / span 2;
+    margin: 0;
+  }
+  #gleame-quiz-root.gq-compact .gq-option-any { min-height: 48px; padding: 13px; font-size: 13px; }
+  #gleame-quiz-root.gq-compact .gq-continue-btn {
+    width: 100%;
+    min-height: 54px;
+    margin-top: 22px;
+    font-size: 16px;
+  }
+}
+
+
 
 /* =======================================================================
    Gleame v3 templates (docs/overhaul/V3-SPEC.md Parts 2–5; V3-CONTRACTS §6).

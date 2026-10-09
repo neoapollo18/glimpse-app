@@ -39,7 +39,27 @@ ASSEMBLY: slots 1-2 go to the two best-selling qualifying products (merchantPrio
 
 RELAXATION (only when fewer than 6 mains qualify), in this order: (1) drop the finish preference; (2) widen the picked chips to spectral neighbors: reds<->pinks<->purples, oranges<->reds, oranges<->yellows, yellows<->greens, greens<->blues, blues<->purples, nudes<->browns, nudes<->whites, greys<->blacks, greys<->whites; (3) allow depth one step off; (4) retired products as a true last resort, only when fewer than 4 mains exist after all other relaxation.`;
 
+// Pool v2 (spec "ORLY Recommendation Backfill v2"): entries carry the spec's
+// quiz-vocabulary attributes directly — chips, finish buckets, computed
+// depth, hex — written by orly-pool-v2.cjs to orly-attributes-v2.json.
+const FINISH_LABEL = {
+  creme: 'classic creme', soft_shimmer: 'soft shimmer', full_sparkle: 'full sparkle',
+  chrome_metallic: 'chrome/metallic', sheer_glossy: 'sheer/glossy',
+};
+function factLineV2(p) {
+  const bits = [];
+  // Chipless = no single-hue color metafield (spec §2.5 multi/neon/pastel
+  // only). Don't assert "multi-color": some are plain shades (Reddy or Not).
+  bits.push(p.chips && p.chips.length ? `chips ${p.chips.join('/')}` : 'no color chip (matches a color pick only via Surprise Me; match on finish)');
+  bits.push(`finish ${(p.finishes || []).map((f) => FINISH_LABEL[f] || f).join(' + ')}`);
+  bits.push(`${p.depth} depth`);
+  bits.push(p.formula);
+  if (p.topper) bits.push('glitter topper, wears over other color or bare nails');
+  return `- ${p.name}: ${bits.join(', ')}`;
+}
+
 function factLine(p) {
+  if (p.schema === 'v2') return factLineV2(p);
   const colors = (p.colors || []).join('/').toLowerCase() || 'color unknown';
   const types = (p.types || []).map((t) => t.toLowerCase());
   const finish = types.length ? types.join(' ') : 'finish unknown';
@@ -51,14 +71,24 @@ function factLine(p) {
   return `- ${p.name}: ${bits.join(', ')}`;
 }
 
-function buildGuidance() {
-  const attrs = JSON.parse(fs.readFileSync(ATTRIBUTES_PATH, 'utf8'));
-  const active = attrs.products.filter((p) => !p.retired);
-  const retired = attrs.products.filter((p) => p.retired);
+// buildGuidance()                       -> v1 behavior, reads orly-attributes.json
+// buildGuidance({ attributesPath })     -> reads another attributes file
+// buildGuidance({ products })           -> explicit product list (v1 and/or
+//                                          v2 entries; orly-pool-v2.cjs passes
+//                                          the resulting pool)
+// Never writes anything; pushing the result is the caller's (flagged) job.
+function buildGuidance(opts = {}) {
+  const products = opts.products
+    || JSON.parse(fs.readFileSync(opts.attributesPath || ATTRIBUTES_PATH, 'utf8')).products;
+  const active = products.filter((p) => !p.retired);
+  const retired = products.filter((p) => p.retired);
+  const hasV2 = active.some((p) => p.schema === 'v2');
   const lines = [
     LAYER_RULES,
     '',
-    'PRODUCT FACTS (from the ORLY catalog; formula Lacquer = classic polish, Breathable = breathable treatment + color; judge from these, not from name alone):',
+    hasV2
+      ? 'PRODUCT FACTS (from ORLY Shopify metafields; chips and finish use the quiz answer vocabulary; depth is computed from the shade hex; formula Lacquer = classic polish, Breathable = breathable treatment + color, GELFX = gel polish; judge from these, not from name alone):'
+      : 'PRODUCT FACTS (from the ORLY catalog; formula Lacquer = classic polish, Breathable = breathable treatment + color; judge from these, not from name alone):',
     ...active.map(factLine),
   ];
   if (retired.length > 0) {

@@ -63,6 +63,8 @@
     partial: false,
     quizStarted: false,     // quiz_start fired; persisted so a mid-quiz refresh doesn't re-fire it
     leadDone: false,        // lead step submitted OR skipped — never shown twice per session
+    leadToken: null,        // signed lead id from quiz-lead (migration 086) — reports results to the lead
+    leadReportedKey: null,  // match set already reported for that lead
   };
 
   // Memory only — the "never stored" promise.
@@ -129,6 +131,35 @@
     } catch (e) {
       return '$' + amount.toFixed(2);
     }
+  }
+
+  // Bundle discount (migration 086): what the saving reads as on the
+  // button ("20%" / "$10.00"), and the discounted total. A fixed amount is
+  // in the store's currency, so it is only shown or subtracted when the
+  // shopper sees prices in that currency (no Markets conversion here).
+  function fixedDiscountComparable() {
+    var active = window.Shopify && window.Shopify.currency && window.Shopify.currency.active;
+    var store = config && typeof config.currency === 'string' ? config.currency : null;
+    return !active || !store || active === store;
+  }
+  function discountText(bd) {
+    if (!bd || !(Number(bd.value) > 0)) return '';
+    if (bd.type === 'percentage') return String(Math.round(Number(bd.value) * 100) / 100) + '%';
+    return fixedDiscountComparable() ? formatMoney(Math.round(Number(bd.value) * 100)) : '';
+  }
+  function discountedCents(totalCents, bd) {
+    if (totalCents == null || !bd || !(Number(bd.value) > 0)) return totalCents;
+    if (bd.type === 'percentage') return Math.max(0, Math.round(totalCents * (1 - Number(bd.value) / 100)));
+    if (!fixedDiscountComparable()) return totalCents;
+    return Math.max(0, totalCents - Math.round(Number(bd.value) * 100));
+  }
+
+  // Storefront image URLs arrive protocol-relative ("//cdn.shopify.com/…");
+  // only https ever leaves the page or reaches an <img>.
+  function httpsImage(u) {
+    if (typeof u !== 'string' || !u) return null;
+    if (u.indexOf('//') === 0) u = 'https:' + u;
+    return /^https:\/\//.test(u) ? u : null;
   }
 
   var productJsonCache = {};
@@ -579,7 +610,14 @@
     if (config.animationStyle === 'minimal' || config.animationStyle === 'off') {
       root.classList.add('gq-anim-' + config.animationStyle);
     }
+    // Compact layout (migration 086, ORLY mobile rebuild). Classic quiz
+    // only; toggled (not added) so a Studio preview update can turn it off.
+    root.classList.toggle('gq-compact', compactActive());
     applyTemplateStyleOverrides();
+  }
+
+  function compactActive() {
+    return Boolean(config && config.compactLayout === true && !config.template);
   }
 
   // Template quizzes only (legacy never reaches past the guard): Style-panel
@@ -994,6 +1032,7 @@
     }
     swapScreen(next, direction || 'forward', seq);
     reportPreviewStep();
+    if (state.screen === 'results') reportLeadResults();
   }
 
   // Studio sync (preview only): tell the host which step is on screen so
@@ -1069,7 +1108,134 @@
 
   // -- Intro (landing + question 1 inline) --
 
+  // Question 1 rendered inline on the landing (shared by the classic and
+  // compact intros). The intro's inline question defaults to the classic
+  // compact chip row regardless of content, but an explicit merchant style
+  // (question.optionStyle) wins here too, so "make question 1 boxed" works
+  // whether it renders on the intro or its own screen.
+  function introQuestionCards(q0) {
+    var introVariant = (q0.optionStyle && STYLE_TO_VARIANT[q0.optionStyle]) || 'chip';
+    var cards = el('div', VARIANT_CONTAINER[introVariant]);
+    visibleOptions(q0).forEach(function(opt, i) {
+      var btn = el('button', VARIANT_BTN_CLASS[introVariant], optionButtonHtml(opt, introVariant));
+      btn.type = 'button';
+      btn.style.setProperty('--gq-stagger', i);
+      btn.onclick = function() {
+        markSelected(btn);
+        commitSingle(0, screens[0][0], opt);
+      };
+      cards.appendChild(btn);
+    });
+    return cards;
+  }
+
+  function introStartButton() {
+    var startBtn = el('button', 'gq-add-btn gq-start-btn', escapeHtml('Start the quiz'));
+    startBtn.type = 'button';
+    startBtn.onclick = function() {
+      state.screen = 'question';
+      state.screenIndex = 0;
+      saveState();
+      pushStep();
+      render('forward');
+    };
+    return startBtn;
+  }
+
+  function introAltAudience(landing) {
+    if (!(landing.altAudienceLabel && landing.altAudienceUrl)) return null;
+    // javascript: (and other scheme) URLs from admin input must never
+    // reach href. Only http(s) and site-relative paths render; anything
+    // else drops the link entirely.
+    var altUrl = String(landing.altAudienceUrl).trim();
+    if (!/^(https?:\/\/|\/)/i.test(altUrl)) return null;
+    var alt = el('p', 'gq-alt-audience');
+    var altLink = el('a', 'gq-alt-audience-link', escapeHtml(landing.altAudienceLabel) + ' →');
+    altLink.href = altUrl;
+    alt.appendChild(altLink);
+    return alt;
+  }
+
+  // "You'll add a pic at the end" (migration 086): sets the photo
+  // expectation on the first screen so the gate isn't a surprise.
+  var CAMERA_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3"/></svg>';
+  function buildPhotoNote(text) {
+    var note = el('p', 'gq-photo-note');
+    note.innerHTML = CAMERA_SVG + '<span>' + escapeHtml(text) + '</span>';
+    return note;
+  }
+
+  // Compact landing (migration 086, ORLY mobile rebuild): promise → proof
+  // → ask. The before/after sits ABOVE the first question (it was below
+  // all the tiles, invisible on a phone), facts collapse to one trust
+  // line, and the question carries a "1 of N" so the quiz reads short.
+  // Desktop keeps the copy|visual split through CSS grid areas, so the
+  // DOM is one order for both.
+  function renderIntroCompact() {
+    draft = {};
+    var landing = config.landing || {};
+    var hasProof = Boolean(landing.beforeImageUrl || landing.afterImageUrl);
+    var screen = el('div', 'gq-intro gq-intro--compact' + (hasProof ? '' : ' gq-intro--noproof'));
+    var main = el('div', 'gq-intro-main');
+
+    var head = el('div', 'gq-intro-copy gq-ci-head');
+    if (landing.eyebrow) head.appendChild(el('p', 'gq-eyebrow', escapeHtml(landing.eyebrow)));
+    head.appendChild(el('h2', 'gq-headline', renderAccent(landing.headline || '')));
+    if (landing.subtext) head.appendChild(el('p', 'gq-subtext', escapeHtml(landing.subtext)));
+    main.appendChild(head);
+
+    if (hasProof) {
+      var proof = el('div', 'gq-intro-visual gq-ci-proof');
+      var frames = el('div', 'gq-ba-frames');
+      [
+        { url: landing.beforeImageUrl, tag: 'Your photo', alt: 'Before the try-on', after: false },
+        { url: landing.afterImageUrl, tag: 'Your try-on', alt: 'After the try-on', after: true },
+      ].forEach(function(f) {
+        if (!f.url) return;
+        var fig = el('figure', 'gq-ba-frame' + (f.after ? ' gq-ba-frame-after' : ''));
+        fig.appendChild(el('span', 'gq-ba-tag' + (f.after ? ' gq-ba-tag-after' : ''), f.tag));
+        var img = el('img', 'gq-ba-img');
+        img.src = f.url; img.alt = f.alt;
+        fig.appendChild(img);
+        frames.appendChild(fig);
+      });
+      proof.appendChild(frames);
+      if (landing.visualCaption) proof.appendChild(el('p', 'gq-ba-caption', escapeHtml(landing.visualCaption)));
+      main.appendChild(proof);
+    }
+
+    if (Array.isArray(landing.trustItems) && landing.trustItems.length > 0) {
+      main.appendChild(el('p', 'gq-ci-trust',
+        landing.trustItems.map(function(t) { return escapeHtml(t); }).join(' \u00b7 ')));
+    }
+
+    var ask = el('div', 'gq-ci-ask');
+    if (introHostsFirstScreen()) {
+      var q0 = flow.questions[screens[0][0]];
+      var askHead = el('div', 'gq-ci-ask-head');
+      askHead.appendChild(el('h3', 'gq-intro-question-title', escapeHtml(q0.prompt)));
+      if (screens.length > 1 && config.progressStyle !== 'none') {
+        askHead.appendChild(el('span', 'gq-ci-count', '1 of ' + screens.length));
+      }
+      ask.appendChild(askHead);
+      if (q0.helperText) ask.appendChild(el('p', 'gq-intro-question-helper', escapeHtml(q0.helperText)));
+      ask.appendChild(introQuestionCards(q0));
+    } else if (screens.length > 0) {
+      ask.appendChild(introStartButton());
+    } else {
+      ask.appendChild(el('p', 'gq-subtext', 'This quiz isn’t configured yet.'));
+    }
+    if (landing.photoNote) ask.appendChild(buildPhotoNote(landing.photoNote));
+    var alt = introAltAudience(landing);
+    if (alt) ask.appendChild(alt);
+    main.appendChild(ask);
+
+    screen.appendChild(main);
+    return screen;
+  }
+
   function renderIntro() {
+    if (compactActive()) return renderIntroCompact();
     // Abandoned uncommitted picks from a screen must not influence intro
     // option visibility (conditionMet consults draft).
     draft = {};
@@ -1099,52 +1265,17 @@
       var qWrap = el('div', 'gq-intro-question');
       qWrap.appendChild(el('h3', 'gq-intro-question-title', escapeHtml(q0.prompt)));
       if (q0.helperText) qWrap.appendChild(el('p', 'gq-intro-question-helper', escapeHtml(q0.helperText)));
-      // The intro's inline question defaults to the classic compact chip
-      // row regardless of content — but an explicit merchant style
-      // (question.optionStyle) wins here too, so "make question 1 boxed"
-      // works whether it renders on the intro or its own screen.
-      var introVariant = (q0.optionStyle && STYLE_TO_VARIANT[q0.optionStyle]) || 'chip';
-      var cards = el('div', VARIANT_CONTAINER[introVariant]);
-      visibleOptions(q0).forEach(function(opt, i) {
-        var btn = el('button', VARIANT_BTN_CLASS[introVariant], optionButtonHtml(opt, introVariant));
-        btn.type = 'button';
-        btn.style.setProperty('--gq-stagger', i);
-        btn.onclick = function() {
-          markSelected(btn);
-          commitSingle(0, screens[0][0], opt);
-        };
-        cards.appendChild(btn);
-      });
-      qWrap.appendChild(cards);
+      qWrap.appendChild(introQuestionCards(q0));
       copy.appendChild(qWrap);
     } else if (screens.length > 0) {
-      var startBtn = el('button', 'gq-add-btn gq-start-btn', escapeHtml('Start the quiz'));
-      startBtn.type = 'button';
-      startBtn.onclick = function() {
-        state.screen = 'question';
-        state.screenIndex = 0;
-        saveState();
-        pushStep();
-        render('forward');
-      };
-      copy.appendChild(startBtn);
+      copy.appendChild(introStartButton());
     } else {
       copy.appendChild(el('p', 'gq-subtext', 'This quiz isn’t configured yet.'));
     }
+    if (landing.photoNote) copy.appendChild(buildPhotoNote(landing.photoNote));
 
-    if (landing.altAudienceLabel && landing.altAudienceUrl) {
-      // javascript: (and other scheme) URLs from admin input must never
-      // reach href. Only http(s) and site-relative paths render; anything
-      // else drops the link entirely.
-      var altUrl = String(landing.altAudienceUrl).trim();
-      if (/^(https?:\/\/|\/)/i.test(altUrl)) {
-        var alt = el('p', 'gq-alt-audience');
-        var altLink = el('a', 'gq-alt-audience-link', escapeHtml(landing.altAudienceLabel) + ' →');
-        altLink.href = altUrl;
-        alt.appendChild(altLink);
-        copy.appendChild(alt);
-      }
-    }
+    var alt = introAltAudience(landing);
+    if (alt) copy.appendChild(alt);
     main.appendChild(copy);
 
     // Before/after visual (desktop side panel).
@@ -1424,6 +1555,27 @@
     list: 'gq-option-list',
   };
 
+  // Finish preview on a card (displayMeta.texture, migration 086): a small
+  // swatch drawn in CSS (flat creme, pearl shimmer, glitter, chrome, sheer
+  // jelly, matte). Closed set; displayMeta.swatch tints the flat ones.
+  var TEXTURES = { creme: 1, matte: 1, shimmer: 1, sparkle: 1, chrome: 1, sheer: 1 };
+  var HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+  function textureHtml(meta) {
+    if (!meta || !TEXTURES[meta.texture]) return '';
+    var tint = meta.swatch && HEX_COLOR_RE.test(meta.swatch) ? ' style="--gq-tx:' + meta.swatch + '"' : '';
+    return '<span class="gq-texture gq-texture--' + meta.texture + '"' + tint + ' aria-hidden="true"></span>';
+  }
+
+  // Chip dot: a light→deep gradient when the option carries a second
+  // swatch (a color FAMILY, e.g. ORLY's Reds), else the flat color.
+  function chipDotHtml(meta) {
+    if (!meta.swatch) return '';
+    var bg = meta.swatch2 && HEX_COLOR_RE.test(meta.swatch2) && HEX_COLOR_RE.test(meta.swatch)
+      ? 'linear-gradient(135deg,' + meta.swatch + ',' + meta.swatch2 + ')'
+      : escapeHtml(meta.swatch);
+    return '<span class="gq-chip-dot" style="background:' + bg + '"></span>';
+  }
+
   function optionButtonHtml(opt, variant) {
     var meta = opt.displayMeta || {};
     var label = escapeHtml(opt.label);
@@ -1441,7 +1593,7 @@
             Math.max(4, Math.min(100, Number(meta.meterPct) || 0)) + '%"></span></span>' +
             '<span class="gq-meter-label">' + escapeHtml(meta.meterLabel) + '</span>'
           : '';
-        return tag + '<span class="gq-option-rich-title">' + label + '</span>' + sub + meter + CHECK_SVG;
+        return textureHtml(meta) + tag + '<span class="gq-option-rich-title">' + label + '</span>' + sub + meter + CHECK_SVG;
       }
       case 'vibe': {
         // Swatch-less options in a vibe question fall back to a plain boxed
@@ -1463,12 +1615,10 @@
         var chipText = meta.sublabel
           ? '<span class="gq-chip-text"><span>' + label + '</span><span class="gq-chip-sub">' + escapeHtml(meta.sublabel) + '</span></span>'
           : '<span>' + label + '</span>';
-        return (variant === 'dotchip' && meta.swatch
-            ? '<span class="gq-chip-dot" style="background:' + escapeHtml(meta.swatch) + '"></span>'
-            : '') + chipText;
+        return (variant === 'dotchip' ? chipDotHtml(meta) : '') + chipText;
       }
       case 'boxed':
-        return '<span class="gq-option-visual-label">' + label + '</span>' + sub + CHECK_SVG;
+        return textureHtml(meta) + '<span class="gq-option-visual-label">' + label + '</span>' + sub + CHECK_SVG;
       default: // list
         return '<span>' + label + (meta.sublabel ? '<span class="gq-option-sub gq-option-sub--inline">' + escapeHtml(meta.sublabel) + '</span>' : '') + '</span>' + CHECK_SVG;
     }
@@ -1844,9 +1994,53 @@
         if (!res.ok) {
           throw new Error((data && data.error) || ('quiz-lead ' + res.status));
         }
+        // Signed lead id (migration 086): lets results report the matches
+        // to this lead without the email ever being sent again.
+        if (data && typeof data.leadToken === 'string' && data.leadToken.length < 200) {
+          state.leadToken = data.leadToken;
+          state.leadReportedKey = null;
+          saveState();
+          reportLeadResults(); // lead taken ON the results screen
+        }
         return data;
       });
     });
+  }
+
+  // Lead → results (migration 086): once a lead's DEFINITIVE results are
+  // on screen, report which products they were shown (merchant lead
+  // export + the Klaviyo "Gleame Quiz Results" event). Partial results
+  // waiting on a shade would trigger a "your matches" email with the
+  // wrong products, so they never report. Handles only: the server
+  // resolves titles, images and links from the store's own catalog.
+  // Once per distinct match set; best effort.
+  function resultsDefinitive() {
+    var sAxis = shadeAxis();
+    var shadeActionable = Boolean(sAxis && !state.criteria[sAxis.key]);
+    return !state.partial || !shadeActionable;
+  }
+  function reportLeadResults() {
+    if (PREVIEW || !state.leadToken || state.screen !== 'results' || !resultsDefinitive()) return;
+    var matches = Array.isArray(state.matches) ? state.matches.slice(0, 12) : [];
+    var handles = [];
+    matches.forEach(function(m) {
+      if (m.productHandle && handles.indexOf(m.productHandle) === -1) handles.push(m.productHandle);
+    });
+    if (handles.length === 0) return;
+    var key = handles.join('|');
+    if (state.leadReportedKey === key) return;
+    state.leadReportedKey = key;
+    saveState();
+    fetch(SHOPIFY_APP_URL + '/api/storefront/quiz-lead-results', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        shopDomain: shopDomain,
+        leadToken: state.leadToken,
+        products: handles.map(function(h) { return { handle: h }; }),
+      }),
+      keepalive: true,
+    }).catch(function() {});
   }
 
   // Auto-apply a merchant discount code to the shopper's checkout. Shopify
@@ -1859,6 +2053,64 @@
       fetch('/discount/' + encodeURIComponent(code), { credentials: 'same-origin' })
         .catch(function() {});
     } catch (e) { /* fetch unavailable — code still shown on screen */ }
+  }
+
+  // Add a discount code to the cart WITHOUT dropping codes already on it.
+  // /cart/update.js `discount` (Cart AJAX, 2025-05) REPLACES the cart's
+  // code set, so the current codes ride along. /discount/{code} is the
+  // fallback for themes/markets where that call fails. Resolves true when
+  // the code is on the cart.
+  function applyCartDiscount(code) {
+    if (PREVIEW || !code) return Promise.resolve(false);
+    return fetch('/cart.js', { credentials: 'same-origin' })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(cart) {
+        var codes = [];
+        var existing = (cart && (cart.discount_codes || [])) || [];
+        existing.forEach(function(d) {
+          var c = d && (d.code || d.title);
+          if (c && codes.indexOf(c) === -1 && c.toUpperCase() !== code.toUpperCase()) codes.push(c);
+        });
+        codes.push(code);
+        return fetch('/cart/update.js', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ discount: codes.join(',') }),
+        });
+      })
+      .then(function(res) {
+        if (!res || !res.ok) throw new Error('cart discount update failed');
+        try {
+          document.dispatchEvent(new CustomEvent('cart:updated', { detail: { source: 'gleame-quiz' } }));
+          document.dispatchEvent(new CustomEvent('cart:refresh', { detail: { source: 'gleame-quiz' } }));
+        } catch (e) { /* old browsers */ }
+        return true;
+      })
+      .catch(function() {
+        // Fallback: the classic discount link. Its response is a storefront
+        // page either way, so "ok" only means the request went through.
+        return fetch('/discount/' + encodeURIComponent(code), { credentials: 'same-origin' })
+          .then(function(r) { return Boolean(r && r.ok); })
+          .catch(function() { return false; });
+      });
+  }
+
+  // The bundle code is never in the public config: ask for it once the
+  // bundle is actually in the cart, then put it on the cart.
+  function applyBundleDiscount() {
+    if (PREVIEW) return Promise.resolve(true);
+    return fetch(SHOPIFY_APP_URL + '/api/storefront/quiz-bundle-discount', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shopDomain: shopDomain }),
+    })
+      .then(function(res) { return res.ok ? res.json() : null; })
+      .then(function(body) {
+        var code = body && typeof body.code === 'string' ? body.code : null;
+        return code ? applyCartDiscount(code) : false;
+      })
+      .catch(function() { return false; });
   }
 
   // Post-submit reveal: the discount code, a copy affordance, and an
@@ -2479,12 +2731,19 @@
     return { label: label, source: source, swatch: swatch };
   }
 
-  function buildAddLabel(template, quantity, totalCents) {
+  // {discount} / {was} only mean something on a discounted bundle
+  // (migration 086); elsewhere they resolve to nothing.
+  function buildAddLabel(template, quantity, totalCents, discount) {
     var t = template || 'Add {count} to bag \u00b7 {total}';
+    var d = discount || null;
     return t
       .replace(/\{count\}/g, String(quantity))
       .replace(/\{set_word\}/g, quantity === 1 ? 'set' : 'sets')
-      .replace(/\{total\}/g, totalCents != null ? formatMoney(totalCents) : '');
+      .replace(/\{total\}/g, totalCents != null ? formatMoney(totalCents) : '')
+      .replace(/\{discount\}/g, d && d.text ? d.text : '')
+      .replace(/\{was\}/g, d && d.wasCents != null ? formatMoney(d.wasCents) : '')
+      .replace(/\s*[\u00b7\u2014-]\s*$/, '')
+      .trim();
   }
 
   function renderResults() {
@@ -2580,6 +2839,10 @@
 
     if (bundleActive) {
       main.appendChild(buildBundleRow(matches, results));
+    }
+    if (definitive) {
+      var xsell = buildCrossSellSection(matches, results);
+      if (xsell) main.appendChild(xsell);
     }
 
     if (state.partial && shadeActionable) {
@@ -3063,6 +3326,27 @@
       });
       return { items: items, total: totalKnown ? total : null };
     }
+    // Bundle discount (migration 086): the saving shows on the button
+    // ({total} becomes the discounted price, {was} the full one) and in a
+    // note under it; the code itself is fetched and applied after the add.
+    var bd = results.bundleDiscount || null;
+    var note = null;
+    if (bd) {
+      note = el('p', 'gq-bundle-note');
+      row.appendChild(note);
+    }
+    function itemCount(items) {
+      var n = 0;
+      items.forEach(function(it) { n += it.quantity; });
+      return n;
+    }
+    function refreshNote(qualifies) {
+      if (!note) return;
+      var amount = discountText(bd);
+      note.textContent = qualifies
+        ? (amount ? 'Save ' + amount + ' \u00b7 ' : '') + (bd.note || '')
+        : 'Bundle ' + bd.minQty + '+ to save' + (amount ? ' ' + amount : '');
+    }
     function refreshButton() {
       // Don't stomp the transient Adding\u2026/Added \u2713 states.
       if (btn.classList.contains('is-working') || btn.classList.contains('is-added')) return;
@@ -3070,11 +3354,17 @@
       if (missing > 0) {
         btn.disabled = true;
         btn.textContent = 'Select ' + missing + ' more';
+        refreshNote(false);
         return;
       }
       var s = selectedItems();
       btn.disabled = lines === null || s.items.length === 0;
-      btn.textContent = buildAddLabel(template, bp.size, s.total);
+      var qualifies = Boolean(bd) && itemCount(s.items) >= bd.minQty;
+      var discount = qualifies
+        ? { text: discountText(bd), wasCents: s.total }
+        : null;
+      btn.textContent = buildAddLabel(template, bp.size, qualifies ? discountedCents(s.total, bd) : s.total, discount);
+      refreshNote(qualifies);
     }
     bp.onChange = refreshButton;
 
@@ -3107,6 +3397,13 @@
             btn.parentNode.insertBefore(bagLink, btn.nextSibling);
           }
           refreshCartToken().then(function() { trackEvent('quiz_add_bundle_to_bag'); });
+          if (bd && itemCount(s.items) >= bd.minQty) {
+            applyBundleDiscount().then(function(applied) {
+              if (!applied || !note) return;
+              note.classList.add('is-applied');
+              trackEvent('quiz_bundle_discount_applied');
+            });
+          }
           setTimeout(function() {
             btn.classList.remove('is-added');
             refreshButton();
@@ -3120,6 +3417,156 @@
     };
     refreshButton();
     return row;
+  }
+
+  // -- Upsell / cross-sell (Studio Offers, migration 086) --
+  //
+  // "Complete the look" row under the results: merchant-picked add-ons
+  // (optionally tied to an answer), and/or Shopify's complementary
+  // products for the top match (Search & Discovery). Anything already in
+  // the matches, sold out, or unresolvable is skipped; with nothing left
+  // the section removes itself.
+
+  function criteriaHas(axisKey, value) {
+    var v = state.criteria[axisKey];
+    return Array.isArray(v) ? v.indexOf(value) !== -1 : v === value;
+  }
+
+  function shopifyComplementary(productId, limit) {
+    if (PREVIEW || !productId) return Promise.resolve([]);
+    var base = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || '/';
+    return fetch(base + 'recommendations/products.json?product_id=' + encodeURIComponent(productId) +
+        '&limit=' + limit + '&intent=complementary', { headers: { 'Accept': 'application/json' } })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(body) { return (body && Array.isArray(body.products)) ? body.products : []; })
+      .catch(function() { return []; });
+  }
+
+  function firstAvailableVariant(pj) {
+    if (!pj || !Array.isArray(pj.variants)) return null;
+    for (var i = 0; i < pj.variants.length; i++) {
+      if (pj.variants[i].available !== false) return pj.variants[i];
+    }
+    return null;
+  }
+
+  function buildCrossSellCard(entry) {
+    var pj = entry.pj;
+    var card = el('div', 'gq-xsell-card');
+    var url = '/products/' + encodeURIComponent(entry.handle);
+    var media = el('a', 'gq-xsell-media');
+    media.href = url;
+    var img = httpsImage((pj && pj.featured_image) || entry.imageUrl);
+    if (img) {
+      var im = el('img', 'gq-xsell-img');
+      im.src = img; im.alt = ''; im.loading = 'lazy';
+      media.appendChild(im);
+    }
+    card.appendChild(media);
+    var body = el('div', 'gq-xsell-body');
+    var name = el('a', 'gq-xsell-name', escapeHtml((pj && pj.title) || entry.title || ''));
+    name.href = url;
+    body.appendChild(name);
+    var variant = firstAvailableVariant(pj);
+    var cents = variant && typeof variant.price === 'number' ? variant.price : (pj && typeof pj.price === 'number' ? pj.price : null);
+    if (cents != null) body.appendChild(el('span', 'gq-xsell-price', escapeHtml(formatMoney(cents))));
+    card.appendChild(body);
+
+    // One tap only when there's nothing to choose; otherwise the product
+    // page owns variant selection.
+    var availableCount = pj && Array.isArray(pj.variants)
+      ? pj.variants.filter(function(v) { return v.available !== false; }).length
+      : 0;
+    if (variant && availableCount === 1) {
+      var add = el('button', 'gq-xsell-add', '+ Add');
+      add.type = 'button';
+      add.setAttribute('aria-label', 'Add ' + ((pj && pj.title) || entry.title || 'item') + ' to bag');
+      add.onclick = function() {
+        if (add.disabled) return;
+        add.disabled = true;
+        add.textContent = 'Adding\u2026';
+        addToBag(variant.id, 1).then(function() {
+          add.textContent = 'Added \u2713';
+          add.classList.add('is-added');
+          refreshCartToken().then(function() { trackEvent('quiz_cross_sell_add'); });
+        }).catch(function() {
+          add.disabled = false;
+          add.textContent = '+ Add';
+        });
+      };
+      card.appendChild(add);
+    } else {
+      var choose = el('a', 'gq-xsell-add gq-xsell-add--link', 'Choose');
+      choose.href = url;
+      card.appendChild(choose);
+    }
+    return card;
+  }
+
+  function buildCrossSellSection(matches, results) {
+    var cs = results && results.crossSell;
+    if (!cs || !Array.isArray(matches) || matches.length === 0) return null;
+    var max = Math.max(1, Math.min(6, Number(cs.max) || 3));
+    var section = el('section', 'gq-xsell');
+    section.setAttribute('aria-label', cs.title || 'Complete the look');
+    var head = el('div', 'gq-xsell-head');
+    head.appendChild(el('h3', 'gq-xsell-title', escapeHtml(cs.title || 'Complete the look')));
+    if (cs.subtext) head.appendChild(el('p', 'gq-xsell-sub', escapeHtml(cs.subtext)));
+    section.appendChild(head);
+    var row = el('div', 'gq-xsell-row');
+    section.appendChild(row);
+    section.style.display = 'none'; // shown once something resolves
+
+    var skip = {};
+    matches.forEach(function(m) { if (m.productHandle) skip[m.productHandle] = true; });
+    var manual = (cs.source === 'shopify') ? [] : (cs.items || []).filter(function(it) {
+      if (!it || !it.handle || skip[it.handle]) return false;
+      return !it.when || criteriaHas(it.when.axisKey, it.when.axisValue);
+    });
+
+    var manualP = Promise.all(manual.slice(0, max).map(function(it) {
+      return fetchProductJson(it.handle).then(function(pj) {
+        return { handle: it.handle, title: it.title, imageUrl: it.imageUrl, pj: pj };
+      });
+    }));
+    var wantShopify = cs.source === 'shopify' || cs.source === 'both';
+    var shopifyP = wantShopify && matches[0] && matches[0].productHandle
+      ? fetchProductJson(matches[0].productHandle).then(function(pj) {
+          return pj && pj.id ? shopifyComplementary(pj.id, max + matches.length) : [];
+        })
+      : Promise.resolve([]);
+
+    Promise.all([manualP, shopifyP]).then(function(r) {
+      var seen = {};
+      var picks = [];
+      function push(entry) {
+        if (!entry || !entry.handle || seen[entry.handle] || skip[entry.handle]) return;
+        // Sold out (or unresolvable outside the Studio) = not offered.
+        if (!PREVIEW && (!entry.pj || entry.pj.available === false)) return;
+        seen[entry.handle] = true;
+        picks.push(entry);
+      }
+      r[0].forEach(push);
+      (r[1] || []).forEach(function(pj) {
+        if (pj && pj.handle) push({ handle: pj.handle, title: pj.title, imageUrl: null, pj: pj });
+      });
+      picks = picks.slice(0, max);
+      if (picks.length === 0) {
+        if (PREVIEW && wantShopify) {
+          // Studio-only: Shopify's recommendations exist on the storefront.
+          section.style.display = '';
+          row.appendChild(el('p', 'gq-preview-off', 'Shopify\u2019s complementary products for the top match appear here on your store.'));
+        } else if (section.parentNode) {
+          section.parentNode.removeChild(section);
+        }
+        return;
+      }
+      picks.forEach(function(entry) { row.appendChild(buildCrossSellCard(entry)); });
+      row.classList.add('gq-xsell-row--' + Math.min(picks.length, 4));
+      section.style.display = '';
+      trackEvent('quiz_cross_sell_view');
+    });
+    return section;
   }
 
   function buildStickyBar(hero, results) {
@@ -3140,6 +3587,9 @@
       // A captured/declined lead survives restarts — never re-ask the same
       // session for the email it already gave (or refused).
       leadDone: state.leadDone,
+      // Same shopper, same lead: a retake's new matches report to it too.
+      leadToken: state.leadToken || null,
+      leadReportedKey: null,
       // v3 Routine: the name given this session survives "Try another look".
       shopperName: state.shopperName,
     };
@@ -3151,7 +3601,7 @@
     state.t2ComputeDone = false;
     // leadDone must survive a mid-restart reload too — persist the reset
     // state instead of clearing when there's a lead flag to keep.
-    if (state.leadDone) saveState();
+    if (state.leadDone || state.leadToken) saveState();
     else clearState();
     replaceStep();
     render('back');
@@ -4397,6 +4847,10 @@
       leadCard: definitive ? tplLeadCard : function() { return null; },
     });
 
+    if (definitive) {
+      var xsell = buildCrossSellSection(matches, results);
+      if (xsell) screen.appendChild(xsell);
+    }
     if (state.partial && shadeActionable) screen.appendChild(buildShadeGate());
     // Match renders its VTO module inside the results body; the other
     // templates keep the shipped upsell banner as the try-on entry point.
@@ -5088,7 +5542,11 @@
       var totVal = el('b', 'gq-t3r-total-value', '');
       totalEls.push(totVal);
       tot.appendChild(totVal);
-      if (results.bundleEnabled) tot.appendChild(el('small', 'gq-t3r-total-save', 'Bundle savings applied at checkout'));
+      // Only a real discount may promise savings (migration 086); the
+      // bundle button alone adds at full price.
+      if (results.bundleEnabled && results.bundleDiscount) {
+        tot.appendChild(el('small', 'gq-t3r-total-save', escapeHtml(results.bundleDiscount.note || 'Bundle savings applied at checkout')));
+      }
       foot.appendChild(tot);
       var bundleRow = tplBundleRow(matches, results, 'Add routine to cart');
       bundleRow.classList.add('gq-t3r-addall');

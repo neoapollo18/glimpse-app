@@ -1,0 +1,196 @@
+ORLY nail color quiz (Find Your Vibe). Rank products for the shopper's answers. Apply these rules in order; higher rules win conflicts.
+
+RESULT SHAPE: the ranked list is 6 MAINS followed by 2 WILDCARDS. Mains must satisfy the shopper's picks (rule below). Wildcards are the highest-fit products that FAIL the color picks but strongly fit the vibe + intensity — they go only in the last 2 slots, never mixed into the mains. Never pad mains with products that violate the shopper's picks: if fewer than 6 products qualify even after relaxation, put the 4 best qualifying mains first and let wildcards grow to 4.
+
+TOPPERS: products marked "topper" are sheer glitter films worn over color or bare nails. Toppers NEVER take main slots, with one exception: when the shopper picked Full Sparkle or the vibe is Full Glam, up to 2 toppers may appear in mains. On every other path at most 1 topper total may appear, in the final slot only, chosen to complement (pair with) the mains.
+
+SHOPPER PICKS ARE HARD PREFERENCES (strongest signal):
+- Colors picked: every main must match at least one picked color chip (a product matches if ANY of its chips is picked). Multi/rainbow shades count as matching only when their finish also fits the picks.
+- Finishes picked: every main must match a picked finish; a secondary finish counts. Finish map: Classic Creme = creme; Soft Shimmer = shimmer or pearl; Full Sparkle = glitter, holographic, confetti or flakies; Chrome & Metallic = metallic or duochrome; Sheer & Glossy = jelly or sheer.
+- Surprise Me / No Preference answers add no constraint; break ties by bestseller rank.
+
+VIBE PROFILES (rank within the products that pass the shopper's picks; chips > finish > depth):
+- Model Off-Duty: chips nudes, whites, pinks; creme or sheer/jelly finish; light depth; sheer or buildable coverage.
+- Soft & Sweet: chips pinks, purples, blues, yellows, whites; creme or soft shimmer; light depth.
+- Timeless: chips reds, pinks, nudes, whites; creme; mid depth; full coverage.
+- Girls' Night Out: chips reds, purples, blacks; creme, shimmer or metallic; mid or deep depth; full coverage.
+- Full Glam: finish leads, color follows the picks or bestseller rank: glitter, holographic, confetti, flakies, chrome, metallic; any depth.
+- Vacation: chips oranges, pinks, yellows, reds; creme or shimmer; mid depth; tropical brights and neons welcome.
+- Coastal Cool: chips blues, greens, whites, greys; creme first, then any finish; any depth.
+- Moody: chips blacks, greys, browns, purples, reds, blues, greens; creme or metallic; deep depth; full coverage.
+
+INTENSITY (applied on top of the vibe profile):
+- Subtle: prefer light depth and creme, sheer/jelly or soft shimmer finishes; strongly deprioritize full sparkle, chunky glitter and neons. Subtle + Full Glam resolves to fine shimmer or micro-glitter, never chunky glitter.
+- Just right: apply the vibe profile as-is.
+- The full look: prefer mid/deep depth and bolder shades; full sparkle, neons and deep colors may outrank.
+
+ASSEMBLY: slots 1-2 go to the two best-selling qualifying products (merchantPriority products are the current bestsellers, in order). Slots 3-6: vary your selection among the next dozen or so qualifying products so repeat runs do not return an identical grid. Never force a poorly matching bestseller over a clearly better match.
+
+RELAXATION (only when fewer than 6 mains qualify), in this order: (1) drop the finish preference; (2) widen the picked chips to spectral neighbors: reds<->pinks<->purples, oranges<->reds, oranges<->yellows, yellows<->greens, greens<->blues, blues<->purples, nudes<->browns, nudes<->whites, greys<->blacks, greys<->whites; (3) allow depth one step off; (4) retired products as a true last resort, only when fewer than 4 mains exist after all other relaxation.
+
+PRODUCT FACTS (from ORLY Shopify metafields; chips and finish use the quiz answer vocabulary; depth is computed from the shade hex; formula Lacquer = classic polish, Breathable = breathable treatment + color, GELFX = gel polish; judge from these, not from name alone):
+- Reddy or Not: no color chip (matches a color pick only via Surprise Me; match on finish), finish classic creme + sheer/glossy, deep depth, Breathable
+- After School Special: no color chip (matches a color pick only via Surprise Me; match on finish), finish full sparkle, light depth, Lacquer, glitter topper, wears over other color or bare nails
+- Disco Drop: no color chip (matches a color pick only via Surprise Me; match on finish), finish full sparkle + chrome/metallic, light depth, Lacquer, glitter topper, wears over other color or bare nails
+- Twinkling Veil: no color chip (matches a color pick only via Surprise Me; match on finish), finish soft shimmer + full sparkle, light depth, Lacquer, glitter topper, wears over other color or bare nails
+- Bubblegum Pop: no color chip (matches a color pick only via Surprise Me; match on finish), finish classic creme, mid depth, Lacquer
+- Liquid Vinyl - Gel Nail Color: chips blacks, finish classic creme, deep depth, GELFX
+- Mind Over Matter: chips blacks, finish classic creme, deep depth, Breathable
+- I’m Easily Suede: chips blues, finish classic creme, deep depth, Breathable
+- Last Run: chips blues, finish classic creme, deep depth, Lacquer
+- Last Run - Gel Nail Color: chips blues, finish classic creme, deep depth, GELFX
+- Bell Bottom Blues: chips blues, finish soft shimmer, light depth, Lacquer
+- Bell Bottom Blues - Gel Nail Color: chips blues, finish soft shimmer, light depth, GELFX
+- Dreamcatcher: chips blues, finish classic creme, light depth, Lacquer
+- Dreamcatcher  - Gel Nail Color: chips blues, finish classic creme, light depth, GELFX
+- Flip Phone: chips blues, finish full sparkle, light depth, Lacquer
+- Flip Phone  - Gel Nail Color: chips blues, finish full sparkle, light depth, GELFX
+- Fresh Powder - Gel Nail Color: chips blues, finish classic creme, light depth, GELFX
+- Looking Glass: chips blues, finish full sparkle, light depth, Lacquer, glitter topper, wears over other color or bare nails
+- Shore Thing: chips blues, finish soft shimmer, light depth, Breathable
+- Among the Stars: chips blues, finish full sparkle, mid depth, Lacquer, glitter topper, wears over other color or bare nails
+- Be Kind Rewind: chips blues, finish classic creme, mid depth, Lacquer
+- Be Kind Rewind  - Gel Nail Color: chips blues, finish classic creme, mid depth, GELFX
+- Freudian Flip: chips blues, finish chrome/metallic, mid depth, Breathable
+- Glass Act: chips blues, finish chrome/metallic, mid depth, Breathable
+- Mallrat: chips blues, finish classic creme, mid depth, Lacquer
+- Mallrat - Gel Nail Color: chips blues, finish classic creme, mid depth, GELFX
+- Skystone: chips blues, finish classic creme, mid depth, Lacquer
+- Fleece to Meet You: chips greens, finish classic creme, deep depth, Breathable
+- Fresh Start: chips greens, finish classic creme, light depth, Breathable
+- Hey Bestie: chips greens, finish full sparkle, light depth, Lacquer, glitter topper, wears over other color or bare nails
+- Dear Abby: chips greens, finish classic creme, mid depth, Lacquer
+- Rollin With My Homies  - Gel Nail Color: chips greens, finish chrome/metallic, mid depth, GELFX
+- Sea Me Now: chips greens, finish classic creme + sheer/glossy, mid depth, Breathable
+- Touch Grass: chips greens, finish classic creme, mid depth, Lacquer
+- Yule Love This: chips greens, finish full sparkle, mid depth, Lacquer
+- Yule Love This - Gel Nail Color: chips greens, finish full sparkle, mid depth, GELFX
+- Rollin With My Homies: chips greens/purples, finish soft shimmer + chrome/metallic, mid depth, Lacquer
+- Chillax: chips greys, finish classic creme + soft shimmer + chrome/metallic, light depth, Lacquer
+- Chillax  - Gel Nail Color: chips greys, finish classic creme, light depth, GELFX
+- Double Diamond: chips greys, finish full sparkle, light depth, Lacquer
+- Double Diamond - Gel Nail Color: chips greys, finish full sparkle, light depth, GELFX
+- Shine - Gel Nail Color: chips greys, finish soft shimmer + full sparkle, light depth, GELFX
+- Sleigh Yes!: chips greys, finish full sparkle, light depth, Lacquer
+- Typing...: chips greys, finish full sparkle, mid depth, Lacquer
+- Grunge Glam: chips greys/blacks, finish classic creme, deep depth, Lacquer
+- Grunge Glam - Gel Nail Color: chips greys/blacks, finish classic creme, deep depth, GELFX
+- Beach You To It!: chips nudes, finish soft shimmer, light depth, Breathable
+- Leather You Like It or Not: chips nudes/browns, finish classic creme, deep depth, Breathable
+- Nude Attitude: chips nudes/browns, finish classic creme, light depth, Breathable
+- Sunkissed: chips nudes/browns, finish classic creme, mid depth, Breathable
+- Chalet Getaway: chips nudes/browns/greys, finish classic creme, light depth, Lacquer
+- Chalet Getaway - Gel Nail Color: chips nudes/browns/greys, finish classic creme, mid depth, GELFX
+- Acid Trip: chips oranges, finish full sparkle, deep depth, Lacquer
+- Acid Trip - Gel Nail Color: chips oranges, finish full sparkle, deep depth, GELFX
+- Hunky Dory - Gel Nail Color: chips oranges, finish classic creme, light depth, GELFX
+- Shaggin Wagon: chips oranges, finish classic creme, light depth, Lacquer
+- Shaggin Wagon - Gel Nail Color: chips oranges, finish classic creme, light depth, GELFX
+- So Fetch: chips oranges, finish classic creme, light depth, Lacquer
+- So Fetch - Gel Nail Color: chips oranges, finish classic creme, light depth, GELFX
+- A Vibe: chips oranges, finish classic creme, mid depth, Lacquer
+- Cloud Nine - Gel Nail Color: chips oranges/nudes, finish classic creme, light depth, GELFX
+- Sheer Nude - Gel Nail Color: chips oranges/nudes, finish classic creme, light depth, GELFX
+- Coral Crush: chips oranges/pinks, finish soft shimmer + full sparkle, deep depth, Lacquer
+- Aphromite: chips oranges/pinks, finish classic creme, mid depth, Breathable
+- Hits Different: chips oranges/pinks, finish classic creme, mid depth, Lacquer
+- Most Definitely: chips oranges/pinks, finish classic creme, mid depth, Lacquer
+- Most Definitely  - Gel Nail Color: chips oranges/pinks, finish classic creme, mid depth, GELFX
+- Nail Superfood: chips oranges/pinks, finish classic creme, mid depth, Breathable
+- Night Fever: chips oranges/pinks, finish classic creme, mid depth, Lacquer
+- Night Fever - Gel Nail Color: chips oranges/pinks, finish classic creme, mid depth, GELFX
+- No Coral-ation: chips oranges/pinks, finish classic creme + sheer/glossy, mid depth, Breathable
+- Meet Cute - Gel Nail Color: chips oranges/purples/pinks, finish classic creme, mid depth, GELFX
+- Hunky Dory: chips oranges/yellows, finish classic creme, light depth, Lacquer
+- Bronze In A Lifetime: chips oranges/yellows/browns, finish soft shimmer + full sparkle, mid depth, Breathable
+- Gilded Dune: chips oranges/yellows/browns, finish soft shimmer, mid depth, Lacquer
+- Gilded Dune - Gel Nail Color: chips oranges/yellows/browns, finish soft shimmer, mid depth, GELFX
+- Berry Bliss: chips pinks, finish classic creme, deep depth, Lacquer
+- Berry Bliss  - Gel Nail Color: chips pinks, finish classic creme, deep depth, GELFX
+- Power Pink: chips pinks, finish sheer/glossy, deep depth, Lacquer
+- Golden French Drip: chips pinks, finish chrome/metallic, light depth, Lacquer
+- Happy And Healthy: chips pinks, finish classic creme, light depth, Breathable
+- It Started With Pink: chips pinks, finish classic creme, light depth, Lacquer
+- It Started With Pink - Gel Nail Color: chips pinks, finish classic creme, light depth, GELFX
+- It'll Always Be Pink: chips pinks, finish classic creme, light depth, Lacquer
+- It'll Always Be Pink - Gel Nail Color: chips pinks, finish classic creme, light depth, GELFX
+- Kiss The Bride - Gel Nail Color: chips pinks, finish classic creme, light depth, GELFX
+- Leave Britney Alone: chips pinks, finish classic creme, light depth, Lacquer
+- Leave Britney Alone  - Gel Nail Color: chips pinks, finish classic creme, light depth, GELFX
+- ORLY Pink: chips pinks, finish classic creme, light depth, Lacquer
+- ORLY Pink - Gel Nail Color: chips pinks, finish classic creme, light depth, GELFX
+- Scales & Tales: chips pinks, finish soft shimmer + full sparkle, light depth, Lacquer, glitter topper, wears over other color or bare nails
+- Shell We Dance?: chips pinks, finish classic creme + sheer/glossy, light depth, Breathable
+- Strawberry Cream: chips pinks, finish classic creme, light depth, Lacquer
+- Totally Clueless: chips pinks, finish classic creme, light depth, Lacquer
+- pH Perfector - Cool Blush: chips pinks, finish classic creme, light depth, Lacquer
+- pH Perfector - Warm Blush: chips pinks, finish soft shimmer + sheer/glossy, light depth, Lacquer
+- Juicy Velour: chips pinks, finish classic creme, mid depth, Lacquer
+- Juicy Velour  - Gel Nail Color: chips pinks, finish classic creme, mid depth, GELFX
+- Moonstone Aura: chips pinks, finish full sparkle + chrome/metallic, mid depth, Lacquer, glitter topper, wears over other color or bare nails
+- Shut Up Heather: chips pinks, finish classic creme, mid depth, Lacquer
+- Shut Up Heather  - Gel Nail Color: chips pinks, finish classic creme, mid depth, GELFX
+- That's Hot: chips pinks, finish classic creme, mid depth, Lacquer
+- Don't Juno: chips pinks/nudes, finish classic creme, light depth, Breathable
+- First Bloom: chips pinks/nudes, finish classic creme, light depth, Lacquer
+- First Bloom - Gel Nail Color: chips pinks/nudes, finish classic creme, light depth, GELFX
+- Sweet Cheeks: chips pinks/nudes, finish classic creme, light depth, Breathable
+- All Eyes on Her: chips purples, finish classic creme, deep depth, Lacquer
+- Alloy Matey: chips purples, finish soft shimmer, deep depth, Breathable
+- Starlit Shale: chips purples, finish classic creme, deep depth, Lacquer
+- Stay Rad: chips purples, finish classic creme, deep depth, Lacquer
+- Stay Rad  - Gel Nail Color: chips purples, finish classic creme, deep depth, GELFX
+- Self Reef-lection: chips purples, finish soft shimmer + sheer/glossy, light depth, Breathable
+- Ube Cloud: chips purples, finish classic creme, light depth, Lacquer
+- Wanderlust: chips purples, finish classic creme, light depth, Lacquer
+- Wanderlust  - Gel Nail Color: chips purples, finish classic creme, light depth, GELFX
+- Now or Bouclé-ter: chips purples/greys, finish classic creme, deep depth, Breathable
+- Check Yes Or No - Gel Nail Color: chips purples/pinks, finish classic creme, mid depth, GELFX
+- Soul Sister: chips purples/pinks, finish soft shimmer + chrome/metallic, mid depth, Breathable
+- Goddess Some Bronze: chips purples/pinks/browns, finish full sparkle + chrome/metallic, mid depth, Breathable
+- Party Popper: chips purples/pinks/greys, finish full sparkle, mid depth, Lacquer, glitter topper, wears over other color or bare nails
+- Yeah, For Sherpa: chips purples/pinks/nudes/browns, finish classic creme, mid depth, Breathable
+- On a Break - Gel Nail Color: chips purples/whites, finish classic creme, light depth, GELFX
+- On a Break: chips purples/whites/greys, finish classic creme, light depth, Lacquer
+- Clause a Commotion: chips reds, finish classic creme, deep depth, Lacquer
+- Clause a Commotion - Gel Nail Color: chips reds, finish classic creme, deep depth, GELFX
+- GRLPWR: chips reds, finish classic creme, deep depth, Lacquer
+- Oh La La: chips reds, finish soft shimmer, deep depth, Lacquer
+- Oh La La  - Gel Nail Color: chips reds, finish soft shimmer, deep depth, GELFX
+- Red Hot: chips reds, finish classic creme, deep depth, Lacquer
+- Red Hot - Gel Nail Color: chips reds, finish classic creme, deep depth, GELFX
+- Star Spangled - Gel Nail Color: chips reds, finish full sparkle, deep depth, GELFX
+- That's My Jam: chips reds, finish classic creme, deep depth, Lacquer
+- Hit the Gas: chips reds, finish classic creme, mid depth, Lacquer
+- Hit the Gas - Gel Nail Color: chips reds, finish classic creme, mid depth, GELFX
+- Vixen – Gel Nail Color: chips reds/browns, finish classic creme, deep depth, GELFX
+- We Flannel-ly Made It: chips reds/browns, finish classic creme, deep depth, Breathable
+- Artemis Me: chips reds/browns, finish classic creme, mid depth, Breathable
+- Rustic Root - Gel Nail Color: chips reds/oranges, finish soft shimmer, deep depth, GELFX
+- Earthfire: chips reds/oranges, finish classic creme, mid depth, Lacquer
+- Earthfire - Gel Nail Color: chips reds/oranges, finish classic creme, mid depth, GELFX
+- Spice Up Your Life: chips reds/oranges/browns, finish classic creme, deep depth, Lacquer
+- Spice Up Your Life - Gel Nail Color: chips reds/oranges/browns, finish classic creme, deep depth, GELFX
+- Naughty - Gel Nail Color: chips reds/pinks, finish classic creme, deep depth, GELFX
+- Stiletto On The Run - Gel Nail Color: chips reds/pinks, finish classic creme, deep depth, GELFX
+- Kiss N Tell: chips reds/pinks, finish full sparkle, mid depth, Lacquer, glitter topper, wears over other color or bare nails
+- Oh Darling - Gel Nail Color: chips reds/pinks, finish classic creme, mid depth, GELFX
+- Bedrock Bloom: chips reds/purples/pinks, finish classic creme, deep depth, Lacquer
+- Bedrock Bloom - Gel Nail Color: chips reds/purples/pinks, finish classic creme, deep depth, GELFX
+- Cherries: chips whites, finish soft shimmer, deep depth, Lacquer
+- Ceci N'Est Pas Blanc - Gel Nail Color: chips whites, finish classic creme, light depth, GELFX
+- Siren Me Crazy: chips whites, finish soft shimmer + chrome/metallic, light depth, Breathable
+- White Tips - Gel Nail Color: chips whites, finish classic creme, light depth, GELFX
+- Bohemian Child: chips whites/greys, finish full sparkle, light depth, Lacquer
+- Bohemian Child - Gel Nail Color: chips whites/greys, finish full sparkle, light depth, GELFX
+- Hello Yellow: chips yellows, finish soft shimmer, light depth, Lacquer
+- Morning, Sunshine: chips yellows, finish classic creme, light depth, Lacquer
+- Morning, Sunshine  - Gel Nail Color: chips yellows, finish classic creme, light depth, GELFX
+- Snatched: chips yellows, finish classic creme, light depth, Lacquer
+- Glow Getter: chips yellows/browns, finish soft shimmer + full sparkle, light depth, Breathable, glitter topper, wears over other color or bare nails
+- Golden Age: chips yellows/browns, finish full sparkle, light depth, Lacquer, glitter topper, wears over other color or bare nails
+- Harry Potter™ BUTTERBEER™ Scented Iridescent Topper: chips yellows/browns, finish soft shimmer + full sparkle, light depth, Lacquer, glitter topper, wears over other color or bare nails
+- Star Fire: chips yellows/greens/pinks/browns, finish full sparkle + chrome/metallic, light depth, Lacquer, glitter topper, wears over other color or bare nails
+- Blush It Off: chips yellows/pinks/browns, finish soft shimmer, light depth, Breathable
+- Gloss Over It: chips yellows/pinks/browns, finish soft shimmer, light depth, Breathable
+- Party in Pink: chips yellows/pinks/browns, finish full sparkle, light depth, Lacquer, glitter topper, wears over other color or bare nails

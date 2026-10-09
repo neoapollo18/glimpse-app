@@ -1196,7 +1196,7 @@ export interface QuizLeadInput {
 export async function saveQuizLead(
   shopId: string,
   lead: QuizLeadInput
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; leadId?: string }> {
   const now = new Date().toISOString();
   const updateFields: Record<string, unknown> = {
     quiz_answers: lead.answers,
@@ -1217,7 +1217,7 @@ export async function saveQuizLead(
     supabase.from('quiz_leads').update(updateFields).eq('shop_id', shopId)
   ).select('id');
   if (updateError) return { ok: false, error: updateError.message };
-  if (updated && updated.length > 0) return { ok: true };
+  if (updated && updated.length > 0) return { ok: true, leadId: String(updated[0].id) };
 
   // No email match, but the shopper's phone may already exist on a
   // phone-only row from an earlier session — upgrade that row with the
@@ -1231,7 +1231,7 @@ export async function saveQuizLead(
       .is('email', null)
       .select('id');
     if (mergeError) return { ok: false, error: mergeError.message };
-    if (merged && merged.length > 0) return { ok: true };
+    if (merged && merged.length > 0) return { ok: true, leadId: String(merged[0].id) };
   }
 
   const { data: inserted, error: insertError } = await supabase
@@ -1255,12 +1255,53 @@ export async function saveQuizLead(
       if (retryError || !retried?.length) {
         return { ok: false, error: retryError?.message ?? 'lead upsert race retry wrote 0 rows' };
       }
-      return { ok: true };
+      return { ok: true, leadId: String(retried[0].id) };
     }
     return { ok: false, error: insertError.message };
   }
   if (!inserted?.length) return { ok: false, error: 'lead insert wrote 0 rows' };
-  return { ok: true };
+  return { ok: true, leadId: String(inserted[0].id) };
+}
+
+export interface QuizLeadProduct {
+  productId: string | null;
+  title: string;
+  url: string | null;
+  imageUrl: string | null;
+  price: string | null;
+}
+
+/**
+ * Attach the matches a lead was shown on results (migration 086). Returns
+ * the lead's contact + answers so the caller can forward them (Klaviyo).
+ * 0 rows (unknown lead, or another shop's id) is reported, never silent.
+ */
+export async function attachQuizLeadResults(
+  shopId: string,
+  leadId: string,
+  products: QuizLeadProduct[],
+): Promise<
+  | { ok: true; lead: { id: string; email: string | null; phone: string | null; answers: QuizLeadAnswer[] } }
+  | { ok: false; error: string }
+> {
+  const { data, error } = await supabase
+    .from('quiz_leads')
+    .update({ recommended_products: products, updated_at: new Date().toISOString() })
+    .eq('shop_id', shopId)
+    .eq('id', leadId)
+    .select('id, email, phone, quiz_answers');
+  if (error) return { ok: false, error: error.message };
+  if (!data || data.length === 0) return { ok: false, error: 'lead not found' };
+  const row = data[0] as Record<string, unknown>;
+  return {
+    ok: true,
+    lead: {
+      id: String(row.id),
+      email: typeof row.email === 'string' ? row.email : null,
+      phone: typeof row.phone === 'string' ? row.phone : null,
+      answers: Array.isArray(row.quiz_answers) ? (row.quiz_answers as QuizLeadAnswer[]) : [],
+    },
+  };
 }
 
 export interface QuizLeadRow {
@@ -1270,6 +1311,8 @@ export interface QuizLeadRow {
   quizAnswers: QuizLeadAnswer[];
   deviceType: string | null;
   createdAt: string;
+  /** Titles of the matches the lead was shown (migration 086). */
+  matchesShown: string[];
 }
 
 export interface QuizLeadStats {
@@ -1290,6 +1333,11 @@ function mapQuizLeadRow(r: any): QuizLeadRow {
       : [],
     deviceType: r.device_type ?? null,
     createdAt: r.created_at,
+    matchesShown: Array.isArray(r.recommended_products)
+      ? r.recommended_products
+          .map((p: any) => (p && typeof p.title === 'string' ? p.title : null))
+          .filter((t: string | null): t is string => Boolean(t))
+      : [],
   };
 }
 
@@ -1311,7 +1359,10 @@ export async function getQuizLeadStats(
 
     const { data, count, error } = await supabase
       .from('quiz_leads')
-      .select('id, email, phone, quiz_answers, device_type, created_at', { count: 'exact' })
+      // '*' rather than a column list: recommended_products (migration
+      // 086) may not exist yet, and a named missing column would turn the
+      // whole lead table into a silent empty result.
+      .select('*', { count: 'exact' })
       .eq('shop_id', shop.id)
       .gte('created_at', since)
       .order('created_at', { ascending: false })
@@ -3311,6 +3362,13 @@ export interface ChatAssistantConfig {
   // Locks & Mane's "email us for a second opinion" line. Emails in the
   // text become mailto links client-side. NULL/empty = hidden.
   quiz_match_footnote: string | null;
+  // Classic quiz only (migration 086, ORLY mobile rebuild): tighter phone
+  // layout with the before/after proof above the first question, 2-up
+  // tiles, swatch chips and one-screen steps. Templates ignore it.
+  quiz_compact_layout: boolean;
+  // Line under the first question telling shoppers the photo comes at the
+  // end (migration 086). NULL/empty = hidden.
+  quiz_photo_note: string | null;
   // Overhaul template system (migration 072, docs/overhaul/CONTRACTS.md).
   // NULL template = legacy rendering — existing shops never change until
   // a template is assigned (Reveal or Studio Style panel).
@@ -3548,6 +3606,8 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   quiz_bundle_label: 'Add all {count} to bag · {total}',
   quiz_bundle_size: 0,
   quiz_match_footnote: null,
+  quiz_compact_layout: false,
+  quiz_photo_note: null,
   quiz_template: null,
   quiz_preset: null,
   template_live_at: null,
@@ -3772,6 +3832,12 @@ function mapChatAssistantRow(data: any): ChatAssistantConfig {
       typeof data.quiz_match_footnote === 'string' && data.quiz_match_footnote.trim()
         ? data.quiz_match_footnote
         : CHAT_ASSISTANT_DEFAULTS.quiz_match_footnote,
+    // Migration 086: absent column (un-run migration) = the shipped layout.
+    quiz_compact_layout: data.quiz_compact_layout === true,
+    quiz_photo_note:
+      typeof data.quiz_photo_note === 'string' && data.quiz_photo_note.trim()
+        ? data.quiz_photo_note
+        : CHAT_ASSISTANT_DEFAULTS.quiz_photo_note,
     quiz_template: typeof data.quiz_template === 'string' ? data.quiz_template : null,
     quiz_preset: typeof data.quiz_preset === 'string' ? data.quiz_preset : null,
     // Migration 081: absent column (un-run migration) = never published.
@@ -4017,6 +4083,7 @@ export interface RecommendationFlow {
         meterPct?: number;
         swatch?: string;
         swatch2?: string;
+        texture?: OptionTexture;
       } | null;
     }>;
   }>;
@@ -4063,6 +4130,18 @@ function emojiOrUndefined(v: unknown): string | undefined {
   return t && t.length <= 16 && EMOJI_ONLY_RE.test(t) ? t : undefined;
 }
 
+// Finish/texture preview on an option card (migration 086 era, ORLY Q4):
+// the widget draws a small texture swatch (flat creme, pearl shimmer,
+// glitter, chrome, sheer jelly, matte). Closed set so a stray string can
+// never become a CSS class.
+export const OPTION_TEXTURES = ['creme', 'matte', 'shimmer', 'sparkle', 'chrome', 'sheer'] as const;
+export type OptionTexture = (typeof OPTION_TEXTURES)[number];
+export function textureOrUndefined(v: unknown): OptionTexture | undefined {
+  return typeof v === 'string' && (OPTION_TEXTURES as readonly string[]).includes(v)
+    ? (v as OptionTexture)
+    : undefined;
+}
+
 function mapDisplayMeta(raw: any): {
   sublabel?: string;
   tag?: string;
@@ -4071,6 +4150,7 @@ function mapDisplayMeta(raw: any): {
   swatch?: string;
   swatch2?: string;
   emoji?: string;
+  texture?: OptionTexture;
 } | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   return {
@@ -4081,6 +4161,7 @@ function mapDisplayMeta(raw: any): {
     meterPct: typeof raw.meterPct === 'number' ? Math.max(0, Math.min(100, raw.meterPct)) : undefined,
     swatch: hexOrUndefined(raw.swatch),
     swatch2: hexOrUndefined(raw.swatch2),
+    texture: textureOrUndefined(raw.texture),
   };
 }
 
@@ -4457,6 +4538,7 @@ export interface AdminQuestionOption {
     meterPct?: number;
     swatch?: string;
     swatch2?: string;
+    texture?: OptionTexture;
   } | null;
   position: number;
 }
@@ -4861,6 +4943,7 @@ export async function saveRecommendationConfig(
           meterPct?: number;
           swatch?: string;
           swatch2?: string;
+          texture?: OptionTexture;
         } | null;
         position: number;
       }>;
@@ -4982,6 +5065,12 @@ export async function saveRecommendationConfig(
               error: `Option "${opt.label}" has an invalid card ${key === 'swatch' ? 'swatch' : 'second swatch'} — it must be a hex color like #e8b4c8 (or left empty)`,
             };
           }
+        }
+        if (meta.texture !== undefined && meta.texture !== null && !textureOrUndefined(meta.texture)) {
+          return {
+            ok: false,
+            error: `Option "${opt.label}" has an unknown finish preview "${String(meta.texture)}" — use one of ${OPTION_TEXTURES.join(', ')}`,
+          };
         }
       }
     }

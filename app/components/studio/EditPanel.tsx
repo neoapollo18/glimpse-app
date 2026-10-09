@@ -19,6 +19,10 @@ import {
 import { XSmallIcon } from "@shopify/polaris-icons";
 import type { StudioLoaderData, StudioTab, StudioActionData } from "../../routes/studio";
 import { IntroEditor, LeadEditor, PhotoEditor, ResultsEditor, ThemeEditor } from "./SettingsEditors";
+import { BundleEditor, CrossSellEditor, type OfferCatalogItem } from "./OffersEditors";
+import { IntegrationsEditor } from "./IntegrationsEditor";
+import type { QuizOffers } from "../../lib/quiz-offers.server";
+import type { IntegrationStatus } from "../../lib/integrations.server";
 import type { StudioFlow, StudioQuestion, StudioOption } from "./types";
 import { answerLabel } from "./types";
 import { slideIdForQuestion } from "./SlideTree";
@@ -208,6 +212,58 @@ function EditBody({
         template={data.studio.template}
         colorSources={data.studio.colorSources}
         onOpenGallery={onOpenGallery}
+      />
+    );
+  }
+  // Sell more (migration 086). The loader fetches these only while the
+  // slide is open; the editors remount per load so they start from it.
+  // Until that load lands the previous loader data has nothing for them.
+  const sellMoreLoading =
+    ((selectedSlide === "offers-bundle" || selectedSlide === "offers-crosssell") && !data.offers) ||
+    (selectedSlide === "offers-crosssell" && !data.offerCatalog) ||
+    (selectedSlide === "integrations" && !data.klaviyo);
+  if (sellMoreLoading) {
+    return (
+      <InlineStack gap="200" blockAlign="center">
+        <Spinner size="small" />
+        <Text as="span" tone="subdued">
+          Loading…
+        </Text>
+      </InlineStack>
+    );
+  }
+  if (selectedSlide === "offers-bundle") {
+    return (
+      <BundleEditor
+        key={`bundle:${chatEpoch}:${data.offers ? "loaded" : "none"}`}
+        settings={settings}
+        offers={(data.offers ?? null) as QuizOffers | null}
+        chatBusy={chatBusy}
+        onPreviewUpdate={onPreviewUpdate}
+        onPreviewReload={onPreviewReload}
+      />
+    );
+  }
+  if (selectedSlide === "offers-crosssell") {
+    return (
+      <CrossSellEditor
+        key={`crosssell:${data.offers ? "loaded" : "none"}`}
+        offers={(data.offers ?? null) as QuizOffers | null}
+        catalog={(data.offerCatalog ?? null) as OfferCatalogItem[] | null}
+        flow={flow}
+        chatBusy={chatBusy}
+        onPreviewReload={onPreviewReload}
+      />
+    );
+  }
+  if (selectedSlide === "integrations") {
+    return (
+      <IntegrationsEditor
+        key={`integrations:${data.klaviyo ? "loaded" : "none"}`}
+        status={(data.klaviyo ?? null) as IntegrationStatus | null}
+        leadEnabled={settings.quiz_lead_enabled === true}
+        collectPhone={settings.quiz_lead_collect_phone === true}
+        onOpenLead={() => onSelectSlide("lead")}
       />
     );
   }
@@ -799,9 +855,18 @@ function AnswerRow({
   const metaBeyondSublabel = Boolean(
     option.displayMeta &&
       Object.entries(option.displayMeta).some(
-        ([k, v]) => k !== "sublabel" && v != null && v !== "",
+        ([k, v]) => k !== "sublabel" && k !== "texture" && v != null && v !== "",
       ),
   );
+  // Finish preview (migration 086): drawn on rich/boxed cards only.
+  const texture = typeof option.displayMeta?.texture === "string" ? option.displayMeta.texture : "";
+  const showTexture = optionStyle === "rich" || optionStyle === "boxed" || Boolean(texture);
+  const setTexture = (v: string) => {
+    const meta: Record<string, unknown> = { ...(option.displayMeta ?? {}) };
+    if (!v) delete meta.texture;
+    else meta.texture = v;
+    onChange({ displayMeta: Object.keys(meta).length > 0 ? meta : null });
+  };
   const hasAdvanced = Boolean(option.showIf || metaBeyondSublabel || option.selectAll);
   // "Image cards" style shows the uploader inline on every row; other styles
   // keep it inside Details (any style can carry an image, and auto style
@@ -873,6 +938,24 @@ function AnswerRow({
               disabled={disabled}
               autoComplete="off"
             />
+            {showTexture && (
+              <Select
+                label="Finish preview"
+                options={[
+                  { label: "None", value: "" },
+                  { label: "Creme (flat color)", value: "creme" },
+                  { label: "Matte", value: "matte" },
+                  { label: "Shimmer (pearl glow)", value: "shimmer" },
+                  { label: "Sparkle (glitter)", value: "sparkle" },
+                  { label: "Chrome / metallic", value: "chrome" },
+                  { label: "Sheer / jelly", value: "sheer" },
+                ]}
+                value={texture}
+                onChange={setTexture}
+                helpText="A small swatch on the card so shoppers can see the finish. Works with Rich and Boxed card styles."
+                disabled={disabled}
+              />
+            )}
             {!showImageInline && (
               <OptionImageUpload option={option} disabled={disabled} onChange={onChange} />
             )}

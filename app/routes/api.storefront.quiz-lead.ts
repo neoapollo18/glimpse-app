@@ -9,6 +9,7 @@ import {
 } from "../lib/supabase.server";
 import { checkRateLimits, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
 import { CORS_HEADERS } from "../lib/storefront-api.server";
+import { sendLeadToKlaviyo, signLeadToken } from "../lib/integrations.server";
 
 // Practical shapes, not RFC exhaustiveness: something@something.tld.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -155,6 +156,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ error: "Could not save — please try again." }, { status: 500, headers: CORS_HEADERS });
   }
 
+  // Klaviyo (migration 086): subscribe + "Gleame Quiz Lead" event. Fire
+  // and forget: the shopper never waits on (or sees) a third-party call.
+  if (result.leadId) {
+    void sendLeadToKlaviyo(verifiedShop.id, {
+      leadId: result.leadId,
+      email,
+      phone,
+      answers,
+      discountCode: config.quiz_lead_discount_code,
+    });
+  }
+  // Lets the widget attach the matches this lead is shown on results
+  // (api.storefront.quiz-lead-results) without re-sending the email.
+  const leadToken = result.leadId ? signLeadToken(verifiedShop.id, result.leadId) : null;
+
   // Discount reveal (migration 077): the code is disclosed ONLY here, after
   // a stored lead — never in the public cached quiz-config GET, where any
   // scraper could read it without giving an email.
@@ -162,6 +178,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json(
       {
         success: true,
+        leadToken,
         discountCode: config.quiz_lead_discount_code,
         discountMessage: config.quiz_lead_discount_message.replace(
           /\{assistant_name\}/g,
@@ -172,7 +189,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
   }
 
-  return json({ success: true }, { headers: CORS_HEADERS });
+  return json({ success: true, leadToken }, { headers: CORS_HEADERS });
 };
 
 // CORS preflight can arrive as GET-adjacent loader traffic in Remix.

@@ -43,7 +43,7 @@ type Kind = "copy" | "design";
 // sequentially through one fetcher (copy first, then design).
 // ---------------------------------------------------------------------
 
-function useSettingsAutosave(onPreviewUpdate: (p: { flow?: unknown; config?: unknown }) => void) {
+export function useSettingsAutosave(onPreviewUpdate: (p: { flow?: unknown; config?: unknown }) => void) {
   const fetcher = useFetcher<StudioActionData>();
   const pending = useRef<{ copy: Record<string, unknown>; design: Record<string, unknown> }>({
     copy: {},
@@ -141,7 +141,7 @@ function useSettingsAutosave(onPreviewUpdate: (p: { flow?: unknown; config?: unk
   return { schedule, saveState, error, clearError: () => setError(null), flushNow };
 }
 
-function EditorHeader({
+export function EditorHeader({
   title,
   saveState,
 }: {
@@ -170,7 +170,7 @@ function EditorHeader({
   );
 }
 
-function str(settings: Record<string, unknown>, key: string): string {
+export function str(settings: Record<string, unknown>, key: string): string {
   const v = settings[key];
   return v == null ? "" : String(v);
 }
@@ -179,7 +179,7 @@ function str(settings: Record<string, unknown>, key: string): string {
 // Field helpers
 // ---------------------------------------------------------------------
 
-function CopyField({
+export function CopyField({
   label,
   fieldKey,
   values,
@@ -420,6 +420,7 @@ export function IntroEditor({
     quiz_visual_caption: str(settings, "quiz_visual_caption"),
     quiz_alt_audience_label: str(settings, "quiz_alt_audience_label"),
     quiz_alt_audience_url: str(settings, "quiz_alt_audience_url"),
+    quiz_photo_note: str(settings, "quiz_photo_note"),
   }));
   const [trustItems, setTrustItems] = useState<string[]>(
     Array.isArray(settings.quiz_trust_items) ? (settings.quiz_trust_items as string[]) : [],
@@ -493,6 +494,16 @@ export function IntroEditor({
       <ImageField label="Before image" fieldKey="quiz_before_image_url" values={values} setValue={setValue} disabled={disabled} />
       <ImageField label="After image" fieldKey="quiz_after_image_url" values={values} setValue={setValue} disabled={disabled} />
       <CopyField label="Visual caption" fieldKey="quiz_visual_caption" values={values} setValue={setValue} disabled={disabled} helpText="Small caption under the before/after visual" />
+      <CopyField
+        label="Photo heads-up (optional)"
+        fieldKey="quiz_photo_note"
+        values={values}
+        setValue={setValue}
+        disabled={disabled}
+        multiline={2}
+        placeholder="You'll add a pic at the end, that's how we show your matches on you."
+        helpText="One line under the first question so the photo step at the end isn't a surprise. Leave blank to hide."
+      />
       <InlineStack gap="200">
         <div style={{ flex: 1, minWidth: 130 }}>
           <CopyField label="Alternate audience label" fieldKey="quiz_alt_audience_label" values={values} setValue={setValue} disabled={disabled} helpText='e.g. "Shopping for someone else?"' />
@@ -778,16 +789,10 @@ export function ResultsEditor({
     quiz_show_matches_label: str(settings, "quiz_show_matches_label"),
     quiz_add_button_template: str(settings, "quiz_add_button_template"),
     quiz_match_footnote: str(settings, "quiz_match_footnote"),
-    quiz_bundle_label: str(settings, "quiz_bundle_label"),
     quiz_upsell_title: str(settings, "quiz_upsell_title"),
     quiz_upsell_body: str(settings, "quiz_upsell_body"),
     quiz_upsell_cta: str(settings, "quiz_upsell_cta"),
   }));
-  const [bundleEnabled, setBundleEnabled] = useState<boolean>(settings.quiz_bundle_enabled === true);
-  const [bundleSize, setBundleSize] = useState<string>(() => {
-    const n = Number(settings.quiz_bundle_size);
-    return Number.isInteger(n) && n > 0 ? String(n) : "";
-  });
   const setValue = (key: string, value: string) => {
     setValues((prev) => ({ ...prev, [key]: value }));
     schedule("copy", key, value);
@@ -837,46 +842,12 @@ export function ResultsEditor({
         multiline={3}
         helpText="Optional small print under every recommendation (e.g. how to reach you for a second opinion). Email addresses become tappable mailto links. Leave blank to hide."
       />
-      <Checkbox
-        label={'Show an "add all" bundle button'}
-        checked={bundleEnabled}
-        disabled={disabled}
-        onChange={(v) => {
-          setBundleEnabled(v);
-          schedule("copy", "quiz_bundle_enabled", v);
-        }}
-        helpText="Full-width button under the match cards that adds every recommended product to the cart in one tap. Only shows when there are 2+ matches."
-      />
-      {bundleEnabled && (
-        <InlineStack gap="200" blockAlign="start">
-          <div style={{ flex: 2, minWidth: 180 }}>
-            <CopyField
-              label="Bundle button label"
-              fieldKey="quiz_bundle_label"
-              values={values}
-              setValue={setValue}
-              disabled={disabled}
-              helpText="{count} inserts how many products, {total} their combined price"
-            />
-          </div>
-          <div style={{ flex: 1, minWidth: 110 }}>
-            <TextField
-              label="Bundle size"
-              type="number"
-              min={0}
-              autoComplete="off"
-              value={bundleSize}
-              disabled={disabled}
-              onChange={(v) => {
-                setBundleSize(v);
-                const n = Math.max(0, Math.floor(Number(v) || 0));
-                schedule("copy", "quiz_bundle_size", n);
-              }}
-              helpText="Shoppers pick this many matches; blank or 0 bundles all of them"
-            />
-          </div>
-        </InlineStack>
-      )}
+      {/* The "add all" bundle button and its discount moved to Sell more →
+          Bundle & discount (one place for everything that changes price). */}
+      <Text as="p" variant="bodySm" tone="subdued">
+        The &ldquo;add all&rdquo; bundle button, bundle discounts and add-on products live under{" "}
+        <strong>Sell more</strong> in the left rail.
+      </Text>
       <Text as="h4" variant="headingSm">
         Try-on upsell
       </Text>
@@ -972,6 +943,7 @@ export function ThemeEditor({
     quiz_body_font_override: str(settings, "quiz_body_font_override"),
     quiz_heading_weight_override: str(settings, "quiz_heading_weight_override"),
   }));
+  const [compact, setCompact] = useState<boolean>(settings.quiz_compact_layout === true);
 
   // Colors must reach the applier as #rrggbb or null (it rejects other
   // strings); numbers as numbers or null; enums as valid values or null.
@@ -1071,6 +1043,16 @@ export function ThemeEditor({
       {/* Legacy-only controls: templates own progress + intro layout. */}
       {!hasTemplate && (
         <>
+          <Checkbox
+            label="Compact phone layout"
+            checked={compact}
+            disabled={disabled}
+            onChange={(v) => {
+              setCompact(v);
+              schedule("copy", "quiz_compact_layout", v);
+            }}
+            helpText="Fits each step on one phone screen: before/after proof above the first question, two-up answer tiles, swatch chips and a full-width Continue."
+          />
           <Select
             label="Progress indicator"
             options={[

@@ -30,6 +30,13 @@ const crypto = require('crypto');
 const SHOP_DOMAIN = 'orlybeauty.myshopify.com';
 const AI_MODEL = 'gemini-3.1-flash-image-preview';
 const dryRun = process.argv.includes('--dry-run');
+// 2026-10-09: SUPERSEDED by orly-pool-v2.cjs (spec v2, 165-product pool).
+// A non-dry run of this v1 script rewrites orly-attributes.json and pushes
+// v1 ai_guidance + priority_product_ids, which would undo a v2 cutover.
+if (!dryRun && !process.argv.includes('--force-v1')) {
+  console.error('onboard-orly-products.cjs is the v1 pool tool; use scripts/orly-pool-v2.cjs. Pass --force-v1 to run it anyway.');
+  process.exit(1);
+}
 const { buildGuidance, ATTRIBUTES_PATH } = require('./orly-guidance.cjs');
 
 // Fallback bestseller ranks (handoff page-1, best-selling sort) — used only

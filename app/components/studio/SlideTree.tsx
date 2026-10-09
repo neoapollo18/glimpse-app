@@ -10,6 +10,9 @@ import {
   MergeIcon,
   ImageIcon,
   LayoutColumns3Icon,
+  CartDiscountIcon,
+  CartUpIcon,
+  ConnectIcon,
 } from "@shopify/polaris-icons";
 import type { StudioFlow } from "./types";
 import { answerLabel } from "./types";
@@ -479,6 +482,12 @@ export function SlideTree({
             )}
           </>
         )}
+        {/* Sell more (migration 086): store-wide commerce + connections,
+            kept below the screens so the quiz itself stays the focus. */}
+        <RailHeader>Sell more</RailHeader>
+        {row("offers-bundle", "Bundle & discount", { icon: CartDiscountIcon })}
+        {row("offers-crosssell", "Upsell & cross-sell", { icon: CartUpIcon })}
+        {row("integrations", "Integrations", { icon: ConnectIcon })}
         {error && (
           <div style={{ padding: 8 }} className="studio-rail-wide">
             <Banner tone="critical" onDismiss={onDismissError}>

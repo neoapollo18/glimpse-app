@@ -1,0 +1,780 @@
+{
+ "savedAt": "2026-10-09T08:14:03.399Z",
+ "shopDomain": "orlybeauty.myshopify.com",
+ "shopId": "6ca0597c-09a4-4c6e-b60f-a6947e0fc02d",
+ "note": "Pre-apply state for orly-pool-v2.cjs. Inserted rows are listed in the run log; config columns below are the only config values the script may change.",
+ "config": {
+  "product_scope": "all_configured",
+  "selected_product_ids": [],
+  "priority_product_ids": [
+   "7c2092e1-6661-4963-887c-22cd10c22206",
+   "b543adec-7f7b-4d91-ad68-94e4640d6018",
+   "4782cfb9-43fa-4384-9a1d-34c24677fc49",
+   "a9b56ae6-3ec8-4095-af0d-829f931f8d53",
+   "9bc2aa98-2da3-49fe-9654-1146cbbd8277",
+   "d9f2f757-8b4b-43e6-83f6-43e7ee61e0d2",
+   "460e8d24-1883-4d09-838d-1149c2d33399",
+   "8c3ec6a8-ddd0-408f-88dd-dde158f22994",
+   "2f09b780-3a3f-4dc3-bcd3-8f6eb4119a75",
+   "55b4c509-90c3-4285-98e3-d810e4fdb0c2"
+  ],
+  "ai_guidance": "ORLY nail color quiz (Find Your Vibe). Rank products for the shopper's answers. Apply these rules in order; higher rules win conflicts.\n\nRESULT SHAPE: the ranked list is 6 MAINS followed by 2 WILDCARDS. Mains must satisfy the shopper's picks (rule below). Wildcards are the highest-fit products that FAIL the color picks but strongly fit the vibe + intensity — they go only in the last 2 slots, never mixed into the mains. Never pad mains with products that violate the shopper's picks: if fewer than 6 products qualify even after relaxation, put the 4 best qualifying mains first and let wildcards grow to 4.\n\nTOPPERS: products marked \"topper\" are sheer glitter films worn over color or bare nails. Toppers NEVER take main slots, with one exception: when the shopper picked Full Sparkle or the vibe is Full Glam, up to 2 toppers may appear in mains. On every other path at most 1 topper total may appear, in the final slot only, chosen to complement (pair with) the mains.\n\nSHOPPER PICKS ARE HARD PREFERENCES (strongest signal):\n- Colors picked: every main must match at least one picked color chip (a product matches if ANY of its chips is picked). Multi/rainbow shades count as matching only when their finish also fits the picks.\n- Finishes picked: every main must match a picked finish; a secondary finish counts. Finish map: Classic Creme = creme; Soft Shimmer = shimmer or pearl; Full Sparkle = glitter, holographic, confetti or flakies; Chrome & Metallic = metallic or duochrome; Sheer & Glossy = jelly or sheer.\n- Surprise Me / No Preference answers add no constraint; break ties by bestseller rank.\n\nVIBE PROFILES (rank within the products that pass the shopper's picks; chips > finish > depth):\n- Model Off-Duty: chips nudes, whites, pinks; creme or sheer/jelly finish; light depth; sheer or buildable coverage.\n- Soft & Sweet: chips pinks, purples, blues, yellows, whites; creme or soft shimmer; light depth.\n- Timeless: chips reds, pinks, nudes, whites; creme; mid depth; full coverage.\n- Girls' Night Out: chips reds, purples, blacks; creme, shimmer or metallic; mid or deep depth; full coverage.\n- Full Glam: finish leads, color follows the picks or bestseller rank: glitter, holographic, confetti, flakies, chrome, metallic; any depth.\n- Vacation: chips oranges, pinks, yellows, reds; creme or shimmer; mid depth; tropical brights and neons welcome.\n- Coastal Cool: chips blues, greens, whites, greys; creme first, then any finish; any depth.\n- Moody: chips blacks, greys, browns, purples, reds, blues, greens; creme or metallic; deep depth; full coverage.\n\nINTENSITY (applied on top of the vibe profile):\n- Subtle: prefer light depth and creme, sheer/jelly or soft shimmer finishes; strongly deprioritize full sparkle, chunky glitter and neons. Subtle + Full Glam resolves to fine shimmer or micro-glitter, never chunky glitter.\n- Just right: apply the vibe profile as-is.\n- The full look: prefer mid/deep depth and bolder shades; full sparkle, neons and deep colors may outrank.\n\nASSEMBLY: slots 1-2 go to the two best-selling qualifying products (merchantPriority products are the current bestsellers, in order). Slots 3-6: vary your selection among the next dozen or so qualifying products so repeat runs do not return an identical grid. Never force a poorly matching bestseller over a clearly better match.\n\nRELAXATION (only when fewer than 6 mains qualify), in this order: (1) drop the finish preference; (2) widen the picked chips to spectral neighbors: reds<->pinks<->purples, oranges<->reds, oranges<->yellows, yellows<->greens, greens<->blues, blues<->purples, nudes<->browns, nudes<->whites, greys<->blacks, greys<->whites; (3) allow depth one step off; (4) retired products as a true last resort, only when fewer than 4 mains exist after all other relaxation.\n\nPRODUCT FACTS (from the ORLY catalog; formula Lacquer = classic polish, Breathable = breathable treatment + color; judge from these, not from name alone):\n- Star Spangled: red glitter shimmer, chips reds, mid depth, Lacquer\n- Anything Goes: multi confetti glitter shimmer, chips multi, mid depth, Lacquer\n- Don't Be Suspicious: brown/neutral creme, chips browns/nudes, mid depth, Lacquer\n- Bubbly Bombshell: purple glitter, chips purples, mid depth, Lacquer\n- Turn It Up: multi/rainbow confetti topper, chips multi, mid depth, Lacquer, glitter topper, wears over other color or bare nails\n- Kaleidoscope Eyes: purple creme, chips purples, mid depth, Lacquer\n- Sagebrush: green/grey creme grey, chips greens/greys, mid depth, Lacquer\n- It's Not A Phase: black/purple creme, chips blacks/purples, deep depth, Breathable\n- Morning Mantra: blue creme, chips blues, light depth, Breathable\n- Kiss Me, I'm Kind: pink creme sheer, chips pinks, light depth, Breathable\n- Citrus Got Real: orange/peach shimmer topper, chips oranges, mid depth, Breathable, glitter topper, wears over other color or bare nails\n- Kick Glass: iridescent flakie topper, chips multi, light depth, Lacquer, glitter topper, wears over other color or bare nails\n- Don't Pop My Balloon: pink shimmer, chips pinks, light depth, Lacquer\n- Earthfire: orange finish unknown, chips oranges, mid depth, Lacquer\n- Astral Flaire: magenta/pink creme, chips pinks/purples, mid depth, Breathable\n- Frond Of You: green creme, chips greens, mid depth, Breathable\n- Embrace Danger: coral/orange/red shimmer, chips oranges/pinks/reds, mid depth, Lacquer\n- Retrograde: blue/green chrome shimmer, chips blues/greens, mid depth, Lacquer\n- Fairy Godmother: rose gold metallic shimmer, chips pinks, light depth, Breathable\n- Heart Beet: magenta/pink creme, chips pinks/purples, mid depth, Breathable\n- De-Stressed Denim: blue/grey creme, chips blues/greys, mid depth, Breathable\n- Beautifully Bizarre: pink shimmer, chips pinks, mid depth, Lacquer\n- Mind Over Matter: black creme, chips blacks, deep depth, Breathable\n- Crush: multi/pink confetti topper, chips multi/pinks, mid depth, Lacquer, glitter topper, wears over other color or bare nails\n- Love My Nails: red creme, chips reds, mid depth, Breathable\n- Crystal Healing: holo/lilac/purple/white holo shimmer topper, chips multi/purples/whites, light depth, Breathable, glitter topper, wears over other color or bare nails\n- She’s A Wildflower: pink shimmer, chips pinks, light depth, Breathable\n- A Vibe: orange neon, chips oranges, mid depth, Lacquer\n- Back For S'more: black finish unknown, chips blacks, deep depth, Breathable\n- Liquid Vinyl: black creme, chips blacks, deep depth, Lacquer\n- Sweet Serenity: pink/red sheer, chips pinks/reds, light depth, Breathable\n- Haute Red: red creme, chips reds, mid depth, Lacquer\n- Almond Milk: beige/neutral/nude/white creme, chips nudes/whites, light depth, Breathable\n- Blue Tango: blue creme, chips blues, mid depth, Lacquer\n- White Tips: white creme, chips whites, light depth, Lacquer\n- Coral Crush: coral/pink jelly topper, chips oranges/pinks, light depth, Lacquer, glitter topper, wears over other color or bare nails\n- Detox My Socks Off: blue/green/teal/turquoise creme, chips blues/greens, mid depth, Breathable\n- Kiss The Bride: pink creme, chips pinks, light depth, Lacquer\n- Bare Rose: pink sheer, chips pinks, light depth, Lacquer\n- Happy And Healthy: pink finish unknown, chips pinks, light depth, Breathable\n- All Dahlia’d Up: pink/red shimmer, chips pinks/reds, mid depth, Breathable\n- Lost Treasure: blue shimmer, chips blues, mid depth, Lacquer\n- Sheer Nude: neutral sheer, chips nudes, light depth, Lacquer\n- Pointe Blanche: white creme, chips whites, light depth, Lacquer\n- Des Fleurs: pink shimmer, chips pinks, light depth, Lacquer\n- Beverly Hills Plum: pink sheer, chips pinks, light depth, Lacquer\n- Canyon Clay: brown/neutral/nude creme, chips browns/nudes, mid depth, Lacquer\n- Charmed: pink/purple creme, chips pinks/purples, mid depth, Lacquer\n- Claim To Fame - Gel Nail Color: yellow creme, chips yellows, mid depth, GELFX\n- Double Espresso: brown/neutral/nude creme, chips browns/nudes, deep depth, Breathable\n- Down To Earth: brown/neutral/taupe creme, chips browns/nudes, mid depth, Breathable\n- Fresh Start: green/mint creme, chips greens, light depth, Breathable\n- Golden Afternoon: yellow creme, chips yellows, light depth, Lacquer\n- Hibis-Kiss: pink creme neon, chips pinks, mid depth, Lacquer\n- Main Character: pink flakie shimmer, chips pinks, mid depth, Lacquer\n- Mirror Mirror: grey creme, chips greys, mid depth, Lacquer\n- Pine-ing For You: green creme, chips greens, deep depth, Breathable\n- Midnight Stars: blue flakie shimmer, chips blues, deep depth, Lacquer\n- Playa Papaya: coral/orange creme neon, chips oranges/pinks, mid depth, Lacquer\n- Rave Wave: purple creme, chips purples, mid depth, Lacquer\n- Snatched: yellow neon, chips yellows, mid depth, Lacquer\n- Red Flare: red creme, chips reds, mid depth, Lacquer\n- Red Rock: red creme, chips reds, deep depth, Lacquer\n- Replay The Night: purple creme, chips purples, deep depth, Lacquer\n- Ruby: red creme, chips reds, mid depth, Lacquer\n- Set On Fire: red flakie shimmer, chips reds, mid depth, Lacquer\n- Velvet Dreams: purple creme, chips purples, deep depth, Lacquer\n- Wanderlust: purple creme, chips purples, light depth, Lacquer\n- Golden Hour: gold topper, chips yellows, mid depth, Lacquer, glitter topper, wears over other color or bare nails\n- Pink Moon: pink holo shimmer, chips pinks, light depth, Lacquer, glitter topper, wears over other color or bare nails\n- Crash the Party (red), You Had Me At Hydrangea (blue/purple), Peaches and Dreams (peach), Rage (copper): retired from the current catalog; strongly deprioritize, recommend only when nothing else fits the shopper's picks.",
+  "updated_at": "2026-10-06T22:59:25.859+00:00"
+ },
+ "products": [
+  {
+   "id": "0084eeb4-c2fe-48c2-90a3-62f893429f20",
+   "product_name": "Crush",
+   "shopify_id": "gid://shopify/Product/6688896090211",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "0617a8b4-509d-4dd2-913f-a9dbfbb051fc",
+   "product_name": "Don't Be Suspicious",
+   "shopify_id": "gid://shopify/Product/6981711396963",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "06a89dc3-7f3a-49fe-9d2a-7c990a8a21b8",
+   "product_name": "Double Espresso",
+   "shopify_id": "gid://shopify/Product/6736048226403",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "102e5e17-e5c2-4296-bbbc-4b7e0ba8f2d9",
+   "product_name": "Back For S'more",
+   "shopify_id": "gid://shopify/Product/7014622494819",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "1a31f20e-0c19-41af-a43b-8484c3e70c5f",
+   "product_name": "Set On Fire",
+   "shopify_id": "gid://shopify/Product/8089945571427",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "1a5c89f3-c938-4050-8d8e-00a3f869b565",
+   "product_name": "Ruby",
+   "shopify_id": "gid://shopify/Product/1495811424355",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "1e9cd346-6f24-46e1-8e0d-9805f53d3a22",
+   "product_name": "Canyon Clay",
+   "shopify_id": "gid://shopify/Product/4670259265635",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "211d1902-0b9d-420a-a637-f266eb500015",
+   "product_name": "It's Not A Phase",
+   "shopify_id": "gid://shopify/Product/4201024159843",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "2bf8f7d1-7ea9-43fe-904f-74f85fb0c413",
+   "product_name": "Golden Hour",
+   "shopify_id": "gid://shopify/Product/8004702830691",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "2cd3a354-73bd-49e7-a7f3-0b1a318d1285",
+   "product_name": "Frond Of You",
+   "shopify_id": "gid://shopify/Product/6729392324707",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "2ced2054-7fec-4885-a9f1-f01449b8744d",
+   "product_name": "Anything Goes",
+   "shopify_id": "gid://shopify/Product/1495853039715",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "2ec6b2c2-c29e-4176-b4c4-05cde18f25e5",
+   "product_name": "Detox My Socks Off",
+   "shopify_id": "gid://shopify/Product/1495868112995",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "2f09b780-3a3f-4dc3-bcd3-8f6eb4119a75",
+   "product_name": "Citrus Got Real",
+   "shopify_id": "gid://shopify/Product/6729397469283",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "3506dcb7-c56a-49bb-a924-e5ad4371372b",
+   "product_name": "Love My Nails",
+   "shopify_id": "gid://shopify/Product/1495865196643",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "3542aeb2-271c-41c4-86b3-1b3253dcbe34",
+   "product_name": "Velvet Dreams",
+   "shopify_id": "gid://shopify/Product/8089954451555",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "35cd4f30-08d8-468e-a567-fc6eedc754dc",
+   "product_name": "Des Fleurs",
+   "shopify_id": "gid://shopify/Product/1495841013859",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "3b3c8898-d0be-48b3-8ac4-fa15a03120b4",
+   "product_name": "Golden Afternoon",
+   "shopify_id": "gid://shopify/Product/6696417099875",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "3b4c44b6-bef8-4306-8aca-3ce2427d10d7",
+   "product_name": "Beautifully Bizarre",
+   "shopify_id": "gid://shopify/Product/1495862935651",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "3ec85812-6358-48f7-a2eb-db6c8a227f0e",
+   "product_name": "Fresh Start",
+   "shopify_id": "gid://shopify/Product/1495864737891",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "400c0132-656c-44de-81da-9490ed9d4f69",
+   "product_name": "Bare Rose",
+   "shopify_id": "gid://shopify/Product/1495815389283",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "404522bd-1153-4af4-9ff7-e14abbdf3904",
+   "product_name": "Sheer Nude",
+   "shopify_id": "gid://shopify/Product/1495807918179",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "412fe214-e818-406c-94c4-4ea0f9935b2e",
+   "product_name": "Red Rock",
+   "shopify_id": "gid://shopify/Product/4670259298403",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "44c1ce8d-cb4b-4244-a3c7-2d279857986f",
+   "product_name": "Peaches and Dreams",
+   "shopify_id": "gid://shopify/Product/4520774041699",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "460e8d24-1883-4d09-838d-1149c2d33399",
+   "product_name": "Morning Mantra",
+   "shopify_id": "gid://shopify/Product/1495873257571",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "4782cfb9-43fa-4384-9a1d-34c24677fc49",
+   "product_name": "Retrograde",
+   "shopify_id": "gid://shopify/Product/1499488485475",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "47f0140d-20a7-4d1b-978e-44c0c2380bef",
+   "product_name": "Snatched",
+   "shopify_id": "gid://shopify/Product/7460423598179",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "496c591c-1d39-406c-a15b-0e3e6430c19a",
+   "product_name": "Claim To Fame - Gel Nail Color",
+   "shopify_id": "gid://shopify/Product/6742221815907",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "4b7b0072-c9b0-4aa6-acd1-fb261716ddd0",
+   "product_name": "Pine-ing For You",
+   "shopify_id": "gid://shopify/Product/4712415199331",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "50a7490f-6b31-416f-9b7d-89ab4ceed2bb",
+   "product_name": "De-Stressed Denim",
+   "shopify_id": "gid://shopify/Product/1495873159267",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "5175a108-516e-4ce8-9175-ee4efd9d5333",
+   "product_name": "Beverly Hills Plum",
+   "shopify_id": "gid://shopify/Product/1495840751715",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "530132a5-f652-462e-9d62-7032da0fdd48",
+   "product_name": "Crystal Healing",
+   "shopify_id": "gid://shopify/Product/1495876370531",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "55b4c509-90c3-4285-98e3-d810e4fdb0c2",
+   "product_name": "Heart Beet",
+   "shopify_id": "gid://shopify/Product/1495876403299",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "56c7d5c1-09d3-4dd3-b7c9-f9246d3a3a5b",
+   "product_name": "Astral Flaire",
+   "shopify_id": "gid://shopify/Product/4201048440931",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "5c0a76b6-3e97-4243-a3a0-b90851dc4fe4",
+   "product_name": "Coral Crush",
+   "shopify_id": "gid://shopify/Product/7565209665635",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "5e2ca411-391b-4cde-a982-6b50c317645c",
+   "product_name": "Midnight Stars",
+   "shopify_id": "gid://shopify/Product/8089940787299",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "5ecf1343-b45b-4b39-a729-9a90166df7cd",
+   "product_name": "Fairy Godmother",
+   "shopify_id": "gid://shopify/Product/1495873421411",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "7342f05c-b603-4109-ba9e-90d223288bad",
+   "product_name": "Pink Moon",
+   "shopify_id": "gid://shopify/Product/8004699357283",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "7a6b62de-4431-43b2-8961-b39408a541e5",
+   "product_name": "Pointe Blanche",
+   "shopify_id": "gid://shopify/Product/1495810080867",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "7c2092e1-6661-4963-887c-22cd10c22206",
+   "product_name": "All Dahlia’d Up",
+   "shopify_id": "gid://shopify/Product/6547714244707",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "7c3a4f23-4c07-42c3-88fa-30fefce7730d",
+   "product_name": "Crash the Party",
+   "shopify_id": "gid://shopify/Product/6742209953891",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "7d46d9dc-ad18-4ac6-ae24-160690259467",
+   "product_name": "Earthfire",
+   "shopify_id": "gid://shopify/Product/7581680140387",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "8b4c74f4-e8e4-4dac-8a71-264e139e0537",
+   "product_name": "Star Spangled",
+   "shopify_id": "gid://shopify/Product/1495815749731",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "8c3ec6a8-ddd0-408f-88dd-dde158f22994",
+   "product_name": "Kiss Me, I'm Kind",
+   "shopify_id": "gid://shopify/Product/1495868178531",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "8ced5798-31e0-4233-8e35-73a063983499",
+   "product_name": "Liquid Vinyl",
+   "shopify_id": "gid://shopify/Product/1495809687651",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "8ec3095c-e447-46c7-8eb4-e8ca0e49e788",
+   "product_name": "Rage",
+   "shopify_id": "gid://shopify/Product/4642291089507",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "90896eba-78ad-4062-9f31-7a36bc828d78",
+   "product_name": "Main Character",
+   "shopify_id": "gid://shopify/Product/8089945931875",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "91437c77-6300-4924-b790-04c260d62d83",
+   "product_name": "Kick Glass",
+   "shopify_id": "gid://shopify/Product/4106230300771",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "91a6fcb1-cb41-4d78-a285-1f5040c86d07",
+   "product_name": "Mirror Mirror",
+   "shopify_id": "gid://shopify/Product/1495809032291",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "9287a354-b2ad-4d9f-8c6c-1d21ebfbf095",
+   "product_name": "Replay The Night",
+   "shopify_id": "gid://shopify/Product/8089960513635",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "94376206-4998-4600-8312-1c04d52a3552",
+   "product_name": "Happy And Healthy",
+   "shopify_id": "gid://shopify/Product/1495864672355",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "955f2520-e3ad-4a39-a832-8dfb219c26e2",
+   "product_name": "Charmed",
+   "shopify_id": "gid://shopify/Product/8089950027875",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "9853e8f8-f31a-4398-ada9-27b29446a1ef",
+   "product_name": "Embrace Danger",
+   "shopify_id": "gid://shopify/Product/6912950992995",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "9bc2aa98-2da3-49fe-9654-1146cbbd8277",
+   "product_name": "Kaleidoscope Eyes",
+   "shopify_id": "gid://shopify/Product/6559279218787",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "9bdfc0a5-fbbc-49a4-a20e-7c5f3c62b10e",
+   "product_name": "Bubbly Bombshell",
+   "shopify_id": "gid://shopify/Product/1495820173411",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "a3b379bf-03cb-465c-9e04-f168c27a419f",
+   "product_name": "Kiss The Bride",
+   "shopify_id": "gid://shopify/Product/1495807131747",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "a885cf7d-b6ec-49a1-afc6-8d91001eff32",
+   "product_name": "Lost Treasure",
+   "shopify_id": "gid://shopify/Product/6913167065187",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "a90de704-215a-4c38-9e97-6ca54ab0f0a3",
+   "product_name": "Red Flare",
+   "shopify_id": "gid://shopify/Product/1495811358819",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "a9b56ae6-3ec8-4095-af0d-829f931f8d53",
+   "product_name": "Turn It Up",
+   "shopify_id": "gid://shopify/Product/1495862018147",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "ab2c9dbb-3da5-44d0-a3cb-2c2f9f2d83f1",
+   "product_name": "Sweet Serenity",
+   "shopify_id": "gid://shopify/Product/1495868211299",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "b0ece989-9f11-4ccf-b430-c9523c0e0c65",
+   "product_name": "Hibis-Kiss",
+   "shopify_id": "gid://shopify/Product/8004700995683",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "b3802ec7-329a-4580-bfa7-97fdf2397b05",
+   "product_name": "Rave Wave",
+   "shopify_id": "gid://shopify/Product/8004700143715",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "b543adec-7f7b-4d91-ad68-94e4640d6018",
+   "product_name": "She’s A Wildflower",
+   "shopify_id": "gid://shopify/Product/6547720765539",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "b56c096c-5673-4ef3-aef7-bf2f22e1908b",
+   "product_name": "Playa Papaya",
+   "shopify_id": "gid://shopify/Product/8004701585507",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "b7ec7815-27b3-4e48-a808-df97276d8e95",
+   "product_name": "Blue Tango",
+   "shopify_id": "gid://shopify/Product/6611281576035",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "b94d208a-d8da-4834-b341-2c6e3ccf71a8",
+   "product_name": "White Tips",
+   "shopify_id": "gid://shopify/Product/1547370561635",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "cba54605-10a3-4440-ab6f-c1ec79033da3",
+   "product_name": "Down To Earth",
+   "shopify_id": "gid://shopify/Product/1495868440675",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "d9f2f757-8b4b-43e6-83f6-43e7ee61e0d2",
+   "product_name": "Sagebrush",
+   "shopify_id": "gid://shopify/Product/4670259200099",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "e0ec11e2-fdb4-4c44-9b7a-aeae73673f76",
+   "product_name": "Haute Red",
+   "shopify_id": "gid://shopify/Product/1495807393891",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "e4300660-91f9-415d-b499-8c68d1f75563",
+   "product_name": "Mind Over Matter",
+   "shopify_id": "gid://shopify/Product/1499488125027",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "e4b394ea-d76d-4cc0-b9d0-f109fedca1b0",
+   "product_name": "Wanderlust",
+   "shopify_id": "gid://shopify/Product/7957080703075",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "e96cf28f-96ba-4429-9af9-54a101533c6a",
+   "product_name": "You Had Me At Hydrangea",
+   "shopify_id": "gid://shopify/Product/6547724107875",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "eaa1d4c2-580f-4592-86b3-a20125e2a155",
+   "product_name": "Don't Pop My Balloon",
+   "shopify_id": "gid://shopify/Product/6742208446563",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "ec63e572-a98a-4a6b-95a0-9c6bd314976f",
+   "product_name": "Almond Milk",
+   "shopify_id": "gid://shopify/Product/4365746176099",
+   "status": null,
+   "handle": null
+  },
+  {
+   "id": "ef7638d7-4f61-42eb-bc3b-8db3c04c0a3d",
+   "product_name": "A Vibe",
+   "shopify_id": "gid://shopify/Product/7460424286307",
+   "status": null,
+   "handle": null
+  }
+ ],
+ "plan": {
+  "reinstate": [],
+  "onboardHandles": [
+   "reddy-or-not",
+   "after-school-special",
+   "disco-drop",
+   "twinkling-veil",
+   "bubblegum-pop",
+   "liquid-vinyl-gel-nail-color",
+   "i-m-easily-suede",
+   "last-run",
+   "last-run-gel-nail-color",
+   "bell-bottom-blues",
+   "bell-bottom-blues-gel-nail-color-1",
+   "dreamcatcher",
+   "dreamcatcher-gel-nail-color",
+   "flip-phone",
+   "flip-phone-gel-nail-color",
+   "fresh-powder-gel-nail-color",
+   "looking-glass",
+   "shore-thing",
+   "among-the-stars",
+   "be-kind-rewind",
+   "be-kind-rewind-gel-nail-color",
+   "freudian-flip",
+   "glass-act",
+   "mallrat",
+   "mallrat-gel-nail-color",
+   "skystone",
+   "fleece-to-meet-you",
+   "hey-bestie",
+   "dear-abby",
+   "rollin-with-my-homies-gel-nail-color",
+   "sea-me-now",
+   "touch-grass",
+   "yule-love-this",
+   "yule-love-this-gel-nail-color",
+   "rollin-with-my-homies",
+   "chillax",
+   "chillax-gel-nail-color",
+   "double-diamond",
+   "double-diamond-gel-nail-color",
+   "shine-gel-nail-color",
+   "sleigh-yes",
+   "typing",
+   "grunge-glam",
+   "grunge-glam-gel-nail-color",
+   "beach-you-to-it",
+   "leather-you-like-it-or-not",
+   "nude-attitude",
+   "sunkissed",
+   "chalet-getaway",
+   "chalet-getaway-gel-nail-color",
+   "acid-trip",
+   "acid-trip-gel-nail-color",
+   "hunky-dory-gel-nail-color",
+   "shaggin-wagon",
+   "shaggin-wagon-gel-nail-color",
+   "so-fetch",
+   "so-fetch-gel-nail-color",
+   "cloud-nine-gel-nail-color",
+   "sheer-nude-gel-nail-color",
+   "aphromite",
+   "hits-different",
+   "most-definitely",
+   "most-definitely-gel-nail-color",
+   "nail-superfood",
+   "night-fever",
+   "bell-bottom-blues-gel-nail-color",
+   "no-coral-ation",
+   "meet-cute-gel-nail-color-1",
+   "hunky-dory",
+   "bronze-in-a-lifetime",
+   "gilded-dune",
+   "earthfire-gel-nail-color-copy",
+   "berry-bliss",
+   "berry-bliss-gel-nail-color",
+   "power-pink",
+   "golden-french-drip",
+   "it-started-with-pink",
+   "it-started-with-pink-gel-nail-color",
+   "itll-always-be-pink",
+   "itll-always-be-pink-gel-nail-color",
+   "kiss-the-bride-gel-nail-color",
+   "leave-britney-alone",
+   "leave-britney-alone-gel-nail-color",
+   "orly-pink",
+   "orly-pink-gel-nail-color",
+   "scales-tales",
+   "shell-we-dance",
+   "strawberry-cream",
+   "totally-clueless",
+   "ph-perfector-cool-blush",
+   "ph-perfector-warm-blush",
+   "juicy-velour",
+   "juicy-velour-gel-nail-color",
+   "moonstone-aura",
+   "shut-up-heather",
+   "shut-up-heather-gel-nail-color",
+   "thats-hot",
+   "dont-juno",
+   "first-bloom",
+   "first-bloom-gel-nail-color",
+   "sweet-cheeks",
+   "all-eyes-on-her",
+   "alloy-matey",
+   "starlit-shale",
+   "stay-rad",
+   "stay-rad-gel-nail-color",
+   "self-reef-lection",
+   "ube-cloud",
+   "wanderlust-gel-nail-color",
+   "now-or-boucleter",
+   "check-yes-or-no-gel-nail-color-1",
+   "soul-sister",
+   "goddess-some-bronze",
+   "party-popper",
+   "yeah-for-sherpa",
+   "on-a-break-gel-nail-color",
+   "on-a-break",
+   "clause-a-commotion",
+   "clause-a-commotion-gel-nail-color",
+   "grlpwr",
+   "oh-la-la",
+   "oh-la-la-gel-nail-color",
+   "red-hot",
+   "red-hot-gel-nail-color",
+   "star-spangled-gel-nail-color",
+   "thats-my-jam",
+   "red-hot-copy",
+   "hit-the-gas-gel-nail-color",
+   "vixen-gel-nail-color",
+   "we-flannel-ly-made-it",
+   "artemis-me",
+   "rustic-root-gel-nail-color",
+   "earthfire-gel-nail-color",
+   "spice-up-your-life",
+   "spice-up-your-life-gel-nail-color",
+   "vixen-gel-nail-color-1",
+   "stiletto-on-the-run-gel-nail-color",
+   "kiss-n-tell",
+   "oh-darling-gel-nail-color-1",
+   "bedrock-bloom",
+   "bedrock-bloom-gel-nail-color",
+   "cherries",
+   "ceci-nest-pas-blanc-gel-nail-color",
+   "siren-me-crazy",
+   "white-tips-gel-nail-color",
+   "bohemian-child",
+   "bohemian-child-gel-nail-color",
+   "hello-yellow",
+   "morning-sunshine",
+   "morning-sunshine-gel-nail-color",
+   "glow-getter",
+   "golden-age",
+   "harry-potter™-butterbeer™-scented-iridescent-topper",
+   "star-fire",
+   "blush-it-off",
+   "gloss-over-it",
+   "party-in-pink"
+  ],
+  "dropped": [
+   "0084eeb4-c2fe-48c2-90a3-62f893429f20",
+   "0617a8b4-509d-4dd2-913f-a9dbfbb051fc",
+   "06a89dc3-7f3a-49fe-9d2a-7c990a8a21b8",
+   "102e5e17-e5c2-4296-bbbc-4b7e0ba8f2d9",
+   "1a31f20e-0c19-41af-a43b-8484c3e70c5f",
+   "1a5c89f3-c938-4050-8d8e-00a3f869b565",
+   "1e9cd346-6f24-46e1-8e0d-9805f53d3a22",
+   "211d1902-0b9d-420a-a637-f266eb500015",
+   "2bf8f7d1-7ea9-43fe-904f-74f85fb0c413",
+   "2cd3a354-73bd-49e7-a7f3-0b1a318d1285",
+   "2ced2054-7fec-4885-a9f1-f01449b8744d",
+   "2ec6b2c2-c29e-4176-b4c4-05cde18f25e5",
+   "2f09b780-3a3f-4dc3-bcd3-8f6eb4119a75",
+   "3506dcb7-c56a-49bb-a924-e5ad4371372b",
+   "3542aeb2-271c-41c4-86b3-1b3253dcbe34",
+   "35cd4f30-08d8-468e-a567-fc6eedc754dc",
+   "3b3c8898-d0be-48b3-8ac4-fa15a03120b4",
+   "3b4c44b6-bef8-4306-8aca-3ce2427d10d7",
+   "400c0132-656c-44de-81da-9490ed9d4f69",
+   "404522bd-1153-4af4-9ff7-e14abbdf3904",
+   "412fe214-e818-406c-94c4-4ea0f9935b2e",
+   "44c1ce8d-cb4b-4244-a3c7-2d279857986f",
+   "460e8d24-1883-4d09-838d-1149c2d33399",
+   "4782cfb9-43fa-4384-9a1d-34c24677fc49",
+   "496c591c-1d39-406c-a15b-0e3e6430c19a",
+   "4b7b0072-c9b0-4aa6-acd1-fb261716ddd0",
+   "50a7490f-6b31-416f-9b7d-89ab4ceed2bb",
+   "5175a108-516e-4ce8-9175-ee4efd9d5333",
+   "530132a5-f652-462e-9d62-7032da0fdd48",
+   "55b4c509-90c3-4285-98e3-d810e4fdb0c2",
+   "56c7d5c1-09d3-4dd3-b7c9-f9246d3a3a5b",
+   "5e2ca411-391b-4cde-a982-6b50c317645c",
+   "5ecf1343-b45b-4b39-a729-9a90166df7cd",
+   "7342f05c-b603-4109-ba9e-90d223288bad",
+   "7a6b62de-4431-43b2-8961-b39408a541e5",
+   "7c2092e1-6661-4963-887c-22cd10c22206",
+   "7c3a4f23-4c07-42c3-88fa-30fefce7730d",
+   "8b4c74f4-e8e4-4dac-8a71-264e139e0537",
+   "8c3ec6a8-ddd0-408f-88dd-dde158f22994",
+   "8ced5798-31e0-4233-8e35-73a063983499",
+   "8ec3095c-e447-46c7-8eb4-e8ca0e49e788",
+   "90896eba-78ad-4062-9f31-7a36bc828d78",
+   "91437c77-6300-4924-b790-04c260d62d83",
+   "91a6fcb1-cb41-4d78-a285-1f5040c86d07",
+   "9287a354-b2ad-4d9f-8c6c-1d21ebfbf095",
+   "955f2520-e3ad-4a39-a832-8dfb219c26e2",
+   "9853e8f8-f31a-4398-ada9-27b29446a1ef",
+   "9bc2aa98-2da3-49fe-9654-1146cbbd8277",
+   "9bdfc0a5-fbbc-49a4-a20e-7c5f3c62b10e",
+   "a3b379bf-03cb-465c-9e04-f168c27a419f",
+   "a885cf7d-b6ec-49a1-afc6-8d91001eff32",
+   "a90de704-215a-4c38-9e97-6ca54ab0f0a3",
+   "a9b56ae6-3ec8-4095-af0d-829f931f8d53",
+   "ab2c9dbb-3da5-44d0-a3cb-2c2f9f2d83f1",
+   "b0ece989-9f11-4ccf-b430-c9523c0e0c65",
+   "b3802ec7-329a-4580-bfa7-97fdf2397b05",
+   "b543adec-7f7b-4d91-ad68-94e4640d6018",
+   "b56c096c-5673-4ef3-aef7-bf2f22e1908b",
+   "b7ec7815-27b3-4e48-a808-df97276d8e95",
+   "b94d208a-d8da-4834-b341-2c6e3ccf71a8",
+   "cba54605-10a3-4440-ab6f-c1ec79033da3",
+   "d9f2f757-8b4b-43e6-83f6-43e7ee61e0d2",
+   "e0ec11e2-fdb4-4c44-9b7a-aeae73673f76",
+   "e96cf28f-96ba-4429-9af9-54a101533c6a",
+   "eaa1d4c2-580f-4592-86b3-a20125e2a155",
+   "ec63e572-a98a-4a6b-95a0-9c6bd314976f"
+  ],
+  "flags": {
+   "pushGuidance": true,
+   "retireDropped": true,
+   "modelFlag": "keep",
+   "imageMode": "swatch"
+  }
+ }
+}
