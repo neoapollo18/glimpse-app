@@ -7,6 +7,7 @@ import {
   findEmptyCombination,
   ruleKey,
   NO_PREFERENCE_SENTENCE,
+  matchNamedProducts,
 } from "../answer-rules-shared";
 import { applyAlways, narrowPool, prependAlways, sentenceTags, type AnswerLayer } from "../answer-rules-layer";
 
@@ -98,5 +99,29 @@ describe("runtime narrowing", () => {
     const l = layer({ [ruleKey("tone", "warm")]: { mode: "lean", ids: ["a"] } });
     const tags = sentenceTags(l, [{ questionIndex: 2, axisKey: "tone", label: "Warm", sentence: "s", mode: "lean" }], { tone: "warm" });
     expect(tags.get("a")).toEqual([2]);
+  });
+});
+
+describe("matchNamedProducts", () => {
+  const products = [
+    { id: "1", name: "Aurora Bible Digitale" },
+    { id: "2", name: "Aurora Bible Digitale – Édition Femme" },
+    { id: "3", name: "Aurora Bible Papier" },
+    { id: "4", name: "Cœur à Cœur" },
+    { id: "5", name: "Parcours Aurora (12 semaines)" },
+    { id: "6", name: "Joy" },
+  ];
+
+  it("matches names verbatim, by base name, and ignoring accents/ligatures", () => {
+    expect(
+      matchNamedProducts("Strongly favor Aurora Bible Digitale in the edition chosen in Q1; outweighs Q2 and Q3.", products),
+    ).toEqual(["1", "2"]);
+    expect(matchNamedProducts("Strongly favor Coeur a coeur in the edition chosen in Q1.", products)).toEqual(["4"]);
+    expect(matchNamedProducts("Strongly favor Parcours Aurora in the edition chosen in Q1.", products)).toEqual(["5"]);
+  });
+
+  it("needs whole words and skips very short names", () => {
+    expect(matchNamedProducts("Lean toward Aurora Bibles.", products)).toEqual([]);
+    expect(matchNamedProducts("Lean toward joy and calm.", products)).toEqual([]);
   });
 });

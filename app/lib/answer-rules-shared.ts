@@ -81,6 +81,40 @@ export function normalizeGlobalRules(raw: unknown): GlobalRules {
 
 export const hasGlobalRules = (g: GlobalRules) => g.always.length > 0 || g.never.length > 0;
 
+/** Lowercase, accent- and ligature-free, punctuation collapsed to spaces. */
+export function normalizeForMatch(s: string): string {
+  return s
+    .replace(/œ/gi, "oe")
+    .replace(/æ/gi, "ae")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+/**
+ * Deterministic backstop for the resolver: products the sentence names
+ * outright. A product matches when its full name, or its base name (the
+ * part before a " - ", " | ", ":" or "(" suffix such as an edition), appears
+ * in the sentence as whole words. Short names (< 4 chars) are skipped.
+ */
+export function matchNamedProducts(sentence: string, products: Array<{ id: string; name: string }>): string[] {
+  const hay = ` ${normalizeForMatch(sentence)} `;
+  const out: string[] = [];
+  for (const p of products) {
+    const base = p.name.split(/\s[-–—|]\s|:|\(/)[0];
+    const phrases = new Set([normalizeForMatch(p.name), normalizeForMatch(base)]);
+    for (const phrase of phrases) {
+      if (phrase.replace(/ /g, "").length >= 4 && hay.includes(` ${phrase} `)) {
+        out.push(p.id);
+        break;
+      }
+    }
+  }
+  return out;
+}
+
 /** The grey line under a sentence (Spec 2, applies-to states). */
 export function appliesToLine(rule: Pick<AnswerRule, "sentence" | "mode" | "resolved" | "status">): {
   text: string;
