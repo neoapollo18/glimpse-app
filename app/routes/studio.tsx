@@ -80,7 +80,14 @@ import { draftProblems } from "../components/studio/draft-problems";
 import { templatesKilled, templateServedLive } from "../lib/template-live.server";
 import { loadMatchingView } from "../lib/answer-rules.server";
 import { rememberShopCurrency } from "../lib/shop-currency.server";
-import { getQuizOffers, saveQuizOffers, syncManagedBundleDiscount, validateOffersPatch, type QuizOffers } from "../lib/quiz-offers.server";
+import {
+  getQuizOffers,
+  numericShopifyId,
+  saveQuizOffers,
+  syncManagedBundleDiscount,
+  validateOffersPatch,
+  type QuizOffers,
+} from "../lib/quiz-offers.server";
 import {
   connectKlaviyo,
   disconnectKlaviyo,
@@ -267,9 +274,9 @@ async function loadOfferCatalog(shopId: string) {
     if (!data || data.length < 1000) break;
   }
   return rows
-    .filter((p) => isLiveProduct(p as { status?: string | null }) && typeof p.handle === "string" && /^\d+$/.test(String(p.shopify_id ?? "")))
+    .filter((p) => isLiveProduct(p as { status?: string | null }) && typeof p.handle === "string" && numericShopifyId(p.shopify_id) !== null)
     .map((p) => ({
-      productId: String(p.shopify_id),
+      productId: numericShopifyId(p.shopify_id) as string,
       handle: String(p.handle),
       title: String(p.product_name ?? p.handle),
       imageUrl: typeof p.image_url === "string" ? p.image_url : null,

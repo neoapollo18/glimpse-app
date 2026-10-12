@@ -169,6 +169,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       // Classic compact layout (migration 086). Templates own their layout,
       // so it's only ever true for the classic renderer.
       compactLayout: config.quiz_compact_layout && !servedTemplate,
+      // Migration 088, classic only: 'boutique' style (implies compact).
+      uiStyle: servedTemplate ? null : config.quiz_ui_style,
       // Overhaul templates (Contract 2/3): template id sets the widget's
       // root layout class; brandTokens map onto the --gq-* vars before the
       // merchant overrides above. Both absent for legacy shops.
@@ -263,6 +265,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         // the bundle add.
         crossSell: publicOffers.crossSell,
         bundleDiscount: publicOffers.bundleDiscount,
+        // Migration 088, classic only: 'grid' = equal cards + bundle bar.
+        layout: servedTemplate ? null : config.quiz_results_layout,
         // v2 template results content (spec 5.6 / Part 3), only when a
         // template is assigned: T2's computation-screen trust lines,
         // T1's consultation prose template, T4's archetype reveal copy.

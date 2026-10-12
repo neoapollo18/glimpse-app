@@ -42,6 +42,7 @@ const OPTION_STYLE_CHOICES = [
   { label: "Image cards", value: "visual" },
   { label: "Rich cards", value: "rich" },
   { label: "Two-tone swatch cards", value: "vibe" },
+  { label: "Nail swatches (color families)", value: "nails" },
 ];
 
 function slugify(text: string, taken: Set<string>): string {
@@ -860,7 +861,7 @@ function AnswerRow({
   );
   // Finish preview (migration 086): drawn on rich/boxed cards only.
   const texture = typeof option.displayMeta?.texture === "string" ? option.displayMeta.texture : "";
-  const showTexture = optionStyle === "rich" || optionStyle === "boxed" || Boolean(texture);
+  const showTexture = optionStyle === "rich" || optionStyle === "boxed" || optionStyle === "nails" || Boolean(texture);
   const setTexture = (v: string) => {
     const meta: Record<string, unknown> = { ...(option.displayMeta ?? {}) };
     if (!v) delete meta.texture;
@@ -949,10 +950,12 @@ function AnswerRow({
                   { label: "Sparkle (glitter)", value: "sparkle" },
                   { label: "Chrome / metallic", value: "chrome" },
                   { label: "Sheer / jelly", value: "sheer" },
+                  { label: "Rainbow (multicolor)", value: "rainbow" },
+                  { label: "French tip", value: "french" },
                 ]}
                 value={texture}
                 onChange={setTexture}
-                helpText="A small swatch on the card so shoppers can see the finish. Works with Rich and Boxed card styles."
+                helpText="A small swatch on the card so shoppers can see the finish. Works with Rich, Boxed and Nail swatch styles."
                 disabled={disabled}
               />
             )}

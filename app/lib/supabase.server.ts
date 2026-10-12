@@ -3369,6 +3369,13 @@ export interface ChatAssistantConfig {
   // Line under the first question telling shoppers the photo comes at the
   // end (migration 086). NULL/empty = hidden.
   quiz_photo_note: string | null;
+  // Classic quiz only (migration 088, Glamnetic UI v2). 'boutique' = white
+  // cards, tinted selected state with a check, bottom Continue bar; implies
+  // the compact phone layout. NULL = standard.
+  quiz_ui_style: 'boutique' | null;
+  // Classic quiz only (migration 088). 'grid' = equal product cards, mix &
+  // match bundle bar, email card under the results. NULL = featured match.
+  quiz_results_layout: 'grid' | null;
   // Overhaul template system (migration 072, docs/overhaul/CONTRACTS.md).
   // NULL template = legacy rendering — existing shops never change until
   // a template is assigned (Reveal or Studio Style panel).
@@ -3608,6 +3615,8 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   quiz_match_footnote: null,
   quiz_compact_layout: false,
   quiz_photo_note: null,
+  quiz_ui_style: null,
+  quiz_results_layout: null,
   quiz_template: null,
   quiz_preset: null,
   template_live_at: null,
@@ -3838,6 +3847,9 @@ function mapChatAssistantRow(data: any): ChatAssistantConfig {
       typeof data.quiz_photo_note === 'string' && data.quiz_photo_note.trim()
         ? data.quiz_photo_note
         : CHAT_ASSISTANT_DEFAULTS.quiz_photo_note,
+    // Migration 088: absent columns / stray values = standard rendering.
+    quiz_ui_style: data.quiz_ui_style === 'boutique' ? 'boutique' : null,
+    quiz_results_layout: data.quiz_results_layout === 'grid' ? 'grid' : null,
     quiz_template: typeof data.quiz_template === 'string' ? data.quiz_template : null,
     quiz_preset: typeof data.quiz_preset === 'string' ? data.quiz_preset : null,
     // Migration 081: absent column (un-run migration) = never published.
@@ -4102,7 +4114,7 @@ export interface RecommendationFlow {
 // Per-question option render styles (migration 048). Mirrors the DB CHECK
 // constraint; anything else read back degrades to null = auto so a stray
 // value can never break the quiz.
-export const QUESTION_OPTION_STYLES = ['chips', 'boxed', 'list', 'visual', 'rich', 'vibe'] as const;
+export const QUESTION_OPTION_STYLES = ['chips', 'boxed', 'list', 'visual', 'rich', 'vibe', 'nails'] as const;
 export type QuestionOptionStyle = (typeof QUESTION_OPTION_STYLES)[number];
 const optionStyleOrNull = (v: unknown): QuestionOptionStyle | null =>
   typeof v === 'string' && (QUESTION_OPTION_STYLES as readonly string[]).includes(v)
@@ -4134,7 +4146,8 @@ function emojiOrUndefined(v: unknown): string | undefined {
 // the widget draws a small texture swatch (flat creme, pearl shimmer,
 // glitter, chrome, sheer jelly, matte). Closed set so a stray string can
 // never become a CSS class.
-export const OPTION_TEXTURES = ['creme', 'matte', 'shimmer', 'sparkle', 'chrome', 'sheer'] as const;
+// rainbow / french (migration 088): multicolor and french-tip nail swatches.
+export const OPTION_TEXTURES = ['creme', 'matte', 'shimmer', 'sparkle', 'chrome', 'sheer', 'rainbow', 'french'] as const;
 export type OptionTexture = (typeof OPTION_TEXTURES)[number];
 export function textureOrUndefined(v: unknown): OptionTexture | undefined {
   return typeof v === 'string' && (OPTION_TEXTURES as readonly string[]).includes(v)

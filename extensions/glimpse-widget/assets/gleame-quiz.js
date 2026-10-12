@@ -613,11 +613,22 @@
     // Compact layout (migration 086, ORLY mobile rebuild). Classic quiz
     // only; toggled (not added) so a Studio preview update can turn it off.
     root.classList.toggle('gq-compact', compactActive());
+    root.classList.toggle('gq-boutique', boutiqueActive());
     applyTemplateStyleOverrides();
   }
 
+  // Boutique (migration 088, Glamnetic UI v2) builds on the compact
+  // layout, so it switches compact on by itself. Classic quiz only.
+  function boutiqueActive() {
+    return Boolean(config && config.uiStyle === 'boutique' && !config.template);
+  }
   function compactActive() {
-    return Boolean(config && config.compactLayout === true && !config.template);
+    return Boolean(config && !config.template && (config.compactLayout === true || config.uiStyle === 'boutique'));
+  }
+  // Grid results (migration 088): equal cards, per-card add, bundle bar,
+  // email card under the results. Classic quiz only.
+  function gridResultsActive() {
+    return Boolean(config && !activeTpl() && config.results && config.results.layout === 'grid');
   }
 
   // Template quizzes only (legacy never reaches past the guard): Style-panel
@@ -788,7 +799,7 @@
     }
     // A lead entry that's no longer showable (merchant turned it off, or
     // this session already submitted/skipped) resolves to the gate.
-    if (target.screen === 'lead' && (!leadActive() || state.leadDone)) {
+    if (target.screen === 'lead' && (!leadActive() || state.leadDone || !tplLeadBeforeResults())) {
       target = { screen: 'gate', screenIndex: 0 };
     }
     // v3 Routine name capture (template-only screen; legacy sessions never
@@ -1115,8 +1126,9 @@
   // whether it renders on the intro or its own screen.
   function introQuestionCards(q0) {
     var introVariant = (q0.optionStyle && STYLE_TO_VARIANT[q0.optionStyle]) || 'chip';
-    var cards = el('div', VARIANT_CONTAINER[introVariant]);
-    visibleOptions(q0).forEach(function(opt, i) {
+    var introOpts = visibleOptions(q0);
+    var cards = el('div', VARIANT_CONTAINER[introVariant] + countClass(introOpts.length));
+    introOpts.forEach(function(opt, i) {
       var btn = el('button', VARIANT_BTN_CLASS[introVariant], optionButtonHtml(opt, introVariant));
       btn.type = 'button';
       btn.style.setProperty('--gq-stagger', i);
@@ -1188,8 +1200,8 @@
       var proof = el('div', 'gq-intro-visual gq-ci-proof');
       var frames = el('div', 'gq-ba-frames');
       [
-        { url: landing.beforeImageUrl, tag: 'Your photo', alt: 'Before the try-on', after: false },
-        { url: landing.afterImageUrl, tag: 'Your try-on', alt: 'After the try-on', after: true },
+        { url: landing.beforeImageUrl, tag: boutiqueActive() ? 'Before' : 'Your photo', alt: 'Before the try-on', after: false },
+        { url: landing.afterImageUrl, tag: boutiqueActive() ? 'Tried on' : 'Your try-on', alt: 'After the try-on', after: true },
       ].forEach(function(f) {
         if (!f.url) return;
         var fig = el('figure', 'gq-ba-frame' + (f.after ? ' gq-ba-frame-after' : ''));
@@ -1386,6 +1398,26 @@
     btn.classList.add('is-selected');
   }
 
+  // Boutique bar line under/beside Continue: what's picked, and that it
+  // can change; the last step says what comes next instead.
+  function ctaNoteText(qIdxs, ready, last) {
+    if (ready && last) return 'Next: see your matches on you (optional)';
+    var picked = 0;
+    var max = 0;
+    var any = false;
+    qIdxs.forEach(function(qi) {
+      var d = draft[qi];
+      if (d && d.selectAll) any = true;
+      else if (d) picked += d.options.length;
+      var q = flow.questions[qi];
+      if (q.maxSelections) max += q.maxSelections;
+    });
+    if (any) return 'Open to anything \u00b7 change any answer later';
+    if (picked === 0) return 'Pick any that fit';
+    var count = qIdxs.length === 1 && max ? picked + ' of ' + max + ' selected' : picked + ' selected';
+    return count + ' \u00b7 change any answer later';
+  }
+
   function renderScreen() {
     var screenIdx = state.screenIndex;
     var qIdxs = screens[screenIdx];
@@ -1434,6 +1466,8 @@
     // single-select keeps the tap-and-advance rhythm.
     var needsContinue = qIdxs.length > 1 || flow.questions[qIdxs[0]].multiSelect;
     var continueBtn = null;
+    var ctaNote = null;
+    var ctaNoteLast = false;
     // Same-screen showIf dependencies need the option lists re-evaluated
     // whenever a selection changes.
     var hasConditionals = qIdxs.some(function(qi) {
@@ -1450,6 +1484,7 @@
         return draft[qi] && draft[qi].options.length > 0;
       });
       continueBtn.disabled = !ready;
+      if (ctaNote) ctaNote.textContent = ctaNoteText(qIdxs, ready, ctaNoteLast);
     }
 
     function onSelectionChange() {
@@ -1497,7 +1532,21 @@
       continueBtn = el('button', 'gq-add-btn gq-continue-btn', escapeHtml(ctaLabel) + ' \u2192');
       continueBtn.type = 'button';
       continueBtn.onclick = function() { commitScreen(screenIdx); };
-      body.appendChild(continueBtn);
+      if (boutiqueActive()) {
+        // Boutique: Continue lives in a bar (pinned to the bottom on
+        // phones, a footer row on desktop) with a live selection count.
+        var bar = el('div', 'gq-cta-bar');
+        ctaNote = el('p', 'gq-cta-note');
+        bar.appendChild(ctaNote);
+        bar.appendChild(continueBtn);
+        body.appendChild(bar);
+        screen.classList.add('gq-step--has-bar');
+        // Only when the photo step really comes next (not the email step).
+        ctaNoteLast = isLast && gateOnForShoppers() && config.tryonEnabled !== false &&
+          !(leadActive() && !state.leadDone && tplLeadBeforeResults());
+      } else {
+        body.appendChild(continueBtn);
+      }
       refreshContinue();
     }
 
@@ -1517,7 +1566,30 @@
     visual: 'visual',
     rich: 'rich',
     vibe: 'vibe',
+    nails: 'nails',
   };
+
+  // How many tiles a grid holds, for layouts that size columns by count
+  // (six shapes in one desktop row, three per phone row). Compact only, so
+  // the shipped layout's markup is unchanged.
+  function countClass(n) {
+    return compactActive() && n > 0 ? ' gq-n-' + Math.min(n, 12) : '';
+  }
+
+  // Nail-shaped swatch (option style 'nails', migration 088): a gradient
+  // from swatch to swatch2 with a gloss highlight; textures add glitter,
+  // a multicolor finish or a french tip. "Surprise me" draws a dashed nail.
+  var SPARKLE_SVG = '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 1.5l1.6 4.2L14 7.3l-4.4 1.6L8 13l-1.6-4.1L2 7.3l4.4-1.6z"/></svg>';
+  function nailSwatchHtml(meta, isAny) {
+    if (isAny) return '<span class="gq-nail gq-nail--any" aria-hidden="true">' + SPARKLE_SVG + '</span>';
+    var m = meta || {};
+    var t = TEXTURES[m.texture] ? m.texture : '';
+    var s1 = m.swatch && HEX_COLOR_RE.test(m.swatch) ? m.swatch : null;
+    var s2 = m.swatch2 && HEX_COLOR_RE.test(m.swatch2) ? m.swatch2 : s1;
+    var vars = s1 ? ' style="--gq-n1:' + s1 + ';--gq-n2:' + s2 + '"' : '';
+    return '<span class="gq-nail' + (t ? ' gq-nail--' + t : '') + (s1 || t ? '' : ' gq-nail--blank') + '"' + vars +
+      ' aria-hidden="true"><span class="gq-nail-gloss"></span></span>';
+  }
 
   // Pick a presentation variant for a question. An explicit optionStyle
   // from the quiz config wins; otherwise (the default) it's inferred from
@@ -1549,6 +1621,7 @@
     visual: 'gq-option-grid',
     rich: 'gq-rich-list',
     vibe: 'gq-vibe-grid',
+    nails: 'gq-nail-grid',
     dotchip: 'gq-chip-row',
     chip: 'gq-chip-row',
     boxed: 'gq-option-grid gq-option-grid--boxed',
@@ -1558,7 +1631,7 @@
   // Finish preview on a card (displayMeta.texture, migration 086): a small
   // swatch drawn in CSS (flat creme, pearl shimmer, glitter, chrome, sheer
   // jelly, matte). Closed set; displayMeta.swatch tints the flat ones.
-  var TEXTURES = { creme: 1, matte: 1, shimmer: 1, sparkle: 1, chrome: 1, sheer: 1 };
+  var TEXTURES = { creme: 1, matte: 1, shimmer: 1, sparkle: 1, chrome: 1, sheer: 1, rainbow: 1, french: 1 };
   var HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
   function textureHtml(meta) {
     if (!meta || !TEXTURES[meta.texture]) return '';
@@ -1619,6 +1692,8 @@
       }
       case 'boxed':
         return textureHtml(meta) + '<span class="gq-option-visual-label">' + label + '</span>' + sub + CHECK_SVG;
+      case 'nails':
+        return nailSwatchHtml(meta, opt.selectAll) + '<span class="gq-option-visual-label">' + label + '</span>' + CHECK_SVG;
       default: // list
         return '<span>' + label + (meta.sublabel ? '<span class="gq-option-sub gq-option-sub--inline">' + escapeHtml(meta.sublabel) + '</span>' : '') + '</span>' + CHECK_SVG;
     }
@@ -1628,6 +1703,7 @@
     visual: 'gq-option gq-option--visual',
     rich: 'gq-option gq-option--rich',
     vibe: 'gq-option gq-option--vibe',
+    nails: 'gq-option gq-option--nail',
     dotchip: 'gq-chip',
     chip: 'gq-chip',
     boxed: 'gq-option gq-option--boxed',
@@ -1684,7 +1760,10 @@
 
     var variant = optionVariantFor(q, specific.length > 0 ? specific : opts);
     var block = el('div', 'gq-option-block' + (noAnim ? ' gq-no-anim' : ''));
-    var list = el('div', VARIANT_CONTAINER[variant]);
+    // Nail swatches keep "Surprise me" as a tile in the grid (it's a color
+    // choice there, not an escape hatch below the tiles).
+    var anyInGrid = variant === 'nails' && anyOpt;
+    var list = el('div', VARIANT_CONTAINER[variant] + countClass(specific.length + (anyInGrid ? 1 : 0)));
 
     specific.forEach(function(opt, idx) {
       var btn = el('button', VARIANT_BTN_CLASS[variant], optionButtonHtml(opt, variant));
@@ -1697,9 +1776,19 @@
     });
     block.appendChild(list);
 
+    if (anyInGrid) {
+      var anyTile = el('button', VARIANT_BTN_CLASS.nails + ' gq-option--nail-any', optionButtonHtml(anyOpt, 'nails'));
+      anyTile.type = 'button';
+      anyTile.style.setProperty('--gq-stagger', specific.length);
+      var curAny = draft[qi];
+      if (curAny && curAny.options.indexOf(anyOpt) !== -1) anyTile.classList.add('is-selected');
+      wireOptionClick(anyTile, qi, q, anyOpt, needsContinue, onChange);
+      list.appendChild(anyTile);
+    }
+
     // "Open to anything" renders as a full-width dashed escape hatch,
     // visually distinct from the tiles — selecting it clears them.
-    if (anyOpt) {
+    if (anyOpt && !anyInGrid) {
       var anyBtn = el('button', 'gq-option-any', '<span>' + escapeHtml(anyOpt.label) + '</span>');
       anyBtn.type = 'button';
       var cur = draft[qi];
@@ -1854,8 +1943,11 @@
     var progressStyle = (config && config.progressStyle) || 'pips';
     var right = el('div', 'gq-progress-wrap');
     if (progressStyle !== 'none') {
+      var boutique = boutiqueActive();
       right.appendChild(el('span', 'gq-step-count',
-        isBonus ? 'Bonus' : (stepNumber + ' of ' + screens.length)));
+        isBonus
+          ? (boutique ? 'Optional' : 'Bonus')
+          : (boutique ? '<span class="gq-step-word">Step </span>' : '') + stepNumber + ' of ' + screens.length));
     }
     if (progressStyle === 'pips') {
       var pips = el('div', 'gq-pips');
@@ -2400,7 +2492,16 @@
       trackEvent('quiz_photo_skip');
       goToResults(screen);
     };
-    body.appendChild(skip);
+    if (boutiqueActive()) {
+      // Boutique: skip is the bar's main action, as an outlined pill.
+      var skipBar = el('div', 'gq-cta-bar gq-cta-bar--skip');
+      skipBar.appendChild(el('p', 'gq-cta-note', 'You can try them on from your results any time'));
+      skipBar.appendChild(skip);
+      body.appendChild(skipBar);
+      screen.classList.add('gq-step--has-bar');
+    } else {
+      body.appendChild(skip);
+    }
 
     screen.appendChild(body);
     return screen;
@@ -2732,9 +2833,10 @@
   }
 
   // {discount} / {was} only mean something on a discounted bundle
-  // (migration 086); elsewhere they resolve to nothing.
+  // (migration 086); elsewhere they resolve to nothing. {min} / {range}
+  // (migration 088) name the bundle threshold for any layout.
   function buildAddLabel(template, quantity, totalCents, discount) {
-    var t = template || 'Add {count} to bag \u00b7 {total}';
+    var t = bundleThresholdTokens(template || 'Add {count} to bag \u00b7 {total}', (config.results || {}).bundleDiscount, config.results || {});
     var d = discount || null;
     return t
       .replace(/\{count\}/g, String(quantity))
@@ -2747,6 +2849,7 @@
   }
 
   function renderResults() {
+    if (gridResultsActive()) return renderResultsGrid();
     var results = config.results || {};
     var matches = Array.isArray(state.matches) ? state.matches : [];
     // Try-on generation off (migration 069): cards keep product images, no
@@ -2867,6 +2970,445 @@
     screen.appendChild(restartRow);
 
     return screen;
+  }
+
+
+  // =====================================================================
+  // Grid results (quiz_results_layout = 'grid', migration 088)
+  // =====================================================================
+  //
+  // Equal product cards (3 across on desktop, 2 on phones) with "See on
+  // me" and Add to bag on each, the shopper's answers on one line with an
+  // Edit, a mix & match bar that counts quiz adds toward the bundle
+  // discount (only when one is live: Sell more), the add-ons row, the
+  // email capture as a card, and a bag bar pinned to the bottom of phones.
+  // Adds persist on state.gridAdded {matchKey: cents} so a re-render (a
+  // try-on landing, a reload) keeps "Added" and the bundle count.
+
+  var EYE_SVG = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+  var BAG_CHECK_SVG = '<svg viewBox="0 0 12 12" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 6.5l2.3 2.3L9.5 4"/></svg>';
+  var gridPendingTryon = null; // matchKey the shopper tapped "See on me" on before giving a photo
+
+  function gridBag() {
+    if (!state.gridAdded || typeof state.gridAdded !== 'object') state.gridAdded = {};
+    var count = 0;
+    var cents = 0;
+    for (var k in state.gridAdded) {
+      if (Object.prototype.hasOwnProperty.call(state.gridAdded, k)) {
+        // {c: cents, q: units}: Shopify's minimum counts units, so a
+        // two-set match counts twice.
+        var e = state.gridAdded[k];
+        count += Math.max(1, Number(e && e.q) || 1);
+        cents += Number(e && e.c) || 0;
+      }
+    }
+    return { count: count, cents: cents };
+  }
+
+  function gridPips(total, done, cls) {
+    var wrap = el('span', 'gq-gr-pips' + (cls ? ' ' + cls : ''));
+    for (var i = 0; i < total; i++) wrap.appendChild(el('span', 'gq-gr-pip' + (i < done ? ' is-done' : '')));
+    return wrap;
+  }
+
+  function renderResultsGrid() {
+    var results = config.results || {};
+    var matches = Array.isArray(state.matches) ? state.matches : [];
+    var tryonOn = config.tryonEnabled !== false;
+    var hasPhotoNow = state.hasPhoto && Boolean(photoFile) && tryonOn;
+    var sAxis = shadeAxis();
+    var shadeActionable = Boolean(sAxis && !state.criteria[sAxis.key]);
+    var definitive = !state.partial || !shadeActionable;
+    bundlePicker = null;
+    var screen = el('div', 'gq-results gq-results--grid');
+
+    if (matches.length === 0) {
+      var none = el('div', 'gq-error',
+        '<p>We couldn’t find a match this time — try adjusting your answers.</p>');
+      var restart0 = el('button', 'gq-retry', 'Start over');
+      restart0.type = 'button';
+      restart0.onclick = restartQuiz;
+      none.appendChild(restart0);
+      screen.appendChild(none);
+      return screen;
+    }
+    postPreviewMsg({ type: 'gleame:screen', screen: 'results' });
+
+    var head = el('div', 'gq-results-head gq-gr-head');
+    head.appendChild(el('p', 'gq-eyebrow gq-gr-eyebrow', 'Your matches'));
+    var headline = (hasPhotoNow && definitive)
+      ? (results.headlinePhoto || "Here's your match — on you")
+      : (results.headlineNoPhoto || 'Your matches');
+    head.appendChild(el('h2', 'gq-headline gq-results-headline', renderAccent(renderName(headline))));
+    if (results.subtext) {
+      head.appendChild(el('p', 'gq-results-subtext',
+        escapeHtml(renderName(results.subtext)
+          .replace(/\{count\}/g, String(matches.length))
+          .replace(/\{match_word\}/g, matches.length === 1 ? 'match' : 'matches'))));
+    }
+    screen.appendChild(head);
+    screen.appendChild(buildGridAnswers());
+
+    if (state.shadeNoMatch) {
+      var referral = el('div', 'gq-shade-referral');
+      referral.setAttribute('role', 'alert');
+      referral.appendChild(el('p', 'gq-shade-referral-text', escapeHtml(state.shadeNoMatch)));
+      screen.appendChild(referral);
+    }
+
+    // Bundle offer: ONLY with a live bundle discount, so the bar never
+    // promises a saving checkout won't give.
+    var bd = definitive && results.bundleEnabled && matches.length >= 2 ? (results.bundleDiscount || null) : null;
+    var refreshers = [];
+    function refreshAll() { refreshers.forEach(function(fn) { fn(); }); }
+    if (bd) screen.appendChild(buildGridBundleBar(bd, results, refreshers));
+
+    // Read once per render: the cards' product JSON can land in any order.
+    var pendingKey = hasPhotoNow ? gridPendingTryon : null;
+    if (hasPhotoNow) gridPendingTryon = null;
+    var grid = el('div', 'gq-gr-grid');
+    matches.forEach(function(m, i) {
+      grid.appendChild(buildGridCard(m, i, definitive, hasPhotoNow, results, bd, refreshAll, pendingKey));
+    });
+    screen.appendChild(grid);
+
+    if (state.partial && shadeActionable) screen.appendChild(buildShadeGate());
+    if (definitive) {
+      var xsell = buildCrossSellSection(matches, results);
+      if (xsell) screen.appendChild(xsell);
+      var leadCard = gridLeadCard();
+      if (leadCard) screen.appendChild(leadCard);
+    }
+
+    var restartRow = el('div', 'gq-restart-row gq-gr-restart');
+    restartRow.appendChild(el('span', 'gq-gr-restart-q', 'Not quite right?'));
+    var restartBtn = el('button', 'gq-link-btn', escapeHtml(results.restartLabel || 'Retake the quiz'));
+    restartBtn.type = 'button';
+    restartBtn.onclick = function() {
+      trackEvent('quiz_restart');
+      restartQuiz();
+    };
+    restartRow.appendChild(restartBtn);
+    screen.appendChild(restartRow);
+
+    if (definitive) screen.appendChild(buildGridBagBar(bd, refreshers));
+    refreshAll();
+    return screen;
+  }
+
+  // "YOUR ANSWERS Main character · Short, Medium · … Edit" — Edit reopens
+  // the first question; finishing the edit returns here with fresh picks.
+  function buildGridAnswers() {
+    var row = el('div', 'gq-gr-answers');
+    row.appendChild(el('span', 'gq-gr-answers-label', 'Your answers'));
+    var parts = [];
+    screens.forEach(function(qIdxs) {
+      qIdxs.forEach(function(qi) {
+        var a = state.answers[qi];
+        if (!a || !a.values || a.values.length === 0) return;
+        var labels = answerLabels(flow.questions[qi], a);
+        if (labels.length) parts.push(labels.join(', '));
+      });
+    });
+    var shade = shadeReasonLine();
+    if (shade) parts.push(shade.label);
+    parts.forEach(function(p, i) {
+      if (i > 0) row.appendChild(el('span', 'gq-gr-answers-sep', '·'));
+      row.appendChild(el('span', 'gq-gr-answers-value', escapeHtml(p)));
+    });
+    var first = 0;
+    while (first < screens.length && screenFullyHidden(first)) first++;
+    if (first < screens.length) {
+      var edit = el('button', 'gq-gr-answers-edit', 'Edit');
+      edit.type = 'button';
+      edit.onclick = function() { jumpToScreen(first); };
+      row.appendChild(edit);
+    }
+    return row;
+  }
+
+  function bundleTarget(bd, results) {
+    var size = Number(results.bundleSize) > 0 ? Math.floor(Number(results.bundleSize)) : 0;
+    return Math.max(bd.minQty, Math.min(size, 6));
+  }
+
+  // {min} / {range} → "2" / "2 or 3" (or "2+" when the bundle size adds
+  // nothing). Without a live discount they read as the bundle size alone.
+  // A missing amount drops its "save {discount}" clause instead of
+  // leaving "and save" hanging.
+  function bundleThresholdTokens(template, bd, results) {
+    var t = String(template || '');
+    if (!/\{(min|range)\}/.test(t) && !(bd && /\{discount\}/.test(t) && !discountText(bd))) return t;
+    var min = bd ? bd.minQty : Math.max(2, Math.floor(Number(results.bundleSize) || 2));
+    var target = bd ? bundleTarget(bd, results) : min;
+    var range = target > min ? min + ' or ' + target : min + '+';
+    t = t.replace(/\{range\}/g, range).replace(/\{min\}/g, String(min));
+    if (!bd || !discountText(bd)) t = t.replace(/[\s,]*(?:and\s+)?save\s*\{discount\}/gi, '');
+    return t;
+  }
+
+  // "% Mix & match: add any 2 or 3 sets, save 15%" + progress (desktop;
+  // phones keep it slim, the bag bar carries progress there).
+  function buildGridBundleBar(bd, results, refreshers) {
+    var bar = el('div', 'gq-gr-bundle');
+    bar.appendChild(el('span', 'gq-gr-bundle-badge', '%'));
+    var amount = discountText(bd);
+    var target = bundleTarget(bd, results);
+    var template = results.bundleLabel && /\{(min|range|discount)\}/.test(results.bundleLabel)
+      ? results.bundleLabel
+      : '**Mix & match:** add any {range} and save {discount}';
+    var text = bundleThresholdTokens(template, bd, results)
+      .replace(/\{count\}/g, String(target))
+      .replace(/\{discount\}/g, amount);
+    bar.appendChild(el('span', 'gq-gr-bundle-text', renderAccent(text).replace(/<span class="gq-accent">/g, '<strong>').replace(/<\/span>/g, '</strong>')));
+    var progress = el('span', 'gq-gr-bundle-progress');
+    bar.appendChild(progress);
+    refreshers.push(function() {
+      var bag = gridBag();
+      progress.innerHTML = '';
+      progress.appendChild(gridPips(target, bag.count));
+      var unlocked = bag.count >= bd.minQty;
+      progress.appendChild(el('span', 'gq-gr-bundle-status',
+        unlocked
+          ? escapeHtml((amount ? amount + ' off ' : 'Discount ') + 'unlocked ✓')
+          : '<strong>' + bag.count + ' of ' + bd.minQty + '</strong> added'));
+      bar.classList.toggle('is-unlocked', unlocked);
+    });
+    return bar;
+  }
+
+  // Phone bag bar: bundle progress (or a count) + View bag with the total.
+  function buildGridBagBar(bd, refreshers) {
+    var bar = el('div', 'gq-gr-bagbar');
+    var left = el('div', 'gq-gr-bagbar-left');
+    var link = el('a', 'gq-add-btn gq-gr-bagbar-btn', 'View bag');
+    link.href = '/cart';
+    bar.appendChild(left);
+    bar.appendChild(link);
+    var target = bd ? bundleTarget(bd, config.results || {}) : 0;
+    refreshers.push(function() {
+      var bag = gridBag();
+      left.innerHTML = '';
+      bar.classList.toggle('is-empty', bag.count === 0 && !bd);
+      if (bd) {
+        var line = el('span', 'gq-gr-bagbar-line');
+        line.appendChild(gridPips(target, bag.count));
+        line.appendChild(el('span', 'gq-gr-bagbar-count',
+          escapeHtml(bag.count >= bd.minQty ? 'Bundle unlocked' : bag.count + ' of ' + bd.minQty + ' added')));
+        left.appendChild(line);
+        var more = bd.minQty - bag.count;
+        var amount = discountText(bd);
+        left.appendChild(el('span', 'gq-gr-bagbar-sub', escapeHtml(more > 0
+          ? 'Add ' + more + ' more' + (amount ? ' to save ' + amount : ' to unlock your bundle discount')
+          : (amount ? amount + ' off applied at checkout' : 'Discount applied at checkout'))));
+      } else {
+        left.appendChild(el('span', 'gq-gr-bagbar-count', escapeHtml(bag.count + ' in your bag')));
+      }
+      link.textContent = bag.count > 0 && bag.cents > 0 ? 'View bag · ' + formatMoney(bag.cents) : 'View bag';
+    });
+    return bar;
+  }
+
+  function buildGridCard(m, idx, definitive, hasPhotoNow, results, bd, refreshAll, pendingKey) {
+    var key = matchKey(m);
+    var card = el('div', 'gq-gr-card');
+    var media = el('div', 'gq-media gq-gr-media');
+    var img = el('img', 'gq-media-img');
+    img.alt = m.title || m.productName || '';
+    img.loading = idx < 2 ? 'eager' : 'lazy';
+    media.appendChild(img);
+    // Same claim rule as the featured layout: "Best match" only when the
+    // merchant's rules (not a fallback ordering) put this set first.
+    if (idx === 0 && state.matrixApplied) {
+      media.appendChild(el('span', 'gq-pill gq-pill--top gq-gr-pill', escapeHtml(results.bestMatchPill || 'Best match')));
+    }
+    card.appendChild(media);
+
+    var href = m.productHandle
+      ? '/products/' + encodeURIComponent(m.productHandle) +
+        (m.variantNumericId ? '?variant=' + encodeURIComponent(m.variantNumericId) : '')
+      : null;
+    function linkTo(node) {
+      if (!href) return node;
+      var a = el('a', 'gq-gr-link');
+      a.href = href;
+      a.onclick = function() { trackEvent('quiz_view_product'); saveState(); };
+      a.appendChild(node);
+      return a;
+    }
+    if (href) {
+      // The photo opens the product page too ("See on me" stops its click).
+      media.classList.add('gq-gr-media--link');
+      media.onclick = function() { trackEvent('quiz_view_product'); saveState(); window.location.href = href; };
+    }
+    var body = el('div', 'gq-gr-body');
+    var name = el('h3', 'gq-gr-name', escapeHtml(m.productName || m.title || ''));
+    body.appendChild(linkTo(name));
+    var price = el('span', 'gq-gr-price', '');
+    body.appendChild(price);
+    var specBits = [];
+    // Shopify's placeholder name for a single-variant product says nothing.
+    if (m.variantTitle && !/^default title$/i.test(m.variantTitle)) specBits.push(m.variantTitle);
+    if (m.quantity > 1) specBits.push(m.quantity + ' sets');
+    if (specBits.length) body.appendChild(el('p', 'gq-gr-spec', escapeHtml(specBits.join(' · '))));
+    var why = m.tagline || (Array.isArray(m.reasons) && m.reasons[0]) || '';
+    if (why) body.appendChild(el('p', 'gq-gr-why', '<span class="gq-gr-why-mark">✓</span><span>' + escapeHtml(why) + '</span>'));
+
+    var add = null;
+    if (definitive) {
+      add = el('button', 'gq-add-btn gq-gr-add', 'Add to bag');
+      add.type = 'button';
+      body.appendChild(add);
+    }
+    if (results.matchFootnote) body.appendChild(buildMatchFootnote(results.matchFootnote));
+    card.appendChild(body);
+
+    var qty = Math.max(1, m.quantity || 1);
+    var unitCents = null; // filled in when the product JSON lands
+    // Armed as soon as a variant is known: the matched variant now, else
+    // the product's first variant once its JSON resolves. Never a dead tap.
+    function armAdd(variantId) {
+      if (!add || add.classList.contains('is-added')) return;
+      add.disabled = false;
+      add.onclick = function() {
+        if (add.disabled) return;
+        add.disabled = true;
+        add.classList.add('is-working');
+        add.textContent = 'Adding\u2026';
+        addToBag(variantId, qty).then(function() {
+          add.classList.remove('is-working');
+          if (!state.gridAdded || typeof state.gridAdded !== 'object') state.gridAdded = {};
+          state.gridAdded[key] = { c: unitCents != null ? unitCents * qty : 0, q: qty };
+          saveState();
+          showAdded();
+          refreshCartToken().then(function() { trackEvent('quiz_add_to_cart'); });
+          var bag = gridBag();
+          if (bd && bag.count >= bd.minQty && !state.gridDiscountApplied) {
+            applyBundleDiscount().then(function(applied) {
+              if (!applied) return;
+              state.gridDiscountApplied = true;
+              saveState();
+              trackEvent('quiz_bundle_discount_applied');
+              refreshAll();
+            });
+          }
+          refreshAll();
+        }).catch(function() {
+          add.classList.remove('is-working');
+          add.disabled = false;
+          add.textContent = 'Couldn\u2019t add \u2014 try again';
+          setTimeout(function() { if (!add.classList.contains('is-added')) add.textContent = 'Add to bag'; }, 2600);
+        });
+      };
+    }
+    if (add && !(state.gridAdded && Object.prototype.hasOwnProperty.call(state.gridAdded, key))) {
+      if (m.variantNumericId) armAdd(m.variantNumericId);
+      else add.disabled = true;
+    }
+
+    function showAdded() {
+      if (!add) return;
+      add.classList.add('is-added');
+      add.disabled = true;
+      add.innerHTML = BAG_CHECK_SVG + '<span>Added</span>';
+    }
+    if (state.gridAdded && Object.prototype.hasOwnProperty.call(state.gridAdded, key)) showAdded();
+
+    fetchProductJson(m.productHandle).then(function(pj) {
+      var src = imageForRec(pj, m);
+      var cached = tryonCache[key];
+      if (cached) {
+        img.src = 'data:image/jpeg;base64,' + cached;
+        media.classList.add('gq-media--tryon');
+        setMediaBadge(media);
+      } else if (src) {
+        img.src = src;
+      }
+      unitCents = priceCentsForRec(pj, m);
+      if (unitCents != null) price.textContent = formatMoney(unitCents * qty);
+      if (add && !m.variantNumericId && !add.classList.contains('is-added')) {
+        var variantId = variantIdForCart(pj, m);
+        if (m.productHandle && variantId) {
+          armAdd(variantId);
+        } else {
+          add.disabled = true;
+          add.textContent = 'Unavailable';
+        }
+      }
+
+      if (config.tryonEnabled === false || cached) return;
+      // One automatic try-on per photo: the card the shopper tapped, else
+      // the first card (a photo from the photo step).
+      var auto = hasPhotoNow && (pendingKey ? pendingKey === key : idx === 0);
+      if (auto) {
+        media.classList.add('gq-media--working');
+        applyTryonToMedia(media, img, m, idx === 0, function() { media.classList.remove('gq-media--working'); });
+        return;
+      }
+      // "See on me" on every card: with a photo it renders here; without
+      // one it asks for the photo, then renders this card first.
+      var see = el('button', 'gq-gr-see', EYE_SVG + '<span>See on me</span>');
+      see.type = 'button';
+      see.onclick = function(e) {
+        e.stopPropagation();
+        if (see.disabled) return;
+        if (!(state.hasPhoto && photoFile)) {
+          gridPendingTryon = key;
+          see.disabled = true;
+          openPhotoCapture(null, function(shadeChanged) {
+            if (shadeChanged) rerunWithShade();
+            else render('forward');
+          });
+          setTimeout(function() { see.disabled = false; }, 4000);
+          return;
+        }
+        see.disabled = true;
+        see.lastChild.textContent = 'Working…';
+        media.classList.add('gq-media--working');
+        applyTryonToMedia(media, img, m, false, function(ok, limited, capped, retryAfterMs) {
+          media.classList.remove('gq-media--working');
+          if (ok) { if (see.parentNode) see.parentNode.removeChild(see); return; }
+          if (capped) { see.lastChild.textContent = 'Try-on limit reached'; return; }
+          var waitMs = limited ? (retryAfterMs || 30000) : 0;
+          if (limited) see.lastChild.textContent = 'Ready in ' + Math.ceil(waitMs / 1000) + 's…';
+          setTimeout(function() {
+            see.disabled = false;
+            see.lastChild.textContent = 'See on me';
+          }, waitMs);
+        });
+      };
+      media.appendChild(see);
+    });
+    return card;
+  }
+
+  // Email capture as a card under the grid results ("Save your matches").
+  // Same form, validation and discount reveal as every other placement.
+  function gridLeadCard() {
+    if (!leadActive() || state.leadDone) return null;
+    var lead = config.lead || {};
+    if (!state.leadViewed) {
+      state.leadViewed = true;
+      saveState();
+      trackEvent('quiz_lead_view');
+    }
+    var wrap = el('section', 'gq-gr-lead');
+    wrap.appendChild(el('p', 'gq-gr-lead-eyebrow', 'Save your matches'));
+    var form = tplLeadForm(lead, {
+      inline: true,
+      onDone: function(kind) {
+        state.leadDone = true;
+        saveState();
+        if (kind === 'skip') {
+          if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
+          return;
+        }
+        form.style.display = 'none';
+        wrap.appendChild(el('p', 'gq-gr-lead-done', 'Sent ✓ Check your inbox for your matches.'));
+      },
+    });
+    wrap.appendChild(form);
+    return wrap;
   }
 
   // "YOUR ANSWERS · TAP TO EDIT" — one chip per answered question; edit
@@ -3590,6 +4132,7 @@
       // Same shopper, same lead: a retake's new matches report to it too.
       leadToken: state.leadToken || null,
       leadReportedKey: null,
+      gridAdded: null,
       // v3 Routine: the name given this session survives "Try another look".
       shopperName: state.shopperName,
     };
@@ -3661,7 +4204,9 @@
   // Legacy shops: always (the shipped bonus step). Templates: hook_start
   // and gate_results; after_results renders a card inside the results.
   function tplLeadBeforeResults() {
-    if (!activeTpl()) return true;
+    // Classic grid results (migration 088) carry the capture as a card
+    // under the results instead of a step before the photo.
+    if (!activeTpl()) return !gridResultsActive();
     var p = tplEmailPlacement();
     return p === 'hook_start' || p === 'gate_results';
   }

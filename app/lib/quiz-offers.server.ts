@@ -76,6 +76,13 @@ const HANDLE_RE = /^[a-z0-9][a-z0-9_-]{0,254}$/i;
 // /discount/{code} URL would mangle).
 const CODE_RE = /^[A-Za-z0-9_-]{3,64}$/;
 
+/** products.shopify_id comes in both forms ("6535189102635" and
+ * "gid://shopify/Product/6535189102635"); offers store the bare number. */
+export function numericShopifyId(v: unknown): string | null {
+  const m = /(\d{1,20})$/.exec(String(v ?? "").trim());
+  return m ? m[1] : null;
+}
+
 function strOrNull(v: unknown, max: number): string | null {
   if (typeof v !== "string") return null;
   const t = v.trim();

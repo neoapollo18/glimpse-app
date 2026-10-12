@@ -26,7 +26,7 @@ import type { QuizDraft } from "./quiz-draft.server";
 import { getShopCurrency } from "./shop-currency.server";
 import { getBrandProfile, servedTemplateFor } from "./brand-profile.server";
 import { defaultEmailPlacement, isTemplateId, resolveQuizTokens } from "./quiz-templates";
-import { getQuizOffers, publicOffersPayload, OFFERS_DEFAULTS } from "./quiz-offers.server";
+import { getQuizOffers, numericShopifyId, publicOffersPayload, OFFERS_DEFAULTS } from "./quiz-offers.server";
 
 const SWATCH_HEX_RE = /^#[0-9a-fA-F]{3,8}$/;
 const hexOrNull = (v: unknown): string | null =>
@@ -271,6 +271,7 @@ export async function buildPreviewQuizConfig(
     introLayout: config.quiz_intro_layout,
     animationStyle: config.quiz_animation_style,
     compactLayout: config.quiz_compact_layout === true && !config.quiz_template,
+    uiStyle: config.quiz_template ? null : config.quiz_ui_style ?? null,
     // Overhaul templates (Contract 2/3): same shape as the storefront
     // endpoint so the studio canvas and the published page can't diverge.
     template: config.quiz_template,
@@ -339,6 +340,7 @@ export async function buildPreviewQuizConfig(
         : null,
       crossSell: publicOffers.crossSell,
       bundleDiscount: publicOffers.bundleDiscount,
+      layout: config.quiz_template ? null : config.quiz_results_layout ?? null,
       // v2 template results content (storefront-endpoint parity).
       ...(tplContent
         ? {
@@ -518,7 +520,7 @@ export async function buildPreviewSampleRecommend(shopId: string, draft: QuizDra
       if (!p.handle || !isLiveProduct(p)) continue;
       const image = p.image_url ?? null;
       productJson[p.handle] = {
-        id: Number(p.shopify_id) || 0,
+        id: Number(numericShopifyId(p.shopify_id)) || 0,
         handle: p.handle,
         available: true,
         featured_image: image,

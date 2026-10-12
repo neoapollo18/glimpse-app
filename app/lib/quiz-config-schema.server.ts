@@ -56,7 +56,7 @@ export interface CatalogProduct {
 const ID_RE = /^[a-z_][a-z0-9_]*$/;
 export const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
-export const QUESTION_OPTION_STYLES = ["chips", "boxed", "list", "visual", "rich", "vibe"] as const;
+export const QUESTION_OPTION_STYLES = ["chips", "boxed", "list", "visual", "rich", "vibe", "nails"] as const;
 
 const ShowIfSchema = z
   .object({

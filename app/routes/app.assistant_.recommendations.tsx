@@ -197,6 +197,7 @@ const OPTION_STYLE_CHOICES = [
   { label: "Image cards — photo grid", value: "visual" },
   { label: "Rich cards — tag chip + meter", value: "rich" },
   { label: "Two-tone swatch cards", value: "vibe" },
+  { label: "Nail swatches — color families", value: "nails" },
 ];
 type EditorRule = {
   criteria: Record<string, string>;

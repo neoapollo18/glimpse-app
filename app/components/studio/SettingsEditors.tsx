@@ -797,10 +797,31 @@ export function ResultsEditor({
     setValues((prev) => ({ ...prev, [key]: value }));
     schedule("copy", key, value);
   };
+  const [resultsLayout, setResultsLayout] = useState<string>(settings.quiz_results_layout === "grid" ? "grid" : "");
   const disabled = chatBusy;
   return (
     <BlockStack gap="400">
       <EditorHeader title="Results slide" saveState={saveState} />
+      {!isTemplateId(settings.quiz_template) && (
+        <Select
+          label="Results layout"
+          options={[
+            { label: "Featured match (best match large, others below)", value: "" },
+            { label: "Grid (equal cards, add each to bag)", value: "grid" },
+          ]}
+          value={resultsLayout}
+          disabled={disabled}
+          onChange={(v) => {
+            setResultsLayout(v);
+            schedule("copy", "quiz_results_layout", v === "grid" ? "grid" : null);
+          }}
+          helpText={
+            resultsLayout === "grid"
+              ? "Equal product cards with See on me and Add to bag, your answers in one line, a mix-and-match bar when a bundle discount is live (Sell more), and email capture as a card under the results instead of its own step."
+              : undefined
+          }
+        />
+      )}
       {error && (
         <Banner tone="critical" onDismiss={clearError}>
           {error}
@@ -817,20 +838,24 @@ export function ResultsEditor({
           <CopyField label="Also matched label" fieldKey="quiz_also_matched_label" values={values} setValue={setValue} disabled={disabled} />
         </div>
       </InlineStack>
-      <InlineStack gap="200">
-        <div style={{ flex: 1, minWidth: 130 }}>
-          <CopyField label="View product button" fieldKey="quiz_view_product_label" values={values} setValue={setValue} disabled={disabled} />
-        </div>
-        <div style={{ flex: 1, minWidth: 130 }}>
-          <CopyField label="Retake link" fieldKey="quiz_retake_label" values={values} setValue={setValue} disabled={disabled} />
-        </div>
-      </InlineStack>
+      {/* Grid cards link the name and photo and say "Add to bag"; these
+          two only drive the featured layout. */}
+      {resultsLayout !== "grid" && (
+        <InlineStack gap="200">
+          <div style={{ flex: 1, minWidth: 130 }}>
+            <CopyField label="View product button" fieldKey="quiz_view_product_label" values={values} setValue={setValue} disabled={disabled} />
+          </div>
+          <div style={{ flex: 1, minWidth: 130 }}>
+            <CopyField label="Add to cart template" fieldKey="quiz_add_button_template" values={values} setValue={setValue} disabled={disabled} helpText="{price} inserts the price" />
+          </div>
+        </InlineStack>
+      )}
       <InlineStack gap="200">
         <div style={{ flex: 1, minWidth: 130 }}>
           <CopyField label="Show matches label" fieldKey="quiz_show_matches_label" values={values} setValue={setValue} disabled={disabled} />
         </div>
         <div style={{ flex: 1, minWidth: 130 }}>
-          <CopyField label="Add to cart template" fieldKey="quiz_add_button_template" values={values} setValue={setValue} disabled={disabled} helpText="{price} inserts the price" />
+          <CopyField label="Retake link" fieldKey="quiz_retake_label" values={values} setValue={setValue} disabled={disabled} />
         </div>
       </InlineStack>
       <CopyField
@@ -848,12 +873,18 @@ export function ResultsEditor({
         The &ldquo;add all&rdquo; bundle button, bundle discounts and add-on products live under{" "}
         <strong>Sell more</strong> in the left rail.
       </Text>
-      <Text as="h4" variant="headingSm">
-        Try-on upsell
-      </Text>
-      <CopyField label="Title" fieldKey="quiz_upsell_title" values={values} setValue={setValue} disabled={disabled} />
-      <CopyField label="Body" fieldKey="quiz_upsell_body" values={values} setValue={setValue} disabled={disabled} multiline={2} />
-      <CopyField label="Button" fieldKey="quiz_upsell_cta" values={values} setValue={setValue} disabled={disabled} />
+      {/* Grid results have no try-on banner: "See on me" on each card is
+          the try-on entry point. */}
+      {resultsLayout !== "grid" && (
+        <>
+          <Text as="h4" variant="headingSm">
+            Try-on upsell
+          </Text>
+          <CopyField label="Title" fieldKey="quiz_upsell_title" values={values} setValue={setValue} disabled={disabled} />
+          <CopyField label="Body" fieldKey="quiz_upsell_body" values={values} setValue={setValue} disabled={disabled} multiline={2} />
+          <CopyField label="Button" fieldKey="quiz_upsell_cta" values={values} setValue={setValue} disabled={disabled} />
+        </>
+      )}
     </BlockStack>
   );
 }
@@ -943,7 +974,11 @@ export function ThemeEditor({
     quiz_body_font_override: str(settings, "quiz_body_font_override"),
     quiz_heading_weight_override: str(settings, "quiz_heading_weight_override"),
   }));
-  const [compact, setCompact] = useState<boolean>(settings.quiz_compact_layout === true);
+  // One "Layout" choice over two settings: Boutique (migration 088)
+  // implies the compact layout, so both keys move together.
+  const [layout, setLayout] = useState<"" | "compact" | "boutique">(() =>
+    settings.quiz_ui_style === "boutique" ? "boutique" : settings.quiz_compact_layout === true ? "compact" : "",
+  );
 
   // Colors must reach the applier as #rrggbb or null (it rejects other
   // strings); numbers as numbers or null; enums as valid values or null.
@@ -1043,15 +1078,26 @@ export function ThemeEditor({
       {/* Legacy-only controls: templates own progress + intro layout. */}
       {!hasTemplate && (
         <>
-          <Checkbox
-            label="Compact phone layout"
-            checked={compact}
+          <Select
+            label="Layout"
+            options={[
+              { label: "Standard", value: "" },
+              { label: "Compact (one step per phone screen)", value: "compact" },
+              { label: "Boutique (white cards, bottom Continue bar)", value: "boutique" },
+            ]}
+            value={layout}
             disabled={disabled}
             onChange={(v) => {
-              setCompact(v);
-              schedule("copy", "quiz_compact_layout", v);
+              const next = v as "" | "compact" | "boutique";
+              setLayout(next);
+              schedule("copy", "quiz_compact_layout", next !== "");
+              schedule("copy", "quiz_ui_style", next === "boutique" ? "boutique" : null);
             }}
-            helpText="Fits each step on one phone screen: before/after proof above the first question, two-up answer tiles, swatch chips and a full-width Continue."
+            helpText={
+              layout === "boutique"
+                ? "Compact phone layout plus white answer cards, a tinted selected state with a check, left-aligned steps and a Continue bar pinned to the bottom of the phone screen."
+                : "Compact fits each step on one phone screen: before/after proof above the first question, two-up tiles, swatch chips."
+            }
           />
           <Select
             label="Progress indicator"

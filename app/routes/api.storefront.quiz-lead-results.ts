@@ -12,6 +12,7 @@ import { formatMoneyDisplay } from "../lib/shop-currency-format";
 import { checkRateLimits, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
 import { CORS_HEADERS } from "../lib/storefront-api.server";
 import { sendResultsToKlaviyo, verifyLeadToken } from "../lib/integrations.server";
+import { numericShopifyId } from "../lib/quiz-offers.server";
 
 const MAX_PRODUCTS = 12;
 const HANDLE_RE = /^[a-z0-9][a-z0-9_-]{0,254}$/i;
@@ -92,7 +93,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     .map((h) => byHandle.get(h))
     .filter((r): r is Record<string, any> => Boolean(r && r.product_name))
     .map((r) => ({
-      productId: r.shopify_id != null ? String(r.shopify_id) : null,
+      productId: numericShopifyId(r.shopify_id),
       title: String(r.product_name).slice(0, 255),
       url: `${storeBase}/products/${encodeURIComponent(String(r.handle))}`,
       imageUrl: typeof r.image_url === "string" && /^https:\/\//.test(r.image_url) ? r.image_url : null,

@@ -440,6 +440,8 @@ const COPY_KEYS = new Set([
   "quiz_match_footnote",
   // Classic compact layout + photo-expectation line (migration 086)
   "quiz_compact_layout", "quiz_photo_note",
+  // Boutique style + grid results (migration 088)
+  "quiz_ui_style", "quiz_results_layout",
   // quiz_template/quiz_preset are deliberately NOT copy keys: template
   // switches must go through app.api.quiz-template, the only path that
   // enforces isTemplateEligible and emits template_switched telemetry.
@@ -462,6 +464,9 @@ const COPY_KEYS = new Set([
 // stray string can never violate the migration-080 CHECK constraints.
 const ENUM_COPY_KEYS: Record<string, readonly string[]> = {
   quiz_email_placement: ["hook_start", "gate_results", "after_results", "off"],
+  // Mirror migration 088's CHECKs; null (standard) clears them.
+  quiz_ui_style: ["boutique"],
+  quiz_results_layout: ["grid"],
 };
 
 // Copy keys that are booleans on the live config row — String() coercion
@@ -730,7 +735,7 @@ const optionSchema = {
         swatch2: { type: "string" },
         texture: {
           type: "string",
-          enum: ["creme", "matte", "shimmer", "sparkle", "chrome", "sheer"],
+          enum: ["creme", "matte", "shimmer", "sparkle", "chrome", "sheer", "rainbow", "french"],
           description: "finish preview drawn on the card (nail/lip finishes)",
         },
       },
