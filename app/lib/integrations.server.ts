@@ -4,7 +4,8 @@ import {
   createEvent,
   getMarketingBlocks,
   listKlaviyoLists,
-  looksLikeKlaviyoPrivateKey,
+  klaviyoKeyProblem,
+  normalizeKlaviyoKey,
   subscribeProfile,
   type KlaviyoList,
 } from "./klaviyo.server";
@@ -203,10 +204,9 @@ export async function connectKlaviyo(
   shopId: string,
   apiKeyRaw: string,
 ): Promise<{ ok: true; status: IntegrationStatus; lists: KlaviyoList[] } | { ok: false; error: string }> {
-  const apiKey = apiKeyRaw.trim();
-  if (!looksLikeKlaviyoPrivateKey(apiKey)) {
-    return { ok: false, error: "That doesn't look like a Klaviyo private API key. It starts with pk_ (Settings → API keys in Klaviyo)." };
-  }
+  const apiKey = normalizeKlaviyoKey(apiKeyRaw);
+  const keyProblem = klaviyoKeyProblem(apiKey);
+  if (keyProblem) return { ok: false, error: keyProblem };
   if (!integrationsEncryptionReady()) {
     return { ok: false, error: "Integrations aren't switched on for this Gleame installation yet. Contact support." };
   }

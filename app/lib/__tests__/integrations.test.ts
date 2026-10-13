@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeAll } from "vitest";
 
 vi.mock("../supabase.server", () => ({ supabase: {} }));
 
-import { buildEventBody, buildSubscribeBody, getMarketingBlocks, looksLikeKlaviyoPrivateKey, toE164 } from "../klaviyo.server";
+import { buildEventBody, buildSubscribeBody, getMarketingBlocks, klaviyoKeyProblem, looksLikeKlaviyoPrivateKey, toE164 } from "../klaviyo.server";
 import {
   decryptSecret,
   encryptSecret,
@@ -107,6 +107,15 @@ describe("Klaviyo payloads", () => {
   it("key shape", () => {
     expect(looksLikeKlaviyoPrivateKey("pk_0123456789abcdef0123456789abcdef01")).toBe(true);
     expect(looksLikeKlaviyoPrivateKey("AbC123")).toBe(false);
+    // Paste debris a key never contains is dropped, not rejected.
+    expect(looksLikeKlaviyoPrivateKey(" pk_0123456789abcdef\u200B0123456789abcdef01\n")).toBe(true);
+    expect(klaviyoKeyProblem("pk_0123456789abcdef0123456789abcdef01")).toBeNull();
+    expect(klaviyoKeyProblem("pk_****************************ef01")).toMatch(/hidden version/);
+    expect(klaviyoKeyProblem("AbC123")).toMatch(/public API key/);
+    expect(klaviyoKeyProblem("pk_0123")).toMatch(/cut off/);
+    expect(klaviyoKeyProblem("shpat_0123456789abcdef")).toMatch(/this starts with "shp" \(22 characters\)/);
+    // Shape beyond pk_ + length is Klaviyo's call, not ours.
+    expect(klaviyoKeyProblem("pk_0123456789abcdef_0123456789ABCDEF-01")).toBeNull();
   });
 });
 

@@ -139,7 +139,9 @@ export function IntegrationsEditor({
               type="password"
               value={apiKey}
               onChange={setApiKey}
-              autoComplete="off"
+              // "off" is ignored on password fields; "new-password" stops
+              // browsers autofilling a saved password in front of the key.
+              autoComplete="new-password"
               placeholder="pk_…"
               disabled={!status.encryptionReady || !status.available}
               helpText="In Klaviyo: Settings → Account → API keys → Create Private API Key. Give it Lists, Profiles, Subscriptions and Events access (full access or custom)."

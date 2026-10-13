@@ -27,9 +27,37 @@ export const KLAVIYO_REVISION = "2026-07-15";
 const BASE = "https://a.klaviyo.com";
 const TIMEOUT_MS = 8000;
 
-/** Private keys start with pk_; anything else is a user paste error. */
+/** Drops paste debris a key never contains: whitespace and zero-width
+ *  characters anywhere in the string, not just at the ends. */
+export function normalizeKlaviyoKey(raw: string): string {
+  return raw.replace(/[\s\u200B-\u200D\u2060\uFEFF]/g, "");
+}
+
+/** Null when the key is worth sending to Klaviyo, else a message naming
+ *  the paste mistake. Only obvious mistakes are caught here: a merchant's
+ *  real key was rejected by a stricter shape check, so Klaviyo's own
+ *  answer (401/403, see klaviyoError) is the judge of everything else. */
+export function klaviyoKeyProblem(raw: string): string | null {
+  const key = normalizeKlaviyoKey(raw);
+  if (/[*•…]|\.\.\./.test(key)) {
+    return "That's the hidden version of a key from Klaviyo's API keys list. Klaviyo shows a private key in full only once, right after you create it: create a new private key and copy it from that screen.";
+  }
+  if (/^[A-Za-z0-9]{6}$/.test(key)) {
+    return "That's your public API key (site ID). Gleame needs a private API key, which starts with pk_.";
+  }
+  if (!key.startsWith("pk_")) {
+    // The first characters say what was pasted without echoing a secret.
+    const start = key.slice(0, 3).replace(/[^A-Za-z0-9_-]/g, "?");
+    return `That doesn't look like a Klaviyo private API key: those start with pk_, this starts with "${start}" (${key.length} characters). In Klaviyo: Settings → Account → API keys.`;
+  }
+  if (key.length < 23) {
+    return "That key looks cut off. A Klaviyo private key is pk_ followed by about 34 letters and numbers: copy the whole thing.";
+  }
+  return null;
+}
+
 export function looksLikeKlaviyoPrivateKey(key: string): boolean {
-  return /^pk_[A-Za-z0-9]{20,}$/.test(key.trim());
+  return klaviyoKeyProblem(key) === null;
 }
 
 type KlaviyoResponse = { status: number; body: any };
