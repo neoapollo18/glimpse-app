@@ -2651,15 +2651,85 @@
   }
 
   // Lightweight in-step working indicator (shown over the gate while
-  // classify + recommend run — typically 1-3s).
+  // classify + recommend run — typically 1-3s). Boutique swaps the whole
+  // step for a loading screen instead: the inline spinner landed under
+  // the pinned bar on phones while the step stayed tappable, and an AI
+  // recommend can take several seconds.
   function showWorking(screenEl, caption) {
     if (!screenEl) return;
     var existing = screenEl.querySelector('.gq-working');
-    if (existing) { existing.querySelector('.gq-working-caption').textContent = caption; return; }
+    if (existing) {
+      existing.querySelector('.gq-working-caption').textContent =
+        existing.classList.contains('gq-loading-view') ? loadingNowText(caption) : caption;
+      return;
+    }
+    if (boutiqueActive() && !screenEl.classList.contains('gq-results')) {
+      screenEl.classList.add('gq-step--working');
+      screenEl.appendChild(buildLoadingView(caption));
+      var rect = root.getBoundingClientRect();
+      if (rect.top < 0) root.scrollIntoView({ block: 'start' });
+      return;
+    }
     var w = el('div', 'gq-working');
     w.appendChild(el('div', 'gq-working-spinner'));
     w.appendChild(el('p', 'gq-working-caption', escapeHtml(caption)));
     screenEl.appendChild(w);
+  }
+
+  // Undo showWorking (the step comes back, e.g. under a retry message).
+  function hideWorking(screenEl) {
+    var w = screenEl.querySelector('.gq-working');
+    if (w && w.parentNode) w.parentNode.removeChild(w);
+    screenEl.classList.remove('gq-step--working');
+  }
+
+  // The title already says "Finding your matches"; the live row names the
+  // step in progress.
+  function loadingNowText(caption) {
+    return /finding your match|matching you up/i.test(caption || '')
+      ? 'Picking your best matches'
+      : String(caption || '').replace(/\u2026$/, '');
+  }
+
+  // Boutique loading screen: the shopper's own answers tick off one by
+  // one, then the live row spins until results land.
+  function buildLoadingView(caption) {
+    var v = el('div', 'gq-working gq-loading-view');
+    v.setAttribute('role', 'status');
+    v.setAttribute('aria-live', 'polite');
+    var pips = el('div', 'gq-lv-pips');
+    pips.setAttribute('aria-hidden', 'true');
+    for (var i = 0; i < 5; i++) {
+      var pip = el('span', 'gq-lv-pip');
+      pip.style.setProperty('--i', String(i));
+      pips.appendChild(pip);
+    }
+    v.appendChild(pips);
+    v.appendChild(el('p', 'gq-gr-eyebrow gq-lv-eyebrow', 'One moment'));
+    v.appendChild(el('h2', 'gq-lv-title', 'Finding your matches'));
+    var rows = [];
+    if (flow && Array.isArray(flow.questions)) {
+      for (var qi = 0; qi < flow.questions.length && rows.length < 5; qi++) {
+        var a = state.answers[qi];
+        if (!a || !a.values || a.values.length === 0) continue;
+        rows.push(answerLabels(flow.questions[qi], a).join(', '));
+      }
+    }
+    var list = el('ul', 'gq-lv-list');
+    rows.forEach(function(text, n) {
+      var li = el('li', 'gq-lv-item',
+        '<span class="gq-lv-check">' + CHECK_MINI + '</span><span class="gq-lv-text">' + escapeHtml(text) + '</span>');
+      li.style.setProperty('--d', (n * 0.4) + 's');
+      list.appendChild(li);
+    });
+    var now = el('li', 'gq-lv-item gq-lv-item--now');
+    now.style.setProperty('--d', (rows.length * 0.4) + 's');
+    now.appendChild(el('span', 'gq-working-spinner'));
+    now.appendChild(el('span', 'gq-working-caption', escapeHtml(loadingNowText(caption))));
+    list.appendChild(now);
+    v.appendChild(list);
+    v.appendChild(el('p', 'gq-lv-note', 'Usually takes a few seconds'));
+    return v;
   }
 
   function goToResults(screenEl) {
@@ -2689,8 +2759,7 @@
       })
       .catch(function() {
         if (!screenEl) return;
-        var w = screenEl.querySelector('.gq-working');
-        if (w && w.parentNode) w.parentNode.removeChild(w);
+        hideWorking(screenEl);
         var err = screenEl.querySelector('.gq-error');
         if (!err) {
           err = el('div', 'gq-error',
@@ -2739,8 +2808,7 @@
         rerunPending = false;
         var screenEl = stageEl ? stageEl.firstElementChild : null;
         if (!screenEl) { render('forward'); return; }
-        var w = screenEl.querySelector('.gq-working');
-        if (w && w.parentNode) w.parentNode.removeChild(w);
+        hideWorking(screenEl);
         var err = screenEl.querySelector('.gq-error');
         if (!err) {
           err = el('div', 'gq-error',
@@ -3404,7 +3472,9 @@
           return;
         }
         form.style.display = 'none';
-        wrap.appendChild(el('p', 'gq-gr-lead-done', 'Sent ✓ Check your inbox for your matches.'));
+        // Neutral on purpose: an email only goes out when the store has a
+        // Klaviyo flow on the quiz events.
+        wrap.appendChild(el('p', 'gq-gr-lead-done', 'Saved \u2713 You\u2019re on the list.'));
       },
     });
     wrap.appendChild(form);

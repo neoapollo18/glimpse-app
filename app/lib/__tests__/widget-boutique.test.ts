@@ -212,6 +212,28 @@ describe("Boutique style (quiz_ui_style)", () => {
     expect(root.querySelector(".gq-step-count")!.textContent).toBe("Optional");
   });
 
+  it("photo step: skipping swaps the step for a loading screen", async () => {
+    const root = await boot(makeConfig(), "gate");
+    const step = root.querySelector(".gq-step")!;
+    (root.querySelector(".gq-cta-bar--skip .gq-skip-link") as HTMLButtonElement).click();
+    // Synchronous: the loading screen is up before recommend resolves.
+    const view = step.querySelector(".gq-loading-view")!;
+    expect(view).not.toBeNull();
+    expect(step.classList.contains("gq-step--working")).toBe(true);
+    expect(view.querySelector(".gq-lv-title")!.textContent).toBe("Finding your matches");
+    expect(view.querySelector(".gq-lv-item--now .gq-working-caption")!.textContent).toBe("Picking your best matches");
+    expect(view.getAttribute("role")).toBe("status");
+  });
+
+  it("standard classic quiz keeps the inline spinner on skip", async () => {
+    const root = await boot(makeConfig({ uiStyle: null }, { layout: null }), "gate");
+    const step = root.querySelector(".gq-step")!;
+    (root.querySelector(".gq-skip-link") as HTMLButtonElement).click();
+    expect(step.querySelector(".gq-loading-view")).toBeNull();
+    expect(step.querySelector(".gq-working")).not.toBeNull();
+    expect(step.classList.contains("gq-step--working")).toBe(false);
+  });
+
   it("standard classic quiz is untouched: no bar, no count classes", async () => {
     const root = await boot(makeConfig({ uiStyle: null }), "q2");
     expect(root.classList.contains("gq-boutique")).toBe(false);
@@ -282,6 +304,17 @@ describe("grid results (quiz_results_layout)", () => {
     await wait(20);
     expect(root.querySelector(".gq-gr-bundle")!.classList.contains("is-unlocked")).toBe(true);
     expect(root.querySelector(".gq-gr-bagbar-btn")!.textContent).toBe("View bag · $37.98");
+  });
+
+  it("email card: saving shows a neutral confirmation, not an inbox promise", async () => {
+    const root = await boot(makeConfig(), "results");
+    await wait(30);
+    const card = root.querySelector(".gq-gr-lead")!;
+    (card.querySelector(".gq-lead-input") as HTMLInputElement).value = "shopper@example.com";
+    card.querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
+    await wait(20);
+    expect(card.querySelector(".gq-gr-lead-done")!.textContent).toBe("Saved \u2713 You\u2019re on the list.");
+    expect(card.textContent).not.toContain("inbox");
   });
 
   it("no live discount: no bundle bar, no promise", async () => {
