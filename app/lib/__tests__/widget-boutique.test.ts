@@ -286,7 +286,7 @@ describe("grid results (quiz_results_layout)", () => {
     // No featured-layout pieces.
     expect(res.querySelector(".gq-answers-rail")).toBeNull();
     expect(res.querySelector(".gq-upsell")).toBeNull();
-    // Email capture is a card here, not a step before the photo.
+    // The email card: second chance after the dedicated step.
     expect(res.querySelector(".gq-gr-lead .gq-lead-input")).not.toBeNull();
     expect(res.querySelector(".gq-gr-bagbar")).not.toBeNull();
   });
@@ -315,6 +315,22 @@ describe("grid results (quiz_results_layout)", () => {
     await wait(20);
     expect(card.querySelector(".gq-gr-lead-done")!.textContent).toBe("Saved \u2713 You\u2019re on the list.");
     expect(card.textContent).not.toContain("inbox");
+  });
+
+  it("email capture is still a dedicated step after the last question", async () => {
+    const root = await boot(makeConfig(), "q4");
+    root.querySelector<HTMLButtonElement>(".gq-option--nail")!.click();
+    await wait(20);
+    root.querySelector<HTMLButtonElement>(".gq-continue-btn")!.click();
+    await wait(400);
+    const step = root.querySelector(".gq-step--lead")!;
+    expect(step).not.toBeNull();
+    expect(step.querySelector(".gq-question-title")!.textContent).toBe("Want us to send your matches?");
+    expect(step.querySelector(".gq-lead-input")).not.toBeNull();
+    // Skipping goes on to the photo step.
+    step.querySelector<HTMLButtonElement>(".gq-skip-link")!.click();
+    await wait(400);
+    expect(root.querySelector(".gq-step--lead")).toBeNull();
   });
 
   it("no live discount: no bundle bar, no promise", async () => {

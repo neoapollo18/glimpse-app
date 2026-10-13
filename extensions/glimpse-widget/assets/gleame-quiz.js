@@ -63,6 +63,8 @@
     partial: false,
     quizStarted: false,     // quiz_start fired; persisted so a mid-quiz refresh doesn't re-fire it
     leadDone: false,        // lead step submitted OR skipped — never shown twice per session
+    leadSaved: false,       // a lead was actually stored (any placement) — never ask again
+    leadCardDismissed: false, // grid results email card skipped
     leadToken: null,        // signed lead id from quiz-lead (migration 086) — reports results to the lead
     leadReportedKey: null,  // match set already reported for that lead
   };
@@ -2021,6 +2023,9 @@
     // is always true for legacy shops).
     if (leadActive() && !state.leadDone && tplLeadBeforeResults()) {
       state.screen = 'lead';
+      // One lead view per session: the grid results card (a second chance
+      // after a skipped step) must not count the same shopper again.
+      state.leadViewed = true;
       trackEvent('quiz_lead_view');
     } else {
       state.screen = 'gate';
@@ -2086,6 +2091,8 @@
         if (!res.ok) {
           throw new Error((data && data.error) || ('quiz-lead ' + res.status));
         }
+        state.leadSaved = true;
+        saveState();
         // Signed lead id (migration 086): lets results report the matches
         // to this lead without the email ever being sent again.
         if (data && typeof data.leadToken === 'string' && data.leadToken.length < 200) {
@@ -3450,10 +3457,12 @@
     return card;
   }
 
-  // Email capture as a card under the grid results ("Save your matches").
-  // Same form, validation and discount reveal as every other placement.
+  // Email capture as a card under the grid results ("Save your matches"):
+  // the second chance for a shopper who skipped the email step. Hidden once
+  // a lead is stored anywhere, or once this card itself is skipped. Same
+  // form, validation and discount reveal as every other placement.
   function gridLeadCard() {
-    if (!leadActive() || state.leadDone) return null;
+    if (!leadActive() || state.leadSaved || state.leadCardDismissed) return null;
     var lead = config.lead || {};
     if (!state.leadViewed) {
       state.leadViewed = true;
@@ -3466,6 +3475,8 @@
       inline: true,
       onDone: function(kind) {
         state.leadDone = true;
+        if (kind === 'skip') state.leadCardDismissed = true;
+        else state.leadSaved = true; // preview submits never hit the endpoint
         saveState();
         if (kind === 'skip') {
           if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
@@ -4199,6 +4210,9 @@
       // A captured/declined lead survives restarts — never re-ask the same
       // session for the email it already gave (or refused).
       leadDone: state.leadDone,
+      leadSaved: state.leadSaved,
+      leadCardDismissed: state.leadCardDismissed,
+      leadViewed: state.leadViewed,
       // Same shopper, same lead: a retake's new matches report to it too.
       leadToken: state.leadToken || null,
       leadReportedKey: null,
@@ -4274,9 +4288,10 @@
   // Legacy shops: always (the shipped bonus step). Templates: hook_start
   // and gate_results; after_results renders a card inside the results.
   function tplLeadBeforeResults() {
-    // Classic grid results (migration 088) carry the capture as a card
-    // under the results instead of a step before the photo.
-    if (!activeTpl()) return !gridResultsActive();
+    // Legacy shops always get the dedicated step. Classic grid results
+    // (migration 088) ALSO carry a card under the results, shown only when
+    // the step was skipped (gridLeadCard).
+    if (!activeTpl()) return true;
     var p = tplEmailPlacement();
     return p === 'hook_start' || p === 'gate_results';
   }
