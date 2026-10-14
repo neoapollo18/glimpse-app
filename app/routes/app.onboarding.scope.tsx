@@ -34,6 +34,8 @@ import { ensureShopExists, supabase } from "../lib/supabase.server";
 import { shopHasRealQuiz } from "../lib/quiz-draft.server";
 import { useCatalogSync } from "../lib/use-catalog-sync";
 import { writeScopeHandoff, type ScopeChip } from "../lib/onboarding-scope";
+import { getSetupOfferContact, shouldOfferSetup } from "../lib/setup-offer.server";
+import { SetupOfferModal } from "../components/SetupOfferModal";
 
 /** `/app?open=studio` with the embedded-admin params (host/shop/embedded)
  * carried over, so App Bridge doesn't re-bootstrap the frame. */
@@ -48,11 +50,12 @@ function studioUrl(request: Request): string {
 // loader for every page is pure waste (same pattern as studio.tsx).
 export const shouldRevalidate = ({ formAction, defaultShouldRevalidate }: { formAction?: string; defaultShouldRevalidate: boolean }) => {
   if (formAction?.includes("/app/api/catalog-sync")) return false;
+  if (formAction?.includes("/app/api/setup-offer")) return false;
   return defaultShouldRevalidate;
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   // A first-ever document load (deep link straight here) can arrive before
   // app.tsx's loader has created the shops row.
   await ensureShopExists(session.shop);
@@ -71,8 +74,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const syncCursor = (shop.data.catalog_sync_cursor as string | null) ?? null;
   const lastSyncedAt = (shop.data.catalog_last_synced_at as string | null) ?? null;
   const productCount = Number(shop.data.catalog_product_count ?? 0) || 0;
+  // New installs land here first: the done-for-you setup offer pops over
+  // the screen until the merchant answers it.
+  const showSetupOffer = await shouldOfferSetup(shop.data.id).catch(() => false);
+  const setupEmail = showSetupOffer ? (await getSetupOfferContact(admin)).email : "";
   return json({
     shopDomain: session.shop,
+    setupOffer: { show: showSetupOffer, email: setupEmail },
     // Never synced, a sync stopped mid-catalog, or sync is "enabled" but no
     // page ever landed (a first page that failed used to leave exactly that
     // state): start (resume) it.
@@ -161,6 +169,16 @@ async function waitForLibraryIndex(): Promise<void> {
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 export default function OnboardingScope() {
+  const { setupOffer } = useLoaderData<typeof loader>();
+  return (
+    <>
+      <OnboardingScopeScreen />
+      {setupOffer.show && <SetupOfferModal defaultEmail={setupOffer.email} source="onboarding" />}
+    </>
+  );
+}
+
+function OnboardingScopeScreen() {
   const { shopDomain, syncNeeded, syncCursor } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
 

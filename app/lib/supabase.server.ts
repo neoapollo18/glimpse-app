@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { dedupeRuleRanks } from "./rule-ranks";
 import { MAX_REFERENCE_IMAGES, parseReferenceImageUrls } from './reference-images';
 import { isOptionVisible } from './option-visibility';
+import { ALL_TIERS_FREE } from './pricing-tiers';
 
 if (!process.env.SUPABASE_URL) {
   throw new Error('SUPABASE_URL environment variable is required');
@@ -2579,6 +2580,10 @@ export async function shopHasValidAccess(shopDomain: string): Promise<boolean> {
   // Enforcement is off until Shopify-native billing is fully migrated
   // (BILLING_ENFORCED, see billing-gate.server.ts).
   if (process.env.BILLING_ENFORCED !== "true") return true;
+  // Free at every tier: no subscription to check. Leftover subscriptions
+  // were cancelled for the "Free" App Store listing (Oct 2026), which
+  // marks high-traffic shops 'cancelled' below.
+  if (ALL_TIERS_FREE) return true;
   const { data, error } = await supabase
     .from('shops')
     .select('*')

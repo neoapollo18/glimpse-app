@@ -55,3 +55,58 @@ export async function sendOnboardingCompleteEmail(
     );
   }
 }
+
+const escapeHtml = (s: string) =>
+  s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+
+/**
+ * A merchant said yes to the free done-for-you setup popup. Goes to the
+ * team (SETUP_OFFER_EMAIL, default aaron@gleame.ai). Returns false on
+ * any delivery failure so the caller can log it; the request is also
+ * recorded in analytics_events, so a lost email is recoverable.
+ */
+export async function sendSetupRequestEmail(req: {
+  shopDomain: string;
+  shopName: string;
+  ownerName: string;
+  email: string;
+  phone: string;
+  notes: string;
+  source: string;
+}): Promise<boolean> {
+  if (!resend) {
+    console.warn("RESEND_API_KEY not set — skipping setup request email");
+    return false;
+  }
+  const storeHandle = req.shopDomain.replace(".myshopify.com", "");
+  const row = (label: string, value: string) =>
+    value ? `<p><strong>${label}:</strong> ${escapeHtml(value)}</p>` : "";
+  try {
+    const { error } = await resend.emails.send({
+      from: EMAIL_FROM,
+      to: process.env.SETUP_OFFER_EMAIL || "aaron@gleame.ai",
+      replyTo: req.email,
+      subject: `Setup request: ${req.shopName || req.shopDomain}`,
+      html: `
+        <h2>A merchant wants us to set up Gleame</h2>
+        ${row("Store", req.shopName)}
+        ${row("Shop", req.shopDomain)}
+        ${row("Owner", req.ownerName)}
+        ${row("Email", req.email)}
+        ${row("Phone", req.phone)}
+        ${row("Notes", req.notes)}
+        ${row("Asked from", req.source)}
+        <p><a href="https://admin.shopify.com/store/${encodeURIComponent(storeHandle)}">Open their Shopify admin</a> (staff access needed) · reply to this email to reach them.</p>
+        <p><strong>Requested at:</strong> ${new Date().toLocaleString("en-US", { timeZone: "America/New_York" })}</p>
+      `,
+    });
+    if (error) {
+      console.error(`[email] FAILED to send setup request for ${req.shopDomain} (from: ${EMAIL_FROM}):`, JSON.stringify(error));
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error(`[email] FAILED to send setup request for ${req.shopDomain} (from: ${EMAIL_FROM}):`, error);
+    return false;
+  }
+}

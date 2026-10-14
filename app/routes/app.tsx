@@ -23,6 +23,7 @@ export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 // scope route). The sync UIs render from the hook's own progress state.
 export const shouldRevalidate = ({ formAction, defaultShouldRevalidate }: { formAction?: string; defaultShouldRevalidate: boolean }) => {
   if (formAction?.includes("/app/api/catalog-sync")) return false;
+  if (formAction?.includes("/app/api/setup-offer")) return false;
   return defaultShouldRevalidate;
 };
 

@@ -19,6 +19,7 @@ import { ALL_TIERS_FREE, SESSION_TIERS } from "../lib/pricing-tiers";
 import {
   adminGraphql,
   billingTermsText,
+  cancelSubscription,
   createFlexSubscription,
   getActiveSubscription,
   tierForSessions,
@@ -101,8 +102,36 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin, session, redirect } = await authenticate.admin(request);
   const shopDomain = session.shop;
   const formData = await request.formData();
-  if (formData.get("intent") !== "subscribe") {
+  const intent = formData.get("intent");
+
+  // Free at every tier: a leftover subscription (Mantle-era flat plan, or
+  // a $0 flex sub) is cancelled outright rather than replaced, so no store
+  // holds a Gleame charge and the App Store listing can say "Free".
+  if (intent === "cancel") {
+    if (!ALL_TIERS_FREE) return json({ error: "Unknown intent" }, { status: 400 });
+    const subscriptionId = String(formData.get("subscriptionId") ?? "");
+    try {
+      const live = await getActiveSubscription(adminGraphql(admin));
+      if (!live || live.id !== subscriptionId) {
+        return json({ error: "That plan is no longer active. Refresh the page." }, { status: 400 });
+      }
+      const result = await cancelSubscription(adminGraphql(admin), live.id);
+      if (!result.ok) return json({ error: result.error }, { status: 500 });
+    } catch (e) {
+      return json(
+        { error: e instanceof Error ? e.message : "Couldn't reach Shopify. Try again in a moment." },
+        { status: 502 },
+      );
+    }
+    invalidateBillingCache(shopDomain);
+    return json({ cancelled: true });
+  }
+
+  if (intent !== "subscribe") {
     return json({ error: "Unknown intent" }, { status: 400 });
+  }
+  if (ALL_TIERS_FREE) {
+    return json({ error: "Gleame is free, so there's nothing to subscribe to." }, { status: 400 });
   }
 
   const state = await getShopBillingState(shopDomain);
@@ -159,8 +188,13 @@ export default function BillingPage() {
       <TitleBar title="Billing" />
       <BlockStack gap="500">
         {actionData && "error" in actionData && actionData.error && (
-          <Banner tone="critical" title="Couldn't start the subscription">
+          <Banner tone="critical" title="Something went wrong">
             {actionData.error}
+          </Banner>
+        )}
+        {actionData && "cancelled" in actionData && (
+          <Banner tone="success" title="Your old plan is cancelled">
+            You won't be charged for Gleame again.
           </Banner>
         )}
         {data.subError && (
@@ -182,6 +216,36 @@ export default function BillingPage() {
               </Text>
             </BlockStack>
           </Card>
+        ) : subscribed && ALL_TIERS_FREE ? (
+          // Leftover subscription from paid days. Cancel, don't replace:
+          // the App Store listing says "Free", so no store may hold a sub.
+          <Card>
+            <BlockStack gap="300">
+              <InlineStack gap="200" blockAlign="center">
+                <Text as="h2" variant="headingMd">Gleame is free</Text>
+                <Badge tone="success">Free</Badge>
+              </InlineStack>
+              <Text as="p" variant="bodyMd">
+                {flatSub
+                  ? `Your store still has an old fixed plan at $${sub?.recurringPriceUsd ?? 0}/month${sub?.name ? ` ("${sub.name}")` : ""}. Gleame is free now, so cancel it and you won't be billed again. Nothing in the app changes.`
+                  : "Your store still has an old usage-based plan on file. It hasn't charged you, and cancelling it changes nothing in the app."}
+              </Text>
+              <InlineStack gap="300" blockAlign="center">
+                <Button
+                  variant="primary"
+                  loading={submitting}
+                  onClick={() => {
+                    const fd = new FormData();
+                    fd.append("intent", "cancel");
+                    fd.append("subscriptionId", sub?.id ?? "");
+                    submit(fd, { method: "POST" });
+                  }}
+                >
+                  Cancel my old plan
+                </Button>
+              </InlineStack>
+            </BlockStack>
+          </Card>
         ) : flatSub ? (
           <Card>
             <BlockStack gap="300">
@@ -194,19 +258,11 @@ export default function BillingPage() {
                 You're on a fixed plan at ${sub?.recurringPriceUsd ?? 0}/month
                 {sub?.name ? ` ("${sub.name}")` : ""}. It keeps working as is.
               </Text>
-              {ALL_TIERS_FREE ? (
-                <Text as="p" variant="bodyMd">
-                  Gleame is now free at every traffic tier. Switching stops
-                  this fixed charge — one approval, and you won't be billed
-                  again unless pricing returns (you'd approve that first).
-                </Text>
-              ) : (
-                <Text as="p" variant="bodyMd">
-                  Our new traffic-based pricing adjusts your charge to your
-                  store's actual sessions each month (free under 2,500, capped
-                  at $399) — one approval, no plan changes ever again.
-                </Text>
-              )}
+              <Text as="p" variant="bodyMd">
+                Our new traffic-based pricing adjusts your charge to your
+                store's actual sessions each month (free under 2,500, capped
+                at $399) — one approval, no plan changes ever again.
+              </Text>
               <InlineStack gap="300" blockAlign="center">
                 <Button
                   variant="primary"
@@ -217,7 +273,7 @@ export default function BillingPage() {
                     submit(fd, { method: "POST" });
                   }}
                 >
-                  {ALL_TIERS_FREE ? "Switch to the free plan" : "Switch to traffic-based pricing"}
+                  Switch to traffic-based pricing
                 </Button>
                 <Text as="span" variant="bodySm" tone="subdued">
                   Approving the new plan replaces this one automatically.
@@ -233,20 +289,11 @@ export default function BillingPage() {
                 <Badge tone="success">Active</Badge>
                 {sub?.test && <Badge tone="info">Test mode</Badge>}
               </InlineStack>
-              {ALL_TIERS_FREE ? (
-                <Text as="p" variant="bodyMd">
-                  You're on Gleame's usage-based plan — and every tier is
-                  currently $0, so nothing is charged. If pricing returns,
-                  your charge follows your store's traffic and never exceeds
-                  $399/month.
-                </Text>
-              ) : (
-                <Text as="p" variant="bodyMd">
-                  You're on Gleame's usage-based plan: your monthly charge
-                  follows your store's traffic automatically, and you never pay
-                  more than $399/month.
-                </Text>
-              )}
+              <Text as="p" variant="bodyMd">
+                You're on Gleame's usage-based plan: your monthly charge
+                follows your store's traffic automatically, and you never pay
+                more than $399/month.
+              </Text>
               <InlineStack gap="600">
                 <BlockStack gap="050">
                   <Text as="span" variant="bodySm" tone="subdued">Current tier</Text>
@@ -283,9 +330,8 @@ export default function BillingPage() {
               </InlineStack>
               <Text as="p" variant="bodyMd">
                 Every Gleame feature is included at no charge, whatever your
-                store's traffic. There's nothing to approve and nothing will
-                be billed. If pricing ever changes, you'll review and approve
-                it on Shopify's billing page before anything is charged.
+                store's traffic. There's no plan to approve and nothing is
+                billed.
               </Text>
             </BlockStack>
           </Card>

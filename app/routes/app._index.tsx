@@ -25,6 +25,8 @@ import {
   getQuizEngagement,
   getOnboardingState,
 } from "../lib/supabase.server";
+import { shouldOfferSetup } from "../lib/setup-offer.server";
+import { SetupOfferModal } from "../components/SetupOfferModal";
 
 // Z0 (V3-SPEC Part 1): the setup wizard, its step components, the manual
 // catalog-sync button and the OVERHAUL_ONBOARDING gate are gone. A shop
@@ -50,7 +52,14 @@ interface LoaderData {
   };
   totalTransformations: number;
   quizMatches: number;
+  setupOffer: { show: boolean; email: string };
 }
+
+// The setup-offer popup's answers don't change anything this page shows.
+export const shouldRevalidate = ({ formAction, defaultShouldRevalidate }: { formAction?: string; defaultShouldRevalidate: boolean }) => {
+  if (formAction?.includes("/app/api/setup-offer")) return false;
+  return defaultShouldRevalidate;
+};
 
 // ============================================================
 // Loader
@@ -61,16 +70,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shopDomain = session.shop;
 
   let ownerName = "";
+  let shopEmail = "";
   try {
     const response = await admin.graphql(`
       query GetShopOwner {
         shop {
           shopOwnerName
+          email
         }
       }
     `);
     const data = await response.json();
     ownerName = data.data?.shop?.shopOwnerName || "";
+    shopEmail = data.data?.shop?.email || "";
   } catch (error) {
     console.error("Error fetching shop owner name:", error);
   }
@@ -144,12 +156,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     throw redirect(`/app/onboarding/scope${search}`);
   }
 
+  // Done-for-you setup offer: only while the quiz isn't live, and (once a
+  // quiz exists) only for shops that built it through self-serve onboarding.
+  const showSetupOffer =
+    !quiz.quizLive &&
+    (await shouldOfferSetup(shopRow?.id, { selfServeOnly: quiz.questions > 0 }).catch(() => false));
+
   return json<LoaderData>({
     shopDomain,
     ownerName,
     quiz,
     totalTransformations: transformCountRes?.count ?? 0,
     quizMatches: quizEngagement?.resultsShown ?? 0,
+    setupOffer: { show: showSetupOffer, email: shopEmail },
   });
 };
 
@@ -231,6 +250,7 @@ function DashboardView({
   quiz,
   totalTransformations,
   quizMatches,
+  setupOffer,
   navigate,
 }: {
   ownerName: string;
@@ -238,6 +258,7 @@ function DashboardView({
   quiz: LoaderData["quiz"];
   totalTransformations: number;
   quizMatches: number;
+  setupOffer: LoaderData["setupOffer"];
   navigate: ReturnType<typeof useNavigate>;
 }) {
   const ownerFirstName = ownerName ? ownerName.split(" ")[0] : "";
@@ -481,6 +502,8 @@ function DashboardView({
       {/* Mounted ONLY while open: rendering the App Bridge Modal closed
           calls .hide() on the not-yet-upgraded ui-modal element and crashes
           the page. Also gated on the client-minted navToken. */}
+      {setupOffer.show && !studioOpen && <SetupOfferModal defaultEmail={setupOffer.email} source="dashboard" />}
+
       {studioOpen && navToken && (
         <Modal
           variant="max"
@@ -500,7 +523,7 @@ function DashboardView({
 // ============================================================
 
 export default function Dashboard() {
-  const { shopDomain, ownerName, quiz, totalTransformations, quizMatches } = useLoaderData<typeof loader>();
+  const { shopDomain, ownerName, quiz, totalTransformations, quizMatches, setupOffer } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
 
   return (
@@ -510,6 +533,7 @@ export default function Dashboard() {
       quiz={quiz}
       totalTransformations={totalTransformations}
       quizMatches={quizMatches}
+      setupOffer={setupOffer}
       navigate={navigate}
     />
   );

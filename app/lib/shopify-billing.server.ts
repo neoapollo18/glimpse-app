@@ -214,6 +214,27 @@ export async function createFlexSubscription(
   return { ok: true, confirmationUrl: result.confirmationUrl, subscriptionId: result.appSubscription.id };
 }
 
+const SUBSCRIPTION_CANCEL_MUTATION = `
+  mutation GleameCancel($id: ID!) {
+    appSubscriptionCancel(id: $id) {
+      appSubscription { id status }
+      userErrors { field message }
+    }
+  }
+`;
+
+/** Ends a subscription immediately; no merchant approval needed. */
+export async function cancelSubscription(
+  graphql: GraphqlFn,
+  subscriptionId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const data = await graphql(SUBSCRIPTION_CANCEL_MUTATION, { id: subscriptionId });
+  const result = data?.appSubscriptionCancel;
+  const userError = result?.userErrors?.[0];
+  if (userError) return { ok: false, error: `${userError.field ?? ""} ${userError.message}`.trim() };
+  return { ok: true };
+}
+
 const USAGE_RECORD_MUTATION = `
   mutation GleameTierUsage($lineItemId: ID!, $price: MoneyInput!, $description: String!, $idempotencyKey: String!) {
     appUsageRecordCreate(
