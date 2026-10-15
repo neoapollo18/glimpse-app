@@ -448,8 +448,31 @@
       .catch(function() { return cartToken; });
   }
 
+  // Mirrors every funnel event into Shopify Customer Events as a custom
+  // event ("gleame_quiz_start", ...) so the merchant's own ad pixels can see
+  // the quiz: a Custom Pixel subscribes and forwards to Meta, TikTok, etc.
+  // (docs/integrations/meta-pixel.md). Shopify.analytics.publish queues
+  // until the pixel manager loads and only reaches pixels the shopper's
+  // consent allows. On-store previews stay out of the merchant's ad data.
+  function publishPixelEvent(eventType) {
+    if (window.GLEAME_QUIZ_FORCE || window.GLEAME_QUIZ_STORE_PREVIEW) return;
+    try {
+      var analytics = window.Shopify && window.Shopify.analytics;
+      if (!analytics || typeof analytics.publish !== 'function') return;
+      var data = { eventType: eventType, widget: 'quiz', device: isMobile() ? 'mobile' : 'desktop' };
+      if (eventType === 'quiz_results_shown' && Array.isArray(state.matches)) {
+        data.matchCount = state.matches.length;
+        data.products = state.matches.slice(0, 12).map(function(m) {
+          return { handle: m.productHandle || null, name: m.productName || null };
+        });
+      }
+      analytics.publish('gleame_' + eventType, data);
+    } catch (e) {}
+  }
+
   function trackEvent(eventType) {
     if (PREVIEW) return; // draft previews never pollute analytics
+    publishPixelEvent(eventType);
     try {
       var payload = {
         shopDomain: shopDomain,
