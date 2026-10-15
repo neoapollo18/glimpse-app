@@ -17,7 +17,13 @@ import {
   deleteQuestionGuidance,
   getRecommendationCounts,
   getChatAssistantConfig,
+  getConfiguredProducts,
+  saveChatAssistantConfig,
+  mapRecommendationTuning,
+  type ChatAssistantConfig,
 } from "../lib/supabase.server";
+import type { MatchProduct, MatchSettings } from "../components/studio/MatchSettingsEditor";
+import { validateMatchSettingsPatch } from "../lib/match-settings";
 import {
   captureLiveConfig,
   saveLiveQuizConfig,
@@ -72,7 +78,14 @@ import {
   type MatchingData,
   type MatchesSelection,
 } from "../components/studio/MatchesTab";
-import { LiveTab, PublishSheet, isPreviewOnly, templateAwaitingPublish } from "../components/studio/PublishStep";
+import {
+  LiveStatusControl,
+  PublishSheet,
+  TemplatePendingBanner,
+  VersionHistoryModal,
+  isPreviewOnly,
+  templateAwaitingPublish,
+} from "../components/studio/PublishStep";
 import { TemplateGallery } from "../components/studio/TemplateGallery";
 import { ImagesRail } from "../components/studio/ImagesRail";
 import { FlowMap } from "../components/studio/FlowMap";
@@ -304,7 +317,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   await rememberShopCurrency(shop.id, (q) => admin.graphql(q)).catch(() => null);
 
   // Lazy migration from the draft era: park any leftover draft row in
-  // version history (restorable from the Live step) BEFORE reading live.
+  // version history (restorable from the top bar) BEFORE reading live.
   const legacy = await archiveLegacyDraft(shop.id).catch(() => ({ archived: false }));
 
   const emptyLibrary: StudioLibraryStatus = { status: null, error: null, imageCount: 0, indexedAt: null };
@@ -349,6 +362,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
   Object.assign(settings, (draft?.settings ?? {}) as Record<string, unknown>);
+
+  // Matching settings (moved here from the retired Quiz settings page,
+  // /app/assistant): store-wide recommendation fields outside quiz_*.
+  const matchSettings: MatchSettings | null = liveConfig
+    ? {
+        numRecommendations: liveConfig.num_recommendations,
+        productScope: liveConfig.product_scope,
+        selectedProductIds: liveConfig.selected_product_ids ?? [],
+        recommendationMode: liveConfig.recommendation_mode,
+        aiGuidance: liveConfig.ai_guidance ?? "",
+        priorityProductIds: liveConfig.priority_product_ids ?? [],
+        tuning: liveConfig.recommendation_tuning,
+        photoFrameHint: liveConfig.photo_frame_hint ?? "",
+      }
+    : null;
 
   // Is the storefront quiz surface on right now? Storefront gate:
   // enabled && mode in (quiz, both) (api.storefront.quiz-config). Unknown
@@ -471,12 +499,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const slideParam = url.searchParams.get("slide") ?? "";
   const onOffers = slideParam === "offers-bundle" || slideParam === "offers-crosssell";
   const onIntegrations = slideParam === "integrations";
-  const [offers, offerCatalog, klaviyo] = await Promise.all([
+  const [offers, offerCatalog, klaviyo, matchProducts] = await Promise.all([
     onOffers ? getQuizOffers(shop.id) : Promise.resolve(null as QuizOffers | null),
     slideParam === "offers-crosssell" ? loadOfferCatalog(shop.id) : Promise.resolve(null),
     onIntegrations
       ? getKlaviyoStatus(shop.id).catch(() => unavailableIntegrationStatus())
       : Promise.resolve(null as IntegrationStatus | null),
+    // Matching panel: the product checklist for scope and priority picks.
+    slideParam === "matching"
+      ? getConfiguredProducts(shopDomain)
+          .then((rows): MatchProduct[] =>
+            (rows as Array<{ id: string; product_name?: string | null }>).map((p) => ({
+              id: p.id,
+              product_name: p.product_name ?? null,
+            })),
+          )
+          .catch((): MatchProduct[] => [])
+      : Promise.resolve(null as MatchProduct[] | null),
   ]);
 
   return json({
@@ -484,6 +523,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     offers,
     offerCatalog,
     klaviyo,
+    matchSettings,
+    matchProducts,
     apiKey: process.env.SHOPIFY_API_KEY || "",
     intercomAppId: process.env.INTERCOM_APP_ID || "",
     intercomUserJwt,
@@ -655,7 +696,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       // intent anymore. Generation is blocking; a shop without a quiz is
       // routed to /app/onboarding/scope by the client, never seeded here.
       case "set-live": {
-        // The Live step's surface toggle: the one deliberate action left
+        // The status menu's surface toggle: the one deliberate action left
         // from the publish era. Config edits are already on the site.
         const enabled = String(formData.get("enabled")) === "true";
         if (enabled) {
@@ -853,6 +894,27 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
         return json({ ok: true, intent });
       }
+      case "save-match-settings": {
+        // Matching panel + camera hint (moved from the retired Quiz settings
+        // page). A partial patch of store-wide recommendation fields, each
+        // validated the way that page's save did; keys not sent are untouched
+        // (the upsert only writes the columns it is given).
+        let raw: unknown;
+        try {
+          raw = JSON.parse(String(formData.get("patch") ?? "{}"));
+        } catch {
+          return json({ ok: false, error: "Malformed settings", intent }, { status: 400 });
+        }
+        const v = validateMatchSettingsPatch(raw, mapRecommendationTuning);
+        if (!v.ok) return json({ ok: false, error: v.error, intent });
+        const patch = v.patch as Partial<ChatAssistantConfig>;
+        try {
+          await saveChatAssistantConfig(shopDomain, patch);
+        } catch (e) {
+          return json({ ok: false, error: e instanceof Error ? e.message : "Saving failed", intent });
+        }
+        return json({ ok: true, intent, message: "Matching settings saved" });
+      }
       case "save-offers": {
         // Studio Offers (migration 086): a partial patch from the bundle or
         // cross-sell editor. Managed-discount bookkeeping is never client
@@ -955,7 +1017,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 // :quizId path param would be fake; the single /studio route carries a
 // ?tab=build|matches|live search param instead (legacy ?step= deep links
 // map onto it).
-export type StudioTab = "build" | "matches" | "live";
+// The Live tab folded into the top bar status menu + version history (2026-10-15).
+export type StudioTab = "build" | "matches";
 export type StudioLoaderData = Exclude<
   ReturnType<typeof useLoaderData<typeof loader>>,
   { billingRequired: true }
@@ -1104,7 +1167,8 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
   const tab = ((): StudioTab => {
     const t = params.get("tab") ?? params.get("step");
     if (t === "matches" || t === "logic") return "matches";
-    if (t === "live" || t === "publish") return "live";
+    // Old ?tab=live / ?step=publish links land on Build; status, on/off and
+    // version history are in the top bar now.
     return "build";
   })();
   const setTab = useCallback(
@@ -1149,7 +1213,8 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
       s === "lead" ||
       s === "offers-bundle" ||
       s === "offers-crosssell" ||
-      s === "integrations"
+      s === "integrations" ||
+      s === "matching"
     )
       return s;
     if (s?.startsWith("q:") && questions.some((q) => slideIdForQuestion(q.axisKey) === s)) return s;
@@ -1220,6 +1285,8 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
 
   // ---- V2 surfaces state ----
   const [publishOpen, setPublishOpen] = useState(false);
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [viewStoreBusy, setViewStoreBusy] = useState(false);
   const [tplBusy, setTplBusy] = useState(false);
   const [slotBusy, setSlotBusy] = useState(false);
@@ -1290,7 +1357,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
       if (slideId === "intro" || slideId === "theme" || slideId === "images") return "intro";
       if (slideId === "lead" || slideId === "integrations") return "lead";
       if (slideId === "photo") return "gate";
-      if (slideId === "results" || slideId === "offers-bundle" || slideId === "offers-crosssell") return "results";
+      if (slideId === "results" || slideId === "offers-bundle" || slideId === "offers-crosssell" || slideId === "matching") return "results";
       const qi = questions.findIndex((q) => slideIdForQuestion(q.axisKey) === slideId);
       if (qi < 0) return "intro";
       // Normalize to the screen's FIRST question: the widget renders and
@@ -1356,7 +1423,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
   // Two-way sync: clicking through the quiz INSIDE the preview advances the
   // widget, which reports its step (gleame-preview-at) — follow it in the
   // tree + editor so the settings always match what's on screen. Scoped to
-  // the BUILD iframe: the Check-matches iframe and the Live tab's version
+  // the BUILD iframe: the Check-matches iframe and the version-history
   // preview echo too, and must never steal the rail selection. With the
   // Build canvas unmounted (other tabs, flow map) there is nothing to sync,
   // so every echo is ignored; otherwise a version preview's step echo would
@@ -1430,7 +1497,9 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
       )
         return;
       if (
-        (selectedSlideRef.current === "offers-bundle" || selectedSlideRef.current === "offers-crosssell") &&
+        (selectedSlideRef.current === "offers-bundle" ||
+          selectedSlideRef.current === "offers-crosssell" ||
+          selectedSlideRef.current === "matching") &&
         slideId === "results"
       )
         return;
@@ -1730,6 +1799,25 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
             onPublishClick={() => setPublishOpen(true)}
             previewOnly={previewOnly}
             templatePending={templateAwaitingPublish(data)}
+            liveControl={
+              <LiveStatusControl
+                data={data}
+                open={statusOpen}
+                onToggle={() => setStatusOpen((v) => !v)}
+                onClose={() => setStatusOpen(false)}
+                onOpenPublish={() => {
+                  setStatusOpen(false);
+                  setPublishOpen(true);
+                }}
+                onOpenHistory={() => {
+                  setStatusOpen(false);
+                  setHistoryOpen(true);
+                }}
+              />
+            }
+            hasVersions={data.versions.length > 0}
+            onOpenHistory={() => setHistoryOpen(true)}
+            onTemplatePendingClick={() => setStatusOpen(true)}
           />
         }
         rail={
@@ -1780,7 +1868,11 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
           )
         }
         canvas={
-          tab === "matches" ? (
+          <>
+            {/* Template on but not live yet: shoppers still see the previous
+                layout (was a banner on the Live tab). */}
+            <TemplatePendingBanner data={data} />
+            {tab === "matches" ? (
             <MatchesCenter
               state={matchesState}
               matching={(data.matching ?? null) as MatchingData | null}
@@ -1789,8 +1881,6 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
               theme={canvasTheme}
               onPublish={() => setPublishOpen(true)}
             />
-          ) : tab === "live" ? (
-            <LiveTab data={data} onOpenPublish={() => setPublishOpen(true)} />
           ) : (
             <>
               {genNotice && (
@@ -1804,9 +1894,9 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
                 <div style={{ padding: "12px 16px 0" }}>
                   <Banner tone="info" title="The studio now edits your live quiz directly" onDismiss={() => setLegacyNotice(false)}>
                     Changes save to your store as you make them (the quiz still only
-                    shows to shoppers while it's turned on in the Live tab). Your
-                    old draft wasn't lost: it's in version history on the Live tab,
-                    one click to restore.
+                    shows to shoppers while it's turned on in the status menu at the
+                    top). Your old draft wasn't lost: it's in version history (the
+                    clock button at the top), one click to restore.
                   </Banner>
                 </div>
               )}
@@ -1845,7 +1935,8 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
                 />
               )}
             </>
-          )
+          )}
+          </>
         }
         panel={
           tab === "matches" ? (
@@ -1945,6 +2036,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
           ) : null
         }
       />
+      <VersionHistoryModal data={data} open={historyOpen} onClose={() => setHistoryOpen(false)} />
       <PublishSheet
         data={data}
         problems={problems}

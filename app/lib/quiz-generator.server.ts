@@ -2,7 +2,7 @@
 //
 // Save = live: generation writes the LIVE config (only for shops with no
 // real quiz content yet; the guard below refuses to stomp an existing one).
-// It never enables the storefront surface — the Live step toggle does.
+// It never enables the storefront surface — the status menu toggle does.
 // On validation failure there is exactly one repair round-trip (validator
 // errors are sent back to the model) before giving up with a friendly error.
 //

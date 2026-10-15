@@ -274,6 +274,9 @@ function DashboardView({
   const revalidator = useRevalidator();
   const studioOpen = params.get("open") === "studio";
   const studioStep = params.get("step") ?? "build";
+  // Optional rail item to open on (e.g. the retired Quiz settings page
+  // redirects here with slide=matching).
+  const studioSlide = params.get("slide");
   // Per-tab token: BroadcastChannel reaches EVERY same-origin admin tab;
   // without this a studio click navigated other dashboards too. Minted
   // client-side only — a render-time random value hydrates differently
@@ -297,6 +300,7 @@ function DashboardView({
       (prev) => {
         prev.delete("open");
         prev.delete("step");
+        prev.delete("slide");
         return prev;
       },
       { replace: true },
@@ -510,7 +514,7 @@ function DashboardView({
         <Modal
           variant="max"
           open
-          src={`/studio?tab=${studioStep}&navtoken=${navToken}`}
+          src={`/studio?tab=${studioStep}${studioSlide ? `&slide=${encodeURIComponent(studioSlide)}` : ""}&navtoken=${navToken}`}
           onHide={closeStudio}
         >
           <TitleBar title="Studio" />

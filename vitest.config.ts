@@ -4,7 +4,7 @@ import { defineConfig } from "vitest/config";
 // Remix server runtime.
 export default defineConfig({
   test: {
-    include: ["app/**/__tests__/**/*.test.ts"],
+    include: ["app/**/__tests__/**/*.test.ts", "app/**/__tests__/**/*.test.tsx"],
     environment: "node",
   },
 });

@@ -10,6 +10,8 @@ import {
   InlineStack,
   Modal,
   Text,
+  Box,
+  Popover,
 } from "@shopify/polaris";
 import type { StudioLoaderData, StudioActionData } from "../../routes/studio";
 import type { DraftProblem } from "./draft-problems";
@@ -28,9 +30,10 @@ const SCOPE_DECLINED_LINE =
 //      page default), add-to-menu checkbox (default on), one Publish
 //      action through the existing /app/api/publish-quiz mechanics, then
 //      a success state with the live URL.
-//   2. LiveTab — status header (Live/Off + URL + surface switch), version
-//      history as a simple restore list, and the placements settings
-//      link. Nothing else.
+//   2. The Live tab itself folded into the top bar (2026-10-15):
+//      LiveStatusControl (Live/Off + URL + surface switch + placements
+//      link), VersionHistoryModal (restore list with preview) and
+//      TemplatePendingBanner over the canvas.
 
 const MODE_LABELS: Record<string, string> = {
   matrix: "Rules only",
@@ -336,76 +339,160 @@ export function PublishSheet({
 }
 
 // ---------------------------------------------------------------------
-// Live tab (slim)
+// Live status + version history. The Live tab folded into the top bar
+// (2026-10-15): status and the on/off switch live in a header popover,
+// version history in a modal opened from the header, and the "template not
+// live" warning in a banner over the canvas.
 // ---------------------------------------------------------------------
 
-export function LiveTab({
-  data,
-  onOpenPublish,
-}: {
-  data: StudioLoaderData;
-  onOpenPublish: () => void;
-}) {
+/** set-live with a revalidate on success. Shared by the status popover and
+ * the template banner (each keeps its own fetcher). */
+function useSetLive() {
   const fetcher = useFetcher<StudioActionData>();
   const revalidator = useRevalidator();
-  const [confirmingRestore, setConfirmingRestore] = useState<string | null>(null);
-  // The preview token is pinned when the preview opens: data.previewToken is
-  // re-minted on every loader run, and a src change would reload the
-  // preview back to its intro mid-click-through.
-  const [previewing, setPreviewing] = useState<{ id: string; token: string } | null>(null);
-  const previewingVersionRow = previewing
-    ? (data.versions as any[]).find((v) => v?.id === previewing.id) ?? null
-    : null;
   const processedRef = useRef<StudioActionData | null>(null);
-
   useEffect(() => {
     if (fetcher.state !== "idle" || !fetcher.data) return;
     if (processedRef.current === fetcher.data) return;
     processedRef.current = fetcher.data;
-    if (fetcher.data.ok && (fetcher.data.intent === "set-live" || fetcher.data.intent === "restore")) {
-      setConfirmingRestore(null);
-      revalidator.revalidate();
-    }
+    if (fetcher.data.ok && fetcher.data.intent === "set-live") revalidator.revalidate();
   }, [fetcher.state, fetcher.data, revalidator]);
-
-  const settings = (data.draft?.settings ?? {}) as Record<string, unknown>;
-  const questionCount = data.draft?.flow.questions.length ?? 0;
-  const ruleCount = data.draft?.flow.rules.length ?? 0;
-  const mode = String(settings.recommendation_mode ?? "matrix");
-  const surfaceOn = data.quizSurfaceEnabled !== false;
-  const toggling = fetcher.state !== "idle" && fetcher.formData?.get("intent") === "set-live";
-  const matrixWithoutRules = mode === "matrix" && ruleCount === 0;
-  const liveUrl = `https://${data.shopDomain}/pages/find-my-match`;
-  const previewOnly = isPreviewOnly(data);
-  const awaitingPublish = templateAwaitingPublish(data);
-
   const setLive = (enabled: boolean) => {
     const fd = new FormData();
     fd.append("intent", "set-live");
     fd.append("enabled", String(enabled));
     fetcher.submit(fd, { method: "POST", action: "/studio" });
   };
+  return {
+    setLive,
+    toggling: fetcher.state !== "idle" && fetcher.formData?.get("intent") === "set-live",
+    error: fetcher.data && !fetcher.data.ok ? fetcher.data.error ?? null : null,
+  };
+}
+
+const statusDot = (color: string) => (
+  <span
+    aria-hidden
+    style={{ width: 8, height: 8, borderRadius: 999, background: color, display: "inline-block", flexShrink: 0 }}
+  />
+);
+
+/** Top bar "Live / Off" menu: where the quiz is, the on/off switch, and the
+ * template go-live action. */
+export function LiveStatusControl({
+  data,
+  open,
+  onToggle,
+  onClose,
+  onOpenPublish,
+  onOpenHistory,
+}: {
+  data: StudioLoaderData;
+  open: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+  onOpenPublish: () => void;
+  onOpenHistory: () => void;
+}) {
+  const { setLive, toggling, error } = useSetLive();
+  const settings = (data.draft?.settings ?? {}) as Record<string, unknown>;
+  const questionCount = data.draft?.flow.questions.length ?? 0;
+  const ruleCount = data.draft?.flow.rules.length ?? 0;
+  const mode = String(settings.recommendation_mode ?? "matrix");
+  const surfaceOn = data.quizSurfaceEnabled !== false;
+  const matrixWithoutRules = mode === "matrix" && ruleCount === 0;
+  const liveUrl = `https://${data.shopDomain}/pages/find-my-match`;
+  const previewOnly = isPreviewOnly(data);
+  const awaitingPublish = templateAwaitingPublish(data);
+  const label = surfaceOn ? "Live" : previewOnly ? "Preview only" : "Off";
 
   return (
-    <div style={{ flex: 1, overflowY: "auto" }}>
-      <div style={{ maxWidth: 560, margin: "0 auto", padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
-        {/* Status header */}
-        <Card>
-          <BlockStack gap="300">
-            <InlineStack align="space-between" blockAlign="center">
-              <InlineStack gap="200" blockAlign="center">
-                <Badge tone={surfaceOn ? "success" : "info"}>{surfaceOn ? "Live" : "Off"}</Badge>
-                {surfaceOn && (
-                  <a href={liveUrl} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: "#2C6ECB" }}>
-                    {liveUrl.replace(/^https:\/\//, "")}
-                  </a>
-                )}
-              </InlineStack>
-              {/* The emergency kill pauses going live, never turning off: a
-                  live template quiz keeps its Turn off switch. */}
-              {previewOnly && !surfaceOn ? (
-                <Badge tone="new">Preview only</Badge>
-              ) : surfaceOn ? (
+    <Popover
+      active={open}
+      onClose={onClose}
+      preferredAlignment="right"
+      activator={
+        // Plain button: Polaris Button takes text only, and the status dot
+        // is the point of this control.
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-label={`Quiz status: ${label}`}
+          aria-expanded={open}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            height: 32,
+            padding: "0 10px",
+            border: "1px solid #C9CCCF",
+            borderRadius: 8,
+            background: "#fff",
+            fontSize: 13,
+            fontWeight: 600,
+            color: "#202223",
+            cursor: "pointer",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {statusDot(surfaceOn ? (awaitingPublish ? "#B98900" : "#29845A") : "#8C9196")}
+          {label}
+          <span aria-hidden style={{ fontSize: 10, color: "#6D7175" }}>
+            {open ? "\u25B2" : "\u25BC"}
+          </span>
+        </button>
+      }
+    >
+      <Box padding="400" width="340px">
+        <BlockStack gap="300">
+          <InlineStack gap="200" blockAlign="center" wrap={false}>
+            <Badge tone={surfaceOn ? "success" : "info"}>{surfaceOn ? "Live" : "Off"}</Badge>
+            {surfaceOn && (
+              <a href={liveUrl} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: "#2C6ECB", overflowWrap: "anywhere" }}>
+                {liveUrl.replace(/^https:\/\//, "")}
+              </a>
+            )}
+          </InlineStack>
+          {previewOnly && (
+            <Text as="p" variant="bodySm" tone="subdued">
+              {PREVIEW_ONLY_LINE}
+            </Text>
+          )}
+          {awaitingPublish && (
+            <Banner tone="warning">
+              <BlockStack gap="200">
+                <Text as="p" variant="bodySm">
+                  Your store is still showing your previous quiz layout. Put this template live to
+                  show it where your quiz already appears.
+                </Text>
+                <InlineStack>
+                  {/* Re-sends Turn on (which stamps the template live), not
+                      the full Publish, which would also create a page and a
+                      main-menu link. */}
+                  <Button variant="primary" loading={toggling} onClick={() => setLive(true)}>
+                    Put template live
+                  </Button>
+                </InlineStack>
+              </BlockStack>
+            </Banner>
+          )}
+          <Text as="p" variant="bodySm" tone="subdued">
+            Edits save to {data.shopDomain} as you make them; shoppers see the quiz only while it's on.{" "}
+            {questionCount} {questionCount === 1 ? "question" : "questions"}
+            {ruleCount > 0 ? ` · ${ruleCount} ${ruleCount === 1 ? "rule" : "rules"}` : ""} · {MODE_LABELS[mode] ?? mode}{" "}
+            matching.
+          </Text>
+          {matrixWithoutRules && !surfaceOn && !previewOnly && (
+            <Text as="p" variant="bodySm" tone="subdued">
+              Pin products to answer paths in Check matches before turning the quiz on.
+            </Text>
+          )}
+          {error && <Banner tone="critical">{error}</Banner>}
+          {/* The emergency kill pauses going live, never turning off: a live
+              template quiz keeps its Turn off switch. */}
+          {!(previewOnly && !surfaceOn) && (
+            <InlineStack gap="200">
+              {surfaceOn ? (
                 <Button loading={toggling} onClick={() => setLive(false)}>
                   Turn off
                 </Button>
@@ -419,153 +506,196 @@ export function LiveTab({
                   Turn on
                 </Button>
               )}
-            </InlineStack>
-            {previewOnly && (
-              <Text as="p" variant="bodySm" tone="subdued">
-                {PREVIEW_ONLY_LINE}
-              </Text>
-            )}
-            {awaitingPublish && (
-              <Banner tone="warning">
-                <BlockStack gap="200">
-                  <Text as="p" variant="bodySm">
-                    Your store is still showing your previous quiz layout. Put this template live
-                    to show it to shoppers where your quiz already appears.
-                  </Text>
-                  <InlineStack>
-                    {/* The quiz is already on and placed: only the template's
-                        go-live stamp is missing, so this re-sends Turn on
-                        (which stamps it) rather than the full Publish, which
-                        would also create a page and a main-menu link. */}
-                    <Button variant="primary" loading={toggling} onClick={() => setLive(true)}>
-                      Put template live
-                    </Button>
-                  </InlineStack>
-                </BlockStack>
-              </Banner>
-            )}
-            <Text as="p" variant="bodySm" tone="subdued">
-              Edits save to {data.shopDomain} as you make them; shoppers see the quiz only while
-              it's on. {questionCount} {questionCount === 1 ? "question" : "questions"}
-              {ruleCount > 0 ? ` · ${ruleCount} ${ruleCount === 1 ? "rule" : "rules"}` : ""} ·{" "}
-              {MODE_LABELS[mode] ?? mode} matching.
-            </Text>
-            {matrixWithoutRules && !surfaceOn && !previewOnly && (
-              <Text as="p" variant="bodySm" tone="subdued">
-                Pin products to answer paths in Check matches before turning the quiz on.
-              </Text>
-            )}
-            {fetcher.data && !fetcher.data.ok && fetcher.data.error && (
-              <Banner tone="critical">{fetcher.data.error}</Banner>
-            )}
-            {!surfaceOn && !previewOnly && (
-              <InlineStack gap="200">
+              {!surfaceOn && (
                 <Button variant="plain" onClick={onOpenPublish}>
                   Publish for the first time
                 </Button>
-              </InlineStack>
-            )}
-          </BlockStack>
-        </Card>
-
-        {/* Version history */}
-        {data.versions.length > 0 && (
-          <Card>
-            <BlockStack gap="200">
-              <Text as="h3" variant="headingMd">
+              )}
+            </InlineStack>
+          )}
+          <InlineStack gap="300">
+            {data.versions.length > 0 && (
+              <Button variant="plain" onClick={onOpenHistory}>
                 Version history
-              </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                Gleame saves restore points as you edit, and before template switches and
-                restores. Preview any version, then restore it if you want it back.
-              </Text>
-              {data.versions
-                .filter((v: any) => v != null)
-                .map((v: any) => (
-                  <InlineStack key={v.id} align="space-between" blockAlign="center" wrap={false}>
-                    <Text as="span" variant="bodySm">
-                      {versionLabel(v)} · {new Date(v.createdAt).toLocaleString()}
-                    </Text>
-                    <InlineStack gap="100" wrap={false}>
-                      {data.previewToken && (
-                        <Button
-                          size="slim"
-                          variant="tertiary"
-                          onClick={() => data.previewToken && setPreviewing({ id: v.id, token: data.previewToken })}
-                        >
-                          Preview
-                        </Button>
-                      )}
-                      <Button size="slim" onClick={() => setConfirmingRestore(v.id)}>
-                        Restore
-                      </Button>
-                    </InlineStack>
-                  </InlineStack>
-                ))}
-              <Modal
-                open={previewing !== null}
-                onClose={() => setPreviewing(null)}
-                title={previewingVersionRow ? `${versionLabel(previewingVersionRow)} · ${new Date(previewingVersionRow.createdAt).toLocaleString()}` : "Version preview"}
-                size="large"
-                primaryAction={{
-                  content: "Restore this version",
-                  onAction: () => {
-                    const id = previewing?.id ?? null;
-                    setPreviewing(null);
-                    setConfirmingRestore(id);
-                  },
-                }}
-                secondaryActions={[{ content: "Close", onAction: () => setPreviewing(null) }]}
-              >
-                <Modal.Section flush>
-                  {previewing && (
-                    <iframe
-                      key={previewing.id}
-                      title="Version preview"
-                      src={`/quiz-preview.html?token=${encodeURIComponent(previewing.token)}&version=${encodeURIComponent(previewing.id)}`}
-                      style={{ width: "100%", height: "70vh", border: 0, display: "block" }}
-                    />
-                  )}
-                </Modal.Section>
-              </Modal>
-              <Modal
-                open={confirmingRestore !== null}
-                onClose={() => setConfirmingRestore(null)}
-                title="Restore this version?"
-                primaryAction={{
-                  content: "Restore",
-                  loading: fetcher.state !== "idle" && fetcher.formData?.get("intent") === "restore",
-                  onAction: () => {
-                    if (!confirmingRestore) return;
-                    const fd = new FormData();
-                    fd.append("intent", "restore");
-                    fd.append("versionId", confirmingRestore);
-                    fetcher.submit(fd, { method: "POST", action: "/studio" });
-                  },
-                }}
-                secondaryActions={[{ content: "Cancel", onAction: () => setConfirmingRestore(null) }]}
-              >
-                <Modal.Section>
-                  <Text as="p">
-                    This version replaces your current quiz configuration, including its template.
-                    Your current setup is saved first, so a restore is always reversible. If the
-                    quiz is on, shoppers see the restored version right away (a template that
-                    isn't live yet still needs to be put live from this tab).
-                  </Text>
-                </Modal.Section>
-              </Modal>
-            </BlockStack>
-          </Card>
-        )}
+              </Button>
+            )}
+            <Button variant="plain" url={themeEditorUrl(data.shopDomain)} external>
+              Placement settings
+            </Button>
+          </InlineStack>
+        </BlockStack>
+      </Box>
+    </Popover>
+  );
+}
 
-        {/* Placements settings link */}
-        <InlineStack gap="200">
-          <Button variant="plain" url={themeEditorUrl(data.shopDomain)} external>
-            Placement settings in the theme editor
-          </Button>
-        </InlineStack>
-      </div>
+/** Banner over the canvas while a template quiz is on but its template
+ * isn't served yet: shoppers still see the previous layout. */
+export function TemplatePendingBanner({ data }: { data: StudioLoaderData }) {
+  const { setLive, toggling, error } = useSetLive();
+  if (!templateAwaitingPublish(data)) return null;
+  return (
+    <div style={{ padding: "12px 16px 0" }}>
+      <Banner tone="warning">
+        <BlockStack gap="200">
+          <Text as="p" variant="bodySm">
+            Your store is still showing your previous quiz layout. Put this template live to show it
+            to shoppers where your quiz already appears.
+          </Text>
+          {error && (
+            <Text as="p" variant="bodySm" tone="critical">
+              {error}
+            </Text>
+          )}
+          <InlineStack>
+            <Button variant="primary" loading={toggling} onClick={() => setLive(true)}>
+              Put template live
+            </Button>
+          </InlineStack>
+        </BlockStack>
+      </Banner>
     </div>
+  );
+}
+
+type HistoryView = { kind: "list" } | { kind: "preview"; id: string; token: string } | { kind: "confirm"; id: string };
+
+/** Version history: the list, a preview of any version, and restore. One
+ * modal whose content steps list -> preview -> confirm. */
+export function VersionHistoryModal({
+  data,
+  open,
+  onClose,
+}: {
+  data: StudioLoaderData;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const fetcher = useFetcher<StudioActionData>();
+  const revalidator = useRevalidator();
+  // The preview token is pinned when a preview opens: data.previewToken is
+  // re-minted on every loader run, and a src change would reload the
+  // preview back to its intro mid-click-through.
+  const [view, setView] = useState<HistoryView>({ kind: "list" });
+  const processedRef = useRef<StudioActionData | null>(null);
+  const close = () => {
+    setView({ kind: "list" });
+    onClose();
+  };
+  useEffect(() => {
+    if (fetcher.state !== "idle" || !fetcher.data) return;
+    if (processedRef.current === fetcher.data) return;
+    processedRef.current = fetcher.data;
+    if (fetcher.data.ok && fetcher.data.intent === "restore") {
+      revalidator.revalidate();
+      close();
+    }
+    // close/revalidator identities don't matter for a once-per-response effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetcher.state, fetcher.data]);
+
+  const versions = (data.versions as any[]).filter((v) => v != null);
+  const rowFor = (id: string) => versions.find((v) => v.id === id) ?? null;
+  const restoring = fetcher.state !== "idle" && fetcher.formData?.get("intent") === "restore";
+  const restoreError =
+    fetcher.state === "idle" && fetcher.data && !fetcher.data.ok && fetcher.data.intent === "restore"
+      ? fetcher.data.error ?? "Restore failed"
+      : null;
+
+  if (view.kind === "preview") {
+    const row = rowFor(view.id);
+    return (
+      <Modal
+        open={open}
+        onClose={close}
+        size="large"
+        title={row ? `${versionLabel(row)} · ${new Date(row.createdAt).toLocaleString()}` : "Version preview"}
+        primaryAction={{ content: "Restore this version", onAction: () => setView({ kind: "confirm", id: view.id }) }}
+        secondaryActions={[{ content: "Back", onAction: () => setView({ kind: "list" }) }]}
+      >
+        <Modal.Section flush>
+          <iframe
+            key={view.id}
+            title="Version preview"
+            src={`/quiz-preview.html?token=${encodeURIComponent(view.token)}&version=${encodeURIComponent(view.id)}`}
+            style={{ width: "100%", height: "70vh", border: 0, display: "block" }}
+          />
+        </Modal.Section>
+      </Modal>
+    );
+  }
+
+  if (view.kind === "confirm") {
+    return (
+      <Modal
+        open={open}
+        onClose={close}
+        title="Restore this version?"
+        primaryAction={{
+          content: "Restore",
+          loading: restoring,
+          onAction: () => {
+            const fd = new FormData();
+            fd.append("intent", "restore");
+            fd.append("versionId", view.id);
+            fetcher.submit(fd, { method: "POST", action: "/studio" });
+          },
+        }}
+        secondaryActions={[{ content: "Cancel", onAction: () => setView({ kind: "list" }) }]}
+      >
+        <Modal.Section>
+          <BlockStack gap="200">
+            <Text as="p">
+              This version replaces your current quiz configuration, including its template. Your
+              current setup is saved first, so a restore is always reversible. If the quiz is on,
+              shoppers see the restored version right away (a template that isn't live yet still
+              needs to be put live from the status menu in the top bar).
+            </Text>
+            {restoreError && <Banner tone="critical">{restoreError}</Banner>}
+          </BlockStack>
+        </Modal.Section>
+      </Modal>
+    );
+  }
+
+  return (
+    <Modal open={open} onClose={close} title="Version history" secondaryActions={[{ content: "Close", onAction: close }]}>
+      <Modal.Section>
+        <BlockStack gap="300">
+          <Text as="p" variant="bodySm" tone="subdued">
+            Gleame saves restore points as you edit, and before template switches and restores.
+            Preview any version, then restore it if you want it back.
+          </Text>
+          {versions.length === 0 ? (
+            <Text as="p" variant="bodySm" tone="subdued">
+              No restore points yet. They appear as you edit the quiz.
+            </Text>
+          ) : (
+            versions.map((v) => (
+              <InlineStack key={v.id} align="space-between" blockAlign="center" wrap={false}>
+                <Text as="span" variant="bodySm">
+                  {versionLabel(v)} · {new Date(v.createdAt).toLocaleString()}
+                </Text>
+                <InlineStack gap="100" wrap={false}>
+                  {data.previewToken && (
+                    <Button
+                      size="slim"
+                      variant="tertiary"
+                      onClick={() => data.previewToken && setView({ kind: "preview", id: v.id, token: data.previewToken })}
+                    >
+                      Preview
+                    </Button>
+                  )}
+                  <Button size="slim" onClick={() => setView({ kind: "confirm", id: v.id })}>
+                    Restore
+                  </Button>
+                </InlineStack>
+              </InlineStack>
+            ))
+          )}
+        </BlockStack>
+      </Modal.Section>
+    </Modal>
   );
 }
 

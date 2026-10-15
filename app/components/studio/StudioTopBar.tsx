@@ -1,11 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Badge, Button, Popover, Box, BlockStack, Text, ProgressBar, Tooltip } from "@shopify/polaris";
+import { ClockIcon } from "@shopify/polaris-icons";
 import { useCatalogSync } from "../../lib/use-catalog-sync";
 import type { StudioTab } from "../../routes/studio";
 
 // V2-SPEC 2.1 top bar (56px): inline-editable quiz name left; centered
-// segmented tabs Build / Check matches / Live; right side "View on my
-// store" (secondary) + "Publish" (primary, opens the publish sheet).
+// segmented tabs Build / Check matches; right side the Live/Off status menu,
+// version history, "View on my store" (secondary) + "Publish" (primary,
+// opens the publish sheet). The Live tab folded into the status menu and
+// the history button on 2026-10-15.
 //
 // V3-SPEC 6.4: while the QUIZ_TEMPLATES_LIVE=off emergency kill is set, a
 // template quiz cannot reach the storefront, so "View on my store" is
@@ -19,12 +22,11 @@ const PREVIEW_ONLY_TIP =
   "Template quizzes are paused on storefronts right now. While paused, shoppers see the classic quiz layout.";
 
 const TEMPLATE_PENDING_TIP =
-  "Your quiz is on, but shoppers still see your previous quiz layout. Open the Live tab to put this template live.";
+  "Your quiz is on, but shoppers still see your previous quiz layout. Open the status menu to put this template live.";
 
 const TABS: Array<{ id: StudioTab; label: string }> = [
   { id: "build", label: "Build" },
   { id: "matches", label: "Check matches" },
-  { id: "live", label: "Live" },
 ];
 
 export function StudioTopBar({
@@ -40,6 +42,10 @@ export function StudioTopBar({
   onPublishClick,
   previewOnly,
   templatePending,
+  liveControl,
+  hasVersions,
+  onOpenHistory,
+  onTemplatePendingClick,
 }: {
   tab: StudioTab;
   onTabChange: (t: StudioTab) => void;
@@ -56,6 +62,11 @@ export function StudioTopBar({
   /** Template quiz that is on but not put live yet: the canvas shows the
    * template while shoppers get the classic layout (spec 6.4). */
   templatePending?: boolean;
+  /** The Live/Off status menu (LiveStatusControl). */
+  liveControl: ReactNode;
+  hasVersions: boolean;
+  onOpenHistory: () => void;
+  onTemplatePendingClick: () => void;
 }) {
   const [syncOpen, setSyncOpen] = useState(false);
   const sync = useCatalogSync();
@@ -126,7 +137,7 @@ export function StudioTopBar({
         )}
         {!previewOnly && templatePending && (
           <button
-            onClick={() => onTabChange("live")}
+            onClick={onTemplatePendingClick}
             style={{ border: 0, background: "transparent", padding: 0, cursor: "pointer", flexShrink: 0 }}
           >
             <Tooltip content={TEMPLATE_PENDING_TIP}>
@@ -136,9 +147,9 @@ export function StudioTopBar({
         )}
         {problemCount > 0 && (
           <button
-            onClick={() => onTabChange("live")}
+            onClick={onPublishClick}
             style={{ border: 0, background: "transparent", padding: 0, cursor: "pointer", flexShrink: 0 }}
-            title="These questions are hidden from shoppers until fixed. See the Live tab."
+            title="These questions are hidden from shoppers until fixed. Open Publish to see which."
           >
             <Badge tone="critical">Hidden</Badge>
           </button>
@@ -234,6 +245,12 @@ export function StudioTopBar({
       </div>
 
       <div className="studio-topbar-right">
+        {liveControl}
+        {hasVersions && (
+          <Tooltip content="Version history">
+            <Button icon={ClockIcon} onClick={onOpenHistory} accessibilityLabel="Version history" />
+          </Tooltip>
+        )}
         {!previewOnly && (
           <Button onClick={onViewStore} loading={viewStoreBusy} disabled={!hasDraft}>
             View on my store

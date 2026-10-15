@@ -64,7 +64,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // too (unlike the storefront, it does NOT filter mid-edit blank
   // questions — the merchant needs to see what they're building).
   //
-  // ?version=<id>: render a version-history snapshot instead (Live tab
+  // ?version=<id>: render a version-history snapshot instead (history
   // "Preview" before Restore). Shop-checked: the token's shop must own it.
   const versionId = url.searchParams.get("version");
   let draft;

@@ -13,6 +13,7 @@ import {
   CartDiscountIcon,
   CartUpIcon,
   ConnectIcon,
+  TargetIcon,
 } from "@shopify/polaris-icons";
 import type { StudioFlow } from "./types";
 import { answerLabel } from "./types";
@@ -482,6 +483,10 @@ export function SlideTree({
             )}
           </>
         )}
+        {/* Store-wide recommendation settings (moved from the retired
+            Quiz settings page). */}
+        <RailHeader>Settings</RailHeader>
+        {row("matching", "Matching", { icon: TargetIcon })}
         {/* Sell more (migration 086): store-wide commerce + connections,
             kept below the screens so the quiz itself stays the focus. */}
         <RailHeader>Sell more</RailHeader>

@@ -21,6 +21,7 @@ import type { StudioLoaderData, StudioTab, StudioActionData } from "../../routes
 import { IntroEditor, LeadEditor, PhotoEditor, ResultsEditor, ThemeEditor } from "./SettingsEditors";
 import { BundleEditor, CrossSellEditor, type OfferCatalogItem } from "./OffersEditors";
 import { IntegrationsEditor } from "./IntegrationsEditor";
+import { CameraHintField, MatchSettingsEditor, type MatchProduct, type MatchSettings } from "./MatchSettingsEditor";
 import type { QuizOffers } from "../../lib/quiz-offers.server";
 import type { IntegrationStatus } from "../../lib/integrations.server";
 import type { StudioFlow, StudioQuestion, StudioOption } from "./types";
@@ -194,8 +195,35 @@ function EditBody({
     );
   }
   if (selectedSlide === "photo") {
+    const match = (data.matchSettings ?? null) as MatchSettings | null;
     return (
-      <PhotoEditor key={`photo:${chatEpoch}`} settings={settings} chatBusy={chatBusy} onPreviewUpdate={onPreviewUpdate} />
+      <BlockStack gap="400">
+        <PhotoEditor key={`photo:${chatEpoch}`} settings={settings} chatBusy={chatBusy} onPreviewUpdate={onPreviewUpdate} />
+        {match && <CameraHintField key={`camera-hint:${chatEpoch}`} initial={match.photoFrameHint} disabled={chatBusy} />}
+      </BlockStack>
+    );
+  }
+  if (selectedSlide === "matching") {
+    const match = (data.matchSettings ?? null) as MatchSettings | null;
+    const products = (data.matchProducts ?? null) as MatchProduct[] | null;
+    if (!match || !products) {
+      return (
+        <InlineStack gap="200" blockAlign="center">
+          <Spinner size="small" />
+          <Text as="span" tone="subdued">
+            Loading…
+          </Text>
+        </InlineStack>
+      );
+    }
+    return (
+      <MatchSettingsEditor
+        key={`matching:${chatEpoch}`}
+        initial={match}
+        products={products}
+        chatBusy={chatBusy}
+        onPreviewReload={onPreviewReload}
+      />
     );
   }
   if (selectedSlide === "results") {

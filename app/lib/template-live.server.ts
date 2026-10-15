@@ -12,7 +12,7 @@
 //   - quiz_template     = what the merchant is building (Studio, gallery,
 //                         generator write it freely)
 //   - template_live_at  = the merchant deliberately published a template quiz
-//                         (Publish sheet, Live tab "Turn on", dashboard mode
+//                         (Publish sheet, top bar status menu "Turn on", dashboard mode
 //                         switch that turns the quiz on). Turning the quiz
 //                         off clears it: the app's surface writer does, and
 //                         migration 081's trigger enforces it for every

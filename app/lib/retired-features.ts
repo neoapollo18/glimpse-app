@@ -17,6 +17,12 @@
 export const TRYON_WIDGETS_RETIRED = true;
 export const CHAT_ASSISTANT_RETIRED = true;
 
+// The Quiz settings page (/app/assistant, formerly "AI Assistant") moved
+// into Studio on 2026-10-15: its recommendation settings are Studio's
+// Matching panel and the camera hint sits on Photo & try-on. The route now
+// opens Studio there; its code is kept.
+export const QUIZ_SETTINGS_PAGE_RETIRED = true;
+
 const RETIRED_CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",

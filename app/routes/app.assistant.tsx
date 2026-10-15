@@ -1,5 +1,5 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
-import { json } from "@remix-run/node";
+import { json, redirect } from "@remix-run/node";
 import { useLoaderData, useFetcher } from "@remix-run/react";
 import {
   Page,
@@ -33,9 +33,19 @@ import {
   type RecommendationTuning,
 } from "../lib/supabase.server";
 import { templateLivePatchForSave } from "../lib/template-live.server";
-import { CHAT_ASSISTANT_RETIRED } from "../lib/retired-features";
+import { CHAT_ASSISTANT_RETIRED, QUIZ_SETTINGS_PAGE_RETIRED } from "../lib/retired-features";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
+  // Retired (lib/retired-features.ts): open Studio's Matching panel instead.
+  // Same redirect shape as app.assistant_.quiz.tsx: the incoming query
+  // (shop/host/embedded) is load-bearing in the embedded admin.
+  if (QUIZ_SETTINGS_PAGE_RETIRED) {
+    const url = new URL(request.url);
+    url.searchParams.set("open", "studio");
+    url.searchParams.set("step", "build");
+    url.searchParams.set("slide", "matching");
+    return redirect(`/app?${url.searchParams.toString()}`);
+  }
   const { session } = await authenticate.admin(request);
   const shopDomain = session.shop;
 
