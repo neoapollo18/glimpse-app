@@ -12,9 +12,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // still carries this script tag gets a valid no-op script.
   if (TRYON_WIDGETS_RETIRED) return retiredScript();
   try {
-    // Read the widget file from the public directory, rewriting its hardcoded
-    // SHOPIFY_APP_URL assignment to the env-derived origin.
-    const widgetPath = join(process.cwd(), "public", "widget-embed.js");
+    // Read the widget file, rewriting its hardcoded SHOPIFY_APP_URL
+    // assignment to the env-derived origin. It lives in retired/, not
+    // public/: remix-serve serves public/ files statically (immutable cache)
+    // before any route runs, which bypassed this loader entirely.
+    const widgetPath = join(process.cwd(), "retired", "widget-embed.js");
     const widgetContent = readFileSync(widgetPath, "utf-8").replace(
       /const SHOPIFY_APP_URL = '[^']*';/,
       `const SHOPIFY_APP_URL = '${APP_URL}';`,
