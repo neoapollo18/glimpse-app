@@ -1,12 +1,16 @@
 import { type LoaderFunctionArgs } from "@remix-run/node";
 import { readFileSync } from "fs";
 import { join } from "path";
+import { TRYON_WIDGETS_RETIRED, retiredScript } from "../lib/retired-features";
 
 // Derive the widget's API origin from the deployed app URL so a host move
 // (custom domain, Render rename) doesn't silently break embeds.
 const APP_URL = (process.env.SHOPIFY_APP_URL || "https://glimpse-app-charles.onrender.com").replace(/\/+$/, "");
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
+  // Try-on widgets are retired (lib/retired-features.ts): a theme that
+  // still carries this script tag gets a valid no-op script.
+  if (TRYON_WIDGETS_RETIRED) return retiredScript();
   try {
     // Read the widget file from the public directory, rewriting its hardcoded
     // SHOPIFY_APP_URL assignment to the env-derived origin.

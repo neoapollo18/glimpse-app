@@ -873,7 +873,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         if (before.bundleDiscountMode === "managed" && nextMode !== "managed" && !("bundleDiscountCode" in v.patch)) {
           v.patch.bundleDiscountCode = null;
         }
-        const discountFieldsChanged = ["bundleDiscountMode", "bundleDiscountType", "bundleDiscountValue", "bundleDiscountMinQty"].some(
+        const discountFieldsChanged = ["bundleDiscountMode", "bundleDiscountType", "bundleDiscountValue", "bundleDiscountMinQty", "bundleDiscountOncePerCustomer"].some(
           (k) => k in v.patch,
         );
         // A managed discount already in Shopify follows the edit (update,

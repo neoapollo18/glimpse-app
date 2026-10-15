@@ -21,8 +21,14 @@ import {
 } from "../lib/supabase.server";
 import { checkRateLimit, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
 import { safeFetch } from "../lib/safe-fetch.server";
+import { TRYON_WIDGETS_RETIRED, retiredJson, retiredPreflight } from "../lib/retired-features";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
+  // Try-on widgets are retired (lib/retired-features.ts); the code below is
+  // kept but unreachable while the flag is on.
+  if (TRYON_WIDGETS_RETIRED) {
+    return request.method === "OPTIONS" ? retiredPreflight() : retiredJson();
+  }
   try {
     // Handle CORS preflight requests first
     if (request.method === "OPTIONS") {

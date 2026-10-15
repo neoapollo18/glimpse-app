@@ -1,6 +1,7 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { getConfiguredVariantsForStorefront } from "../lib/supabase.server";
+import { TRYON_WIDGETS_RETIRED } from "../lib/retired-features";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -11,6 +12,11 @@ const CORS_HEADERS = {
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: CORS_HEADERS });
+  }
+  // Try-on widgets are retired (lib/retired-features.ts): answer with the
+  // widgets' own "no variants" shape so a stale page degrades quietly.
+  if (TRYON_WIDGETS_RETIRED) {
+    return json({ variants: [] }, { headers: CORS_HEADERS });
   }
 
   const url = new URL(request.url);

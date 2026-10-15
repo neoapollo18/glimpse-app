@@ -21,6 +21,7 @@ import { checkRateLimit, getClientIP } from "../lib/rate-limiter.server";
 import { neverMatches } from "../lib/answer-rules-layer";
 import { normalizeGlobalRules } from "../lib/answer-rules-shared";
 import { isValidImageFile } from "../lib/storefront-api.server";
+import { CHAT_ASSISTANT_RETIRED, retiredJson } from "../lib/retired-features";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -41,6 +42,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: CORS_HEADERS });
   }
+  // Chat assistant is retired (lib/retired-features.ts); code kept below.
+  if (CHAT_ASSISTANT_RETIRED) return retiredJson();
 
   if (request.method !== "POST") {
     return json({ error: "Method not allowed" }, { status: 405, headers: CORS_HEADERS });

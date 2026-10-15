@@ -1503,7 +1503,7 @@ export default function Products() {
                     All Products
                   </Text>
                   <Text as="p" variant="bodyMd" tone="subdued">
-                    Select products to enable for AI virtual try-on
+                    Select products shoppers can try on in the quiz
                   </Text>
                 </BlockStack>
 
@@ -1933,7 +1933,7 @@ export default function Products() {
                                                     Swatch Color (Optional)
                                                   </Text>
                                                   <Text as="p" variant="bodySm" tone="subdued">
-                                                    Displayed as a color dot in the widget's variant selector.
+                                                    Displayed as a color dot next to this shade.
                                                   </Text>
                                                   <InlineStack gap="200" blockAlign="center">
                                                     <input
@@ -2378,7 +2378,7 @@ export default function Products() {
                       onChange={(v) => setVariantDisplayColor(v)}
                       placeholder="#c4506a"
                       autoComplete="off"
-                      helpText="Hex color shown as a swatch in the widget shade picker"
+                      helpText="Hex color shown as this shade's swatch"
                     />
                   </div>
                   {variantDisplayColor && (

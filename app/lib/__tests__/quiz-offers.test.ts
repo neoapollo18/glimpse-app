@@ -160,9 +160,21 @@ describe("Shopify discount input", () => {
       context: { all: "ALL" },
       customerGets: { value: { percentage: 0.2 }, items: { all: true } },
       minimumRequirement: { quantity: { greaterThanOrEqualToQuantity: "3" } },
-      appliesOncePerCustomer: true,
+      appliesOncePerCustomer: false,
     });
     expect(input).not.toHaveProperty("customerSelection");
+  });
+
+  it("one use per customer is the merchant's opt-in, off by default", () => {
+    const base = { code: "QUIZBUNDLE-X", type: "percentage" as const, value: 20, minQty: 3 };
+    expect(buildBundleDiscountInput(base).appliesOncePerCustomer).toBe(false);
+    expect(buildBundleDiscountInput({ ...base, oncePerCustomer: true }).appliesOncePerCustomer).toBe(true);
+    expect(OFFERS_DEFAULTS.bundleDiscountOncePerCustomer).toBe(false);
+    expect(mapOffersRow({ bundle_discount_once_per_customer: true }).bundleDiscountOncePerCustomer).toBe(true);
+    expect(mapOffersRow({}).bundleDiscountOncePerCustomer).toBe(false);
+    const v = validateOffersPatch({ bundleDiscountOncePerCustomer: true });
+    expect(v.ok && v.patch.bundleDiscountOncePerCustomer).toBe(true);
+    expect(validateOffersPatch({ bundleDiscountOncePerCustomer: "yes" }).ok).toBe(false);
   });
 
   it("fixed amount splits across the bundle; legacy schemas get customerSelection", () => {

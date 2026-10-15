@@ -27,6 +27,7 @@ import {
 } from "../lib/supabase.server";
 import { shouldOfferSetup } from "../lib/setup-offer.server";
 import { SetupOfferModal } from "../components/SetupOfferModal";
+import { TRYON_WIDGETS_RETIRED } from "../lib/retired-features";
 
 // Z0 (V3-SPEC Part 1): the setup wizard, its step components, the manual
 // catalog-sync button and the OVERHAUL_ONBOARDING gate are gone. A shop
@@ -337,7 +338,8 @@ function DashboardView({
 
   // "Shoppers matched" = quiz matches for quiz-first shops; only legacy
   // try-on shops (VTO configured, quiz not live) see the selfie try-on count.
-  const showTryOnStat = quiz.vtoEnabled && !quiz.quizLive;
+  // Off while the try-on widgets are retired (lib/retired-features.ts).
+  const showTryOnStat = !TRYON_WIDGETS_RETIRED && quiz.vtoEnabled && !quiz.quizLive;
   const storeHandle = shopDomain.replace(".myshopify.com", "");
   const themeEditorUrl = `https://admin.shopify.com/store/${storeHandle}/themes/current/editor?template=index&addAppBlockId=${THEME_EXT_UUID}/gleame-quiz&target=newAppsSection`;
 

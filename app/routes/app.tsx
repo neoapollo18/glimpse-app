@@ -14,6 +14,7 @@ import { shopNeedsBilling } from "../lib/billing-gate.server";
 import { ensureShopExists, shopHasTryOnConfig } from "../lib/supabase.server";
 import { isSkinAnalysisEnabledForShop } from "../lib/skin-analysis.server";
 import { syncShopDomains } from "../lib/domain-sync.server";
+import { CHAT_ASSISTANT_RETIRED } from "../lib/retired-features";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
@@ -150,7 +151,7 @@ export default function App() {
             Dashboard
           </Link>
           {isTryOnEnabled && <Link to="/app/products">Products</Link>}
-          {isTryOnEnabled && <Link to="/app/assistant">AI Assistant</Link>}
+          {isTryOnEnabled && <Link to="/app/assistant">{CHAT_ASSISTANT_RETIRED ? "Quiz settings" : "AI Assistant"}</Link>}
           {isSkinAnalysisEnabled && <Link to="/app/skin-analysis">Skin Analysis</Link>}
           <Link to="/app/analytics">Analytics</Link>
           <Link to="/app/billing">Billing</Link>

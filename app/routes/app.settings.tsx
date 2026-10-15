@@ -164,7 +164,7 @@ export default function Settings() {
               <Card background="bg-surface-secondary">
                 <BlockStack gap="400">
                   <Text as="p" variant="bodyMd">
-                    If the quiz or chat isn't appearing on your storefront, use the troubleshooting tools below.
+                    If the quiz isn't appearing on your storefront, use the troubleshooting tools below.
                   </Text>
                   
                   <InlineStack gap="300" wrap={true}>
@@ -189,19 +189,21 @@ export default function Settings() {
 
               {/* Try-on entry point. The nav hides Products/AI Assistant for
                   shops with no configured try-on prompts (quiz-first pivot),
-                  which would otherwise make try-on impossible to bootstrap. */}
+                  which would otherwise make try-on impossible to bootstrap.
+                  Product-page try-on widgets are retired; this now sets up the
+                  quiz's own try-on step. */}
               <Card>
                 <BlockStack gap="300">
                   <Text as="h2" variant="headingMd">
-                    AI try-on
+                    Quiz try-on
                   </Text>
                   <Text as="p" variant="bodySm" tone="subdued">
-                    Let shoppers see products on their own photo. Configure a
-                    transformation prompt on your first product to enable the
-                    try-on pages in the navigation.
+                    Let quiz shoppers see their matches on their own photo.
+                    Configure a try-on prompt on your first product to turn on
+                    the try-on settings pages in the navigation.
                   </Text>
                   <InlineStack>
-                    <Button url="/app/products">Set up product try-on</Button>
+                    <Button url="/app/products">Set up quiz try-on</Button>
                   </InlineStack>
                 </BlockStack>
               </Card>

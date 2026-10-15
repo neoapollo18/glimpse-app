@@ -43,6 +43,9 @@ export interface QuizOffers {
   bundleDiscountShopifyId: string | null;
   bundleDiscountSyncedAt: string | null;
   bundleDiscountNote: string | null;
+  /** Managed discount only: Shopify honors the code once per customer.
+   * Off by default, so returning customers get every bundle's saving. */
+  bundleDiscountOncePerCustomer: boolean;
 }
 
 export const OFFERS_DEFAULTS: QuizOffers = {
@@ -60,6 +63,7 @@ export const OFFERS_DEFAULTS: QuizOffers = {
   bundleDiscountShopifyId: null,
   bundleDiscountSyncedAt: null,
   bundleDiscountNote: null,
+  bundleDiscountOncePerCustomer: false,
 };
 
 export const CROSS_SELL_TITLE_DEFAULT = "Complete the look";
@@ -153,6 +157,7 @@ export function mapOffersRow(row: Record<string, unknown> | null | undefined): Q
     bundleDiscountShopifyId: strOrNull(row.bundle_discount_shopify_id, 200),
     bundleDiscountSyncedAt: typeof row.bundle_discount_synced_at === "string" ? row.bundle_discount_synced_at : null,
     bundleDiscountNote: strOrNull(row.bundle_discount_note, 120),
+    bundleDiscountOncePerCustomer: row.bundle_discount_once_per_customer === true,
   };
 }
 
@@ -193,6 +198,7 @@ export type OffersPatch = Partial<
     | "bundleDiscountMinQty"
     | "bundleDiscountCode"
     | "bundleDiscountNote"
+    | "bundleDiscountOncePerCustomer"
   >
 >;
 
@@ -275,6 +281,12 @@ export function validateOffersPatch(
     patch.bundleDiscountCode = code || null;
   }
   if (has("bundleDiscountNote")) patch.bundleDiscountNote = strOrNull(r.bundleDiscountNote, 120);
+  if (has("bundleDiscountOncePerCustomer")) {
+    if (typeof r.bundleDiscountOncePerCustomer !== "boolean") {
+      return { ok: false, error: "bundleDiscountOncePerCustomer must be true or false" };
+    }
+    patch.bundleDiscountOncePerCustomer = r.bundleDiscountOncePerCustomer;
+  }
 
   // Cross-field: the percentage is a whole percent the widget can show.
   const type = patch.bundleDiscountType;
@@ -301,6 +313,7 @@ const ROW_KEY: Record<keyof OffersPatch, string> = {
   bundleDiscountMinQty: "bundle_discount_min_qty",
   bundleDiscountCode: "bundle_discount_code",
   bundleDiscountNote: "bundle_discount_note",
+  bundleDiscountOncePerCustomer: "bundle_discount_once_per_customer",
 };
 
 export function offersPatchToRow(patch: OffersPatch): Record<string, unknown> {
@@ -477,6 +490,8 @@ export function buildBundleDiscountInput(args: {
   value: number;
   minQty: number;
   startsAt?: string;
+  /** Limit the code to one use per customer (merchant option, default off). */
+  oncePerCustomer?: boolean;
   /** Pre-2025-10 schemas only know the (since deprecated)
    * customerSelection field; the sync retries with it when a schema
    * rejects `context`. */
@@ -497,10 +512,10 @@ export function buildBundleDiscountInput(args: {
       quantity: { greaterThanOrEqualToQuantity: String(args.minQty) },
     },
     combinesWith: { orderDiscounts: false, productDiscounts: false, shippingDiscounts: true },
-    // A code is public once any shopper has seen it, and Shopify applies it
-    // to any cart that meets the minimum: one use per customer keeps a
-    // leaked code from becoming a standing store-wide sale.
-    appliesOncePerCustomer: true,
+    // Off by default: the minimum item count is the protection, and a
+    // once-per-customer code silently charges returning customers full
+    // price on their next bundle. Merchants who want it can turn it on.
+    appliesOncePerCustomer: args.oncePerCustomer === true,
   };
 }
 
@@ -600,6 +615,7 @@ export async function syncManagedBundleDiscount(
       value: offers.bundleDiscountValue!,
       minQty,
       legacyEligibility,
+      oncePerCustomer: offers.bundleDiscountOncePerCustomer,
     });
 
   const create = async (code: string) => {

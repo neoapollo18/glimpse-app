@@ -162,6 +162,7 @@ export function BundleEditor({
     initialOffers?.bundleDiscountMode === "code" ? initialOffers.bundleDiscountCode ?? "" : "",
   );
   const [note, setNote] = useState(initialOffers?.bundleDiscountNote ?? "");
+  const [oncePerCustomer, setOncePerCustomer] = useState(initialOffers?.bundleDiscountOncePerCustomer === true);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: "success" | "critical" | "warning"; text: string } | null>(null);
@@ -217,6 +218,9 @@ export function BundleEditor({
         bundleDiscountMinQty: minQty.trim() === "" ? null : Number(minQty),
         bundleDiscountNote: note.trim() || null,
         ...(mode === "code" ? { bundleDiscountCode: code.trim() || null } : {}),
+        // Only Gleame's own discount carries this; a merchant code's usage
+        // limits live on their discount in Shopify.
+        ...(mode === "managed" ? { bundleDiscountOncePerCustomer: oncePerCustomer } : {}),
       };
       const fd = new FormData();
       fd.append("intent", "save-offers");
@@ -335,7 +339,7 @@ export function BundleEditor({
         onChange={touch((v: string) => setMode(v as QuizOffers["bundleDiscountMode"]))}
         helpText={
           mode === "managed"
-            ? "Gleame creates one discount code in your Shopify admin and keeps it in sync with what you set here. It's applied to the cart automatically when shoppers add the bundle. Like any code, Shopify honors it on any cart that meets the minimum, so it's limited to one use per customer."
+            ? "Gleame creates one discount code in your Shopify admin and keeps it in sync with what you set here. It's applied to the cart automatically when shoppers add the bundle. Like any code, Shopify honors it on any cart that meets the minimum."
             : mode === "code"
               ? "Create the code in Shopify first (Discounts → Amount off products, with a minimum quantity). The quiz applies it when shoppers add the bundle."
               : "The bundle adds at full price."
@@ -395,6 +399,19 @@ export function BundleEditor({
                 : `The quiz applies your code once the bundle has at least this many items. Blank = ${defaultMin}.`
             }
           />
+          {mode === "managed" && (
+            <Checkbox
+              label="Limit to one use per customer"
+              checked={oncePerCustomer}
+              onChange={touch(setOncePerCustomer)}
+              disabled={disabled}
+              helpText={
+                oncePerCustomer
+                  ? "Shopify applies the code once per customer. Returning customers pay full price on later bundles."
+                  : "Every qualifying bundle gets the discount, including repeat customers. The minimum item count still applies."
+              }
+            />
+          )}
           <TextField
             label="Note under the button"
             value={note}

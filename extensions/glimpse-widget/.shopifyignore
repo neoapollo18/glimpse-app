@@ -1,0 +1,31 @@
+# Retired 2026-10-15 at Shopify App Review's request: the product-page
+# try-on widgets and the chat assistant embed are no longer app features.
+# The files stay in the repo; listing them here keeps them out of
+# `shopify app deploy`, so the blocks leave the theme editor and stop
+# rendering on every store. Delete a line (and redeploy) to bring one back.
+# The quiz block and the assets it shares (gleame-camera.*) stay deployed.
+
+# Try-on widget blocks
+blocks/glimpse-banner.liquid
+blocks/glimpse-button.liquid
+blocks/transformation-widget-integrated.liquid
+blocks/transformation-widget-integrated-horizontal.liquid
+blocks/transformation-widget.liquid
+
+# Try-on widget assets (nothing else loads these)
+assets/glimpse-banner.js
+assets/glimpse-banner.css
+assets/glimpse-button.js
+assets/glimpse-button.css
+assets/widget-integrated.js
+assets/transformation-widget-integrated.css
+assets/widget-integrated-horizontal.js
+assets/transformation-widget-integrated-horizontal.css
+assets/widget.js
+assets/transformation-widget.css
+assets/gleame-variants.css
+
+# Chat assistant app embed ("Gleame AI Assistant")
+blocks/gleame-chat.liquid
+assets/gleame-chat.js
+assets/gleame-chat.css

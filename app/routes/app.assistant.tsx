@@ -33,6 +33,7 @@ import {
   type RecommendationTuning,
 } from "../lib/supabase.server";
 import { templateLivePatchForSave } from "../lib/template-live.server";
+import { CHAT_ASSISTANT_RETIRED } from "../lib/retired-features";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -435,7 +436,7 @@ export default function AssistantConfig() {
 
   return (
     <Page>
-      <TitleBar title="AI Assistant" />
+      <TitleBar title={CHAT_ASSISTANT_RETIRED ? "Quiz settings" : "AI Assistant"} />
       <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
         {/* Left: Settings */}
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -457,12 +458,12 @@ export default function AssistantConfig() {
                 <InlineStack align="space-between" blockAlign="start" gap="500">
                   <BlockStack gap="100">
                     <Text as="h2" variant="headingMd">
-                      AI Shopping Assistant
+                      {CHAT_ASSISTANT_RETIRED ? "Find My Match quiz" : "AI Shopping Assistant"}
                     </Text>
                     <Text as="p" variant="bodySm" tone="subdued">
-                      Personalized product matching for your storefront: the full-page
-                      Find My Fit quiz, an optional floating chat bubble, and AI try-on
-                      previews.
+                      {CHAT_ASSISTANT_RETIRED
+                        ? "Personalized product matching for your storefront through the full-page quiz."
+                        : "Personalized product matching for your storefront: the full-page Find My Fit quiz, an optional floating chat bubble, and AI try-on previews."}
                     </Text>
                   </BlockStack>
                   <div style={{ flexShrink: 0 }}>
@@ -479,7 +480,9 @@ export default function AssistantConfig() {
                 </InlineStack>
                 {enabled && (
                   <Banner tone="info">
-                    {assistantMode === "quiz"
+                    {CHAT_ASSISTANT_RETIRED
+                      ? 'The quiz renders through the "Gleame Quiz" section. Add it to a page in the theme editor.'
+                      : assistantMode === "quiz"
                       ? 'The quiz renders through the "Gleame Quiz" section. Add it to a page in the theme editor; the app embed is only needed for the chat bubble.'
                       : 'Make sure to enable the "Gleame AI Assistant" app embed in your theme editor for the chat bubble to appear on your storefront.'}
                   </Banner>
@@ -487,6 +490,10 @@ export default function AssistantConfig() {
               </BlockStack>
             </Card>
 
+            {/* Surface chooser: hidden while the chat assistant is retired (the
+                quiz is the only surface; Studio publishes it). */}
+            {!CHAT_ASSISTANT_RETIRED && (
+              <>
             {/* Surface — where the assistant runs on the storefront */}
             <Card>
               <BlockStack gap="400">
@@ -526,6 +533,8 @@ export default function AssistantConfig() {
                 />
               </BlockStack>
             </Card>
+              </>
+            )}
 
             {/* Quiz Page — link to dedicated sub-page */}
             <Card>
@@ -583,7 +592,7 @@ export default function AssistantConfig() {
                     Recommendations
                   </Text>
                   <Text as="p" variant="bodySm" tone="subdued">
-                    Shared by the quiz and the chat bubble.
+                    {CHAT_ASSISTANT_RETIRED ? "How many matches the quiz shows, and from which products." : "Shared by the quiz and the chat bubble."}
                   </Text>
                 </BlockStack>
                 <RangeSlider
@@ -751,11 +760,17 @@ export default function AssistantConfig() {
                   onChange={setPhotoFrameHint}
                   autoComplete="off"
                   placeholder="Position your face in the frame"
-                  helpText="Instruction inside the camera modal, used on the quiz try-on gate and in chat (e.g. “Position your nails in the frame”)"
+                  helpText={CHAT_ASSISTANT_RETIRED
+                    ? "Instruction inside the camera modal on the quiz try-on step (e.g. “Position your nails in the frame”)"
+                    : "Instruction inside the camera modal, used on the quiz try-on gate and in chat (e.g. “Position your nails in the frame”)"}
                 />
               </BlockStack>
             </Card>
 
+            {/* Chat-only settings: hidden while the chat assistant is retired
+                (lib/retired-features.ts). Values are kept and still saved as-is. */}
+            {!CHAT_ASSISTANT_RETIRED && (
+              <>
             {/* Chat appearance */}
             <CollapsibleCard
               title="Chat Appearance"
@@ -1289,6 +1304,8 @@ export default function AssistantConfig() {
                 )}
                 */}
             </CollapsibleCard>
+              </>
+            )}
 
             {/* Save */}
             <InlineStack align="end">
@@ -1299,7 +1316,8 @@ export default function AssistantConfig() {
           </BlockStack>
         </div>
 
-        {/* Right: Live Preview */}
+        {/* Right: live chat bubble preview, hidden while the chat assistant is retired. */}
+        {!CHAT_ASSISTANT_RETIRED && (
         <div style={{ width: 340, flexShrink: 0, position: "sticky", top: 16 }}>
           <Card>
             <BlockStack gap="400">
@@ -1520,6 +1538,7 @@ export default function AssistantConfig() {
             </BlockStack>
           </Card>
         </div>
+        )}
       </div>
     </Page>
   );

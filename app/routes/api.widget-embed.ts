@@ -10,6 +10,7 @@
  */
 
 import type { LoaderFunctionArgs } from "@remix-run/node";
+import { TRYON_WIDGETS_RETIRED, retiredScript } from "../lib/retired-features";
 
 // Derive the widget's API origin from the deployed app URL so a host move
 // (custom domain, Render rename) doesn't silently break legacy-theme embeds.
@@ -530,6 +531,8 @@ const WIDGET_JS = `
 `;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
+  // Try-on widgets are retired (lib/retired-features.ts).
+  if (TRYON_WIDGETS_RETIRED) return retiredScript();
   return new Response(WIDGET_JS, {
     status: 200,
     headers: {

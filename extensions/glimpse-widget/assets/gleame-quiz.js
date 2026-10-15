@@ -2175,6 +2175,20 @@
   // code set, so the current codes ride along. /discount/{code} is the
   // fallback for themes/markets where that call fails. Resolves true when
   // the code is on the cart.
+  // Shopify answers /cart/update.js with 200 even for a code it won't
+  // honor (unknown code, minimum not met), marking it applicable: false.
+  // Only claim the saving when the cart says the code applies; a cart
+  // without the field (older storefronts) keeps the old optimistic answer.
+  function cartDiscountApplies(cart, code) {
+    if (!cart || !Array.isArray(cart.discount_codes)) return true;
+    var want = String(code).toUpperCase();
+    for (var i = 0; i < cart.discount_codes.length; i++) {
+      var d = cart.discount_codes[i];
+      if (d && String(d.code || '').toUpperCase() === want) return d.applicable === true;
+    }
+    return false;
+  }
+
   function applyCartDiscount(code) {
     if (PREVIEW || !code) return Promise.resolve(false);
     return fetch('/cart.js', { credentials: 'same-origin' })
@@ -2196,11 +2210,14 @@
       })
       .then(function(res) {
         if (!res || !res.ok) throw new Error('cart discount update failed');
+        return res.json().catch(function() { return null; });
+      })
+      .then(function(cart) {
         try {
           document.dispatchEvent(new CustomEvent('cart:updated', { detail: { source: 'gleame-quiz' } }));
           document.dispatchEvent(new CustomEvent('cart:refresh', { detail: { source: 'gleame-quiz' } }));
         } catch (e) { /* old browsers */ }
-        return true;
+        return cartDiscountApplies(cart, code);
       })
       .catch(function() {
         // Fallback: the classic discount link. Its response is a storefront

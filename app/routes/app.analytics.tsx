@@ -26,6 +26,7 @@ import {
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { findShopByDomain, getAnalytics, getConversionStats, getTopTrafficSources, getAssistantEngagement, getQuizAttribution, getQuizEngagement, getQuizLeadStats, shopHasTryOnConfig, type TrafficSourceStat, type AssistantEngagement, type AssistantFunnelCounts, type QuizAttributionStats, type QuizEngagement, type QuizFunnelCounts, type QuizLeadStats } from "../lib/supabase.server";
+import { CHAT_ASSISTANT_RETIRED, TRYON_WIDGETS_RETIRED } from "../lib/retired-features";
 import { useState, useCallback } from "react";
 
 interface WidgetBreakdown {
@@ -112,9 +113,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // The try-on/assistant sections only exist for shops with VTO enabled
   // (backend vto_enabled override, else auto-detected from configured
   // products). Everyone else gets a quiz-only page — and we skip the
-  // legacy queries entirely.
+  // legacy queries entirely. Both features are retired
+  // (lib/retired-features.ts), so every shop gets the quiz-only page.
   const [showLegacy, quiz7Days, quiz30Days, leads7Days, leads30Days, quizAttr7Days, quizAttr30Days] = await Promise.all([
-    shopHasTryOnConfig(session.shop),
+    TRYON_WIDGETS_RETIRED && CHAT_ASSISTANT_RETIRED ? Promise.resolve(false) : shopHasTryOnConfig(session.shop),
     getQuizEngagement(session.shop, 7),
     getQuizEngagement(session.shop, 30),
     getQuizLeadStats(session.shop, 7),
