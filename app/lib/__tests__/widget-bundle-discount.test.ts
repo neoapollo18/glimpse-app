@@ -150,13 +150,15 @@ beforeEach(() => {
 });
 
 describe("bundle discount on the live storefront path", () => {
-  it("offers the saving on the add-all button and applies the code after the add", async () => {
+  it("offers the saving in the Bundle & save card and applies the code after the add", async () => {
     applicable = true;
     const root = await toResults();
-    const btn = root.querySelector(".gq-add-btn--bundle") as HTMLButtonElement;
-    expect(btn, "bundle button").not.toBeNull();
-    const note = root.querySelector(".gq-bundle-note")!;
-    expect(note.textContent).toContain("15%");
+    const card = root.querySelector(".gq-bundle-offer")!;
+    expect(card, "bundle card").not.toBeNull();
+    const btn = card.querySelector(".gq-add-btn--bundle") as HTMLButtonElement;
+    expect(card.querySelector(".gq-bo-title")!.textContent).toBe("Bundle all 2 and save 15%");
+    // 2 × 12.00 = 24.00, 15% off saves 3.60
+    expect(btn.textContent).toMatch(/^Add all 2 to bag · Save .*3\.60$/);
     expect(btn.disabled).toBe(false);
 
     btn.click();
@@ -166,8 +168,22 @@ describe("bundle discount on the live storefront path", () => {
       (c) => String(c[0]).includes("/cart/update.js") && String((c[1] as any)?.body || "").includes("discount"),
     );
     expect(JSON.parse(String((discountPost![1] as any).body))).toEqual({ discount: "BUNDLE15" });
-    expect(note.classList.contains("is-applied")).toBe(true);
+    expect(card.classList.contains("is-applied")).toBe(true);
+    expect(card.querySelector(".gq-bo-status")!.textContent).toBe("15% off applied. You’ll see it at checkout.");
     expect(trackedEvents()).toContain("quiz_bundle_discount_applied");
+  });
+
+  it("mix and match: only the picked items go to the cart, and no code below the minimum", async () => {
+    applicable = true;
+    const root = await toResults();
+    (root.querySelectorAll(".gq-bo-item")[1] as HTMLButtonElement).click(); // drop Golden Hour
+    (root.querySelector(".gq-add-btn--bundle") as HTMLButtonElement).click();
+    await settle(20);
+
+    const add = fetchMock.mock.calls.find((c) => String(c[0]).includes("/cart/add.js"));
+    expect(JSON.parse(String((add![1] as any).body)).items).toEqual([{ id: 10, quantity: 1 }]);
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes("/api/storefront/quiz-bundle-discount"))).toBe(false);
+    expect(trackedEvents()).toContain("quiz_add_bundle_to_bag");
   });
 
   it("does not claim the saving when Shopify marks the code not applicable", async () => {
@@ -176,8 +192,9 @@ describe("bundle discount on the live storefront path", () => {
     (root.querySelector(".gq-add-btn--bundle") as HTMLButtonElement).click();
     await settle(20);
 
-    const note = root.querySelector(".gq-bundle-note")!;
-    expect(note.classList.contains("is-applied")).toBe(false);
+    const card = root.querySelector(".gq-bundle-offer")!;
+    expect(card.classList.contains("is-applied")).toBe(false);
+    expect(card.querySelector(".gq-bo-status")!.textContent).toBe("");
     expect(trackedEvents()).toContain("quiz_add_bundle_to_bag");
     expect(trackedEvents()).not.toContain("quiz_bundle_discount_applied");
   });

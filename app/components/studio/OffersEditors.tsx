@@ -264,8 +264,9 @@ export function BundleEditor({
     <BlockStack gap="400">
       <EditorHeader title="Bundle & discount" saveState={copy.saveState} />
       <Text as="p" variant="bodySm" tone="subdued">
-        One button under the results adds the shopper&rsquo;s matches to the cart together. Add a discount to make
-        the bundle the obvious buy.
+        A Bundle &amp; save card under the results: one tap adds all the shopper&rsquo;s matches, and they can drop
+        any they don&rsquo;t want. Every product keeps its own Add to bag. Add a discount to make the bundle the
+        obvious buy.
       </Text>
       {copy.error && (
         <Banner tone="critical" onDismiss={copy.clearError}>
@@ -273,7 +274,7 @@ export function BundleEditor({
         </Banner>
       )}
       <Checkbox
-        label={'Show an "add all" bundle button'}
+        label="Show the Bundle & save card"
         checked={bundleEnabled}
         disabled={disabled}
         onChange={(v) => {
@@ -291,7 +292,7 @@ export function BundleEditor({
               values={values}
               setValue={setCopyValue}
               disabled={disabled}
-              helpText="{count} items, {total} price, {discount} the saving (e.g. 20%), {was} the price before it"
+              helpText="Keep the default for our copy (Add all 3 to bag · Save $12.00). Your own: {count} items, {total} price, {discount} the saving (e.g. 20%), {was} the price before it"
             />
           </div>
           <div style={{ flex: 1, minWidth: 100 }}>
@@ -306,7 +307,7 @@ export function BundleEditor({
                 setBundleSize(v);
                 copy.schedule("copy", "quiz_bundle_size", Math.max(0, Math.floor(Number(v) || 0)));
               }}
-              helpText="Shoppers pick this many; blank = all matches"
+              helpText="How many matches start selected; blank = all"
             />
           </div>
         </InlineStack>

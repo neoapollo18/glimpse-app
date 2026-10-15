@@ -2953,6 +2953,9 @@
       .replace(/\{discount\}/g, d && d.text ? d.text : '')
       .replace(/\{was\}/g, d && d.wasCents != null ? formatMoney(d.wasCents) : '')
       .replace(/\s*[\u00b7\u2014-]\s*$/, '')
+      // One item reads "Add to bag", so a product's own button never looks
+      // like the Bundle & save card's "Add all 3".
+      .replace(/^Add 1 to (bag|cart)\b/i, quantity === 1 ? 'Add to $1' : 'Add 1 to $1')
       .trim();
   }
 
@@ -3026,21 +3029,10 @@
     // Column count follows the match count (capped at 3) so one or two
     // curated picks render centered at card width instead of rattling
     // around the left of a fixed 3-column grid.
-    // Bundle picker state must exist before the cards render — they draw
-    // the pick toggles. Size 0 (or >= match count) bundles every match
-    // with no picking UI; N < match count arms the button only once the
-    // shopper has exactly N picked (top N pre-picked).
+    // The Bundle & save card carries its own selector (the bundle size is
+    // its pre-selection), so the cards get no pick toggles.
     var bundleActive = definitive && results.bundleEnabled && matches.length >= 2;
-    var bundleSize = Number(results.bundleSize) > 0
-      ? Math.min(Math.floor(Number(results.bundleSize)), matches.length)
-      : matches.length;
-    bundlePicker = bundleActive ? {
-      size: bundleSize,
-      sel: matches.map(function(_, i) { return i; }).slice(0, bundleSize),
-      pickable: bundleSize < matches.length,
-      refreshers: [],
-      onChange: null,
-    } : null;
+    bundlePicker = null;
 
     var grid = el('div', 'gq-match-grid gq-match-grid--' + Math.min(matches.length, 3));
     matches.forEach(function(m, i) {
@@ -3049,7 +3041,7 @@
     main.appendChild(grid);
 
     if (bundleActive) {
-      main.appendChild(buildBundleRow(matches, results));
+      main.appendChild(buildBundleOffer(matches, results));
     }
     if (definitive) {
       var xsell = buildCrossSellSection(matches, results);
@@ -3949,6 +3941,199 @@
       if (bp.onChange) bp.onChange();
     };
     return pick;
+  }
+
+  // Bundle & save card (2026-10-15): a separate offer under the results,
+  // so every product keeps its own Add to bag. One tap adds all the
+  // matches; the tiles let shoppers drop any (mix and match), with price,
+  // saving and button following the selection. Classic results and the
+  // templates without their own bundle row (t1/t2/t5) use it; t3/t4 keep
+  // their designed routine/kit rows and the grid keeps its Mix & match bar.
+  // Savings are only promised with a live discount whose minimum this set
+  // can reach; the code is applied (and confirmed) after the add.
+  var DEFAULT_BUNDLE_LABEL = 'Add all {count} to bag · {total}';
+
+  function buildBundleOffer(matches, results) {
+    var all = matches.length;
+    var live = results.bundleDiscount || null;
+    // A minimum this match set can't reach would promise a saving that
+    // checkout never gives.
+    var bd = live && live.minQty <= all ? live : null;
+    var amount = discountText(bd);
+    var mixable = Boolean(bd) && bd.minQty < all;
+    var size = Number(results.bundleSize) > 0 ? Math.min(Math.floor(Number(results.bundleSize)), all) : all;
+    var customLabel = results.bundleLabel && results.bundleLabel !== DEFAULT_BUNDLE_LABEL ? results.bundleLabel : null;
+    var picks = matches.map(function(m, i) { return { m: m, on: i < size, line: null, tile: null }; });
+    var linesReady = false;
+
+    var card = el('section', 'gq-bundle-offer' + (bd ? ' has-discount' : ''));
+    card.setAttribute('aria-label', 'Bundle offer');
+    var head = el('div', 'gq-bo-head');
+    if (bd) head.appendChild(el('span', 'gq-bo-badge', '%'));
+    var headText = el('div', 'gq-bo-head-text');
+    headText.appendChild(el('h3', 'gq-bo-title', escapeHtml(
+      bd ? (amount ? (mixable ? 'Bundle & save ' + amount : 'Bundle all ' + all + ' and save ' + amount) : 'Bundle your matches & save')
+        : 'Get the full set')));
+    headText.appendChild(el('p', 'gq-bo-sub', escapeHtml(
+      bd ? (mixable ? 'Pick any ' + bd.minQty + ' or more of your matches.' : 'All ' + all + ' of your matches, in one tap.')
+        : 'Everything we matched you with, in one tap.')));
+    head.appendChild(headText);
+    card.appendChild(head);
+
+    var tiles = el('div', 'gq-bo-items');
+    picks.forEach(function(p) {
+      var tile = el('button', 'gq-bo-item');
+      tile.type = 'button';
+      var media = el('span', 'gq-bo-item-media');
+      tile.appendChild(media);
+      tile.appendChild(el('span', 'gq-bo-item-check', '✓'));
+      tile.appendChild(el('span', 'gq-bo-item-name', escapeHtml(p.m.productName || '')));
+      var price = el('span', 'gq-bo-item-price', '');
+      tile.appendChild(price);
+      p.tile = tile;
+      p.media = media;
+      p.price = price;
+      tile.onclick = function() {
+        if (btn.classList.contains('is-working')) return;
+        p.on = !p.on;
+        refresh();
+      };
+      tiles.appendChild(tile);
+    });
+    card.appendChild(tiles);
+
+    var foot = el('div', 'gq-bo-foot');
+    var totalEl = el('p', 'gq-bo-total', '');
+    foot.appendChild(totalEl);
+    var btn = el('button', 'gq-add-btn gq-add-btn--bundle gq-bo-add', 'Add all ' + all + ' to bag');
+    btn.type = 'button';
+    btn.disabled = true;
+    foot.appendChild(btn);
+    card.appendChild(foot);
+    var hint = el('p', 'gq-bo-hint', '');
+    card.appendChild(hint);
+    var status = el('p', 'gq-bo-status', '');
+    status.setAttribute('role', 'status');
+    card.appendChild(status);
+    if (bd) card.appendChild(el('p', 'gq-bo-fine', escapeHtml(bd.note || 'Bundle savings applied at checkout')));
+
+    function selection() {
+      var items = [];
+      var count = 0;
+      var total = 0;
+      var known = true;
+      picks.forEach(function(p) {
+        if (!p.on || !p.line || !p.line.id) return;
+        items.push({ id: p.line.id, quantity: p.line.quantity });
+        count += p.line.quantity;
+        if (p.line.unit != null) total += p.line.unit * p.line.quantity;
+        else known = false;
+      });
+      return { items: items, count: count, total: known && items.length ? total : null };
+    }
+
+    function refresh() {
+      picks.forEach(function(p) {
+        p.tile.classList.toggle('is-on', p.on);
+        p.tile.setAttribute('aria-pressed', p.on ? 'true' : 'false');
+        p.tile.setAttribute('aria-label', (p.on ? 'Remove ' : 'Add ') + (p.m.productName || 'item') + (p.on ? ' from' : ' to') + ' the bundle');
+      });
+      if (btn.classList.contains('is-working') || btn.classList.contains('is-added')) return;
+      if (!linesReady) {
+        btn.disabled = true;
+        btn.textContent = 'Add all ' + all + ' to bag';
+        return;
+      }
+      var s = selection();
+      var qualifies = Boolean(bd) && s.count >= bd.minQty;
+      var discounted = qualifies ? discountedCents(s.total, bd) : s.total;
+      var saving = qualifies && s.total != null && discounted != null && discounted < s.total ? s.total - discounted : null;
+      btn.disabled = s.items.length === 0;
+      if (customLabel) {
+        btn.textContent = buildAddLabel(customLabel, s.count, discounted,
+          saving != null ? { text: amount, wasCents: s.total } : null);
+      } else {
+        btn.textContent = (s.count === all && all > 1 ? 'Add all ' + s.count + ' to bag' : 'Add ' + s.count + ' to bag') +
+          (saving != null ? ' · Save ' + formatMoney(saving) : (s.total != null ? ' · ' + formatMoney(s.total) : ''));
+      }
+      if (s.items.length === 0) btn.textContent = 'Pick at least one';
+      totalEl.innerHTML = saving != null
+        ? '<strong>' + escapeHtml(formatMoney(discounted)) + '</strong> <s>' + escapeHtml(formatMoney(s.total)) + '</s>'
+        : '';
+      var missing = bd && s.count > 0 && !qualifies ? bd.minQty - s.count : 0;
+      hint.textContent = missing > 0 ? 'Pick ' + missing + ' more to save' + (amount ? ' ' + amount : '') : '';
+    }
+
+    Promise.all(picks.map(function(p) {
+      return p.m.productHandle ? fetchProductJson(p.m.productHandle) : Promise.resolve(null);
+    })).then(function(pjs) {
+      pjs.forEach(function(pj, i) {
+        var p = picks[i];
+        p.line = {
+          id: variantIdForCart(pj, p.m),
+          quantity: Math.max(1, p.m.quantity || 1),
+          unit: priceCentsForRec(pj, p.m),
+        };
+        var img = httpsImage(imageForRec(pj, p.m));
+        if (img) {
+          var im = document.createElement('img');
+          im.src = img;
+          im.alt = '';
+          im.loading = 'lazy';
+          p.media.appendChild(im);
+        }
+        if (p.line.unit != null) p.price.textContent = formatMoney(p.line.unit * p.line.quantity);
+        // Nothing to add for this match: it can't be in the bundle.
+        if (!p.line.id) {
+          p.on = false;
+          p.tile.disabled = true;
+        }
+      });
+      linesReady = true;
+      refresh();
+    });
+
+    btn.onclick = function() {
+      var s = selection();
+      if (s.items.length === 0) return;
+      var qualifies = Boolean(bd) && s.count >= bd.minQty;
+      btn.disabled = true;
+      btn.classList.add('is-working');
+      btn.textContent = 'Adding…';
+      status.textContent = '';
+      addAllToBag(s.items)
+        .then(function() {
+          btn.classList.remove('is-working');
+          btn.classList.add('is-added');
+          btn.textContent = 'Added to bag ✓';
+          if (!foot.querySelector('.gq-viewbag-link')) {
+            var bagLink = el('a', 'gq-view-link gq-viewbag-link', 'View bag →');
+            bagLink.href = '/cart';
+            foot.appendChild(bagLink);
+          }
+          refreshCartToken().then(function() { trackEvent('quiz_add_bundle_to_bag'); });
+          if (qualifies) {
+            applyBundleDiscount().then(function(applied) {
+              if (!applied) return;
+              card.classList.add('is-applied');
+              status.textContent = (amount ? amount + ' off applied.' : 'Bundle discount applied.') + ' You’ll see it at checkout.';
+              trackEvent('quiz_bundle_discount_applied');
+            });
+          }
+          setTimeout(function() {
+            btn.classList.remove('is-added');
+            refresh();
+          }, 3200);
+        })
+        .catch(function() {
+          btn.classList.remove('is-working');
+          btn.textContent = 'Couldn’t add — try again';
+          setTimeout(refresh, 2600);
+        });
+    };
+
+    refresh();
+    return card;
   }
 
   // Bundle bar under the match grid (migrations 070/071): adds the PICKED
@@ -5502,6 +5687,9 @@
       leadCard: definitive ? tplLeadCard : function() { return null; },
     });
 
+    if (definitive && results.bundleEnabled && matches.length >= 2 && !tpl.ownsBundle) {
+      screen.appendChild(buildBundleOffer(matches, results));
+    }
     if (definitive) {
       var xsell = buildCrossSellSection(matches, results);
       if (xsell) screen.appendChild(xsell);
@@ -6213,6 +6401,8 @@
 
   var TplRoutine = {
     id: 't3',
+    // Its "Add routine to cart" total row is the bundle (no Bundle & save card).
+    ownsBundle: true,
     rootClass: 'gq-t3',
     loading: 'optional',
     resultsMarker: 'gq-t3r',
@@ -6345,6 +6535,8 @@
 
   var TplDiscover = {
     id: 't4',
+    // Its kit row's "Add all" is the bundle (no Bundle & save card).
+    ownsBundle: true,
     rootClass: 'gq-t4',
     loading: 'absent',
     resultsMarker: 'gq-t4r',

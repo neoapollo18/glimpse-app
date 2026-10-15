@@ -284,7 +284,7 @@ describe("results offers", () => {
     expect(root.querySelector(".gq-xsell")).toBeNull();
   });
 
-  it("bundle discount: discounted total on the button and the saving under it", async () => {
+  it("bundle discount: a separate Bundle & save card with the saving on its button", async () => {
     const root = await boot(
       makeConfig({}, {
         bundleEnabled: true,
@@ -294,10 +294,17 @@ describe("results offers", () => {
       "results",
     );
     await wait(20);
-    const btn = root.querySelector(".gq-add-btn--bundle")!;
-    // 12.00 + 13.00 = 25.00 → 20% off = 20.00
+    const card = root.querySelector(".gq-bundle-offer")!;
+    expect(card, "bundle card").not.toBeNull();
+    const btn = card.querySelector(".gq-add-btn--bundle")!;
+    // 12.00 + 13.00 = 25.00 → 20% off = 20.00 (merchant label honored)
     expect(btn.textContent).toMatch(/20\.00 \(was .*25\.00\)/);
-    expect(root.querySelector(".gq-bundle-note")!.textContent).toBe("Save 20% · Bundle savings applied at checkout");
+    expect(card.querySelector(".gq-bo-title")!.textContent).toBe("Bundle all 2 and save 20%");
+    expect(card.querySelector(".gq-bo-total")!.textContent).toMatch(/20\.00 .*25\.00/);
+    expect(card.querySelector(".gq-bo-fine")!.textContent).toBe("Bundle savings applied at checkout");
+    // Every product keeps its own Add to bag; the cards carry no bundle picks.
+    expect(root.querySelectorAll(".gq-match-card .gq-add-btn:not(.gq-add-btn--bundle)").length).toBeGreaterThan(0);
+    expect(root.querySelector(".gq-bundle-pick")).toBeNull();
   });
 
   it("no discount configured: label tokens collapse and no note renders", async () => {
