@@ -265,7 +265,7 @@ describe("nail swatches (option style 'nails')", () => {
 
 describe("grid results (quiz_results_layout)", () => {
   it("equal cards, answers line with Edit, mix & match bar, See on me, email card", async () => {
-    const root = await boot(makeConfig(), "results");
+    const root = await boot(makeConfig({ emailPlacement: "after_results" }), "results");
     await wait(30);
     const res = root.querySelector(".gq-results--grid")!;
     expect(res).not.toBeNull();
@@ -286,7 +286,7 @@ describe("grid results (quiz_results_layout)", () => {
     // No featured-layout pieces.
     expect(res.querySelector(".gq-answers-rail")).toBeNull();
     expect(res.querySelector(".gq-upsell")).toBeNull();
-    // Email capture is a card here, not a step before the photo.
+    // "Below the match" placement: capture is a card here, not a step.
     expect(res.querySelector(".gq-gr-lead .gq-lead-input")).not.toBeNull();
     expect(res.querySelector(".gq-gr-bagbar")).not.toBeNull();
   });
@@ -307,7 +307,7 @@ describe("grid results (quiz_results_layout)", () => {
   });
 
   it("email card: saving shows a neutral confirmation, not an inbox promise", async () => {
-    const root = await boot(makeConfig(), "results");
+    const root = await boot(makeConfig({ emailPlacement: "after_results" }), "results");
     await wait(30);
     const card = root.querySelector(".gq-gr-lead")!;
     (card.querySelector(".gq-lead-input") as HTMLInputElement).value = "shopper@example.com";
@@ -315,6 +315,15 @@ describe("grid results (quiz_results_layout)", () => {
     await wait(20);
     expect(card.querySelector(".gq-gr-lead-done")!.textContent).toBe("Saved \u2713 You\u2019re on the list.");
     expect(card.textContent).not.toContain("inbox");
+  });
+
+  it("default placement asks before results: lead step renders, no card on results", async () => {
+    const results = await boot(makeConfig(), "results");
+    await wait(30);
+    expect(results.querySelector(".gq-results--grid")).not.toBeNull();
+    expect(results.querySelector(".gq-gr-lead")).toBeNull();
+    const lead = await boot(makeConfig(), "lead");
+    expect(lead.querySelector(".gq-step--lead .gq-lead-input")).not.toBeNull();
   });
 
   it("no live discount: no bundle bar, no promise", async () => {

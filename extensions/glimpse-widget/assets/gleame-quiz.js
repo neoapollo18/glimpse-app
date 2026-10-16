@@ -3528,7 +3528,7 @@
   // Email capture as a card under the grid results ("Save your matches").
   // Same form, validation and discount reveal as every other placement.
   function gridLeadCard() {
-    if (!leadActive() || state.leadDone) return null;
+    if (!leadActive() || state.leadDone || tplLeadBeforeResults()) return null;
     var lead = config.lead || {};
     if (!state.leadViewed) {
       state.leadViewed = true;
@@ -4602,20 +4602,22 @@
   }
 
   // Email placement (spec 5.2): merchant column, else the template default.
-  var TPL_EMAIL_DEFAULT = { t1: 'after_results', t2: 'hook_start', t3: 'gate_results', t4: 'after_results', t5: 'after_results' };
+  // Mirrors quiz-templates.ts emailPlacementDefault (before results unless
+  // the merchant picks "below the match").
+  var TPL_EMAIL_DEFAULT = { t1: 'gate_results', t2: 'hook_start', t3: 'gate_results', t4: 'gate_results', t5: 'gate_results' };
   function tplEmailPlacement() {
     var p = config && config.emailPlacement;
     if (p === 'hook_start' || p === 'gate_results' || p === 'after_results' || p === 'off') return p;
-    return TPL_EMAIL_DEFAULT[config.template] || 'after_results';
+    return TPL_EMAIL_DEFAULT[config.template] || 'gate_results';
   }
 
   // Whether the lead step sits in the flow BEFORE results (its own screen).
-  // Legacy shops: always (the shipped bonus step). Templates: hook_start
-  // and gate_results; after_results renders a card inside the results.
+  // Legacy shops: always (the shipped bonus step), except classic grid
+  // results with the merchant's "below the match" placement, which carry
+  // the capture as a card under the results. Templates: hook_start and
+  // gate_results; after_results renders a card inside the results.
   function tplLeadBeforeResults() {
-    // Classic grid results (migration 088) carry the capture as a card
-    // under the results instead of a step before the photo.
-    if (!activeTpl()) return !gridResultsActive();
+    if (!activeTpl()) return !gridResultsActive() || config.emailPlacement !== 'after_results';
     var p = tplEmailPlacement();
     return p === 'hook_start' || p === 'gate_results';
   }

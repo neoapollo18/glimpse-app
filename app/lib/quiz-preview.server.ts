@@ -279,6 +279,9 @@ export async function buildPreviewQuizConfig(
     screenImageUrl: null,
     // v3 template payload, mirroring the storefront endpoint exactly:
     // present only when a template is assigned, absent for legacy shops.
+    ...(!isTemplateId(config.quiz_template) && config.quiz_results_layout === "grid"
+      ? { emailPlacement: config.quiz_email_placement }
+      : {}),
     ...(tplContent
       ? {
           emailPlacement,

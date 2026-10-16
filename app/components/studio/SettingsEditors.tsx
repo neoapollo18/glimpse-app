@@ -647,15 +647,19 @@ export function LeadEditor({
 }) {
   const { schedule, saveState, error, clearError } = useSettingsAutosave(onPreviewUpdate);
   const hasTemplate = isTemplateId(template);
-  // "" = template default (column NULL); the applier stores null for it.
-  const [placement, setPlacement] = useState<string>(() => {
-    const v = settings.quiz_email_placement;
-    return typeof v === "string" && (EMAIL_PLACEMENTS as string[]).includes(v) ? v : "";
-  });
+  // Classic quizzes with grid results choose between the step before
+  // results (default) and a card below the matches.
+  const classicGrid = !hasTemplate && settings.quiz_results_layout === "grid";
+  // "" = default (column NULL); the applier stores null for it.
+  const readPlacement = (v: unknown) =>
+    classicGrid
+      ? v === "after_results" ? "after_results" : ""
+      : typeof v === "string" && (EMAIL_PLACEMENTS as string[]).includes(v) ? v : "";
+  const [placement, setPlacement] = useState<string>(() => readPlacement(settings.quiz_email_placement));
   useEffect(() => {
-    const v = settings.quiz_email_placement;
-    setPlacement(typeof v === "string" && (EMAIL_PLACEMENTS as string[]).includes(v) ? v : "");
-  }, [settings.quiz_email_placement]);
+    setPlacement(readPlacement(settings.quiz_email_placement));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.quiz_email_placement, classicGrid]);
   const defaultLabel = emailPlacementDefault ? PLACEMENT_LABELS[emailPlacementDefault] : null;
   const [values, setValues] = useState<Record<string, string>>(() => ({
     quiz_lead_headline: str(settings, "quiz_lead_headline"),
@@ -690,11 +694,31 @@ export function LeadEditor({
           schedule("copy", "quiz_lead_enabled", v);
         }}
         helpText={
-          hasTemplate
+          hasTemplate || classicGrid
             ? "Shoppers can always skip it. Placement below decides where the ask happens. Captured leads appear on the Analytics page."
             : "Adds an optional step between the last question and the photo step. Shoppers can always skip it. Captured leads appear on the Analytics page."
         }
       />
+      {classicGrid && (
+        <Select
+          label="Placement"
+          options={[
+            { label: "Ask right before results (default)", value: "" },
+            { label: PLACEMENT_LABELS.after_results, value: "after_results" },
+          ]}
+          value={placement}
+          disabled={disabled || !enabled}
+          onChange={(v) => {
+            setPlacement(v);
+            schedule("copy", "quiz_email_placement", v === "" ? null : v);
+          }}
+          helpText={
+            placement === "after_results"
+              ? "A card under the matches. Easy to miss on phones: it sits below every result."
+              : "Its own step after the last question, before the photo step."
+          }
+        />
+      )}
       {hasTemplate && (
         <Select
           label="Placement"

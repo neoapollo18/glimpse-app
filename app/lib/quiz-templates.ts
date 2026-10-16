@@ -214,6 +214,10 @@ export interface TemplateDef {
 }
 
 export const TEMPLATES: Record<TemplateId, TemplateDef> = {
+  // emailPlacementDefault: every template asks before results by default
+  // (2026-10-13). With "results first" as the default, merchants who ticked
+  // "Ask shoppers for their email" found the ask buried under the results
+  // and read it as missing; below the match is now an explicit choice.
   t1: {
     id: "t1",
     name: "Match",
@@ -225,7 +229,7 @@ export const TEMPLATES: Record<TemplateId, TemplateDef> = {
     questionRangeLabel: "5–8 questions in phases",
     resultsShapeLabel: "visual answers · one hero match with your answers echoed back",
     introType: "hero",
-    emailPlacementDefault: "after_results",
+    emailPlacementDefault: "gate_results",
     loading: "required",
     visualQuestions: "required",
     imageryModel: "per-answer",
@@ -282,7 +286,7 @@ export const TEMPLATES: Record<TemplateId, TemplateDef> = {
     questionRangeLabel: "4–5 questions",
     resultsShapeLabel: "archetype reveal + a kit",
     introType: "hero",
-    emailPlacementDefault: "after_results",
+    emailPlacementDefault: "gate_results",
     loading: "absent",
     visualQuestions: "optional",
     imageryModel: "cutout",
@@ -301,7 +305,7 @@ export const TEMPLATES: Record<TemplateId, TemplateDef> = {
     questionRangeLabel: "4–6 questions",
     resultsShapeLabel: "The fallback. Every other template degrades here.",
     introType: "minimal",
-    emailPlacementDefault: "after_results",
+    emailPlacementDefault: "gate_results",
     loading: "absent",
     visualQuestions: "absent",
     imageryModel: "none",

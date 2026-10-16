@@ -237,8 +237,8 @@ Trust items are verbatim-sourced (shipping line, guarantee, count) or template-c
 ### 5.2 Email + discount placement (one setting, per quiz)
 
 - `hook_start` — intro type C promises the discount; capture happens before results; the code renders on submit and is applied silently (Charlie's build). Default for Consult.
-- `gate_results` — capture is the last step before results; skip link always visible. Default for Routine.
-- `after_results` — results show first; capture is a card below the hero match. Default for Match, Discover, Clean.
+- `gate_results` — capture is the last step before results; skip link always visible. Default for Routine, Match, Discover, Clean (Match/Discover/Clean moved here from `after_results` on 2026-10-13: with results first as the default, the ask sat under the results and merchants read it as missing). Classic quizzes with grid results (migration 088) use the same setting: NULL = before results.
+- `after_results` — results show first; capture is a card below the hero match. Opt-in only.
 - `off`.
 
 Post-submit state (all placements): headline from `Discount reveal message`, code in a dashed box with `Copy`, and `Applied at checkout` confirmation. Reload never re-asks.

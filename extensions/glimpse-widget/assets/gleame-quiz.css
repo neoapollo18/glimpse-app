@@ -2359,6 +2359,8 @@
   #gleame-quiz-root.gq-boutique .gq-ci-proof .gq-ba-frame { border-radius: 14px; box-shadow: none; }
   #gleame-quiz-root.gq-boutique .gq-step--gate .gq-question-title,
   #gleame-quiz-root.gq-boutique .gq-step--gate .gq-question-helper { text-align: center; }
+  #gleame-quiz-root.gq-compact.gq-boutique .gq-step--lead .gq-step-body > .gq-question-title,
+  #gleame-quiz-root.gq-compact.gq-boutique .gq-step--lead .gq-step-body > .gq-question-helper { text-align: center; margin-left: auto; margin-right: auto; }
 }
 
 /* ---- Phones ---- */
@@ -2649,6 +2651,20 @@
 #gleame-quiz-root .gq-gr-lead .gq-tpl-lead-reveal { grid-column: 1 / -1; color: #ffffff; }
 #gleame-quiz-root .gq-gr-lead .gq-lead-code { background: #ffffff; color: var(--gq-ink); }
 #gleame-quiz-root .gq-gr-lead-done { margin: 12px 0 0; font-size: 15px; font-weight: 600; color: #ffffff; }
+/* Boutique email step (the default placement, before results): centered
+   like the photo step, pill field and button in the boutique style. */
+#gleame-quiz-root.gq-boutique .gq-step--lead .gq-lead-form { max-width: 420px; }
+#gleame-quiz-root.gq-boutique .gq-step--lead .gq-lead-input,
+#gleame-quiz-root.gq-boutique .gq-step--lead .gq-lead-submit {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 52px;
+  border-radius: 999px;
+}
+/* 16px: iOS Safari zooms the page on focus below that. */
+#gleame-quiz-root.gq-boutique .gq-step--lead .gq-lead-input { padding: 0 20px; font-size: 16px; background: #ffffff; }
+#gleame-quiz-root.gq-boutique .gq-step--lead .gq-lead-submit { text-transform: none; letter-spacing: 0.01em; font-size: 15px; font-weight: 600; }
+
 /* Boutique loading screen (replaces the step while matches load). */
 #gleame-quiz-root .gq-step--working > :not(.gq-working) { display: none !important; }
 #gleame-quiz-root .gq-loading-view {

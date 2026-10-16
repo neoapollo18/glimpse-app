@@ -494,8 +494,11 @@ describe("v3 widget templates", () => {
     expect(hook.querySelector(".gq-tpl-skip")!.textContent).toBe("Skip");
     expect(hook.querySelector(".gq-tpl-lead-submit")!.textContent).toBe("Reveal my discount →");
 
-    const after = await boot(previewFor("t1", "results", false));
+    const after = await boot(previewFor("t1", "results", false, { emailPlacement: "after_results" }));
     expect(after.querySelector(".gq-t1r .gq-tpl-lead-inline .gq-tpl-lead-form")).not.toBeNull();
+    // Default (2026-10-13): Match asks before results, so no card here.
+    const matchDefault = await boot(previewFor("t1", "results", false));
+    expect(matchDefault.querySelector(".gq-tpl-lead-inline")).toBeNull();
     const off = await boot(previewFor("t1", "results", false, { emailPlacement: "off" }));
     expect(off.querySelector(".gq-tpl-lead-inline")).toBeNull();
     const gate = await boot(previewFor("t3", "results", false));
@@ -689,7 +692,8 @@ describe("v3 widget templates", () => {
   it("(8d) the Match loading screen reaches results within 4s", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
     try {
-      mount(previewFor("t1", "q5", false));
+      // Email below the match, so the last answer goes straight to loading.
+      mount(previewFor("t1", "q5", false, { emailPlacement: "after_results" }));
       await vi.advanceTimersByTimeAsync(5);
       const root = document.getElementById("gleame-quiz-root")!;
       // No photo question + try-on off: the photo step is skipped, so the
@@ -744,7 +748,7 @@ describe("v3 widget templates", () => {
 
   it("Match loading screen: required, uses trust lines verbatim, then reaches results", async () => {
     const root = await boot({
-      ...previewFor("t1", "q5", false),
+      ...previewFor("t1", "q5", false, { emailPlacement: "after_results" }),
     });
     // Answer the last question (the photo step is skipped: no photo question,
     // try-on off) and the recommend round trip lands on the loading screen.

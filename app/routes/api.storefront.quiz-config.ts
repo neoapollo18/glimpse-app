@@ -183,6 +183,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       // is assigned: email placement, Match phases, the Images-rail
       // slot map, and theme.heroImage (legacy v2 field the hero slot falls
       // back to when the slot map has no `hero`).
+      // Classic grid results: the merchant's placement (NULL = ask right
+      // before results; "after_results" = card below the matches).
+      ...(!servedTemplate && config.quiz_results_layout === "grid"
+        ? { emailPlacement: config.quiz_email_placement }
+        : {}),
       ...(tplContent
         ? {
             emailPlacement: servedEmailPlacement,
