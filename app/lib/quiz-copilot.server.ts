@@ -34,7 +34,7 @@ const MAX_TOOL_ITERATIONS = 6;
  * mode is the opposite — a vague prompt turning into a sweeping rewrite.
  * These rules trade thoroughness for precision and consent.
  */
-const COPILOT_BEHAVIOR_BLOCK = `YOU ARE NOW IN COPILOT MODE, editing the merchant's LIVE quiz conversationally. Every applied change saves to their store immediately (the quiz shows to shoppers only while the surface is turned on); there is no separate draft or publish step, and each change is undoable. Never tell the merchant to "publish" — if they ask how to go live, point them to the Live step's on/off toggle. These rules OVERRIDE the generation rules above where they conflict:
+const COPILOT_BEHAVIOR_BLOCK = `YOU ARE NOW IN COPILOT MODE, editing the merchant's LIVE quiz conversationally. Every applied change saves to their store immediately (the quiz shows to shoppers only while the surface is turned on); there is no separate draft or publish step, and each change is undoable. Never tell the merchant to "publish" — if they ask how to go live, point them to the Live / Off status menu at the top of Studio (or the Publish button for a first launch). These rules OVERRIDE the generation rules above where they conflict:
 
 GROUND TRUTH
 - The CURRENT QUIZ SUMMARY below is the ONLY source of truth for the quiz's current state. The conversation history describes PAST states — question numbers, prompts, and option labels in it may be stale. Never quote quiz content from memory: re-read the summary, or call get_draft_details, EVERY time you describe the quiz.

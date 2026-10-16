@@ -50,6 +50,9 @@ export function klaviyoKeyProblem(raw: string): string | null {
     const start = key.slice(0, 3).replace(/[^A-Za-z0-9_-]/g, "?");
     return `That doesn't look like a Klaviyo private API key: those start with pk_, this starts with "${start}" (${key.length} characters). In Klaviyo: Settings → Account → API keys.`;
   }
+  if (/[^\x21-\x7E]/.test(key)) {
+    return "That key has a character Klaviyo keys never contain (often a curly quote or invisible character from copying). Copy the key again straight from Klaviyo.";
+  }
   if (key.length < 23) {
     return "That key looks cut off. A Klaviyo private key is pk_ followed by about 34 letters and numbers: copy the whole thing.";
   }

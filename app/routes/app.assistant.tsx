@@ -58,6 +58,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
+  // Retired: settings save through Studio's Matching panel now. A tab left
+  // open from before the move must not write enabled/assistant_mode and
+  // every matching field from its stale form.
+  if (QUIZ_SETTINGS_PAGE_RETIRED) {
+    return json(
+      { success: false, error: "This page moved into Studio (Settings > Matching). Reload to open it there." },
+      { status: 410 },
+    );
+  }
   // Use authenticate.admin but catch token bounce (same issue as admin.tsx).
   // For embedded app pages, the fetcher POST can trigger a 204 session token
   // exchange if the id_token has expired.

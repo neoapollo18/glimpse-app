@@ -206,6 +206,13 @@ function EditBody({
   if (selectedSlide === "matching") {
     const match = (data.matchSettings ?? null) as MatchSettings | null;
     const products = (data.matchProducts ?? null) as MatchProduct[] | null;
+    if (!match && products) {
+      return (
+        <Banner tone="critical">
+          We couldn&rsquo;t load your matching settings, so they can&rsquo;t be edited right now. Reload Studio to try again.
+        </Banner>
+      );
+    }
     if (!match || !products) {
       return (
         <InlineStack gap="200" blockAlign="center">

@@ -3,7 +3,9 @@ import { readFileSync } from "fs";
 import { join } from "path";
 
 /**
- * Serves the storefront embed JS from /public/skin-analysis-embed.js.
+ * Serves the storefront embed JS from embeds/skin-analysis-embed.js (not
+ * public/: remix-serve serves public/ statically with a 1-year immutable
+ * cache before any route runs, so this loader never ran).
  * Mirrors the existing /widget-embed.js pattern (app/routes/widget-embed[.]js.ts).
  *
  * Cached for 1 hour publicly. Cross-origin so any merchant storefront can
@@ -11,7 +13,7 @@ import { join } from "path";
  */
 export const loader = async (_args: LoaderFunctionArgs) => {
   try {
-    const embedPath = join(process.cwd(), "public", "skin-analysis-embed.js");
+    const embedPath = join(process.cwd(), "embeds", "skin-analysis-embed.js");
     const content = readFileSync(embedPath, "utf-8");
     return new Response(content, {
       status: 200,

@@ -76,6 +76,15 @@
   // render; null when the bundle button is off. sel = match indexes in
   // pick order (oldest first, so over-picking drops the oldest).
   var bundlePicker = null;
+  // Bundle & save card (2026-10-15). pickedVariants: the size/shade a shopper
+  // picked on a template's hero (t1), so the card adds what they chose.
+  // quizAdds: units added through the quiz's own buttons this session, so
+  // per-product adds earn the bundle code too. bundleCodeState: 'pending' /
+  // 'applied' / 'refused' for the bundle code on this cart.
+  var pickedVariants = {};
+  var quizAdds = {};
+  var bundleCodeState = null;
+  var bundleOfferRefresh = null;
 
   // ---- Small utilities (mirrored from gleame-chat.js) ----
 
@@ -215,7 +224,14 @@
   // product's first (default) variant.
   function variantIdForCart(pj, rec) {
     if (rec.variantNumericId) return rec.variantNumericId;
-    if (pj && Array.isArray(pj.variants) && pj.variants.length > 0) return pj.variants[0].id;
+    if (pj && Array.isArray(pj.variants) && pj.variants.length > 0) {
+      // First in-stock variant: a sold-out default makes Shopify reject the
+      // whole multi-item add (the bundle card).
+      for (var i = 0; i < pj.variants.length; i++) {
+        if (pj.variants[i] && pj.variants[i].available !== false) return pj.variants[i].id;
+      }
+      return pj.variants[0].id;
+    }
     return null;
   }
 
@@ -472,6 +488,8 @@
 
   function trackEvent(eventType) {
     if (PREVIEW) return; // draft previews never pollute analytics
+    // Neither do on-store previews (tokenized, unlisted merchant test runs).
+    if (window.GLEAME_QUIZ_FORCE || window.GLEAME_QUIZ_STORE_PREVIEW) return;
     publishPixelEvent(eventType);
     try {
       var payload = {
@@ -2955,7 +2973,7 @@
       .replace(/\s*[\u00b7\u2014-]\s*$/, '')
       // One item reads "Add to bag", so a product's own button never looks
       // like the Bundle & save card's "Add all 3".
-      .replace(/^Add 1 to (bag|cart)\b/i, quantity === 1 ? 'Add to $1' : 'Add 1 to $1')
+      .replace(/^(Add) 1 (to (?:bag|cart))\b/i, function(m, add, rest) { return quantity === 1 ? add + ' ' + rest : m; })
       .trim();
   }
 
@@ -3158,7 +3176,10 @@
 
     // Bundle offer: ONLY with a live bundle discount, so the bar never
     // promises a saving checkout won't give.
-    var bd = definitive && results.bundleEnabled && matches.length >= 2 ? (results.bundleDiscount || null) : null;
+    var gridUnits = 0;
+    matches.forEach(function(m) { gridUnits += Math.max(1, m.quantity || 1); });
+    var bd = definitive && results.bundleEnabled && matches.length >= 2 && results.bundleDiscount &&
+      results.bundleDiscount.minQty <= gridUnits ? results.bundleDiscount : null;
     var refreshers = [];
     function refreshAll() { refreshers.forEach(function(fn) { fn(); }); }
     if (bd) screen.appendChild(buildGridBundleBar(bd, results, refreshers));
@@ -3268,13 +3289,27 @@
       progress.innerHTML = '';
       progress.appendChild(gridPips(target, bag.count));
       var unlocked = bag.count >= bd.minQty;
+      var status = unlocked ? gridDiscountStatus() : null;
       progress.appendChild(el('span', 'gq-gr-bundle-status',
-        unlocked
-          ? escapeHtml((amount ? amount + ' off ' : 'Discount ') + 'unlocked ✓')
-          : '<strong>' + bag.count + ' of ' + bd.minQty + '</strong> added'));
-      bar.classList.toggle('is-unlocked', unlocked);
+        !unlocked
+          ? '<strong>' + bag.count + ' of ' + bd.minQty + '</strong> added'
+          : escapeHtml(status === 'applied'
+            ? (amount ? amount + ' off applied ✓' : 'Discount applied ✓')
+            : status === 'refused'
+              ? 'Discount couldn\u2019t be applied'
+              : 'Applying your discount\u2026')));
+      bar.classList.toggle('is-unlocked', unlocked && status === 'applied');
     });
     return bar;
+  }
+
+  // Grid bundle discount status, from Shopify's answer (cartDiscountApplies),
+  // never from the item count alone: 'pending' while the code is being put
+  // on the cart, 'applied' once the cart says it applies, 'refused' when it
+  // doesn't (retried on the next add). Restored sessions carry the old flag.
+  function gridDiscountStatus() {
+    if (state.gridDiscountApplied === true) return 'applied';
+    return state.gridDiscountState === 'pending' || state.gridDiscountState === 'refused' ? state.gridDiscountState : null;
   }
 
   // Phone bag bar: bundle progress (or a count) + View bag with the total.
@@ -3298,9 +3333,14 @@
         left.appendChild(line);
         var more = bd.minQty - bag.count;
         var amount = discountText(bd);
+        var status = more > 0 ? null : gridDiscountStatus();
         left.appendChild(el('span', 'gq-gr-bagbar-sub', escapeHtml(more > 0
           ? 'Add ' + more + ' more' + (amount ? ' to save ' + amount : ' to unlock your bundle discount')
-          : (amount ? amount + ' off applied at checkout' : 'Discount applied at checkout'))));
+          : status === 'applied'
+            ? (amount ? amount + ' off applied at checkout' : 'Discount applied at checkout')
+            : status === 'refused'
+              ? 'We couldn\u2019t apply the bundle discount to this cart'
+              : 'Applying your bundle discount\u2026')));
       } else {
         left.appendChild(el('span', 'gq-gr-bagbar-count', escapeHtml(bag.count + ' in your bag')));
       }
@@ -3383,12 +3423,15 @@
           showAdded();
           refreshCartToken().then(function() { trackEvent('quiz_add_to_cart'); });
           var bag = gridBag();
-          if (bd && bag.count >= bd.minQty && !state.gridDiscountApplied) {
+          if (bd && bag.count >= bd.minQty && state.gridDiscountApplied !== true && state.gridDiscountState !== 'pending') {
+            state.gridDiscountState = 'pending';
             applyBundleDiscount().then(function(applied) {
-              if (!applied) return;
-              state.gridDiscountApplied = true;
+              state.gridDiscountState = applied ? null : 'refused';
+              if (applied) {
+                state.gridDiscountApplied = true;
+                trackEvent('quiz_bundle_discount_applied');
+              }
               saveState();
-              trackEvent('quiz_bundle_discount_applied');
               refreshAll();
             });
           }
@@ -3840,6 +3883,7 @@
             btn.parentNode.insertBefore(bagLink, btn.nextSibling);
           }
           refreshCartToken().then(function() { trackEvent('quiz_add_to_cart'); });
+          noteQuizAdd(variantId, quantity);
           setTimeout(function() {
             btn.classList.remove('is-added');
             btn.textContent = original;
@@ -3855,6 +3899,26 @@
           }, 2600);
         });
     };
+  }
+
+  // Units the shopper added through the quiz this session. Once they reach
+  // the live bundle discount's minimum, the code goes on the cart even if
+  // the shopper added items one by one instead of through the card.
+  function noteQuizAdd(variantId, quantity) {
+    if (variantId == null) return;
+    quizAdds[String(variantId)] = (quizAdds[String(variantId)] || 0) + Math.max(1, quantity || 1);
+    var results = (config && config.results) || {};
+    var bd = results.bundleEnabled ? results.bundleDiscount : null;
+    if (!bd || bundleCodeState === 'applied' || bundleCodeState === 'pending') return;
+    var units = 0;
+    for (var k in quizAdds) units += quizAdds[k];
+    if (units < bd.minQty) return;
+    bundleCodeState = 'pending';
+    applyBundleDiscount().then(function(applied) {
+      bundleCodeState = applied ? 'applied' : 'refused';
+      if (applied) trackEvent('quiz_bundle_discount_applied');
+      if (bundleOfferRefresh) bundleOfferRefresh();
+    });
   }
 
   // Shade gate ("Now let's nail your shade") for partial results.
@@ -3955,14 +4019,21 @@
 
   function buildBundleOffer(matches, results) {
     var all = matches.length;
+    // Shopify's minimum counts units, and a match can carry quantity > 1.
+    var units = 0;
+    matches.forEach(function(m) { units += Math.max(1, m.quantity || 1); });
     var live = results.bundleDiscount || null;
     // A minimum this match set can't reach would promise a saving that
     // checkout never gives.
-    var bd = live && live.minQty <= all ? live : null;
+    var bd = live && live.minQty <= units ? live : null;
     var amount = discountText(bd);
-    var mixable = Boolean(bd) && bd.minQty < all;
+    var mixable = Boolean(bd) && bd.minQty < units;
     var size = Number(results.bundleSize) > 0 ? Math.min(Math.floor(Number(results.bundleSize)), all) : all;
-    var customLabel = results.bundleLabel && results.bundleLabel !== DEFAULT_BUNDLE_LABEL ? results.bundleLabel : null;
+    // A merchant label is a button label only when it carries the count or
+    // price tokens; older copy-only labels ("Select 3 and save 20%", the
+    // grid's "**Mix & match:**" line) would read wrong on the button.
+    var customLabel = results.bundleLabel && results.bundleLabel !== DEFAULT_BUNDLE_LABEL &&
+      /\{(count|total)\}/.test(results.bundleLabel) ? results.bundleLabel.replace(/\*\*/g, '') : null;
     var picks = matches.map(function(m, i) { return { m: m, on: i < size, line: null, tile: null }; });
     var linesReady = false;
 
@@ -3996,6 +4067,8 @@
       tile.onclick = function() {
         if (btn.classList.contains('is-working')) return;
         p.on = !p.on;
+        // A new selection is a new offer: the "Added" state ends here.
+        btn.classList.remove('is-added');
         refresh();
       };
       tiles.appendChild(tile);
@@ -4017,27 +4090,47 @@
     card.appendChild(status);
     if (bd) card.appendChild(el('p', 'gq-bo-fine', escapeHtml(bd.note || 'Bundle savings applied at checkout')));
 
+    // The variant the shopper picked on the page (t1 hero) wins over the
+    // matched one, for both the cart line and the price.
+    function lineFor(p) {
+      if (!p.line) return null;
+      var pv = pickedVariants[matchKey(p.m)];
+      return pv ? { id: pv.id, quantity: p.line.quantity, unit: pv.price != null ? pv.price : p.line.unit } : p.line;
+    }
+    function addable() {
+      return picks.filter(function(p) { var l = lineFor(p); return l && l.id && !p.tile.disabled; });
+    }
     function selection() {
       var items = [];
       var count = 0;
       var total = 0;
       var known = true;
       picks.forEach(function(p) {
-        if (!p.on || !p.line || !p.line.id) return;
-        items.push({ id: p.line.id, quantity: p.line.quantity });
-        count += p.line.quantity;
-        if (p.line.unit != null) total += p.line.unit * p.line.quantity;
+        var l = lineFor(p);
+        if (!p.on || !l || !l.id) return;
+        items.push({ id: l.id, quantity: l.quantity });
+        count += l.quantity;
+        if (l.unit != null) total += l.unit * l.quantity;
         else known = false;
       });
-      return { items: items, count: count, total: known && items.length ? total : null };
+      var ready = addable();
+      return {
+        items: items,
+        count: count,
+        total: known && items.length ? total : null,
+        everything: ready.length > 1 && items.length === ready.length,
+      };
     }
 
     function refresh() {
       picks.forEach(function(p) {
+        var l = lineFor(p);
+        if (l && l.unit != null) p.price.textContent = formatMoney(l.unit * l.quantity);
         p.tile.classList.toggle('is-on', p.on);
         p.tile.setAttribute('aria-pressed', p.on ? 'true' : 'false');
         p.tile.setAttribute('aria-label', (p.on ? 'Remove ' : 'Add ') + (p.m.productName || 'item') + (p.on ? ' from' : ' to') + ' the bundle');
       });
+      showCodeState();
       if (btn.classList.contains('is-working') || btn.classList.contains('is-added')) return;
       if (!linesReady) {
         btn.disabled = true;
@@ -4053,7 +4146,7 @@
         btn.textContent = buildAddLabel(customLabel, s.count, discounted,
           saving != null ? { text: amount, wasCents: s.total } : null);
       } else {
-        btn.textContent = (s.count === all && all > 1 ? 'Add all ' + s.count + ' to bag' : 'Add ' + s.count + ' to bag') +
+        btn.textContent = (s.everything ? 'Add all ' + s.count + ' to bag' : 'Add ' + s.count + ' to bag') +
           (saving != null ? ' · Save ' + formatMoney(saving) : (s.total != null ? ' · ' + formatMoney(s.total) : ''));
       }
       if (s.items.length === 0) btn.textContent = 'Pick at least one';
@@ -4062,6 +4155,19 @@
         : '';
       var missing = bd && s.count > 0 && !qualifies ? bd.minQty - s.count : 0;
       hint.textContent = missing > 0 ? 'Pick ' + missing + ' more to save' + (amount ? ' ' + amount : '') : '';
+    }
+
+    // The bundle code's state on this cart, whoever put it there (this card
+    // or per-product adds reaching the minimum).
+    function showCodeState() {
+      if (!bd) return;
+      card.classList.toggle('is-applied', bundleCodeState === 'applied');
+      card.classList.toggle('is-refused', bundleCodeState === 'refused');
+      status.textContent = bundleCodeState === 'applied'
+        ? (amount ? amount + ' off applied.' : 'Bundle discount applied.') + ' You’ll see it at checkout.'
+        : bundleCodeState === 'refused'
+          ? 'We couldn’t apply the bundle discount to this cart.'
+          : '';
     }
 
     Promise.all(picks.map(function(p) {
@@ -4083,8 +4189,8 @@
           p.media.appendChild(im);
         }
         if (p.line.unit != null) p.price.textContent = formatMoney(p.line.unit * p.line.quantity);
-        // Nothing to add for this match: it can't be in the bundle.
-        if (!p.line.id) {
+        // Nothing to add, or sold out: it can't be in the bundle.
+        if (!p.line.id || (pj && pj.available === false)) {
           p.on = false;
           p.tile.disabled = true;
         }
@@ -4100,7 +4206,7 @@
       btn.disabled = true;
       btn.classList.add('is-working');
       btn.textContent = 'Adding…';
-      status.textContent = '';
+      hint.textContent = '';
       addAllToBag(s.items)
         .then(function() {
           btn.classList.remove('is-working');
@@ -4112,26 +4218,31 @@
             foot.appendChild(bagLink);
           }
           refreshCartToken().then(function() { trackEvent('quiz_add_bundle_to_bag'); });
-          if (qualifies) {
+          s.items.forEach(function(it) { quizAdds[String(it.id)] = (quizAdds[String(it.id)] || 0) + it.quantity; });
+          if (qualifies && bundleCodeState !== 'applied') {
+            bundleCodeState = 'pending';
+            showCodeState();
             applyBundleDiscount().then(function(applied) {
-              if (!applied) return;
-              card.classList.add('is-applied');
-              status.textContent = (amount ? amount + ' off applied.' : 'Bundle discount applied.') + ' You’ll see it at checkout.';
-              trackEvent('quiz_bundle_discount_applied');
+              bundleCodeState = applied ? 'applied' : 'refused';
+              if (applied) trackEvent('quiz_bundle_discount_applied');
+              showCodeState();
             });
           }
-          setTimeout(function() {
-            btn.classList.remove('is-added');
-            refresh();
-          }, 3200);
+          // "Added to bag ✓" stays until the shopper changes the selection,
+          // so a second tap can't silently add the whole set again.
+          btn.disabled = true;
         })
-        .catch(function() {
+        .catch(function(err) {
           btn.classList.remove('is-working');
           btn.textContent = 'Couldn’t add — try again';
+          // Shopify's reason ("sold out", "only 2 left") beats a bare retry.
+          var why = err && err.message && !/^cart add/.test(err.message) ? String(err.message).slice(0, 140) : '';
+          if (why) hint.textContent = why;
           setTimeout(refresh, 2600);
         });
     };
 
+    bundleOfferRefresh = refresh;
     refresh();
     return card;
   }
@@ -4416,6 +4527,9 @@
   }
 
   function restartQuiz() {
+    pickedVariants = {};
+    quizAdds = {};
+    bundleCodeState = null;
     state = {
       screen: 'intro', screenIndex: 0, criteria: {}, answers: [],
       hasPhoto: false, detectedShade: null, matches: null,
@@ -5687,8 +5801,9 @@
       leadCard: definitive ? tplLeadCard : function() { return null; },
     });
 
-    if (definitive && results.bundleEnabled && matches.length >= 2 && !tpl.ownsBundle) {
-      screen.appendChild(buildBundleOffer(matches, results));
+    var bundleShown = tpl.bundleCount ? matches.slice(0, tpl.bundleCount) : matches;
+    if (definitive && results.bundleEnabled && bundleShown.length >= 2 && !tpl.ownsBundle) {
+      screen.appendChild(buildBundleOffer(bundleShown, results));
     }
     if (definitive) {
       var xsell = buildCrossSellSection(matches, results);
@@ -5852,6 +5967,8 @@
         var sel = row.querySelectorAll('.is-selected');
         for (var i = 0; i < sel.length; i++) sel[i].classList.remove('is-selected');
         pill.classList.add('is-selected');
+        pickedVariants[matchKey(m)] = { id: v.id, price: typeof v.price === 'number' ? v.price : null };
+        if (bundleOfferRefresh) bundleOfferRefresh();
         var qty = Math.max(1, m.quantity || 1);
         var unit = typeof v.price === 'number' ? v.price * qty : null;
         if (parts.priceEl && unit != null) parts.priceEl.textContent = formatMoney(unit);
@@ -6025,6 +6142,8 @@
 
   var TplMatch = {
     id: 't1',
+    // Hero + two alternates are on screen; the bundle offers exactly those.
+    bundleCount: 3,
     rootClass: 'gq-t1',
     loading: 'required',
     resultsMarker: 'gq-t1r',
@@ -6190,6 +6309,7 @@
 
   var TplConsult = {
     id: 't2',
+    bundleCount: 3, // the three compared columns
     rootClass: 'gq-t2',
     loading: 'optional',
     resultsMarker: 'gq-t2r',
@@ -6614,6 +6734,7 @@
 
   var TplClean = {
     id: 't5',
+    bundleCount: 4, // the four cards it renders
     rootClass: 'gq-t5',
     loading: 'absent',
     resultsMarker: 'gq-t5r',
@@ -6794,7 +6915,7 @@
       // Resolve a joinable cart token up front (strips the "?key=" suffix,
       // force-mints a cart when none exists) so every funnel event carries
       // it — not just post-add-to-bag ones.
-      refreshCartToken();
+      var tokenReady = refreshCartToken();
 
       // Restore an in-flight session (per-tab). Photos don't survive a
       // refresh by design; results re-render in product-image mode.
@@ -6841,7 +6962,9 @@
       } else {
         render('forward');
       }
-      trackEvent('quiz_view');
+      // After the token resolves, so a view joins to the same shopper as
+      // their later events (refreshCartToken never rejects).
+      tokenReady.then(function() { trackEvent('quiz_view'); });
     });
   }
 

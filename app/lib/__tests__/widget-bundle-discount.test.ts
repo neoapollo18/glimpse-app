@@ -78,7 +78,7 @@ const json = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: (
 let applicable = true;
 let fetchMock: ReturnType<typeof vi.fn>;
 function routedFetch(url: string, init?: { body?: string }) {
-  if (url.includes("/api/storefront/quiz-config")) return json(CONFIG);
+  if (url.includes("/api/storefront/quiz-config")) return json(configOverride ?? CONFIG);
   if (url.includes("/api/storefront/recommendation-config")) return json(FLOW);
   if (url.includes("/api/storefront/quiz-recommend")) return json(RECOMMEND);
   if (url.includes("/api/storefront/quiz-bundle-discount")) return json({ code: "BUNDLE15" });
@@ -144,10 +144,13 @@ const trackedEvents = () =>
     .map((c) => JSON.parse(String((c[1] as any)?.body || "{}")).eventType);
 
 beforeEach(() => {
+  configOverride = null;
   sessionStorage.clear();
   delete (window as any).GLEAME_QUIZ_PREVIEW;
   delete (window as any).Shopify;
 });
+
+let configOverride: Record<string, unknown> | null = null;
 
 describe("bundle discount on the live storefront path", () => {
   it("offers the saving in the Bundle & save card and applies the code after the add", async () => {
@@ -186,6 +189,50 @@ describe("bundle discount on the live storefront path", () => {
     expect(trackedEvents()).toContain("quiz_add_bundle_to_bag");
   });
 
+  it("per-product adds that reach the minimum earn the bundle code too", async () => {
+    applicable = true;
+    const root = await toResults();
+    const own = Array.from(root.querySelectorAll<HTMLButtonElement>(".gq-match-card .gq-add-btn:not(.gq-add-btn--bundle)"));
+    expect(own.length).toBe(2);
+    own[0].click();
+    await settle(12);
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes("/api/storefront/quiz-bundle-discount"))).toBe(false);
+    own[1].click();
+    await settle(20);
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes("/api/storefront/quiz-bundle-discount"))).toBe(true);
+    const card = root.querySelector(".gq-bundle-offer")!;
+    expect(card.classList.contains("is-applied")).toBe(true);
+    expect(trackedEvents()).toContain("quiz_bundle_discount_applied");
+  });
+
+  it("after a bundle add the button stays 'Added' until the selection changes", async () => {
+    applicable = true;
+    const root = await toResults();
+    const btn = root.querySelector<HTMLButtonElement>(".gq-add-btn--bundle")!;
+    btn.click();
+    await settle(20);
+    expect(btn.textContent).toBe("Added to bag ✓");
+    expect(btn.disabled).toBe(true);
+    (root.querySelectorAll(".gq-bo-item")[1] as HTMLButtonElement).click();
+    expect(btn.disabled).toBe(false);
+    expect(btn.textContent).toMatch(/^Add 1 to bag/);
+  });
+
+  it("grid results never say 'applied' when Shopify refuses the code", async () => {
+    applicable = false;
+    configOverride = { ...CONFIG, results: { ...CONFIG.results, layout: "grid" } };
+    const root = await toResults();
+    const adds = Array.from(root.querySelectorAll<HTMLButtonElement>(".gq-gr-add"));
+    expect(adds.length).toBe(2);
+    adds[0].click();
+    await settle(12);
+    adds[1].click();
+    await settle(25);
+    const text = root.textContent ?? "";
+    expect(text).not.toMatch(/off applied|Discount applied/);
+    expect(text).toMatch(/couldn’t apply|couldn’t be applied/i);
+  });
+
   it("does not claim the saving when Shopify marks the code not applicable", async () => {
     applicable = false;
     const root = await toResults();
@@ -194,7 +241,9 @@ describe("bundle discount on the live storefront path", () => {
 
     const card = root.querySelector(".gq-bundle-offer")!;
     expect(card.classList.contains("is-applied")).toBe(false);
-    expect(card.querySelector(".gq-bo-status")!.textContent).toBe("");
+    // Says so plainly instead of leaving the "applied at checkout" promise up.
+    expect(card.classList.contains("is-refused")).toBe(true);
+    expect(card.querySelector(".gq-bo-status")!.textContent).toBe("We couldn’t apply the bundle discount to this cart.");
     expect(trackedEvents()).toContain("quiz_add_bundle_to_bag");
     expect(trackedEvents()).not.toContain("quiz_bundle_discount_applied");
   });

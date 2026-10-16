@@ -113,6 +113,10 @@ describe("Klaviyo payloads", () => {
     expect(klaviyoKeyProblem("pk_****************************ef01")).toMatch(/hidden version/);
     expect(klaviyoKeyProblem("AbC123")).toMatch(/public API key/);
     expect(klaviyoKeyProblem("pk_0123")).toMatch(/cut off/);
+    // A character a header can't carry gets a paste message, never a fetch
+    // error that can echo the key back.
+    expect(klaviyoKeyProblem("pk_0123456789abcdef0123456789abcdef01\u2019")).toMatch(/never contain/);
+    expect(klaviyoKeyProblem("pk_0123456789abcdef\u00000123456789abcdef01")).toMatch(/never contain/);
     expect(klaviyoKeyProblem("shpat_0123456789abcdef")).toMatch(/this starts with "shp" \(22 characters\)/);
     // Shape beyond pk_ + length is Klaviyo's call, not ours.
     expect(klaviyoKeyProblem("pk_0123456789abcdef_0123456789ABCDEF-01")).toBeNull();

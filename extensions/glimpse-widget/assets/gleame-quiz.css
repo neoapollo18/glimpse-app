@@ -4765,3 +4765,6 @@
   #gleame-quiz-root .gq-bo-item { min-width: 96px; }
   #gleame-quiz-root .gq-bundle-offer .gq-bo-add { flex-basis: 100%; }
 }
+/* Shopify refused the bundle code on this cart: no promise in fine print. */
+#gleame-quiz-root .gq-bundle-offer.is-refused .gq-bo-fine { display: none; }
+#gleame-quiz-root .gq-bundle-offer.is-refused .gq-bo-status { color: var(--gq-ink-soft); }

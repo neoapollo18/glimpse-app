@@ -355,6 +355,15 @@ const TEMPLATE_SWITCH_LABEL_PREFIX = "Before switching from ";
  * (before restore, before start over, the generated quiz) out of the
  * KEEP_VERSIONS window.
  */
+/**
+ * Auto-snapshot (same 10-minute bucket as editor saves) before a write that
+ * changes snapshotted settings outside saveLiveQuizConfig, e.g. the Studio
+ * Matching panel. MUST be called while holding withShopSaveLock(shopId).
+ */
+export async function snapshotBeforeSettingsSave(shopId: string): Promise<{ ok: boolean; error?: string }> {
+  return snapshotLive(shopId, {});
+}
+
 export async function snapshotBeforeTemplateSwitch(
   shopId: string,
   fromName: string,

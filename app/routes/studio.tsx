@@ -31,6 +31,7 @@ import {
   archiveLegacyDraft,
   restoreVersion,
   listVersions,
+  snapshotBeforeSettingsSave,
   type QuizDraft,
 } from "../lib/quiz-draft.server";
 import { APPLIERS, type DraftShape } from "../lib/quiz-copilot-tools.server";
@@ -335,7 +336,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       // THE fresh read of chat_assistant_config for this revalidation: the
       // template, slots and report all derive from it (B0: no cached
       // draft capture feeds the Style panel or the banner).
-      getChatAssistantConfig(shopDomain).catch(() => null),
+      // throwOnError: a failed read must be null here (handled below), never
+      // the defaults row — the Matching panel would save defaults over the
+      // shop's real scope and ranking settings.
+      getChatAssistantConfig(shopDomain, { throwOnError: true }).catch(() => null),
       getBrandProfile(shopDomain).catch(() => null),
       // Library index status (V3-CONTRACTS §9); a missing column reads as
       // "never attempted", never a 500.
@@ -909,7 +913,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         if (!v.ok) return json({ ok: false, error: v.error, intent });
         const patch = v.patch as Partial<ChatAssistantConfig>;
         try {
-          await saveChatAssistantConfig(shopDomain, patch);
+          // Same contract as every Studio edit: under the shop's save lock,
+          // with a restore point first (these fields are in snapshots).
+          await withShopSaveLock(shop.id, async () => {
+            const snap = await snapshotBeforeSettingsSave(shop.id);
+            if (!snap.ok) throw new Error(`Save aborted: ${snap.error}`);
+            await saveChatAssistantConfig(shopDomain, patch);
+          });
         } catch (e) {
           return json({ ok: false, error: e instanceof Error ? e.message : "Saving failed", intent });
         }
@@ -2036,7 +2046,20 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
           ) : null
         }
       />
-      <VersionHistoryModal data={data} open={historyOpen} onClose={() => setHistoryOpen(false)} />
+      <VersionHistoryModal
+        data={data}
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        // Pending keystrokes land BEFORE the restore, never after it.
+        onBeforeRestore={() => editorFlushRef.current?.()}
+        // Editors hold local state keyed by chatEpoch: remount them from the
+        // restored config (else the next edit writes pre-restore values back)
+        // and reload the preview, which keeps its pinned token otherwise.
+        onRestored={() => {
+          setChatEpoch((n) => n + 1);
+          reloadPreview();
+        }}
+      />
       <PublishSheet
         data={data}
         problems={problems}

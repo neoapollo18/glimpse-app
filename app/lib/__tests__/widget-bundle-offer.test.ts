@@ -104,13 +104,20 @@ function evalWidget() {
   }
 }
 
-async function boot(config: Record<string, unknown>) {
+const EXTRA = {
+  "nude-1": pj(4, "nude-1", "Nude One", 1100),
+  "nude-2": pj(5, "nude-2", "Nude Two", 1000),
+};
+async function boot(config: Record<string, unknown>, quantities?: number[], matchIdx?: number[]) {
   document.body.innerHTML = '<div id="gleame-quiz-root" data-shop-domain="shop.myshopify.com"></div>';
+  const pool = [...SAMPLE.matches, match("nude-1", "Nude One"), match("nude-2", "Nude Two")];
+  const picked = (matchIdx ?? [0, 1, 2]).map((i) => ({ ...pool[i] }));
+  if (quantities) picked.forEach((m, i) => { m.quantity = quantities[i] ?? 1; });
   (window as any).GLEAME_QUIZ_PREVIEW = {
     config,
     flow: FLOW,
-    sampleRecommend: SAMPLE,
-    productJson: PRODUCT_JSON,
+    sampleRecommend: { ...SAMPLE, matches: picked },
+    productJson: { ...PRODUCT_JSON, ...EXTRA },
     studio: false,
     overrides: { step: "results" },
   };
@@ -202,6 +209,30 @@ describe("Bundle & save card", () => {
   it("bundle button off: no card", async () => {
     const root = await boot(makeConfig({ bundleEnabled: false }));
     expect(root.querySelector(".gq-bundle-offer")).toBeNull();
+  });
+
+  it("a copy-only merchant label never lands on the button; token labels do, without ** markup", async () => {
+    const copyOnly = await boot(makeConfig({ bundleLabel: "**Mix & match:** add any {range} and save {discount}", bundleDiscount: { type: "percentage", value: 20, minQty: 2, note: null } }));
+    expect(text(copyOnly, ".gq-add-btn--bundle")).toMatch(/^Add all 3 to bag · Save /);
+    const custom = await boot(makeConfig({ bundleLabel: "**Grab all {count}** · {total}" }));
+    expect(text(custom, ".gq-add-btn--bundle")).toMatch(/^Grab all 3 · .*40\.00$/);
+  });
+
+  it("quantity > 1: 'all' means every tile, and the minimum counts units", async () => {
+    const root = await boot(makeConfig({ bundleDiscount: { type: "percentage", value: 10, minQty: 4, note: null } }), [2, 1, 1]);
+    // 4 units reach minQty 4 even though there are only 3 matches.
+    expect(text(root, ".gq-bo-title")).toBe("Bundle all 3 and save 10%");
+    expect(text(root, ".gq-add-btn--bundle")).toMatch(/^Add all 4 to bag · Save /);
+    tiles(root)[1].click();
+    expect(text(root, ".gq-add-btn--bundle")).toMatch(/^Add 3 to bag/);
+  });
+
+  it("templates bundle only the matches they show (t1: 3, t5: 4)", async () => {
+    const five = [0, 1, 2, 3, 4];
+    const t1 = await boot(makeConfig(templateResults(), templateExtras("t1")), undefined, five);
+    expect(tiles(t1).length).toBe(3);
+    const t5 = await boot(makeConfig(templateResults(), templateExtras("t5")), undefined, five);
+    expect(tiles(t5).length).toBe(4);
   });
 
   it("templates: t1/t2/t5 show the card; t3/t4 keep their own routine/kit row", async () => {

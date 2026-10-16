@@ -47,6 +47,9 @@ export function validateMatchSettingsPatch<T>(
   if (has("photo_frame_hint")) {
     patch.photo_frame_hint = typeof r.photo_frame_hint === "string" ? r.photo_frame_hint.trim().slice(0, 200) : "";
   }
+  if (patch.product_scope === "selected" && patch.selected_product_ids && patch.selected_product_ids.length === 0) {
+    return { ok: false, error: "Pick at least one product, or choose All configured products." };
+  }
   if (Object.keys(patch).length === 0) return { ok: false, error: "Nothing to save" };
   return { ok: true, patch };
 }

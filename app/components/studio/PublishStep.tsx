@@ -93,6 +93,11 @@ export function PublishSheet({
   const [addToMenu, setAddToMenu] = useState(true);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ liveUrl: string | null; error: string | null } | null>(null);
+  // Each opening starts at the checklist (the Hidden badge opens this sheet
+  // to show which questions are hidden), not at the last publish's result.
+  useEffect(() => {
+    if (open) setResult(null);
+  }, [open]);
   const revalidator = useRevalidator();
   const shopify = useAppBridge();
 
@@ -367,6 +372,7 @@ function useSetLive() {
     setLive,
     toggling: fetcher.state !== "idle" && fetcher.formData?.get("intent") === "set-live",
     error: fetcher.data && !fetcher.data.ok ? fetcher.data.error ?? null : null,
+    data: fetcher.data,
   };
 }
 
@@ -394,7 +400,16 @@ export function LiveStatusControl({
   onOpenPublish: () => void;
   onOpenHistory: () => void;
 }) {
-  const { setLive, toggling, error } = useSetLive();
+  const live = useSetLive();
+  const { setLive, toggling } = live;
+  // An error from an earlier attempt doesn't greet the next opening.
+  const [dismissed, setDismissed] = useState<unknown>(null);
+  useEffect(() => {
+    if (open) setDismissed(live.data ?? null);
+    // Only on opening; a new attempt's response is a new object.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  const error = live.data && live.data !== dismissed ? live.error : null;
   const settings = (data.draft?.settings ?? {}) as Record<string, unknown>;
   const questionCount = data.draft?.flow.questions.length ?? 0;
   const ruleCount = data.draft?.flow.rules.length ?? 0;
@@ -566,10 +581,14 @@ export function VersionHistoryModal({
   data,
   open,
   onClose,
+  onBeforeRestore,
+  onRestored,
 }: {
   data: StudioLoaderData;
   open: boolean;
   onClose: () => void;
+  onBeforeRestore?: () => void;
+  onRestored?: () => void;
 }) {
   const fetcher = useFetcher<StudioActionData>();
   const revalidator = useRevalidator();
@@ -588,6 +607,7 @@ export function VersionHistoryModal({
     processedRef.current = fetcher.data;
     if (fetcher.data.ok && fetcher.data.intent === "restore") {
       revalidator.revalidate();
+      onRestored?.();
       close();
     }
     // close/revalidator identities don't matter for a once-per-response effect.
@@ -597,8 +617,20 @@ export function VersionHistoryModal({
   const versions = (data.versions as any[]).filter((v) => v != null);
   const rowFor = (id: string) => versions.find((v) => v.id === id) ?? null;
   const restoring = fetcher.state !== "idle" && fetcher.formData?.get("intent") === "restore";
+  // Which version the last restore attempt was for: its error shows only on
+  // that version's confirm step, and reopening the modal clears it.
+  const [errorFor, setErrorFor] = useState<string | null>(null);
+  useEffect(() => {
+    if (open) setErrorFor(null);
+  }, [open]);
   const restoreError =
-    fetcher.state === "idle" && fetcher.data && !fetcher.data.ok && fetcher.data.intent === "restore"
+    errorFor &&
+    view.kind === "confirm" &&
+    view.id === errorFor &&
+    fetcher.state === "idle" &&
+    fetcher.data &&
+    !fetcher.data.ok &&
+    fetcher.data.intent === "restore"
       ? fetcher.data.error ?? "Restore failed"
       : null;
 
@@ -635,10 +667,13 @@ export function VersionHistoryModal({
           content: "Restore",
           loading: restoring,
           onAction: () => {
+            onBeforeRestore?.();
+            setErrorFor(null);
             const fd = new FormData();
             fd.append("intent", "restore");
             fd.append("versionId", view.id);
             fetcher.submit(fd, { method: "POST", action: "/studio" });
+            setErrorFor(view.id);
           },
         }}
         secondaryActions={[{ content: "Cancel", onAction: () => setView({ kind: "list" }) }]}

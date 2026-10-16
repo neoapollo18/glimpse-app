@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFetcher } from "@remix-run/react";
 import {
   Banner,
@@ -63,6 +63,10 @@ export function MatchSettingsEditor({
   const [tuning, setTuning] = useState<RecommendationTuning>(initial.tuning);
   const [dirty, setDirty] = useState(false);
   const [message, setMessage] = useState<{ tone: "success" | "critical"; text: string } | null>(null);
+  // What the store has now: a save sends only the fields that differ from
+  // it, so a stale or default value elsewhere in the form is never written.
+  const [baseline, setBaseline] = useState<MatchSettings>(initial);
+  const pendingRef = useRef<MatchSettings | null>(null);
 
   const touch = <T,>(setter: (v: T) => void) => (v: T) => {
     setter(v);
@@ -79,6 +83,8 @@ export function MatchSettingsEditor({
   useEffect(() => {
     if (fetcher.state !== "idle" || !fetcher.data || fetcher.data.intent !== "save-match-settings") return;
     if (fetcher.data.ok) {
+      if (pendingRef.current) setBaseline(pendingRef.current);
+      pendingRef.current = null;
       setDirty(false);
       setMessage({ tone: "success", text: fetcher.data.message ?? "Matching settings saved" });
       onPreviewReload();
@@ -89,23 +95,41 @@ export function MatchSettingsEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetcher.state, fetcher.data]);
 
+  const emptySelection = productScope === "selected" && selectedProductIds.length === 0;
+
   const save = () => {
+    if (emptySelection) {
+      setMessage({ tone: "critical", text: "Pick at least one product, or choose All configured products. With none selected, shoppers get no matches." });
+      return;
+    }
+    const next: MatchSettings = {
+      ...baseline,
+      numRecommendations,
+      productScope,
+      selectedProductIds,
+      recommendationMode,
+      aiGuidance,
+      priorityProductIds,
+      tuning,
+    };
+    const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+    const patch: Record<string, unknown> = {};
+    if (!same(next.numRecommendations, baseline.numRecommendations)) patch.num_recommendations = next.numRecommendations;
+    if (!same(next.productScope, baseline.productScope)) patch.product_scope = next.productScope;
+    if (!same(next.selectedProductIds, baseline.selectedProductIds)) patch.selected_product_ids = next.selectedProductIds;
+    if (!same(next.recommendationMode, baseline.recommendationMode)) patch.recommendation_mode = next.recommendationMode;
+    // Guidance is edited only where its textarea renders (AI modes).
+    if (next.recommendationMode !== "matrix" && !same(next.aiGuidance, baseline.aiGuidance)) patch.ai_guidance = next.aiGuidance;
+    if (!same(next.priorityProductIds, baseline.priorityProductIds)) patch.priority_product_ids = next.priorityProductIds;
+    if (!same(next.tuning, baseline.tuning)) patch.recommendation_tuning = next.tuning;
+    if (Object.keys(patch).length === 0) {
+      setDirty(false);
+      return;
+    }
+    pendingRef.current = next;
     const fd = new FormData();
     fd.append("intent", "save-match-settings");
-    fd.append(
-      "patch",
-      JSON.stringify({
-        num_recommendations: numRecommendations,
-        product_scope: productScope,
-        selected_product_ids: selectedProductIds,
-        recommendation_mode: recommendationMode,
-        // Only sent where the textarea renders, so a rules-only shop's
-        // generated rulebook is never blanked by an unrelated save.
-        ...(recommendationMode !== "matrix" ? { ai_guidance: aiGuidance } : {}),
-        priority_product_ids: priorityProductIds,
-        recommendation_tuning: tuning,
-      }),
-    );
+    fd.append("patch", JSON.stringify(patch));
     fetcher.submit(fd, { method: "POST", action: "/studio" });
   };
 
@@ -141,6 +165,11 @@ export function MatchSettingsEditor({
         onChange={touch(setProductScope)}
         disabled={disabled}
       />
+      {emptySelection && (
+        <Text as="p" variant="bodySm" tone="critical">
+          Pick at least one product. With none selected, shoppers get no matches.
+        </Text>
+      )}
       {productScope === "selected" && (
         <BlockStack gap="100">
           {products.length === 0 ? (
@@ -300,14 +329,22 @@ export function CameraHintField({ initial, disabled }: { initial: string; disabl
   const fetcher = useFetcher<StudioActionData>();
   const [value, setValue] = useState(initial);
   const [saved, setSaved] = useState(initial);
+  const sentRef = useRef<string | null>(null);
+  // Only a successful save moves the baseline, so a failed one can be
+  // retried by blurring again with the same text.
+  useEffect(() => {
+    if (fetcher.state !== "idle" || !fetcher.data || fetcher.data.intent !== "save-match-settings") return;
+    if (fetcher.data.ok && sentRef.current != null) setSaved(sentRef.current);
+    sentRef.current = null;
+  }, [fetcher.state, fetcher.data]);
   const commit = () => {
     const next = value.trim();
-    if (next === saved) return;
+    if (next === saved || fetcher.state !== "idle") return;
+    sentRef.current = next;
     const fd = new FormData();
     fd.append("intent", "save-match-settings");
     fd.append("patch", JSON.stringify({ photo_frame_hint: next }));
     fetcher.submit(fd, { method: "POST", action: "/studio" });
-    setSaved(next);
   };
   const failed = fetcher.state === "idle" && fetcher.data?.intent === "save-match-settings" && !fetcher.data.ok;
   return (

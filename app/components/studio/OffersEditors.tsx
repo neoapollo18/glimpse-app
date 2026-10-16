@@ -266,7 +266,7 @@ export function BundleEditor({
       <Text as="p" variant="bodySm" tone="subdued">
         A Bundle &amp; save card under the results: one tap adds all the shopper&rsquo;s matches, and they can drop
         any they don&rsquo;t want. Every product keeps its own Add to bag. Add a discount to make the bundle the
-        obvious buy.
+        obvious buy. Grid results and the Routine and Discover templates show the bundle in their own style.
       </Text>
       {copy.error && (
         <Banner tone="critical" onDismiss={copy.clearError}>

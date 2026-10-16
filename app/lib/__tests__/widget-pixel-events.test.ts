@@ -165,13 +165,13 @@ describe("Shopify Customer Events mirror", () => {
     expect(published().filter((e) => e === "gleame_quiz_start")).toHaveLength(1);
   });
 
-  it("on-store previews never reach the merchant's pixels (Gleame analytics still records)", async () => {
+  it("on-store previews reach neither the merchant's pixels nor Gleame analytics", async () => {
     (window as any).GLEAME_QUIZ_FORCE = true;
     (window as any).GLEAME_QUIZ_STORE_PREVIEW = { token: "t", id: "d" };
     await boot();
     expect(publish).not.toHaveBeenCalled();
     const urls = ((window as any).fetch as ReturnType<typeof vi.fn>).mock.calls.map((c) => String(c[0]));
-    expect(urls.some((u) => u.includes("/api/storefront/track-event"))).toBe(true);
+    expect(urls.some((u) => u.includes("/api/storefront/track-event"))).toBe(false);
   });
 
   it("a storefront without Shopify.analytics (or a throwing one) still tracks normally", async () => {

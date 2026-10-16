@@ -199,8 +199,8 @@ export default function Settings() {
                   </Text>
                   <Text as="p" variant="bodySm" tone="subdued">
                     Let quiz shoppers see their matches on their own photo.
-                    Configure a try-on prompt on your first product to turn on
-                    the try-on settings pages in the navigation.
+                    Configure a try-on prompt on your first product to add the
+                    Products page to the navigation.
                   </Text>
                   <InlineStack>
                     <Button url="/app/products">Set up quiz try-on</Button>

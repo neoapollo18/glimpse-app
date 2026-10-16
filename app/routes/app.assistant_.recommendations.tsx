@@ -1157,7 +1157,7 @@ const NUM_RANKS = 3;
   // -----------------------------------------------------------------
   return (
     <Page
-      backAction={{ content: "Assistant", url: "/app/assistant" }}
+      backAction={{ content: "Studio", url: "/app?open=studio&step=build&slide=matching" }}
       title="Advanced rules editor"
     >
       <TitleBar title="Advanced rules editor" />
