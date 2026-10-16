@@ -15,6 +15,7 @@ import { templateRenderable, templateServedLive } from "../lib/template-live.ser
 import { getShopCurrency } from "../lib/shop-currency.server";
 import { getQuizOffers, publicOffersPayload } from "../lib/quiz-offers.server";
 import { verifyStorePreviewToken } from "../lib/app-proxy.server";
+import { quizTextPayload, resultsCtaPayload } from "../lib/quiz-ui-text";
 
 /** Template contract the widget must declare (`&tpl=`) to receive template
  * payloads. Mirrors TEMPLATE_PROTOCOL in gleame-quiz.js. */
@@ -155,6 +156,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       headingFontOverride: config.quiz_heading_font_override,
       bodyFontOverride: config.quiz_body_font_override,
       headingWeightOverride: config.quiz_heading_weight_override,
+      // Text & labels overrides + body typography (migration 092). All null
+      // for an untouched quiz: the widget's English and inherited weight.
+      ...quizTextPayload(config),
       // Design tokens (migration 049). Null = the widget stylesheet's
       // defaults — the shipped design, unchanged.
       inkColor: config.quiz_ink_color,
@@ -270,6 +274,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         // the bundle add.
         crossSell: publicOffers.crossSell,
         bundleDiscount: publicOffers.bundleDiscount,
+        // Card button: add to cart (default) or view product, plus the
+        // small link for the other action (migration 092).
+        ...resultsCtaPayload(config),
         // Migration 088, classic only: 'grid' = equal cards + bundle bar.
         layout: servedTemplate ? null : config.quiz_results_layout,
         // v2 template results content (spec 5.6 / Part 3), only when a

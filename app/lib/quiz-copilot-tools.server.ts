@@ -21,6 +21,7 @@ import {
   type GeneratedQuizConfig,
   type NormalizedDraft,
 } from "./quiz-config-schema.server";
+import { UI_TEXT_ENTRIES, applyProductWhyPatch, applyUiTextPatch } from "./quiz-ui-text";
 
 export type DraftShape = NormalizedDraft;
 
@@ -458,6 +459,9 @@ const COPY_KEYS = new Set([
   // quiz_phases / quiz_founder / quiz_generation_report are generator-owned
   // object columns, never copy.
   "quiz_email_placement",
+  // Results card CTA (migration 092): which action is the button, and
+  // whether the other one shows as a small link.
+  "quiz_results_primary_cta", "quiz_results_secondary_link",
 ]);
 
 // Copy keys with a closed value set — anything else is rejected, so a
@@ -467,6 +471,7 @@ const ENUM_COPY_KEYS: Record<string, readonly string[]> = {
   // Mirror migration 088's CHECKs; null (standard) clears them.
   quiz_ui_style: ["boutique"],
   quiz_results_layout: ["grid"],
+  quiz_results_primary_cta: ["add", "view"],
 };
 
 // Copy keys that are booleans on the live config row — String() coercion
@@ -479,6 +484,7 @@ const BOOL_COPY_KEYS = new Set([
   "quiz_lead_collect_phone",
   "quiz_bundle_enabled",
   "quiz_compact_layout",
+  "quiz_results_secondary_link",
 ]);
 
 // Copy keys that are integers on the live config row — same typed-column
@@ -548,6 +554,8 @@ const DESIGN_KEYS = new Set([
   ...GENERATED_DESIGN_KEYS,
   "quiz_heading_font_override", "quiz_body_font_override",
   "quiz_heading_weight_override",
+  // Body typography (migration 092).
+  "quiz_body_weight", "quiz_body_color",
 ]);
 
 // Non-color token constraints mirror the DB CHECKs from migration 049. An
@@ -561,6 +569,8 @@ const DESIGN_ENUMS: Record<string, readonly string[]> = {
   quiz_animation_style: ["full", "minimal", "off"],
   // Mirrors the DB CHECK from migration 061.
   quiz_heading_weight_override: ["300", "400", "500", "600", "700", "800"],
+  // Mirrors the DB CHECK from migration 092.
+  quiz_body_weight: ["400", "500", "600"],
 };
 
 export function applyUpdateDesignTokens(draft: DraftShape, input: any, _catalog: CatalogProduct[]): ApplyResult {
@@ -691,6 +701,61 @@ export function applyGetDraftDetails(draft: DraftShape, input: any, _catalog: Ca
   };
 }
 
+// Text & labels (migration 092): merchant overrides for the quiz's fixed
+// strings (buttons, hints, loading lines...). Keys and defaults live in
+// quiz-ui-text.ts; null / blank / the default clears an override.
+export function applyUpdateUiText(draft: DraftShape, input: any, _catalog: CatalogProduct[]): ApplyResult {
+  const fields = input?.fields;
+  if (!fields || typeof fields !== "object" || Array.isArray(fields) || Object.keys(fields).length === 0) {
+    return { ok: false, error: "fields is empty" };
+  }
+  const settings = draft.settings as Record<string, unknown>;
+  const result = applyUiTextPatch(settings.quiz_ui_text, fields, (settings.quiz_template as string | null) ?? null);
+  if (!result.ok) return { ok: false, error: result.error };
+  const next = clone(draft);
+  (next.settings as Record<string, unknown>).quiz_ui_text = result.value;
+  const n = Object.keys(fields).length;
+  return {
+    ok: true,
+    draft: next,
+    summary: { tool: "update_ui_text", target: "Copy", description: `Updated ${n} text label${n > 1 ? "s" : ""}` },
+  };
+}
+
+// "Why this fits" lines (migration 092): one line per product under its
+// result card. Accepts one {productId, text} or {lines: [...]} (max 60).
+export function applySetProductWhy(draft: DraftShape, input: any, catalog: CatalogProduct[]): ApplyResult {
+  const lines: Array<{ productId: unknown; text: unknown }> = Array.isArray(input?.lines)
+    ? input.lines
+    : input && "productId" in input
+      ? [{ productId: input.productId, text: input.text }]
+      : [];
+  if (lines.length === 0) return { ok: false, error: "Provide productId and text, or lines" };
+  if (lines.length > 60) return { ok: false, error: "At most 60 lines per call" };
+  const known = new Set(catalog.map((p) => p.id));
+  const settings = draft.settings as Record<string, unknown>;
+  let value: unknown = settings.quiz_product_why;
+  for (const line of lines) {
+    if (typeof line?.productId !== "string" || !known.has(line.productId)) {
+      return { ok: false, error: `Unknown product id: ${String(line?.productId)}` };
+    }
+    const r = applyProductWhyPatch(value, line.productId, line.text);
+    if (!r.ok) return { ok: false, error: r.error };
+    value = r.value;
+  }
+  const next = clone(draft);
+  (next.settings as Record<string, unknown>).quiz_product_why = value ?? null;
+  return {
+    ok: true,
+    draft: next,
+    summary: {
+      tool: "set_product_why",
+      target: "Results",
+      description: lines.length === 1 ? "Updated a product's “why this fits” line" : `Updated ${lines.length} “why this fits” lines`,
+    },
+  };
+}
+
 export const APPLIERS: Record<string, (d: DraftShape, i: any, c: CatalogProduct[]) => ApplyResult> = {
   update_question: applyUpdateQuestion,
   update_question_options: applyUpdateQuestionOptions,
@@ -699,6 +764,8 @@ export const APPLIERS: Record<string, (d: DraftShape, i: any, c: CatalogProduct[
   reorder_questions: applyReorderQuestions,
   update_copy: applyUpdateCopy,
   update_design_tokens: applyUpdateDesignTokens,
+  update_ui_text: applyUpdateUiText,
+  set_product_why: applySetProductWhy,
   update_rules: applyUpdateRules,
   update_recommendation_mode: applyUpdateRecommendationMode,
   update_guidance: applyUpdateGuidance,
@@ -894,6 +961,37 @@ export const COPILOT_TOOLS: Anthropic.Tool[] = [
       type: "object",
       properties: { fields: { type: "object" } },
       required: ["fields"],
+    },
+  },
+  {
+    name: "update_ui_text",
+    description:
+      "Change the quiz's fixed shopper-facing text: buttons (start, back, next), hints, loading and error lines, add-to-bag states, bundle card text, template labels. Use this to translate the quiz into another language (together with update_copy for headlines and question text). Keys: " +
+      UI_TEXT_ENTRIES.filter((e) => !e.column).map((e) => `${e.key} ("${e.default}")`).join(", ") +
+      ". Placeholders in braces like {count} must be kept. null resets a key to the English default.",
+    input_schema: {
+      type: "object",
+      properties: { fields: { type: "object", description: "key -> new text (or null to reset)" } },
+      required: ["fields"],
+    },
+  },
+  {
+    name: "set_product_why",
+    description:
+      "Set the one-line \"why this fits\" text shown under a product on the results cards (blank clears it; nothing shows by default). Use catalog product ids. Keep each line short (under 120 characters) and about what the product does for the shopper.",
+    input_schema: {
+      type: "object",
+      properties: {
+        lines: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: { productId: { type: "string" }, text: { type: ["string", "null"] } },
+            required: ["productId", "text"],
+          },
+        },
+      },
+      required: ["lines"],
     },
   },
   {

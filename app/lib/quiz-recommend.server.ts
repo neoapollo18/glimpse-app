@@ -35,6 +35,8 @@ export type QuizRecommendResult = {
     variantTitle: string | null;
     title: string;
     tagline: string | null;
+    /** Merchant "why this fits" line for the product (migration 092). */
+    whyFits: string | null;
     rank: number;
     quantity: number;
     reasons: string[];
@@ -312,10 +314,12 @@ export async function computeQuizRecommendations({
 
   const targetCount = matrixApplied ? Math.min(desiredCount, matrixCount) : desiredCount;
 
-  // Reason bullets: join the shopper's answers to the merchant-authored
-  // reason_text per option, in question order. Fallback is
-  // "{axis label}: {option label}" so cards never render empty bullets
-  // for answered questions.
+  // Reason bullets: the merchant-authored reason_text of the options the
+  // shopper picked, in question order. Questions without authored copy
+  // add nothing: the old "{axis label}: {option label}" fallback echoed a
+  // random answer under every card ("occasion: a special event") without
+  // explaining the match, so it was dropped 2026-10-16. Merchants write a
+  // per-product "why this fits" line instead (whyFits below).
   //
   // ONLY for matrix-matched picks. reason_text is merchant copy written
   // for the curated target ("blends perfectly with thick hair") — stamping
@@ -335,13 +339,10 @@ export async function computeQuizRecommendations({
         ? q.options.filter((o) => o.selectAll)
         : q.options.filter((o) => selected.has(o.axisValue));
       if (selectedOpts.length === 0) continue;
-      // First selected option with authored reason copy wins; otherwise a
-      // readable fallback listing what they picked.
-      const withReason = selectedOpts.find((o) => o.reasonText);
-      reasons.push(
-        withReason?.reasonText ||
-        `${q.axisLabel}: ${selectedOpts.map((o) => o.label).join(", ")}`
-      );
+      // First selected option with authored reason copy wins.
+      const withReason = selectedOpts.find((o) => o.reasonText?.trim());
+      if (!withReason) continue;
+      reasons.push(withReason.reasonText!.trim());
       if (reasons.length >= 3) break;
     }
   }
@@ -417,6 +418,7 @@ export async function computeQuizRecommendations({
     "quiz-recommend",
   );
 
+  const whyLines = chatConfig.quiz_product_why ?? {};
   const matches = picks.map((candidate: Candidate, idx: number) => {
     const { product } = candidate;
     // Partial match = the rule group was chosen with an axis (typically
@@ -440,6 +442,7 @@ export async function computeQuizRecommendations({
       variantTitle,
       title: variantTitle ? `${productName} — ${variantTitle}` : productName,
       tagline: variant?.tagline ?? null,
+      whyFits: whyLines[product.id] ?? null,
       rank: effectiveRank,
       quantity: Math.max(1, candidate.quantity ?? 1),
       // Matrix picks keep the merchant-authored answer reasons; LLM picks

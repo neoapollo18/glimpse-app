@@ -47,6 +47,9 @@
   background: var(--gq-bg);
   padding: var(--gq-pad-top, 24px) 20px var(--gq-pad-bottom, 64px);
   font-family: var(--gq-font-body);
+  /* Studio body text weight (migration 092). Unset = invalid at computed
+     time, which falls back to inheriting the theme: today's rendering. */
+  font-weight: var(--gq-body-weight);
   color: var(--gq-ink);
   -webkit-font-smoothing: antialiased;
   line-height: 1.5;
@@ -227,7 +230,7 @@
 }
 #gleame-quiz-root .gq-chip-sub {
   font-size: 11.5px;
-  font-weight: 450;
+  font-weight: var(--gq-body-weight, 450);
   color: var(--gq-ink-soft);
 }
 #gleame-quiz-root .gq-chip-dot {
@@ -492,7 +495,7 @@
 #gleame-quiz-root .gq-option-sub {
   display: block;
   font-size: 13px;
-  font-weight: 450;
+  font-weight: var(--gq-body-weight, 450);
   color: var(--gq-ink-soft);
   margin-top: 2px;
 }
@@ -2246,7 +2249,7 @@
 }
 #gleame-quiz-root.gq-boutique .gq-ci-trust {
   font-size: 12.5px;
-  font-weight: 400;
+  font-weight: var(--gq-body-weight, 400);
   letter-spacing: 0.01em;
   text-transform: none;
   color: var(--gq-ink-soft);
@@ -3612,7 +3615,7 @@
   font-weight: 500;
   line-height: 1.3;
 }
-#gleame-quiz-root.gq-t1 .gq-t1-tile-sub { display: block; font-size: 12px; font-weight: 400; color: var(--gq-ink-faint); margin-top: 2px; }
+#gleame-quiz-root.gq-t1 .gq-t1-tile-sub { display: block; font-size: 12px; font-weight: var(--gq-body-weight, 400); color: var(--gq-ink-faint); margin-top: 2px; }
 #gleame-quiz-root.gq-t1 .gq-t1-tile > .gq-tpl-check {
   position: absolute;
   top: 8px;
@@ -3720,7 +3723,7 @@
   cursor: pointer;
   transition: border-color 120ms ease, background 120ms ease;
 }
-#gleame-quiz-root.gq-t1 .gq-t1r-variant small { font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--gq-ink-soft); }
+#gleame-quiz-root.gq-t1 .gq-t1r-variant small { font-weight: var(--gq-body-weight, 400); letter-spacing: 0; text-transform: none; color: var(--gq-ink-soft); }
 #gleame-quiz-root.gq-t1 .gq-t1r-variant:hover:not(:disabled) { border-color: var(--gq-ink-faint); }
 #gleame-quiz-root.gq-t1 .gq-t1r-variant.is-selected { border-color: var(--gq-accent); background: var(--gq-accent-08); }
 #gleame-quiz-root.gq-t1 .gq-t1r-variant:disabled { opacity: 0.45; cursor: default; }
@@ -3912,7 +3915,7 @@
   border-bottom: 1px solid var(--gq-line);
   text-align: left;
   vertical-align: middle;
-  font-weight: 400;
+  font-weight: var(--gq-body-weight, 400);
   background: transparent;
 }
 #gleame-quiz-root.gq-t2 .gq-t2r-table thead th { border-bottom-width: 2px; vertical-align: bottom; }
@@ -4126,7 +4129,7 @@
 #gleame-quiz-root.gq-t4 .gq-t4-emoji { flex: none; font-size: 22px; line-height: 1; }
 #gleame-quiz-root.gq-t4 .gq-t4-card-slot { flex: none; border-radius: var(--gq-r-12); }
 #gleame-quiz-root.gq-t4 .gq-t4-card-tx { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-#gleame-quiz-root.gq-t4 .gq-t4-card-desc { font-size: 12.5px; font-weight: 400; color: var(--gq-ink-faint); }
+#gleame-quiz-root.gq-t4 .gq-t4-card-desc { font-size: 12.5px; font-weight: var(--gq-body-weight, 400); color: var(--gq-ink-faint); }
 #gleame-quiz-root.gq-t4 .gq-t4-card.is-selected .gq-t4-card-desc { color: var(--gq-accent-text); opacity: 0.85; }
 #gleame-quiz-root.gq-t4 .gq-t4-trust { justify-content: center; }
 /* S6 */
@@ -4350,7 +4353,7 @@
   font-weight: 400;
 }
 #gleame-quiz-root.gq-t2 .gq-t2-row.is-selected .gq-t2-letter { background: transparent; color: var(--gq-accent); }
-#gleame-quiz-root.gq-t2 .gq-t2-row-label { font-weight: 400; }
+#gleame-quiz-root.gq-t2 .gq-t2-row-label { font-weight: var(--gq-body-weight, 400); }
 #gleame-quiz-root.gq-t2 .gq-t2-cards { gap: 28px 20px; }
 #gleame-quiz-root.gq-t2 .gq-t2-card { border: 0; border-radius: 0; background: transparent; overflow: visible; }
 #gleame-quiz-root.gq-t2 .gq-t2-card:hover { box-shadow: none; }
@@ -4522,7 +4525,7 @@
 #gleame-quiz-root.gq-t5 .gq-t5-bars .gq-t5-bar.is-selected { background: var(--gq-accent); border-color: var(--gq-accent); color: var(--gq-accent-text); box-shadow: none; }
 #gleame-quiz-root.gq-t5 .gq-t5-bars .gq-t5-bar.is-selected .gq-t5-bar-desc,
 #gleame-quiz-root.gq-t5 .gq-t5-bars .gq-t5-bar.is-selected .gq-tpl-check { color: var(--gq-accent-text); }
-#gleame-quiz-root.gq-t5 .gq-t5-bar-desc { font-weight: 400; }
+#gleame-quiz-root.gq-t5 .gq-t5-bar-desc { font-weight: var(--gq-body-weight, 400); }
 #gleame-quiz-root.gq-t5 .gq-t5r-headline { text-align: left; font-size: clamp(32px, 4.4vw, 54px); line-height: 0.98; }
 #gleame-quiz-root.gq-t5 .gq-t5r-sub { text-align: left; font-family: var(--gq-mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; padding-bottom: 20px; border-bottom: 2px solid var(--gq-ink); }
 #gleame-quiz-root.gq-t5 .gq-t5r-grid { gap: 12px; }
@@ -4784,3 +4787,25 @@
 /* Shopify refused the bundle code on this cart: no promise in fine print. */
 #gleame-quiz-root .gq-bundle-offer.is-refused .gq-bo-fine { display: none; }
 #gleame-quiz-root .gq-bundle-offer.is-refused .gq-bo-status { color: var(--gq-ink-soft); }
+
+/* Results CTA setting (migration 092). "View product" as the card button
+   is a link dressed as the add button; "Add to cart" as the secondary
+   action is a button dressed as the view link. */
+#gleame-quiz-root a.gq-add-btn.gq-cta-view {
+  text-align: center;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+#gleame-quiz-root button.gq-view-link.gq-cta-addlink {
+  appearance: none;
+  -webkit-appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  /* Centered like the view link when it's a block (classic cards). */
+  margin-left: auto;
+  margin-right: auto;
+  font-family: inherit;
+  cursor: pointer;
+}
+#gleame-quiz-root button.gq-view-link.gq-cta-addlink:disabled { opacity: 0.5; cursor: default; }

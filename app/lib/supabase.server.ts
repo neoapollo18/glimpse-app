@@ -4,6 +4,7 @@ import { dedupeRuleRanks } from "./rule-ranks";
 import { MAX_REFERENCE_IMAGES, parseReferenceImageUrls } from './reference-images';
 import { isOptionVisible } from './option-visibility';
 import { ALL_TIERS_FREE } from './pricing-tiers';
+import { sanitizeProductWhy, sanitizeUiText } from './quiz-ui-text';
 
 if (!process.env.SUPABASE_URL) {
   throw new Error('SUPABASE_URL environment variable is required');
@@ -3425,6 +3426,19 @@ export interface ChatAssistantConfig {
   // Classic quiz only (migration 088). 'grid' = equal product cards, mix &
   // match bundle bar, email card under the results. NULL = featured match.
   quiz_results_layout: 'grid' | null;
+  // ---- Text, typography, results CTA (migration 092, 2026-10-16) ----
+  // Merchant overrides for fixed quiz text (Studio Text & labels), cleaned
+  // by sanitizeUiText: known keys, non-empty strings. NULL = shipped English.
+  quiz_ui_text: Record<string, string> | null;
+  // Body text weight / color. NULL = inherit the theme / derive from ink.
+  quiz_body_weight: '400' | '500' | '600' | null;
+  quiz_body_color: string | null;
+  // Result card button: 'view' = product page; NULL = add to cart.
+  quiz_results_primary_cta: 'add' | 'view' | null;
+  // Small link for the other action under the button. Default shown.
+  quiz_results_secondary_link: boolean;
+  // products.id -> "why this fits" line on result cards.
+  quiz_product_why: Record<string, string> | null;
   // Overhaul template system (migration 072, docs/overhaul/CONTRACTS.md).
   // NULL template = legacy rendering — existing shops never change until
   // a template is assigned (Reveal or Studio Style panel).
@@ -3666,6 +3680,12 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   quiz_photo_note: null,
   quiz_ui_style: null,
   quiz_results_layout: null,
+  quiz_ui_text: null,
+  quiz_body_weight: null,
+  quiz_body_color: null,
+  quiz_results_primary_cta: null,
+  quiz_results_secondary_link: true,
+  quiz_product_why: null,
   quiz_template: null,
   quiz_preset: null,
   template_live_at: null,
@@ -3899,6 +3919,24 @@ function mapChatAssistantRow(data: any): ChatAssistantConfig {
     // Migration 088: absent columns / stray values = standard rendering.
     quiz_ui_style: data.quiz_ui_style === 'boutique' ? 'boutique' : null,
     quiz_results_layout: data.quiz_results_layout === 'grid' ? 'grid' : null,
+    // Migration 092: absent columns (un-run migration) = today's quiz.
+    quiz_ui_text: (() => {
+      const t = sanitizeUiText(data.quiz_ui_text);
+      return Object.keys(t).length > 0 ? t : null;
+    })(),
+    quiz_body_weight: ['400', '500', '600'].includes(data.quiz_body_weight)
+      ? (data.quiz_body_weight as ChatAssistantConfig['quiz_body_weight'])
+      : null,
+    quiz_body_color:
+      typeof data.quiz_body_color === 'string' && /^#[0-9a-fA-F]{6}$/.test(data.quiz_body_color)
+        ? data.quiz_body_color
+        : null,
+    quiz_results_primary_cta: data.quiz_results_primary_cta === 'view' ? 'view' : data.quiz_results_primary_cta === 'add' ? 'add' : null,
+    quiz_results_secondary_link: data.quiz_results_secondary_link !== false,
+    quiz_product_why: (() => {
+      const w = sanitizeProductWhy(data.quiz_product_why);
+      return Object.keys(w).length > 0 ? w : null;
+    })(),
     quiz_template: typeof data.quiz_template === 'string' ? data.quiz_template : null,
     quiz_preset: typeof data.quiz_preset === 'string' ? data.quiz_preset : null,
     // Migration 081: absent column (un-run migration) = never published.

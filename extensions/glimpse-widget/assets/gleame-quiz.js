@@ -102,6 +102,19 @@
       .replace(/"/g, '&quot;');
   }
 
+  // Merchant text overrides (Studio → Text & labels, 2026-10-16). Every
+  // fixed shopper-facing string goes through T(key, fallback): an override
+  // from config.uiText wins, else the shipped English. {vars} fill in after
+  // the lookup. Returns plain text — use TH() (escaped) for innerHTML.
+  function T(key, fallback, vars) {
+    var map = config && config.uiText;
+    var v = map && typeof map[key] === 'string' && map[key].trim() ? map[key] : fallback;
+    v = String(v);
+    if (vars) v = v.replace(/\{(\w+)\}/g, function(m0, k) { return vars[k] != null ? String(vars[k]) : m0; });
+    return v;
+  }
+  function TH(key, fallback, vars) { return escapeHtml(T(key, fallback, vars)); }
+
   // Logged-in customer's first name (Liquid-injected). Empty for guests.
   var customerFirstName = (root.getAttribute('data-customer-first-name') || '').trim();
 
@@ -660,6 +673,12 @@
   }
 
   function applyStyleConfig() {
+    // Cleared first so a Studio edit that removes a body color/weight
+    // doesn't linger in the preview; brand tokens and the ink color then
+    // re-derive soft/faint text below, and the body settings win last.
+    root.style.removeProperty('--gq-ink-soft');
+    root.style.removeProperty('--gq-ink-faint');
+    root.style.removeProperty('--gq-body-weight');
     applyBrandTokens();
     if (config.accentColor) root.style.setProperty('--gq-accent', config.accentColor);
     if (typeof config.buttonRadius === 'number') {
@@ -673,6 +692,15 @@
       // stays readable without two more merchant fields.
       root.style.setProperty('--gq-ink-soft', 'color-mix(in srgb, ' + config.inkColor + ' 62%, transparent)');
       root.style.setProperty('--gq-ink-faint', 'color-mix(in srgb, ' + config.inkColor + ' 42%, transparent)');
+    }
+    // Body text (migration 092): subtitles, descriptions and results text
+    // use the soft/faint inks, which read too light on some themes.
+    if (config.bodyColor && /^#[0-9a-fA-F]{6}$/.test(config.bodyColor)) {
+      root.style.setProperty('--gq-ink-soft', config.bodyColor);
+      root.style.setProperty('--gq-ink-faint', 'color-mix(in srgb, ' + config.bodyColor + ' 78%, transparent)');
+    }
+    if (config.bodyWeight === '400' || config.bodyWeight === '500' || config.bodyWeight === '600') {
+      root.style.setProperty('--gq-body-weight', config.bodyWeight);
     }
     if (config.cardBgColor) root.style.setProperty('--gq-card-bg', config.cardBgColor);
     if (config.lineColor) root.style.setProperty('--gq-line', config.lineColor);
@@ -1223,7 +1251,7 @@
   }
 
   function introStartButton() {
-    var startBtn = el('button', 'gq-add-btn gq-start-btn', escapeHtml('Start the quiz'));
+    var startBtn = el('button', 'gq-add-btn gq-start-btn', TH('start', 'Start the quiz'));
     startBtn.type = 'button';
     startBtn.onclick = function() {
       state.screen = 'question';
@@ -1281,8 +1309,8 @@
       var proof = el('div', 'gq-intro-visual gq-ci-proof');
       var frames = el('div', 'gq-ba-frames');
       [
-        { url: landing.beforeImageUrl, tag: boutiqueActive() ? 'Before' : 'Your photo', alt: 'Before the try-on', after: false },
-        { url: landing.afterImageUrl, tag: boutiqueActive() ? 'Tried on' : 'Your try-on', alt: 'After the try-on', after: true },
+        { url: landing.beforeImageUrl, tag: boutiqueActive() ? T('beforeTag', 'Before') : T('yourPhotoTag', 'Your photo'), alt: 'Before the try-on', after: false },
+        { url: landing.afterImageUrl, tag: boutiqueActive() ? T('triedOnTag', 'Tried on') : T('yourTryonTag', 'Your try-on'), alt: 'After the try-on', after: true },
       ].forEach(function(f) {
         if (!f.url) return;
         var fig = el('figure', 'gq-ba-frame' + (f.after ? ' gq-ba-frame-after' : ''));
@@ -1308,7 +1336,7 @@
       var askHead = el('div', 'gq-ci-ask-head');
       askHead.appendChild(el('h3', 'gq-intro-question-title', escapeHtml(q0.prompt)));
       if (screens.length > 1 && config.progressStyle !== 'none') {
-        askHead.appendChild(el('span', 'gq-ci-count', '1 of ' + screens.length));
+        askHead.appendChild(el('span', 'gq-ci-count', TH('stepCount', '{n} of {total}', { n: 1, total: screens.length })));
       }
       ask.appendChild(askHead);
       if (q0.helperText) ask.appendChild(el('p', 'gq-intro-question-helper', escapeHtml(q0.helperText)));
@@ -1377,7 +1405,7 @@
       var frames = el('div', 'gq-ba-frames');
       if (landing.beforeImageUrl) {
         var b = el('figure', 'gq-ba-frame');
-        b.appendChild(el('span', 'gq-ba-tag', 'Before'));
+        b.appendChild(el('span', 'gq-ba-tag', TH('beforeTag', 'Before')));
         var bImg = el('img', 'gq-ba-img');
         bImg.src = landing.beforeImageUrl; bImg.alt = 'Before'; bImg.loading = 'lazy';
         b.appendChild(bImg);
@@ -1385,7 +1413,7 @@
       }
       if (landing.afterImageUrl) {
         var a = el('figure', 'gq-ba-frame gq-ba-frame-after');
-        a.appendChild(el('span', 'gq-ba-tag gq-ba-tag-after', 'After'));
+        a.appendChild(el('span', 'gq-ba-tag gq-ba-tag-after', TH('afterTag', 'After')));
         var aImg = el('img', 'gq-ba-img');
         aImg.src = landing.afterImageUrl; aImg.alt = 'After'; aImg.loading = 'lazy';
         a.appendChild(aImg);
@@ -1482,7 +1510,7 @@
   // Boutique bar line under/beside Continue: what's picked, and that it
   // can change; the last step says what comes next instead.
   function ctaNoteText(qIdxs, ready, last) {
-    if (ready && last) return 'Next: see your matches on you (optional)';
+    if (ready && last) return T('nextPhotoHint', 'Next: see your matches on you (optional)');
     var picked = 0;
     var max = 0;
     var any = false;
@@ -1493,10 +1521,11 @@
       var q = flow.questions[qi];
       if (q.maxSelections) max += q.maxSelections;
     });
-    if (any) return 'Open to anything \u00b7 change any answer later';
-    if (picked === 0) return 'Pick any that fit';
-    var count = qIdxs.length === 1 && max ? picked + ' of ' + max + ' selected' : picked + ' selected';
-    return count + ' \u00b7 change any answer later';
+    if (any) return T('anyHint', 'Open to anything \u00b7 change any answer later');
+    if (picked === 0) return T('pickAnyHint', 'Pick any that fit');
+    return qIdxs.length === 1 && max
+      ? T('selectedOfHint', '{n} of {max} selected \u00b7 change any answer later', { n: picked, max: max })
+      : T('selectedHint', '{n} selected \u00b7 change any answer later', { n: picked });
   }
 
   function renderScreen() {
@@ -1609,7 +1638,7 @@
       var isLast = screenIdx === screens.length - 1;
       var ctaLabel = isLast
         ? ((config.results && config.results.showMatchesLabel) || 'Show my matches')
-        : 'Continue';
+        : T('next', 'Continue');
       continueBtn = el('button', 'gq-add-btn gq-continue-btn', escapeHtml(ctaLabel) + ' \u2192');
       continueBtn.type = 'button';
       continueBtn.onclick = function() { commitScreen(screenIdx); };
@@ -2027,7 +2056,7 @@
   function buildStepHeader(stepNumber, isBonus) {
     var header = el('div', 'gq-step-header');
     var back = el('button', 'gq-back',
-      '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg><span>Back</span>');
+      '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg><span>' + TH('back', 'Back') + '</span>');
     back.type = 'button';
     back.onclick = function() { if (PREVIEW) { previewBack(); } else { history.back(); } };
     header.appendChild(back);
@@ -2041,8 +2070,9 @@
       var boutique = boutiqueActive();
       right.appendChild(el('span', 'gq-step-count',
         isBonus
-          ? (boutique ? 'Optional' : 'Bonus')
-          : (boutique ? '<span class="gq-step-word">Step </span>' : '') + stepNumber + ' of ' + screens.length));
+          ? (boutique ? TH('optionalStep', 'Optional') : TH('bonusStep', 'Bonus'))
+          : (boutique ? '<span class="gq-step-word">' + TH('stepWord', 'Step') + ' </span>' : '') +
+            TH('stepCount', '{n} of {total}', { n: stepNumber, total: screens.length })));
     }
     if (progressStyle === 'pips') {
       var pips = el('div', 'gq-pips');
@@ -2135,7 +2165,7 @@
     var labels = [];
     if (a.selectAll || a.values.indexOf(ANY_VALUE) !== -1) {
       var anyOpt = q.options.filter(function(o) { return o.selectAll; })[0];
-      labels.push(anyOpt ? anyOpt.label : 'Open to anything');
+      labels.push(anyOpt ? anyOpt.label : T('openToAnything', 'Open to anything'));
     } else {
       a.values.forEach(function(v) {
         var opt = q.options.filter(function(o) { return o.axisValue === v; })[0];
@@ -2326,19 +2356,19 @@
       escapeHtml(lead.discountMessage || 'Here’s your code — we’ve applied it to your checkout automatically.')));
     var codeRow = el('div', 'gq-lead-code');
     codeRow.appendChild(el('span', 'gq-lead-code-text', escapeHtml(lead.discountCode)));
-    var copyBtn = el('button', 'gq-lead-code-copy', 'Copy');
+    var copyBtn = el('button', 'gq-lead-code-copy', TH('copy', 'Copy'));
     copyBtn.type = 'button';
     copyBtn.onclick = function() {
       try {
         navigator.clipboard.writeText(lead.discountCode).then(function() {
-          copyBtn.textContent = 'Copied';
-          setTimeout(function() { copyBtn.textContent = 'Copy'; }, 2000);
+          copyBtn.textContent = T('copied', 'Copied');
+          setTimeout(function() { copyBtn.textContent = T('copy', 'Copy'); }, 2000);
         }).catch(function() { /* permission denied — the code is on screen */ });
       } catch (e) { /* clipboard unavailable — the code is on screen */ }
     };
     codeRow.appendChild(copyBtn);
     wrap.appendChild(codeRow);
-    var cont = el('button', 'gq-add-btn gq-lead-continue', 'Continue →');
+    var cont = el('button', 'gq-add-btn gq-lead-continue', TH('leadContinue', 'Continue →'));
     cont.type = 'button';
     cont.onclick = function() { leaveLead(); };
     wrap.appendChild(cont);
@@ -2394,10 +2424,10 @@
     emailInput.className = 'gq-lead-input';
     emailInput.type = 'email';
     emailInput.name = 'email';
-    emailInput.placeholder = 'you@email.com';
+    emailInput.placeholder = T('emailPlaceholder', 'you@email.com');
     emailInput.autocomplete = 'email';
     emailInput.setAttribute('inputmode', 'email');
-    emailInput.setAttribute('aria-label', 'Email address');
+    emailInput.setAttribute('aria-label', T('ariaEmail', 'Email address'));
     form.appendChild(emailInput);
 
     var phoneInput = null;
@@ -2406,10 +2436,10 @@
       phoneInput.className = 'gq-lead-input';
       phoneInput.type = 'tel';
       phoneInput.name = 'phone';
-      phoneInput.placeholder = 'Phone number (optional)';
+      phoneInput.placeholder = T('phonePlaceholder', 'Phone number (optional)');
       phoneInput.autocomplete = 'tel';
       phoneInput.setAttribute('inputmode', 'tel');
-      phoneInput.setAttribute('aria-label', 'Phone number');
+      phoneInput.setAttribute('aria-label', T('ariaPhone', 'Phone number'));
       form.appendChild(phoneInput);
     }
 
@@ -2438,19 +2468,21 @@
       var email = emailInput.value.trim().toLowerCase();
       var phone = phoneInput ? phoneInput.value.replace(/[\s().-]/g, '') : '';
       if (!email && !phone) {
-        showLeadError(phoneInput ? 'Enter your email or phone number.' : 'Enter your email.');
+        showLeadError(phoneInput
+          ? T('emailOrPhoneMissing', 'Enter your email or phone number.')
+          : T('emailMissing', 'Enter your email.'));
         return;
       }
       if (email && (email.length > 254 || !LEAD_EMAIL_RE.test(email))) {
-        showLeadError('That email doesn’t look right.');
+        showLeadError(T('emailInvalid', 'That email doesn’t look right.'));
         return;
       }
       if (phone && !LEAD_PHONE_RE.test(phone)) {
-        showLeadError('That phone number doesn’t look right.');
+        showLeadError(T('phoneInvalid', 'That phone number doesn’t look right.'));
         return;
       }
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Saving…';
+      submitBtn.textContent = T('saving', 'Saving…');
       submitLead(email, phone)
         .then(function(response) {
           trackEvent('quiz_lead_submitted', { has_email: Boolean(email), has_phone: Boolean(phone) });
@@ -2485,7 +2517,7 @@
           // either way — a failing endpoint must never trap the quiz.
           var msg = error && error.message && /email|phone/i.test(error.message)
             ? error.message
-            : 'Something went wrong — try again, or skip for now.';
+            : T('leadFailed', 'Something went wrong — try again, or skip for now.');
           showLeadError(msg);
         });
     };
@@ -2544,7 +2576,7 @@
     var drop = el('div', 'gq-dropzone');
     drop.innerHTML =
       '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>' +
-      '<p class="gq-dropzone-title">' + (isMobile() ? 'Tap to add a quick photo' : 'Drag a photo here, or tap to upload') + '</p>';
+      '<p class="gq-dropzone-title">' + (isMobile() ? TH('dropMobile', 'Tap to add a quick photo') : TH('dropDesktop', 'Drag a photo here, or tap to upload')) + '</p>';
     var uploadBtn = el('button', 'gq-dropzone-btn', escapeHtml(gate.photoLabel || 'Upload photo'));
     uploadBtn.type = 'button';
     drop.appendChild(uploadBtn);
@@ -2607,7 +2639,7 @@
     if (boutiqueActive()) {
       // Boutique: skip is the bar's main action, as an outlined pill.
       var skipBar = el('div', 'gq-cta-bar gq-cta-bar--skip');
-      skipBar.appendChild(el('p', 'gq-cta-note', 'You can try them on from your results any time'));
+      skipBar.appendChild(el('p', 'gq-cta-note', TH('photoLaterNote', 'You can try them on from your results any time')));
       skipBar.appendChild(skip);
       body.appendChild(skipBar);
       screen.classList.add('gq-step--has-bar');
@@ -2643,7 +2675,7 @@
       window.gleameCamera.open(
         handler,
         function() { fileInput.click(); },
-        { hint: config && config.photoFrameHint }
+        { hint: config && config.photoFrameHint, text: (config && config.uiText) || null }
       );
     } else {
       fileInput.click();
@@ -2654,12 +2686,12 @@
   // 8MB — the old silent 5MB client cap rejected ordinary 12MP phone photos
   // with NO feedback, which read as "uploading a photo does nothing".
   function photoRejectReason(file) {
-    if (!file) return 'No file selected.';
+    if (!file) return T('photoNoFile', 'No file selected.');
     if (file.type && file.type.indexOf('image/') !== 0) {
-      return 'That file isn’t a photo — please choose an image.';
+      return T('photoNotImage', 'That file isn’t a photo — please choose an image.');
     }
     if (file.size > 8 * 1024 * 1024) {
-      return 'That photo is too large (over 8MB). Try a smaller photo or a screenshot of it.';
+      return T('photoTooLarge', 'That photo is too large (over 8MB). Try a smaller photo or a screenshot of it.');
     }
     return null;
   }
@@ -2712,7 +2744,7 @@
       state.detectedShade = null;
     }
 
-    showWorking(screenEl, needsShade ? 'Reading your shade…' : 'Matching you up…');
+    showWorking(screenEl, needsShade ? T('readingShade', 'Reading your shade…') : T('matchingYou', 'Matching you up…'));
 
     var detected = false;
     var classify = needsShade
@@ -2745,8 +2777,7 @@
             showPhotoNotice(
               screenEl,
               (res && res.noMatchMessage) ||
-                'We couldn’t read your shade from that photo — natural light helps. ' +
-                  'You can also pick the closest shade manually.'
+                T('shadeReadFail', 'We couldn’t read your shade from that photo — natural light helps. You can also pick the closest shade manually.')
             );
           }
         })
@@ -2798,8 +2829,8 @@
   // The title already says "Finding your matches"; the live row names the
   // step in progress.
   function loadingNowText(caption) {
-    return /finding your match|matching you up/i.test(caption || '')
-      ? 'Picking your best matches'
+    return (caption === T('findingMatch', 'Finding your match…') || caption === T('matchingYou', 'Matching you up…'))
+      ? T('pickingMatches', 'Picking your best matches')
       : String(caption || '').replace(/\u2026$/, '');
   }
 
@@ -2817,8 +2848,8 @@
       pips.appendChild(pip);
     }
     v.appendChild(pips);
-    v.appendChild(el('p', 'gq-gr-eyebrow gq-lv-eyebrow', 'One moment'));
-    v.appendChild(el('h2', 'gq-lv-title', 'Finding your matches'));
+    v.appendChild(el('p', 'gq-gr-eyebrow gq-lv-eyebrow', TH('loadingKicker', 'One moment')));
+    v.appendChild(el('h2', 'gq-lv-title', TH('loadingTitle', 'Finding your matches')));
     var rows = [];
     if (flow && Array.isArray(flow.questions)) {
       for (var qi = 0; qi < flow.questions.length && rows.length < 5; qi++) {
@@ -2840,12 +2871,12 @@
     now.appendChild(el('span', 'gq-working-caption', escapeHtml(loadingNowText(caption))));
     list.appendChild(now);
     v.appendChild(list);
-    v.appendChild(el('p', 'gq-lv-note', 'Usually takes a few seconds'));
+    v.appendChild(el('p', 'gq-lv-note', TH('loadingNote', 'Usually takes a few seconds')));
     return v;
   }
 
   function goToResults(screenEl) {
-    if (screenEl) showWorking(screenEl, 'Finding your match…');
+    if (screenEl) showWorking(screenEl, T('findingMatch', 'Finding your match…'));
     return quizRecommend()
       .then(function(data) {
         // A resolved response without a usable matches payload (or an empty
@@ -2879,8 +2910,8 @@
         var err = screenEl.querySelector('.gq-error');
         if (!err) {
           err = el('div', 'gq-error',
-            '<p>Something went wrong finding your match.</p>');
-          var retry = el('button', 'gq-retry', 'Try again');
+            '<p>' + TH('errorFinding', 'Something went wrong finding your match.') + '</p>');
+          var retry = el('button', 'gq-retry', TH('tryAgain', 'Try again'));
           retry.type = 'button';
           retry.onclick = function() {
             if (err.parentNode) err.parentNode.removeChild(err);
@@ -2900,7 +2931,7 @@
     rerunPending = true;
     // The results screen is live behind this call — show the standard
     // working spinner instead of freezing silently for the round trip.
-    showWorking(stageEl ? stageEl.firstElementChild : null, 'Updating your matches\u2026');
+    showWorking(stageEl ? stageEl.firstElementChild : null, T('updatingMatches', 'Updating your matches\u2026'));
     quizRecommend()
       .then(function(data) {
         // Same guard as goToResults: a payload without a usable matches
@@ -2928,8 +2959,8 @@
         var err = screenEl.querySelector('.gq-error');
         if (!err) {
           err = el('div', 'gq-error',
-            '<p>Something went wrong updating your matches.</p>');
-          var retry = el('button', 'gq-retry', 'Try again');
+            '<p>' + TH('errorUpdating', 'Something went wrong updating your matches.') + '</p>');
+          var retry = el('button', 'gq-retry', TH('tryAgain', 'Try again'));
           retry.type = 'button';
           retry.onclick = function() {
             if (err.parentNode) err.parentNode.removeChild(err);
@@ -3007,8 +3038,8 @@
       ? state.detectedShade.label
       : shadeLabelFor(state.criteria[axis.key]);
     var source = state.detectedShade && state.detectedShade.source === 'photo'
-      ? 'detected from your photo'
-      : 'your pick';
+      ? T('shadeFromPhoto', 'detected from your photo')
+      : T('shadeYourPick', 'your pick');
     var swatch = null;
     for (var i = 0; i < axis.values.length; i++) {
       if (axis.values[i].value === state.criteria[axis.key]) swatch = axis.values[i].swatch;
@@ -3024,7 +3055,7 @@
     var d = discount || null;
     return t
       .replace(/\{count\}/g, String(quantity))
-      .replace(/\{set_word\}/g, quantity === 1 ? 'set' : 'sets')
+      .replace(/\{set_word\}/g, quantity === 1 ? T('setWord', 'set') : T('setsWord', 'sets'))
       .replace(/\{total\}/g, totalCents != null ? formatMoney(totalCents) : '')
       .replace(/\{discount\}/g, d && d.text ? d.text : '')
       .replace(/\{was\}/g, d && d.wasCents != null ? formatMoney(d.wasCents) : '')
@@ -3064,8 +3095,8 @@
     if (matches.length === 0) {
       screen.appendChild(el('div', 'gq-results-head'));
       var none = el('div', 'gq-error',
-        '<p>We couldn\u2019t find a match this time \u2014 try adjusting your answers.</p>');
-      var restart = el('button', 'gq-retry', 'Start over');
+        '<p>' + TH('noMatch', 'We couldn\u2019t find a match this time \u2014 try adjusting your answers.') + '</p>');
+      var restart = el('button', 'gq-retry', TH('startOver', 'Start over'));
       restart.type = 'button';
       restart.onclick = restartQuiz;
       none.appendChild(restart);
@@ -3084,7 +3115,7 @@
       head.appendChild(el('p', 'gq-results-subtext',
         escapeHtml(renderName(results.subtext)
           .replace(/\{count\}/g, String(matches.length))
-          .replace(/\{match_word\}/g, matches.length === 1 ? 'match' : 'matches'))));
+          .replace(/\{match_word\}/g, matches.length === 1 ? T('matchWord', 'match') : T('matchesWord', 'matches')))));
     }
     screen.appendChild(head);
 
@@ -3133,7 +3164,7 @@
     layout.appendChild(main);
     screen.appendChild(layout);
 
-    if (definitive) screen.appendChild(buildStickyBar(matches[0], results));
+    if (definitive || ctaPrimary() === 'view') screen.appendChild(buildStickyBar(matches[0], results));
 
     var restartRow = el('div', 'gq-restart-row');
     var restartBtn = el('button', 'gq-link-btn', escapeHtml(results.restartLabel || 'Try another look'));
@@ -3200,8 +3231,8 @@
 
     if (matches.length === 0) {
       var none = el('div', 'gq-error',
-        '<p>We couldn’t find a match this time — try adjusting your answers.</p>');
-      var restart0 = el('button', 'gq-retry', 'Start over');
+        '<p>' + TH('noMatch', 'We couldn’t find a match this time — try adjusting your answers.') + '</p>');
+      var restart0 = el('button', 'gq-retry', TH('startOver', 'Start over'));
       restart0.type = 'button';
       restart0.onclick = restartQuiz;
       none.appendChild(restart0);
@@ -3211,7 +3242,7 @@
     postPreviewMsg({ type: 'gleame:screen', screen: 'results' });
 
     var head = el('div', 'gq-results-head gq-gr-head');
-    head.appendChild(el('p', 'gq-eyebrow gq-gr-eyebrow', 'Your matches'));
+    head.appendChild(el('p', 'gq-eyebrow gq-gr-eyebrow', TH('yourMatches', 'Your matches')));
     var headline = (hasPhotoNow && definitive)
       ? (results.headlinePhoto || "Here's your match — on you")
       : (results.headlineNoPhoto || 'Your matches');
@@ -3220,7 +3251,7 @@
       head.appendChild(el('p', 'gq-results-subtext',
         escapeHtml(renderName(results.subtext)
           .replace(/\{count\}/g, String(matches.length))
-          .replace(/\{match_word\}/g, matches.length === 1 ? 'match' : 'matches'))));
+          .replace(/\{match_word\}/g, matches.length === 1 ? T('matchWord', 'match') : T('matchesWord', 'matches')))));
     }
     screen.appendChild(head);
     screen.appendChild(buildGridAnswers());
@@ -3260,7 +3291,7 @@
     }
 
     var restartRow = el('div', 'gq-restart-row gq-gr-restart');
-    restartRow.appendChild(el('span', 'gq-gr-restart-q', 'Not quite right?'));
+    restartRow.appendChild(el('span', 'gq-gr-restart-q', TH('notQuiteRight', 'Not quite right?')));
     var restartBtn = el('button', 'gq-link-btn', escapeHtml(results.restartLabel || 'Retake the quiz'));
     restartBtn.type = 'button';
     restartBtn.onclick = function() {
@@ -3279,7 +3310,7 @@
   // the first question; finishing the edit returns here with fresh picks.
   function buildGridAnswers() {
     var row = el('div', 'gq-gr-answers');
-    row.appendChild(el('span', 'gq-gr-answers-label', 'Your answers'));
+    row.appendChild(el('span', 'gq-gr-answers-label', TH('yourAnswers', 'Your answers')));
     var parts = [];
     screens.forEach(function(qIdxs) {
       qIdxs.forEach(function(qi) {
@@ -3298,7 +3329,7 @@
     var first = 0;
     while (first < screens.length && screenFullyHidden(first)) first++;
     if (first < screens.length) {
-      var edit = el('button', 'gq-gr-answers-edit', 'Edit');
+      var edit = el('button', 'gq-gr-answers-edit', TH('editAnswers', 'Edit'));
       edit.type = 'button';
       edit.onclick = function() { jumpToScreen(first); };
       row.appendChild(edit);
@@ -3335,7 +3366,7 @@
     var target = bundleTarget(bd, results);
     var template = results.bundleLabel && /\{(min|range|discount)\}/.test(results.bundleLabel)
       ? results.bundleLabel
-      : '**Mix & match:** add any {range} and save {discount}';
+      : T('gridBundleBar', '**Mix & match:** add any {range} and save {discount}');
     var text = bundleThresholdTokens(template, bd, results)
       .replace(/\{count\}/g, String(target))
       .replace(/\{discount\}/g, amount);
@@ -3350,12 +3381,12 @@
       var status = unlocked ? gridDiscountStatus() : null;
       progress.appendChild(el('span', 'gq-gr-bundle-status',
         !unlocked
-          ? '<strong>' + bag.count + ' of ' + bd.minQty + '</strong> added'
+          ? TH('gridAddedCount', '**{n} of {min}** added', { n: bag.count, min: bd.minQty }).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
           : escapeHtml(status === 'applied'
-            ? (amount ? amount + ' off applied ✓' : 'Discount applied ✓')
+            ? (amount ? T('gridDiscountAppliedAmount', '{amount} off applied ✓', { amount: amount }) : T('gridDiscountApplied', 'Discount applied ✓'))
             : status === 'refused'
-              ? 'Discount couldn\u2019t be applied'
-              : 'Applying your discount\u2026')));
+              ? T('gridDiscountRefused', 'Discount couldn\u2019t be applied')
+              : T('gridDiscountApplying', 'Applying your discount\u2026'))));
       bar.classList.toggle('is-unlocked', unlocked && status === 'applied');
     });
     return bar;
@@ -3374,7 +3405,7 @@
   function buildGridBagBar(bd, refreshers) {
     var bar = el('div', 'gq-gr-bagbar');
     var left = el('div', 'gq-gr-bagbar-left');
-    var link = el('a', 'gq-add-btn gq-gr-bagbar-btn', 'View bag');
+    var link = el('a', 'gq-add-btn gq-gr-bagbar-btn', TH('viewBag', 'View bag'));
     link.href = '/cart';
     bar.appendChild(left);
     bar.appendChild(link);
@@ -3387,22 +3418,22 @@
         var line = el('span', 'gq-gr-bagbar-line');
         line.appendChild(gridPips(target, bag.count));
         line.appendChild(el('span', 'gq-gr-bagbar-count',
-          escapeHtml(bag.count >= bd.minQty ? 'Bundle unlocked' : bag.count + ' of ' + bd.minQty + ' added')));
+          escapeHtml(bag.count >= bd.minQty ? T('bagUnlocked', 'Bundle unlocked') : T('bagAddedCount', '{n} of {min} added', { n: bag.count, min: bd.minQty }))));
         left.appendChild(line);
         var more = bd.minQty - bag.count;
         var amount = discountText(bd);
         var status = more > 0 ? null : gridDiscountStatus();
         left.appendChild(el('span', 'gq-gr-bagbar-sub', escapeHtml(more > 0
-          ? 'Add ' + more + ' more' + (amount ? ' to save ' + amount : ' to unlock your bundle discount')
+          ? (amount ? T('bagAddMoreSave', 'Add {n} more to save {amount}', { n: more, amount: amount }) : T('bagAddMoreUnlock', 'Add {n} more to unlock your bundle discount', { n: more }))
           : status === 'applied'
-            ? (amount ? amount + ' off applied at checkout' : 'Discount applied at checkout')
+            ? (amount ? T('bagAppliedAmount', '{amount} off applied at checkout', { amount: amount }) : T('bagApplied', 'Discount applied at checkout'))
             : status === 'refused'
-              ? 'We couldn\u2019t apply the bundle discount to this cart'
-              : 'Applying your bundle discount\u2026')));
+              ? T('bagRefused', 'We couldn\u2019t apply the bundle discount to this cart')
+              : T('bagApplying', 'Applying your bundle discount\u2026'))));
       } else {
-        left.appendChild(el('span', 'gq-gr-bagbar-count', escapeHtml(bag.count + ' in your bag')));
+        left.appendChild(el('span', 'gq-gr-bagbar-count', TH('bagCount', '{n} in your bag', { n: bag.count })));
       }
-      link.textContent = bag.count > 0 && bag.cents > 0 ? 'View bag · ' + formatMoney(bag.cents) : 'View bag';
+      link.textContent = bag.count > 0 && bag.cents > 0 ? T('viewBag', 'View bag') + ' · ' + formatMoney(bag.cents) : T('viewBag', 'View bag');
     });
     return bar;
   }
@@ -3447,14 +3478,18 @@
     var specBits = [];
     // Shopify's placeholder name for a single-variant product says nothing.
     if (m.variantTitle && !/^default title$/i.test(m.variantTitle)) specBits.push(m.variantTitle);
-    if (m.quantity > 1) specBits.push(m.quantity + ' sets');
+    if (m.quantity > 1) specBits.push(T('setsCount', '{n} sets', { n: m.quantity }));
     if (specBits.length) body.appendChild(el('p', 'gq-gr-spec', escapeHtml(specBits.join(' · '))));
-    var why = m.tagline || (Array.isArray(m.reasons) && m.reasons[0]) || '';
+    var why = whyFits(m) || m.tagline || (Array.isArray(m.reasons) && m.reasons[0]) || '';
     if (why) body.appendChild(el('p', 'gq-gr-why', '<span class="gq-gr-why-mark">✓</span><span>' + escapeHtml(why) + '</span>'));
 
+    // CTA setting (migration 092): View product as the button keeps the
+    // grid's add logic behind a small link (or drops it when that's off).
+    var viewMode = ctaPrimary() === 'view';
+    if (viewMode) body.appendChild(viewButton(m, results, 'gq-gr-add'));
     var add = null;
-    if (definitive) {
-      add = el('button', 'gq-add-btn gq-gr-add', 'Add to bag');
+    if (definitive && (!viewMode || ctaSecondaryOn())) {
+      add = el('button', viewMode ? 'gq-view-link gq-cta-addlink gq-gr-addlink' : 'gq-add-btn gq-gr-add', TH('gridAdd', 'Add to bag'));
       add.type = 'button';
       body.appendChild(add);
     }
@@ -3472,7 +3507,7 @@
         if (add.disabled) return;
         add.disabled = true;
         add.classList.add('is-working');
-        add.textContent = 'Adding\u2026';
+        add.textContent = T('adding', 'Adding\u2026');
         addToBag(variantId, qty).then(function() {
           add.classList.remove('is-working');
           if (!state.gridAdded || typeof state.gridAdded !== 'object') state.gridAdded = {};
@@ -3499,8 +3534,8 @@
         }).catch(function() {
           add.classList.remove('is-working');
           add.disabled = false;
-          add.textContent = 'Couldn\u2019t add \u2014 try again';
-          setTimeout(function() { if (!add.classList.contains('is-added')) add.textContent = 'Add to bag'; }, 2600);
+          add.textContent = T('addFailed', 'Couldn\u2019t add \u2014 try again');
+          setTimeout(function() { if (!add.classList.contains('is-added')) add.textContent = T('gridAdd', 'Add to bag'); }, 2600);
         });
       };
     }
@@ -3513,7 +3548,7 @@
       if (!add) return;
       add.classList.add('is-added');
       add.disabled = true;
-      add.innerHTML = BAG_CHECK_SVG + '<span>Added</span>';
+      add.innerHTML = BAG_CHECK_SVG + '<span>' + TH('gridAdded', 'Added') + '</span>';
     }
     if (state.gridAdded && Object.prototype.hasOwnProperty.call(state.gridAdded, key)) showAdded();
 
@@ -3535,7 +3570,7 @@
           armAdd(variantId);
         } else {
           add.disabled = true;
-          add.textContent = 'Unavailable';
+          add.textContent = T('unavailable', 'Unavailable');
         }
       }
 
@@ -3550,7 +3585,7 @@
       }
       // "See on me" on every card: with a photo it renders here; without
       // one it asks for the photo, then renders this card first.
-      var see = el('button', 'gq-gr-see', EYE_SVG + '<span>See on me</span>');
+      var see = el('button', 'gq-gr-see', EYE_SVG + '<span>' + TH('seeOnMe', 'See on me') + '</span>');
       see.type = 'button';
       see.onclick = function(e) {
         e.stopPropagation();
@@ -3566,17 +3601,17 @@
           return;
         }
         see.disabled = true;
-        see.lastChild.textContent = 'Working…';
+        see.lastChild.textContent = T('tryonWorking', 'Working…');
         media.classList.add('gq-media--working');
         applyTryonToMedia(media, img, m, false, function(ok, limited, capped, retryAfterMs) {
           media.classList.remove('gq-media--working');
           if (ok) { if (see.parentNode) see.parentNode.removeChild(see); return; }
-          if (capped) { see.lastChild.textContent = 'Try-on limit reached'; return; }
+          if (capped) { see.lastChild.textContent = T('tryonLimit', 'Try-on limit reached'); return; }
           var waitMs = limited ? (retryAfterMs || 30000) : 0;
-          if (limited) see.lastChild.textContent = 'Ready in ' + Math.ceil(waitMs / 1000) + 's…';
+          if (limited) see.lastChild.textContent = T('tryonWait', 'Ready in {s}s…', { s: Math.ceil(waitMs / 1000) });
           setTimeout(function() {
             see.disabled = false;
-            see.lastChild.textContent = 'See on me';
+            see.lastChild.textContent = T('seeOnMe', 'See on me');
           }, waitMs);
         });
       };
@@ -3596,7 +3631,7 @@
       trackEvent('quiz_lead_view');
     }
     var wrap = el('section', 'gq-gr-lead');
-    wrap.appendChild(el('p', 'gq-gr-lead-eyebrow', 'Save your matches'));
+    wrap.appendChild(el('p', 'gq-gr-lead-eyebrow', TH('saveMatches', 'Save your matches')));
     var form = tplLeadForm(lead, {
       inline: true,
       onDone: function(kind) {
@@ -3609,7 +3644,7 @@
         form.style.display = 'none';
         // Neutral on purpose: an email only goes out when the store has a
         // Klaviyo flow on the quiz events.
-        wrap.appendChild(el('p', 'gq-gr-lead-done', 'Saved \u2713 You\u2019re on the list.'));
+        wrap.appendChild(el('p', 'gq-gr-lead-done', TH('savedDone', 'Saved \u2713 You\u2019re on the list.')));
       },
     });
     wrap.appendChild(form);
@@ -3620,7 +3655,7 @@
   // jumps back to that screen and returns straight here after the change.
   function buildAnswersRail() {
     var rail = el('aside', 'gq-answers-rail');
-    rail.appendChild(el('p', 'gq-rail-title', 'Your answers \u00b7 tap to edit'));
+    rail.appendChild(el('p', 'gq-rail-title', TH('answersRailTitle', 'Your answers \u00b7 tap to edit')));
 
     screens.forEach(function(qIdxs, s) {
       qIdxs.forEach(function(qi) {
@@ -3631,7 +3666,7 @@
         var chip = el('div', 'gq-rail-chip');
         chip.appendChild(el('span', 'gq-rail-axis', escapeHtml(q.axisLabel)));
         chip.appendChild(el('span', 'gq-rail-value', escapeHtml(labels.join(', '))));
-        var edit = el('button', 'gq-rail-edit', 'edit');
+        var edit = el('button', 'gq-rail-edit', TH('answersRailEdit', 'edit'));
         edit.type = 'button';
         edit.onclick = function() { jumpToScreen(s); };
         chip.appendChild(edit);
@@ -3656,7 +3691,7 @@
       // Editable like every other answer: clearing the shade drops results
       // to the partial state, whose shade gate offers a fresh photo AND the
       // manual picker — the recovery path for a wrong detection.
-      var editShade = el('button', 'gq-rail-edit', 'edit');
+      var editShade = el('button', 'gq-rail-edit', TH('answersRailEdit', 'edit'));
       editShade.type = 'button';
       editShade.onclick = function() {
         if (state.detectedShade && state.detectedShade.source === 'photo') {
@@ -3719,7 +3754,7 @@
   // "On you" badge lives in JS (not CSS content) like its sibling pills.
   function setMediaBadge(media) {
     if (media.querySelector('.gq-media-badge')) return;
-    media.appendChild(el('span', 'gq-media-badge', 'On you'));
+    media.appendChild(el('span', 'gq-media-badge', TH('onYou', 'On you')));
   }
 
   // Merchant note under a match card. Built from text nodes (never
@@ -3749,7 +3784,7 @@
     // actually matched. AI-fallback picks get neutral position pills.
     var isCuratedTop = idx === 0 && state.matrixApplied;
     card.appendChild(el('span', 'gq-pill' + (isCuratedTop ? ' gq-pill--top' : ''),
-      escapeHtml(isCuratedTop ? (results.bestMatchPill || 'Top match') : 'Match ' + (idx + 1))));
+      escapeHtml(isCuratedTop ? (results.bestMatchPill || T('topMatch', 'Top match')) : T('matchN', 'Match {n}', { n: idx + 1 }))));
 
     // Media: product image, upgraded to a try-on when a photo exists —
     // automatically for the top match, on demand for the others.
@@ -3765,7 +3800,7 @@
     body.appendChild(el('h3', 'gq-match-title', escapeHtml(m.productName)));
     var specBits = [];
     if (m.variantTitle) specBits.push(m.variantTitle);
-    if (m.quantity > 1) specBits.push(m.quantity + ' sets');
+    if (m.quantity > 1) specBits.push(T('setsCount', '{n} sets', { n: m.quantity }));
     if (specBits.length > 0) body.appendChild(el('p', 'gq-match-spec', escapeHtml(specBits.join(' \u00b7 '))));
 
     // Shade line on the top match when a shade is resolved.
@@ -3795,8 +3830,9 @@
       });
       body.appendChild(ul);
     }
-    if (m.tagline) {
-      body.appendChild(el('p', 'gq-tagline', escapeHtml(m.tagline)));
+    var tagline = whyFits(m) || m.tagline;
+    if (tagline) {
+      body.appendChild(el('p', 'gq-tagline', escapeHtml(tagline)));
     } else if (idx > 0 && Array.isArray(m.reasons) && m.reasons.length > 0) {
       // No authored tagline: borrow one criteria reason so non-top cards
       // aren't bare name/price stubs next to the rich top match.
@@ -3812,28 +3848,10 @@
     var price = el('p', 'gq-match-price', '');
     body.appendChild(price);
 
-    if (definitive) {
-      var addBtn = el('button', 'gq-add-btn gq-add-btn--card', escapeHtml(buildAddLabel(results.addButtonTemplate, m.quantity || 1, null)));
-      addBtn.type = 'button';
-      body.appendChild(addBtn);
-      if (m.productHandle) {
-        wirePricedAddButton(addBtn, m, results);
-      } else {
-        // No handle means no product JSON, no price, no cart variant to arm.
-        addBtn.disabled = true;
-        addBtn.textContent = 'Unavailable';
-      }
-    }
-
-    // No handle means nowhere to link; skip the View link rather than render a
-    // dead '/products/undefined' href.
-    if (m.productHandle) {
-      var view = el('a', 'gq-view-link', escapeHtml(results.viewProductLabel || 'View full product') + ' \u2192');
-      view.href = '/products/' + encodeURIComponent(m.productHandle) +
-        (m.variantNumericId ? '?variant=' + encodeURIComponent(m.variantNumericId) : '');
-      view.onclick = function() { trackEvent('quiz_view_product', productProps(m)); saveState(); };
-      body.appendChild(view);
-    }
+    // Button + small link per the merchant's CTA setting. Without a
+    // handle the add button reads Unavailable and there's no View link
+    // (never a dead '/products/undefined' href).
+    resultCtas(m, results, definitive, 'gq-add-btn--card', 'gq-view-link').forEach(function(n) { body.appendChild(n); });
 
     // Merchant note under every card (migration 074), e.g. L&M's "email
     // us for a second opinion" line.
@@ -3861,31 +3879,31 @@
           media.classList.add('gq-media--working');
           applyTryonToMedia(media, img, m, true, function() { media.classList.remove('gq-media--working'); });
         } else {
-          var seeBtn = el('button', 'gq-media-see', 'See on me \u2728');
+          var seeBtn = el('button', 'gq-media-see', TH('seeOnMe', 'See on me') + ' \u2728');
           seeBtn.type = 'button';
           seeBtn.onclick = function(e) {
             e.stopPropagation();
             seeBtn.disabled = true;
-            seeBtn.textContent = 'Working\u2026';
+            seeBtn.textContent = T('tryonWorking', 'Working\u2026');
             applyTryonToMedia(media, img, m, false, function(ok, limited, capped, retryAfterMs) {
               if (ok) { if (seeBtn.parentNode) seeBtn.parentNode.removeChild(seeBtn); }
               else if (capped) {
                 // Session try-on cap hit: a persistent disabled label, not
                 // a silent revert that reads as a broken button.
                 seeBtn.disabled = true;
-                seeBtn.textContent = 'Try-on limit reached';
+                seeBtn.textContent = T('tryonLimit', 'Try-on limit reached');
               } else if (limited) {
                 // Rate-limited: stay disabled until the server's Retry-After
                 // window opens \u2014 a quick retry into it would just 429 again.
                 var waitMs = retryAfterMs || 30000;
-                seeBtn.textContent = 'Ready in ' + Math.ceil(waitMs / 1000) + 's\u2026';
+                seeBtn.textContent = T('tryonWait', 'Ready in {s}s\u2026', { s: Math.ceil(waitMs / 1000) });
                 setTimeout(function() {
                   seeBtn.disabled = false;
-                  seeBtn.textContent = 'See on me \u2728';
+                  seeBtn.textContent = T('seeOnMe', 'See on me') + ' \u2728';
                 }, waitMs);
               } else {
                 seeBtn.disabled = false;
-                seeBtn.textContent = 'See on me \u2728';
+                seeBtn.textContent = T('seeOnMe', 'See on me') + ' \u2728';
               }
             });
           };
@@ -3936,9 +3954,9 @@
         .then(function() {
           btn.classList.remove('is-working');
           btn.classList.add('is-added');
-          btn.textContent = compact ? 'Added \u2713' : 'Added to bag \u2713';
+          btn.textContent = compact ? T('addedShort', 'Added \u2713') : T('added', 'Added to bag \u2713');
           if (!compact && btn.parentNode && !btn.parentNode.querySelector('.gq-viewbag-link')) {
-            var bagLink = el('a', 'gq-view-link gq-viewbag-link', 'View bag \u2192');
+            var bagLink = el('a', 'gq-view-link gq-viewbag-link', TH('viewBag', 'View bag') + ' \u2192');
             bagLink.href = '/cart';
             btn.parentNode.insertBefore(bagLink, btn.nextSibling);
           }
@@ -3954,7 +3972,7 @@
         })
         .catch(function() {
           btn.classList.remove('is-working');
-          btn.textContent = 'Couldn\u2019t add \u2014 try again';
+          btn.textContent = T('addFailed', 'Couldn\u2019t add \u2014 try again');
           setTimeout(function() {
             btn.textContent = original;
             btn.disabled = false;
@@ -4057,7 +4075,7 @@
     var bp = bundlePicker;
     var pick = el('button', 'gq-bundle-pick');
     pick.type = 'button';
-    pick.setAttribute('aria-label', 'Include in bundle');
+    pick.setAttribute('aria-label', T('ariaBundlePick', 'Include in bundle'));
     pick.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
     function refresh() {
       pick.classList.toggle('is-picked', bp.sel.indexOf(idx) !== -1);
@@ -4109,16 +4127,22 @@
     var linesReady = false;
 
     var card = el('section', 'gq-bundle-offer' + (bd ? ' has-discount' : ''));
-    card.setAttribute('aria-label', 'Bundle offer');
+    card.setAttribute('aria-label', T('ariaBundleOffer', 'Bundle offer'));
     var head = el('div', 'gq-bo-head');
     if (bd) head.appendChild(el('span', 'gq-bo-badge', '%'));
     var headText = el('div', 'gq-bo-head-text');
     headText.appendChild(el('h3', 'gq-bo-title', escapeHtml(
-      bd ? (amount ? (mixable ? 'Bundle & save ' + amount : 'Bundle all ' + all + ' and save ' + amount) : 'Bundle your matches & save')
-        : 'Get the full set')));
+      bd ? (amount
+          ? (mixable
+            ? T('bundleTitleMix', 'Bundle & save {amount}', { amount: amount })
+            : T('bundleTitleSaveAmount', 'Bundle all {count} and save {amount}', { count: all, amount: amount }))
+          : T('bundleTitleSave', 'Bundle your matches & save'))
+        : T('bundleTitleSet', 'Get the full set'))));
     headText.appendChild(el('p', 'gq-bo-sub', escapeHtml(
-      bd ? (mixable ? 'Pick any ' + bd.minQty + ' or more of your matches.' : 'All ' + all + ' of your matches, in one tap.')
-        : 'Everything we matched you with, in one tap.')));
+      bd ? (mixable
+          ? T('bundleSubMix', 'Pick any {n} or more of your matches.', { n: bd.minQty })
+          : T('bundleSubAll', 'All {count} of your matches, in one tap.', { count: all }))
+        : T('bundleSubSet', 'Everything we matched you with, in one tap.'))));
     head.appendChild(headText);
     card.appendChild(head);
 
@@ -4149,7 +4173,7 @@
     var foot = el('div', 'gq-bo-foot');
     var totalEl = el('p', 'gq-bo-total', '');
     foot.appendChild(totalEl);
-    var btn = el('button', 'gq-add-btn gq-add-btn--bundle gq-bo-add', 'Add all ' + all + ' to bag');
+    var btn = el('button', 'gq-add-btn gq-add-btn--bundle gq-bo-add', TH('bundleAddAll', 'Add all {count} to bag', { count: all }));
     btn.type = 'button';
     btn.disabled = true;
     foot.appendChild(btn);
@@ -4159,7 +4183,7 @@
     var status = el('p', 'gq-bo-status', '');
     status.setAttribute('role', 'status');
     card.appendChild(status);
-    if (bd) card.appendChild(el('p', 'gq-bo-fine', escapeHtml(bd.note || 'Bundle savings applied at checkout')));
+    if (bd) card.appendChild(el('p', 'gq-bo-fine', escapeHtml(bd.note || T('bundleFine', 'Bundle savings applied at checkout'))));
 
     // The variant the shopper picked on the page (t1 hero) wins over the
     // matched one, for both the cart line and the price.
@@ -4205,7 +4229,7 @@
       if (btn.classList.contains('is-working') || btn.classList.contains('is-added')) return;
       if (!linesReady) {
         btn.disabled = true;
-        btn.textContent = 'Add all ' + all + ' to bag';
+        btn.textContent = T('bundleAddAll', 'Add all {count} to bag', { count: all });
         return;
       }
       var s = selection();
@@ -4217,15 +4241,20 @@
         btn.textContent = buildAddLabel(customLabel, s.count, discounted,
           saving != null ? { text: amount, wasCents: s.total } : null);
       } else {
-        btn.textContent = (s.everything ? 'Add all ' + s.count + ' to bag' : 'Add ' + s.count + ' to bag') +
-          (saving != null ? ' · Save ' + formatMoney(saving) : (s.total != null ? ' · ' + formatMoney(s.total) : ''));
+        btn.textContent = (s.everything
+          ? T('bundleAddAll', 'Add all {count} to bag', { count: s.count })
+          : T('bundleAddSome', 'Add {count} to bag', { count: s.count })) +
+          (saving != null ? ' · ' + T('bundleSave', 'Save {amount}', { amount: formatMoney(saving) }) : (s.total != null ? ' · ' + formatMoney(s.total) : ''));
       }
-      if (s.items.length === 0) btn.textContent = 'Pick at least one';
+      if (s.items.length === 0) btn.textContent = T('bundlePickOne', 'Pick at least one');
       totalEl.innerHTML = saving != null
         ? '<strong>' + escapeHtml(formatMoney(discounted)) + '</strong> <s>' + escapeHtml(formatMoney(s.total)) + '</s>'
         : '';
       var missing = bd && s.count > 0 && !qualifies ? bd.minQty - s.count : 0;
-      hint.textContent = missing > 0 ? 'Pick ' + missing + ' more to save' + (amount ? ' ' + amount : '') : '';
+      // No amount: {amount} resolves to nothing and the dangling space goes.
+      hint.textContent = missing > 0
+        ? T('bundlePickMore', 'Pick {n} more to save {amount}', { n: missing, amount: amount || '' }).replace(/ {2,}/g, ' ').trim()
+        : '';
     }
 
     // The bundle code's state on this cart, whoever put it there (this card
@@ -4235,9 +4264,11 @@
       card.classList.toggle('is-applied', bundleCodeState === 'applied');
       card.classList.toggle('is-refused', bundleCodeState === 'refused');
       status.textContent = bundleCodeState === 'applied'
-        ? (amount ? amount + ' off applied.' : 'Bundle discount applied.') + ' You’ll see it at checkout.'
+        ? (amount
+          ? T('bundleAppliedAmount', '{amount} off applied. You’ll see it at checkout.', { amount: amount })
+          : T('bundleApplied', 'Bundle discount applied. You’ll see it at checkout.'))
         : bundleCodeState === 'refused'
-          ? 'We couldn’t apply the bundle discount to this cart.'
+          ? T('bundleRefused', 'We couldn’t apply the bundle discount to this cart.')
           : '';
     }
 
@@ -4276,15 +4307,15 @@
       var qualifies = Boolean(bd) && s.count >= bd.minQty;
       btn.disabled = true;
       btn.classList.add('is-working');
-      btn.textContent = 'Adding…';
+      btn.textContent = T('adding', 'Adding…');
       hint.textContent = '';
       addAllToBag(s.items)
         .then(function() {
           btn.classList.remove('is-working');
           btn.classList.add('is-added');
-          btn.textContent = 'Added to bag ✓';
+          btn.textContent = T('added', 'Added to bag ✓');
           if (!foot.querySelector('.gq-viewbag-link')) {
-            var bagLink = el('a', 'gq-view-link gq-viewbag-link', 'View bag →');
+            var bagLink = el('a', 'gq-view-link gq-viewbag-link', TH('viewBag', 'View bag') + ' →');
             bagLink.href = '/cart';
             foot.appendChild(bagLink);
           }
@@ -4305,7 +4336,7 @@
         })
         .catch(function(err) {
           btn.classList.remove('is-working');
-          btn.textContent = 'Couldn’t add — try again';
+          btn.textContent = T('addFailed', 'Couldn’t add — try again');
           // Shopify's reason ("sold out", "only 2 left") beats a bare retry.
           var why = err && err.message && !/^cart add/.test(err.message) ? String(err.message).slice(0, 140) : '';
           if (why) hint.textContent = why;
@@ -4363,8 +4394,8 @@
       if (!note) return;
       var amount = discountText(bd);
       note.textContent = qualifies
-        ? (amount ? 'Save ' + amount + ' \u00b7 ' : '') + (bd.note || '')
-        : 'Bundle ' + bd.minQty + '+ to save' + (amount ? ' ' + amount : '');
+        ? (amount ? T('bundleSave', 'Save {amount}', { amount: amount }) + ' \u00b7 ' : '') + (bd.note || '')
+        : T('bundleRowHint', 'Bundle {n}+ to save {amount}', { n: bd.minQty, amount: amount || '' }).replace(/\s+/g, ' ').trim();
     }
     function refreshButton() {
       // Don't stomp the transient Adding\u2026/Added \u2713 states.
@@ -4372,7 +4403,7 @@
       var missing = bp.size - bp.sel.length;
       if (missing > 0) {
         btn.disabled = true;
-        btn.textContent = 'Select ' + missing + ' more';
+        btn.textContent = T('bundleSelectMore', 'Select {n} more', { n: missing });
         refreshNote(false);
         return;
       }
@@ -4409,9 +4440,9 @@
         .then(function() {
           btn.classList.remove('is-working');
           btn.classList.add('is-added');
-          btn.textContent = 'Added to bag \u2713';
+          btn.textContent = T('added', 'Added to bag \u2713');
           if (btn.parentNode && !btn.parentNode.querySelector('.gq-viewbag-link')) {
-            var bagLink = el('a', 'gq-view-link gq-viewbag-link', 'View bag \u2192');
+            var bagLink = el('a', 'gq-view-link gq-viewbag-link', TH('viewBag', 'View bag') + ' \u2192');
             bagLink.href = '/cart';
             btn.parentNode.insertBefore(bagLink, btn.nextSibling);
           }
@@ -4430,7 +4461,7 @@
         })
         .catch(function() {
           btn.classList.remove('is-working');
-          btn.textContent = 'Couldn\u2019t add \u2014 try again';
+          btn.textContent = T('addFailed', 'Couldn\u2019t add \u2014 try again');
           setTimeout(refreshButton, 2600);
         });
     };
@@ -4497,25 +4528,25 @@
       ? pj.variants.filter(function(v) { return v.available !== false; }).length
       : 0;
     if (variant && availableCount === 1) {
-      var add = el('button', 'gq-xsell-add', '+ Add');
+      var add = el('button', 'gq-xsell-add', TH('xsellAdd', '+ Add'));
       add.type = 'button';
       add.setAttribute('aria-label', 'Add ' + ((pj && pj.title) || entry.title || 'item') + ' to bag');
       add.onclick = function() {
         if (add.disabled) return;
         add.disabled = true;
-        add.textContent = 'Adding\u2026';
+        add.textContent = T('adding', 'Adding\u2026');
         addToBag(variant.id, 1).then(function() {
-          add.textContent = 'Added \u2713';
+          add.textContent = T('addedShort', 'Added \u2713');
           add.classList.add('is-added');
           refreshCartToken().then(function() { trackEvent('quiz_cross_sell_add', { h: entry.handle, v: String(variant.id) }); });
         }).catch(function() {
           add.disabled = false;
-          add.textContent = '+ Add';
+          add.textContent = T('xsellAdd', '+ Add');
         });
       };
       card.appendChild(add);
     } else {
-      var choose = el('a', 'gq-xsell-add gq-xsell-add--link', 'Choose');
+      var choose = el('a', 'gq-xsell-add gq-xsell-add--link', TH('choose', 'Choose'));
       choose.href = url;
       card.appendChild(choose);
     }
@@ -4527,9 +4558,9 @@
     if (!cs || !Array.isArray(matches) || matches.length === 0) return null;
     var max = Math.max(1, Math.min(6, Number(cs.max) || 3));
     var section = el('section', 'gq-xsell');
-    section.setAttribute('aria-label', cs.title || 'Complete the look');
+    section.setAttribute('aria-label', cs.title || T('completeTheLook', 'Complete the look'));
     var head = el('div', 'gq-xsell-head');
-    head.appendChild(el('h3', 'gq-xsell-title', escapeHtml(cs.title || 'Complete the look')));
+    head.appendChild(el('h3', 'gq-xsell-title', escapeHtml(cs.title || T('completeTheLook', 'Complete the look'))));
     if (cs.subtext) head.appendChild(el('p', 'gq-xsell-sub', escapeHtml(cs.subtext)));
     section.appendChild(head);
     var row = el('div', 'gq-xsell-row');
@@ -4590,6 +4621,10 @@
 
   function buildStickyBar(hero, results) {
     var bar = el('div', 'gq-sticky-bar');
+    if (ctaPrimary() === 'view') {
+      bar.appendChild(viewButton(hero, results, 'gq-add-btn--sticky'));
+      return bar;
+    }
     var btn = el('button', 'gq-add-btn gq-add-btn--sticky', escapeHtml(buildAddLabel(results.addButtonTemplate, hero.quantity || 1, null)));
     btn.type = 'button';
     bar.appendChild(btn);
@@ -4912,7 +4947,7 @@
 
   function tplBackButton() {
     var back = el('button', 'gq-back gq-tpl-back',
-      '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg><span>Back</span>');
+      '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg><span>' + TH('back', 'Back') + '</span>');
     back.type = 'button';
     back.onclick = function() { if (PREVIEW) { previewBack(); } else { history.back(); } };
     return back;
@@ -4956,7 +4991,12 @@
   function introCtaLabel(tpl) {
     var landing = config.landing || {};
     if (landing.ctaLabel) return landing.ctaLabel;
-    if (leadActive() && tplEmailPlacement() === 'hook_start' && config.lead && config.lead.hasDiscount) return 'Unlock my discount';
+    // A Text & labels start override is a merchant label too.
+    var ui = config.uiText;
+    if (ui && typeof ui.start === 'string' && ui.start.trim()) return ui.start;
+    if (leadActive() && tplEmailPlacement() === 'hook_start' && config.lead && config.lead.hasDiscount) {
+      return T('unlockDiscount', 'Unlock my discount');
+    }
     return TPL_CTA[tpl.id] || 'Start the quiz';
   }
 
@@ -5003,7 +5043,9 @@
   function multiHint(q) {
     if (!q.multiSelect) return null;
     if (q.helperText && /select all|pick all|choose all|all that apply/i.test(q.helperText)) return null;
-    return el('p', 'gq-tpl-multi', q.maxSelections ? 'Select up to ' + q.maxSelections : 'Select all that apply');
+    return el('p', 'gq-tpl-multi', q.maxSelections
+      ? TH('selectUpTo', 'Select up to {n}', { n: q.maxSelections })
+      : TH('selectAll', 'Select all that apply'));
   }
 
   // Template counterpart of buildOptionList: same wiring (wireOptionClick,
@@ -5134,7 +5176,7 @@
       body.appendChild(list);
       // Match: the helper reads as a tip beneath visual tiles (spec T1 S2).
       if (tpl.id === 't1' && visual && q.helperText) {
-        body.appendChild(el('p', 'gq-t1-tip', '<span class="gq-t1-tip-label">Tip</span> ' + escapeHtml(q.helperText)));
+        body.appendChild(el('p', 'gq-t1-tip', '<span class="gq-t1-tip-label">' + TH('tip', 'Tip') + '</span> ' + escapeHtml(q.helperText)));
       }
     });
 
@@ -5142,7 +5184,7 @@
       var isLast = screenIdx === screens.length - 1;
       var ctaLabel = isLast
         ? ((config.results && config.results.showMatchesLabel) || 'Show my matches')
-        : (tpl.id === 't4' ? 'Next' : 'Continue');
+        : T('next', tpl.id === 't4' ? 'Next' : 'Continue');
       continueBtn = el('button', 'gq-add-btn gq-continue-btn gq-tpl-continue', escapeHtml(ctaLabel) + ' →');
       continueBtn.type = 'button';
       continueBtn.onclick = function() { commitScreen(screenIdx); };
@@ -5284,7 +5326,7 @@
       var chip = el('div', 'gq-intro-rating');
       chip.innerHTML = '<span class="gq-intro-stars" aria-hidden="true">★★★★★</span> <b>' +
         escapeHtml(String(rating.value)) + '/5</b>' +
-        (rating.count ? '<span class="gq-intro-rating-src"> · ' + escapeHtml(String(rating.count)) + ' reviews</span>' : '') +
+        (rating.count ? '<span class="gq-intro-rating-src"> · ' + TH('reviewsCount', '{n} reviews', { n: String(rating.count) }) + '</span>' : '') +
         (rating.source ? '<span class="gq-intro-rating-src"> · ' + escapeHtml(String(rating.source)) + '</span>' : '');
       left.appendChild(chip);
     }
@@ -5311,9 +5353,9 @@
 
     var card = el('div', 'gq-intro-preview');
     card.setAttribute('aria-hidden', 'true');
-    card.appendChild(el('span', 'gq-intro-preview-label', 'Quiz preview'));
+    card.appendChild(el('span', 'gq-intro-preview-label', TH('quizPreview', 'Quiz preview')));
     if (lead.hasDiscount && leadActive()) {
-      card.appendChild(el('span', 'gq-intro-badge', '<span>Mystery</span><b>?%</b><span>off</span>'));
+      card.appendChild(el('span', 'gq-intro-badge', '<span>' + TH('mysteryWord', 'Mystery') + '</span><b>?%</b><span>' + TH('offWord', 'off') + '</span>'));
     }
     var previewUrl = resolveSlotUrl('preview', null);
     if (previewUrl || isStudio()) {
@@ -5328,7 +5370,7 @@
         pbar.appendChild(el('i', i <= (qi > 0 ? 1 : 0) ? 'is-filled' : ''));
       }
       mini.appendChild(pbar);
-      mini.appendChild(el('p', 'gq-intro-preview-kicker', 'Question ' + (qi + 1) + ' of ' + screens.length));
+      mini.appendChild(el('p', 'gq-intro-preview-kicker', TH('questionOf', 'Question {n} of {total}', { n: qi + 1, total: screens.length })));
       mini.appendChild(el('p', 'gq-intro-preview-q', escapeHtml(q.prompt)));
       var savedDraft = draft;
       draft = {};
@@ -5355,7 +5397,7 @@
     } else {
       screen.classList.add('gq-intro--noimg');
     }
-    col.appendChild(el('h2', 'gq-tpl-headline gq-intro-founder-hi', 'Hi, I’m ' + escapeHtml(founder.name) + '.'));
+    col.appendChild(el('h2', 'gq-tpl-headline gq-intro-founder-hi', TH('founderHi', 'Hi, I’m {name}.', { name: founder.name })));
     if (founder.credentials) col.appendChild(el('p', 'gq-intro-founder-cred', escapeHtml(founder.credentials)));
     var pitch = landing.subtext || landing.headline;
     if (pitch) col.appendChild(el('p', 'gq-tpl-prose', escapeHtml(pitch)));
@@ -5424,19 +5466,19 @@
     }
     screen.appendChild(tpl.questionChrome(0));
     var body = el('div', 'gq-tpl-body gq-t3-body gq-t3-name-body');
-    body.appendChild(el('h2', 'gq-tpl-q gq-t3-q', 'To start, who is the routine for?'));
+    body.appendChild(el('h2', 'gq-tpl-q gq-t3-q', TH('nameQuestion', 'To start, who is the routine for?')));
     var form = el('form', 'gq-t3-name-form');
     var input = document.createElement('input');
     input.className = 'gq-lead-input gq-t3-name-input';
     input.type = 'text';
     input.name = 'name';
     input.maxLength = 40;
-    input.placeholder = 'Enter your name here';
+    input.placeholder = T('namePlaceholder', 'Enter your name here');
     input.autocomplete = 'given-name';
-    input.setAttribute('aria-label', 'Your name');
+    input.setAttribute('aria-label', T('ariaName', 'Your name'));
     if (state.shopperName) input.value = state.shopperName;
     form.appendChild(input);
-    var cont = tplCta('Continue', 'gq-t3-name-continue');
+    var cont = tplCta(T('next', 'Continue'), 'gq-t3-name-continue');
     cont.disabled = !input.value.trim();
     form.appendChild(cont);
     input.oninput = function() { cont.disabled = !input.value.trim(); };
@@ -5448,7 +5490,7 @@
       leaveNameCapture();
     };
     body.appendChild(form);
-    var skip = el('button', 'gq-skip-link gq-tpl-skip', 'Skip');
+    var skip = el('button', 'gq-skip-link gq-tpl-skip', TH('skip', 'Skip'));
     skip.type = 'button';
     skip.onclick = function() { state.shopperName = ''; leaveNameCapture(); };
     body.appendChild(skip);
@@ -5461,13 +5503,13 @@
   function leadDefaultHeadline(lead) {
     if (lead.headline) return lead.headline;
     var p = tplEmailPlacement();
-    if (p === 'hook_start' && lead.hasDiscount) return 'Your match is ready';
+    if (p === 'hook_start' && lead.hasDiscount) return T('leadReadyTitle', 'Your match is ready');
     return 'Want us to send your matches?';
   }
 
   function leadSubmitLabel(lead) {
     if (lead.buttonLabel) return lead.buttonLabel;
-    if (tplEmailPlacement() === 'hook_start' && lead.hasDiscount) return 'Reveal my discount →';
+    if (tplEmailPlacement() === 'hook_start' && lead.hasDiscount) return T('revealDiscount', 'Reveal my discount →');
     return 'Save my results';
   }
 
@@ -5483,10 +5525,10 @@
     emailInput.className = 'gq-lead-input';
     emailInput.type = 'email';
     emailInput.name = 'email';
-    emailInput.placeholder = 'you@email.com';
+    emailInput.placeholder = T('emailPlaceholder', 'you@email.com');
     emailInput.autocomplete = 'email';
     emailInput.setAttribute('inputmode', 'email');
-    emailInput.setAttribute('aria-label', 'Email address');
+    emailInput.setAttribute('aria-label', T('ariaEmail', 'Email address'));
     form.appendChild(emailInput);
     var phoneInput = null;
     if (lead.collectPhone) {
@@ -5494,10 +5536,10 @@
       phoneInput.className = 'gq-lead-input';
       phoneInput.type = 'tel';
       phoneInput.name = 'phone';
-      phoneInput.placeholder = 'Phone number (optional)';
+      phoneInput.placeholder = T('phonePlaceholder', 'Phone number (optional)');
       phoneInput.autocomplete = 'tel';
       phoneInput.setAttribute('inputmode', 'tel');
-      phoneInput.setAttribute('aria-label', 'Phone number');
+      phoneInput.setAttribute('aria-label', T('ariaPhone', 'Phone number'));
       form.appendChild(phoneInput);
     }
     var err = el('p', 'gq-lead-error');
@@ -5529,19 +5571,21 @@
       var email = emailInput.value.trim().toLowerCase();
       var phone = phoneInput ? phoneInput.value.replace(/[\s().-]/g, '') : '';
       if (!email && !phone) {
-        showLeadError(phoneInput ? 'Enter your email or phone number.' : 'Enter your email.');
+        showLeadError(phoneInput
+          ? T('emailOrPhoneMissing', 'Enter your email or phone number.')
+          : T('emailMissing', 'Enter your email.'));
         return;
       }
       if (email && (email.length > 254 || !LEAD_EMAIL_RE.test(email))) {
-        showLeadError('That email doesn’t look right.');
+        showLeadError(T('emailInvalid', 'That email doesn’t look right.'));
         return;
       }
       if (phone && !LEAD_PHONE_RE.test(phone)) {
-        showLeadError('That phone number doesn’t look right.');
+        showLeadError(T('phoneInvalid', 'That phone number doesn’t look right.'));
         return;
       }
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Saving…';
+      submitBtn.textContent = T('saving', 'Saving…');
       submitLead(email, phone)
         .then(function(response) {
           trackEvent('quiz_lead_submitted', { has_email: Boolean(email), has_phone: Boolean(phone) });
@@ -5563,7 +5607,7 @@
           submitBtn.textContent = submitLabel;
           var msg = error && error.message && /email|phone/i.test(error.message)
             ? error.message
-            : 'Something went wrong — try again, or skip.';
+            : T('leadFailed', 'Something went wrong — try again, or skip.');
           showLeadError(msg);
         });
     };
@@ -5578,11 +5622,11 @@
     reveal.classList.add('gq-tpl-lead-reveal');
     var msg = reveal.querySelector('.gq-lead-reveal-msg');
     if (msg) {
-      var head = el(inline ? 'h3' : 'h2', 'gq-tpl-lead-title gq-tpl-lead-reveal-title', escapeHtml(lead.discountMessage || 'Here’s your code'));
+      var head = el(inline ? 'h3' : 'h2', 'gq-tpl-lead-title gq-tpl-lead-reveal-title', escapeHtml(lead.discountMessage || T('codeTitle', 'Here’s your code')));
       reveal.insertBefore(head, msg);
       msg.parentNode.removeChild(msg);
     }
-    var applied = el('p', 'gq-tpl-lead-applied', CHECK_MINI + '<span>Applied at checkout</span>');
+    var applied = el('p', 'gq-tpl-lead-applied', CHECK_MINI + '<span>' + TH('appliedAtCheckout', 'Applied at checkout') + '</span>');
     var cont = reveal.querySelector('.gq-lead-continue');
     if (inline) {
       if (cont) cont.parentNode.removeChild(cont);
@@ -5654,7 +5698,10 @@
   // state (persisted) so a reload of computed results never replays it.
   // (state.t2ComputeDone is the historical name of that flag.)
 
-  var TPL_LOADING_TITLE = { t1: 'Finding your match…', t2: 'Finding your match…', t3: 'Building your routine…' };
+  // Loading title: Routine builds a routine; every other template finds a match.
+  function tplLoadingTitle(tpl) {
+    return tpl.id === 't3' ? TH('buildingRoutine', 'Building your routine…') : TH('findingMatch', 'Finding your match…');
+  }
   function tplLoadingWanted(tpl, results) {
     if (tpl.loading === 'absent') return false;
     if (state.t2ComputeDone) return false;
@@ -5666,7 +5713,7 @@
     var screen = el('div', 'gq-tpl-loading gq-' + tpl.id + '-loading');
     var inner = el('div', 'gq-tpl-loading-inner');
     inner.appendChild(el('div', 'gq-tpl-ring'));
-    inner.appendChild(el('h3', 'gq-tpl-loading-title', escapeHtml(TPL_LOADING_TITLE[tpl.id] || 'Finding your match…')));
+    inner.appendChild(el('h3', 'gq-tpl-loading-title', tplLoadingTitle(tpl)));
     var brand = (config.landing && config.landing.eyebrow) || '';
     if (brand) inner.appendChild(el('p', 'gq-tpl-loading-brand', escapeHtml(brand)));
     var lines = Array.isArray(results.trustLines)
@@ -5708,14 +5755,84 @@
   function tplSpecLine(m) {
     var bits = [];
     if (m.variantTitle) bits.push(m.variantTitle);
-    if (m.quantity > 1) bits.push(m.quantity + ' sets');
+    if (m.quantity > 1) bits.push(T('setsCount', '{n} sets', { n: m.quantity }));
     return bits.length > 0 ? bits.join(' · ') : null;
   }
 
   function tplWhyText(m) {
+    var wf = whyFits(m);
+    if (wf) return wf;
     if (m.tagline) return m.tagline;
     if (Array.isArray(m.reasons) && m.reasons.length > 0) return m.reasons[0];
     return null;
+  }
+
+  // Merchant "why this fits" line per product (migration 092). The Studio
+  // preview reads the current map from config, so an edit shows on the
+  // cards without re-running the recommendations.
+  function whyFits(m) {
+    var map = PREVIEW && config && config.results && config.results.productWhy;
+    if (map) return (m && m.productHandle && map[m.productHandle]) || null;
+    return (m && typeof m.whyFits === 'string' && m.whyFits.trim()) ? m.whyFits : null;
+  }
+
+  // ---- Results CTA (migration 092) ----
+  // Per quiz, the merchant picks the card button: add to cart (default,
+  // today's cards) or view product, and whether the other action shows as
+  // the small link under it. Every results layout builds its actions here.
+  function ctaPrimary() {
+    return config && config.results && config.results.primaryCta === 'view' ? 'view' : 'add';
+  }
+  function ctaSecondaryOn() {
+    return !(config && config.results && config.results.secondaryLink === false);
+  }
+  function productHref(m) {
+    return '/products/' + encodeURIComponent(m.productHandle) +
+      (m.variantNumericId ? '?variant=' + encodeURIComponent(m.variantNumericId) : '');
+  }
+  function viewLinkEl(m, results, label, cls) {
+    if (!m.productHandle) return null;
+    var view = el('a', cls, escapeHtml(label || results.viewProductLabel || 'View full product') + ' \u2192');
+    view.href = productHref(m);
+    view.onclick = function() { trackEvent('quiz_view_product', productProps(m)); saveState(); };
+    return view;
+  }
+  // "View product" as the card's main button: a link dressed as the add
+  // button. label = a shorter wording for small cards.
+  function viewButton(m, results, cls, label) {
+    if (!m.productHandle) {
+      var none = el('button', 'gq-add-btn ' + cls, TH('unavailable', 'Unavailable'));
+      none.type = 'button';
+      none.disabled = true;
+      return none;
+    }
+    var a = el('a', 'gq-add-btn gq-cta-view ' + cls, escapeHtml(label || results.viewProductLabel || 'View full product'));
+    a.href = productHref(m);
+    a.onclick = function() { trackEvent('quiz_view_product', productProps(m)); saveState(); };
+    return a;
+  }
+  // "Add to cart" as the small link: a button dressed as the view link.
+  function addLinkEl(m, results, cls) {
+    if (!m.productHandle) return null;
+    var b = el('button', cls + ' gq-cta-addlink', escapeHtml(buildAddLabel(results.addButtonTemplate, m.quantity || 1, null)));
+    b.type = 'button';
+    wirePricedAddButton(b, m, results);
+    return b;
+  }
+  // [main button, small link] for one product, per the CTA setting. The
+  // add button needs a resolved variant (definitive); View never does.
+  function resultCtas(m, results, definitive, btnCls, linkCls, shortLabel) {
+    var out = [];
+    if (ctaPrimary() === 'view') {
+      out.push(viewButton(m, results, btnCls, shortLabel));
+      var al = ctaSecondaryOn() && definitive ? addLinkEl(m, results, linkCls) : null;
+      if (al) out.push(al);
+    } else {
+      if (definitive) out.push(tplAddButton(m, results, btnCls));
+      var vl = ctaSecondaryOn() ? viewLinkEl(m, results, shortLabel, linkCls) : null;
+      if (vl) out.push(vl);
+    }
+    return out;
   }
 
   function tplAddButton(m, results, cls) {
@@ -5726,19 +5843,15 @@
       wirePricedAddButton(btn, m, results);
     } else {
       btn.disabled = true;
-      btn.textContent = 'Unavailable';
+      btn.textContent = T('unavailable', 'Unavailable');
     }
     return btn;
   }
 
   function tplViewLink(m, results, label) {
-    if (!m.productHandle) return null;
-    var view = el('a', 'gq-view-link gq-tpl-view', escapeHtml(label || results.viewProductLabel || 'View full product') + ' →');
-    view.href = '/products/' + encodeURIComponent(m.productHandle) +
-      (m.variantNumericId ? '?variant=' + encodeURIComponent(m.variantNumericId) : '');
-    view.onclick = function() { trackEvent('quiz_view_product', productProps(m)); saveState(); };
-    return view;
+    return viewLinkEl(m, results, label, 'gq-view-link gq-tpl-view');
   }
+  var TPL_LINK = 'gq-view-link gq-tpl-view';
 
   // Price text element that fills in when the product JSON resolves.
   function tplPrice(m, cls) {
@@ -5790,7 +5903,7 @@
     if (!results.subtext) return null;
     return renderName(results.subtext)
       .replace(/\{count\}/g, String(matches.length))
-      .replace(/\{match_word\}/g, matches.length === 1 ? 'match' : 'matches');
+      .replace(/\{match_word\}/g, matches.length === 1 ? T('matchWord', 'match') : T('matchesWord', 'matches'));
   }
 
   // Bundle add-all through the shipped machinery: every match, no picking
@@ -5848,8 +5961,8 @@
 
     if (matches.length === 0) {
       var none = el('div', 'gq-error',
-        '<p>We couldn’t find a match this time — try adjusting your answers.</p>');
-      var restart0 = el('button', 'gq-retry', 'Start over');
+        '<p>' + TH('noMatch', 'We couldn’t find a match this time — try adjusting your answers.') + '</p>');
+      var restart0 = el('button', 'gq-retry', TH('startOver', 'Start over'));
       restart0.type = 'button';
       restart0.onclick = restartQuiz;
       none.appendChild(restart0);
@@ -5974,7 +6087,7 @@
     top.appendChild(tplBackButton());
     top.appendChild(el('span', 'gq-t1-brand', escapeHtml((config.landing && config.landing.eyebrow) || '')));
     top.appendChild(el('span', 'gq-t1-numeral',
-      isBonus ? 'Bonus' : zeroPad(stepNumber + 1) + ' / ' + zeroPad(screens.length + 1)));
+      isBonus ? TH('bonusStep', 'Bonus') : zeroPad(stepNumber + 1) + ' / ' + zeroPad(screens.length + 1)));
     frag.appendChild(top);
     frag.appendChild(matchPhaseBar(isBonus ? screens.length : stepNumber - 1));
     return frag;
@@ -6028,7 +6141,9 @@
     if (!pj || !Array.isArray(pj.variants) || pj.variants.length < 2) return null;
     var addBtn = parts.addBtn;
     var wrap = el('div', 'gq-t1r-variants');
-    wrap.appendChild(el('h4', 'gq-t1r-h4', 'Select ' + escapeHtml((pj.options && pj.options[0] && (pj.options[0].name || pj.options[0])) || 'option').toLowerCase()));
+    wrap.appendChild(el('h4', 'gq-t1r-h4', TH('selectOption', 'Select {option}', {
+      option: String((pj.options && pj.options[0] && (pj.options[0].name || pj.options[0])) || 'option').toLowerCase(),
+    })));
     var row = el('div', 'gq-t1r-variant-row');
     var currentId = String(m.variantNumericId || pj.variants[0].id);
     pj.variants.slice(0, 8).forEach(function(v) {
@@ -6066,6 +6181,8 @@
   }
 
   function matchWhyText(m, results) {
+    var wf = whyFits(m);
+    if (wf) return wf;
     if (Array.isArray(m.reasons) && m.reasons.length > 0) {
       var r = m.reasons.slice(0, 2).map(function(s) { return String(s).replace(/[.\s]+$/, ''); });
       return r.join('. ') + '.';
@@ -6082,7 +6199,7 @@
     top.appendChild(el('span', 'gq-t1-brand', escapeHtml((config.landing && config.landing.eyebrow) || '')));
     top.appendChild(el('span', 'gq-t1-top-spacer'));
     wrap.appendChild(top);
-    wrap.appendChild(el('p', 'gq-t1r-headline', renderAccent(renderName(tplResultsHeadline(results, ctx, "Here's what we think will look amazing")))));
+    wrap.appendChild(el('p', 'gq-t1r-headline', renderAccent(renderName(tplResultsHeadline(results, ctx, T('t1Headline', "Here's what we think will look amazing"))))));
 
     var grid = el('div', 'gq-t1r-grid');
     // Left: gallery (main 1:1 slot + up to 4 thumbs from the product JSON).
@@ -6096,8 +6213,8 @@
 
     // Right: About your match · variants · Your shade · Why this works · CTA.
     var info = el('div', 'gq-t1r-info');
-    info.appendChild(el('h4', 'gq-t1r-h4', 'About your match'));
-    info.appendChild(el('p', 'gq-t1r-sub', 'Selected for you based on your answers:'));
+    info.appendChild(el('h4', 'gq-t1r-h4', TH('aboutMatch', 'About your match')));
+    info.appendChild(el('p', 'gq-t1r-sub', TH('aboutMatchSub', 'Selected for you based on your answers:')));
     var echo = el('ul', 'gq-t1r-echo');
     tplAnswerChips().forEach(function(c) {
       echo.appendChild(el('li', 'gq-t1r-echo-item', '<b>' + escapeHtml(c.axis) + ':</b> ' + escapeHtml(c.value)));
@@ -6112,7 +6229,7 @@
 
     var shade = shadeReasonLine();
     if (shadeAxis()) {
-      info.appendChild(el('h4', 'gq-t1r-h4', 'Your shade'));
+      info.appendChild(el('h4', 'gq-t1r-h4', TH('yourShade', 'Your shade')));
       var shadeCard = el('div', 'gq-t1r-shade');
       var swSlot = imageSlot({
         key: 'shade', kind: 'swatch', ratio: '1:1', sizePx: 56, url: null,
@@ -6122,25 +6239,28 @@
       shadeCard.appendChild(swSlot);
       var st = el('div', 'gq-t1r-shade-text');
       st.appendChild(el('b', 'gq-t1r-shade-name', escapeHtml(shade ? shade.label : shadeAxis().label)));
-      st.appendChild(el('small', 'gq-t1r-shade-line', escapeHtml(shade ? (hero.variantTitle ? hero.variantTitle + ' · ' + shade.source : shade.source) : 'Add a photo or pick your shade below')));
+      st.appendChild(el('small', 'gq-t1r-shade-line', escapeHtml(shade ? (hero.variantTitle ? hero.variantTitle + ' · ' + shade.source : shade.source) : T('shadeMissing', 'Add a photo or pick your shade below'))));
       shadeCard.appendChild(st);
       info.appendChild(shadeCard);
     }
 
     var why = matchWhyText(hero, results);
     if (why) {
-      info.appendChild(el('h4', 'gq-t1r-h4', 'Why this works'));
+      info.appendChild(el('h4', 'gq-t1r-h4', TH('whyWorks', 'Why this works')));
       info.appendChild(el('p', 'gq-t1r-why', escapeHtml(why)));
     }
     var priceEl = tplPrice(hero, 'gq-t1r-price');
     info.appendChild(priceEl);
+    // The variant picker re-points the View link and re-arms the add
+    // control, whichever of the two is the button.
+    var heroCtas = resultCtas(hero, results, ctx.definitive, 'gq-t1r-add', TPL_LINK);
+    heroCtas.forEach(function(n) { info.appendChild(n); });
     var addBtn = null;
-    if (ctx.definitive) {
-      addBtn = tplAddButton(hero, results, 'gq-t1r-add');
-      info.appendChild(addBtn);
-    }
-    var view = tplViewLink(hero, results);
-    if (view) info.appendChild(view);
+    var view = null;
+    heroCtas.forEach(function(n) {
+      if (n.tagName === 'A') view = n;
+      else addBtn = n;
+    });
     if (results.matchFootnote) info.appendChild(buildMatchFootnote(results.matchFootnote));
     grid.appendChild(info);
     wrap.appendChild(grid);
@@ -6178,7 +6298,7 @@
     var alts = matches.slice(1, 3);
     if (alts.length > 0) {
       var altRow = el('div', 'gq-t1-alts');
-      altRow.appendChild(el('h4', 'gq-t1r-h4 gq-t1-alts-title', escapeHtml(results.alsoMatchedLabel || 'Also worth a look')));
+      altRow.appendChild(el('h4', 'gq-t1r-h4 gq-t1-alts-title', escapeHtml(results.alsoMatchedLabel || T('alsoWorthLook', 'Also worth a look'))));
       var altGrid = el('div', 'gq-t1-alts-grid');
       alts.forEach(function(m) {
         var a = el('div', 'gq-t1-alt');
@@ -6193,9 +6313,7 @@
         var altPrice = tplPrice(m, 'gq-t1-alt-price');
         ai.appendChild(altPrice);
         var actions = el('div', 'gq-t1-alt-actions');
-        if (ctx.definitive) actions.appendChild(tplAddButton(m, results, 'gq-t1-alt-add'));
-        var v2 = tplViewLink(m, results, 'View');
-        if (v2) actions.appendChild(v2);
+        resultCtas(m, results, ctx.definitive, 'gq-t1-alt-add', TPL_LINK, T('viewShort', 'View')).forEach(function(n) { actions.appendChild(n); });
         ai.appendChild(actions);
         if (results.matchFootnote) ai.appendChild(buildMatchFootnote(results.matchFootnote));
         a.appendChild(ai);
@@ -6236,7 +6354,9 @@
     var frag = document.createDocumentFragment();
     var meta = el('div', 'gq-t2-meta');
     meta.appendChild(tplBackButton());
-    meta.appendChild(el('span', 'gq-t2-count', isBonus ? 'One last thing' : 'Question ' + stepNumber + ' of ' + screens.length));
+    meta.appendChild(el('span', 'gq-t2-count', isBonus
+      ? TH('oneLastThing', 'One last thing')
+      : TH('questionOf', 'Question {n} of {total}', { n: stepNumber, total: screens.length })));
     frag.appendChild(meta);
     frag.appendChild(tplBar('gq-t2-bar', isBonus ? screens.length + 1 : stepNumber));
     return frag;
@@ -6279,9 +6399,9 @@
     var results = ctx.results;
     var hero = matches[0];
     var wrap = el('div', 'gq-t2r-wrap');
-    wrap.appendChild(el('h2', 'gq-t2r-headline', renderAccent(renderName(tplResultsHeadline(results, ctx, 'Your match: ' + (hero.productName || ''))))));
+    wrap.appendChild(el('h2', 'gq-t2r-headline', renderAccent(renderName(tplResultsHeadline(results, ctx, T('yourMatchHeadline', 'Your match: {name}', { name: hero.productName || '' }))))));
     var recap = el('div', 'gq-t2r-recap');
-    recap.appendChild(el('p', 'gq-t2r-recap-label', 'Based on your answers'));
+    recap.appendChild(el('p', 'gq-t2r-recap-label', TH('basedOnAnswers', 'Based on your answers')));
     recap.appendChild(tplChipRow('gq-tpl-chips gq-t2r-chips', false));
     wrap.appendChild(recap);
 
@@ -6290,19 +6410,18 @@
     pick.appendChild(slot);
     slotTryon(slot, hero, ctx.hasPhotoNow);
     var info = el('div', 'gq-t2r-info');
-    info.appendChild(el('p', 'gq-t2r-lbl', escapeHtml(state.matrixApplied ? (results.bestMatchPill || 'Best for you') : 'Our pick')));
+    info.appendChild(el('p', 'gq-t2r-lbl', escapeHtml(state.matrixApplied ? (results.bestMatchPill || T('bestForYou', 'Best for you')) : T('ourPick', 'Our pick'))));
     info.appendChild(el('h3', 'gq-t2r-name', escapeHtml(hero.productName + (hero.variantTitle ? ' · ' + hero.variantTitle : ''))));
     info.appendChild(tplPrice(hero, 'gq-t2r-price'));
     var bullets = Array.isArray(hero.reasons) ? hero.reasons.slice(0, 3) : [];
     if (bullets.length === 0 && hero.tagline) bullets = [hero.tagline];
+    if (whyFits(hero)) bullets = [whyFits(hero)].concat(bullets).slice(0, 3);
     if (bullets.length > 0) {
       var ul = el('ul', 'gq-t2r-bullets');
       bullets.forEach(function(b) { ul.appendChild(el('li', 'gq-t2r-bullet', '<span class="gq-t2r-arrow" aria-hidden="true">→</span><span>' + escapeHtml(b) + '</span>')); });
       info.appendChild(ul);
     }
-    if (ctx.definitive) info.appendChild(tplAddButton(hero, results, 'gq-t2r-cta'));
-    var view = tplViewLink(hero, results);
-    if (view) info.appendChild(view);
+    resultCtas(hero, results, ctx.definitive, 'gq-t2r-cta', TPL_LINK).forEach(function(n) { info.appendChild(n); });
     if (results.matchFootnote) info.appendChild(buildMatchFootnote(results.matchFootnote));
     pick.appendChild(info);
     wrap.appendChild(pick);
@@ -6329,7 +6448,7 @@
         if (i === 0) th.className = 'gq-t2r-pickcol';
         var cell = el('div', 'gq-t2r-th');
         cell.appendChild(productSlot(m, 'thumb', '1:1', 52, 'gq-t2r-th-slot'));
-        cell.appendChild(el('span', 'gq-t2r-th-name', escapeHtml(m.productName || '') + (i === 0 ? '<small>your match</small>' : '')));
+        cell.appendChild(el('span', 'gq-t2r-th-name', escapeHtml(m.productName || '') + (i === 0 ? '<small>' + TH('yourMatchSmall', 'your match') + '</small>' : '')));
         th.appendChild(cell);
         headRow.appendChild(th);
       });
@@ -6351,7 +6470,7 @@
         });
         tbody.appendChild(tr);
       }
-      addRow('Price', function(td, m) {
+      addRow(T('rowPrice', 'Price'), function(td, m) {
         fetchProductJson(m.productHandle).then(function(pj) {
           var unit = priceCentsForRec(pj, m);
           var qty = Math.max(1, m.quantity || 1);
@@ -6359,20 +6478,18 @@
         });
       });
       if (cols.some(function(m) { return m.variantTitle; })) {
-        addRow('Option', function(td, m) { td.textContent = m.variantTitle || '—'; });
+        addRow(T('rowOption', 'Option'), function(td, m) { td.textContent = m.variantTitle || '—'; });
       }
       if (cols.some(function(m) { return m.quantity > 1; })) {
-        addRow('Sets', function(td, m) { td.textContent = String(Math.max(1, m.quantity || 1)); });
+        addRow(T('rowSets', 'Sets'), function(td, m) { td.textContent = String(Math.max(1, m.quantity || 1)); });
       }
       if (cols.some(function(m) { return tplWhyText(m); })) {
-        addRow('Why', function(td, m) { td.textContent = tplWhyText(m) || '—'; });
+        addRow(T('rowWhy', 'Why'), function(td, m) { td.textContent = tplWhyText(m) || '—'; });
       }
       // Secondary CTA per alternate.
       addRow('', function(td, m, i) {
-        if (i === 0) { td.appendChild(el('span', 'gq-t2r-yours', 'Your match')); return; }
-        var v = tplViewLink(m, results, 'View');
-        if (v) td.appendChild(v);
-        if (ctx.definitive) td.appendChild(tplAddButton(m, results, 'gq-t2r-alt-add'));
+        if (i === 0) { td.appendChild(el('span', 'gq-t2r-yours', TH('yourMatchCol', 'Your match'))); return; }
+        resultCtas(m, results, ctx.definitive, 'gq-t2r-alt-add', TPL_LINK, T('viewShort', 'View')).reverse().forEach(function(n) { td.appendChild(n); });
       });
       table.appendChild(tbody);
       tableWrap.appendChild(table);
@@ -6402,7 +6519,7 @@
     var meta = el('div', 'gq-t3-meta');
     meta.appendChild(tplBackButton());
     if (stepNumber > 0) {
-      meta.appendChild(el('span', 'gq-t3-count', isBonus ? 'Almost there' : stepNumber + ' of ' + screens.length));
+      meta.appendChild(el('span', 'gq-t3-count', isBonus ? TH('almostThere', 'Almost there') : stepNumber + ' of ' + screens.length));
     }
     return meta;
   }
@@ -6436,7 +6553,7 @@
     var frag = document.createDocumentFragment();
     var name = shopperName();
     if (part === 0 && screenIdx === 0 && name) {
-      frag.appendChild(el('h2', 'gq-tpl-q gq-t3-q', 'Nice to meet you, ' + escapeHtml(name) + '.'));
+      frag.appendChild(el('h2', 'gq-tpl-q gq-t3-q', TH('niceToMeet', 'Nice to meet you, {name}.', { name: name })));
       frag.appendChild(el('p', 'gq-t3-sub', escapeHtml(q.prompt)));
     } else {
       frag.appendChild(el(part === 0 ? 'h2' : 'h3', (part === 0 ? 'gq-tpl-q' : 'gq-tpl-q gq-tpl-q--sub') + ' gq-t3-q', escapeHtml(q.prompt)));
@@ -6472,8 +6589,8 @@
       else night.push(m);
     });
     var groups = [];
-    if (morning.length) groups.push({ key: 'morning', label: 'Morning', glyph: '☀', steps: morning });
-    if (night.length) groups.push({ key: 'night', label: 'Night', glyph: '☾', steps: night });
+    if (morning.length) groups.push({ key: 'morning', label: T('morning', 'Morning'), glyph: '☀', steps: morning });
+    if (night.length) groups.push({ key: 'night', label: T('night', 'Night'), glyph: '☾', steps: night });
     return groups;
   }
 
@@ -6487,8 +6604,8 @@
     var shade = shadeReasonLine();
     if (shade) labels.push(shade.label);
     var told = labels.length > 0
-      ? 'You told us ' + labels.join(', ').toLowerCase() + '.'
-      : 'You told us what you’re working with.';
+      ? T('toldUs', 'You told us {answers}.', { answers: labels.join(', ').toLowerCase() })
+      : T('toldUsAnon', 'You told us what you’re working with.');
     var names = matches.map(function(m) { return m.productName; }).filter(Boolean);
     var n = names.length;
     var build = n > 1
@@ -6501,22 +6618,24 @@
     var results = ctx.results;
     var wrap = el('div', 'gq-t3r-wrap');
     var name = shopperName();
-    wrap.appendChild(el('h2', 'gq-t3r-headline', renderAccent(renderName(tplResultsHeadline(results, ctx, 'Your personalized routine')))));
+    wrap.appendChild(el('h2', 'gq-t3r-headline', renderAccent(renderName(tplResultsHeadline(results, ctx, T('routineHeadline', 'Your personalized routine'))))));
     var chips = tplAnswerChips();
     if (chips.length > 0) {
-      wrap.appendChild(el('p', 'gq-t3r-for', escapeHtml(name ? 'Built for ' + name : 'Built for')));
+      wrap.appendChild(el('p', 'gq-t3r-for', escapeHtml(name
+        ? T('builtFor', 'Built for {name}', { name: name })
+        : T('builtForAnon', 'Built for'))));
       var row = el('div', 'gq-t3r-concerns');
       chips.forEach(function(c) { row.appendChild(el('span', 'gq-t3r-concern', escapeHtml(c.value))); });
       wrap.appendChild(row);
     }
     var why = el('div', 'gq-t3r-why');
-    why.appendChild(el('b', 'gq-t3r-why-title', 'Why this regimen is right for you'));
+    why.appendChild(el('b', 'gq-t3r-why-title', TH('regimenWhy', 'Why this regimen is right for you')));
     why.appendChild(el('p', 'gq-t3r-why-text', escapeHtml(routineWhy(matches))));
     wrap.appendChild(why);
 
     var regimen = el('div', 'gq-t3r-regimen');
     var head = el('div', 'gq-t3r-regimen-head');
-    head.appendChild(el('h3', 'gq-t3r-regimen-title', 'Your regimen'));
+    head.appendChild(el('h3', 'gq-t3r-regimen-title', TH('regimenTitle', 'Your regimen')));
     var headTotal = el('span', 'gq-t3r-regimen-total', '');
     head.appendChild(headTotal);
     regimen.appendChild(head);
@@ -6534,7 +6653,7 @@
     }
     routineGroups(matches).forEach(function(g) {
       regimen.appendChild(el('div', 'gq-t3r-group gq-t3r-group--' + g.key,
-        '<span class="gq-t3r-group-glyph" aria-hidden="true">' + g.glyph + '</span>' + g.label));
+        '<span class="gq-t3r-group-glyph" aria-hidden="true">' + g.glyph + '</span>' + escapeHtml(g.label)));
       g.steps.forEach(function(m, i) {
         stepNo++;
         var idx = matches.indexOf(m);
@@ -6545,11 +6664,9 @@
         var tx = el('div', 'gq-t3r-step-tx');
         tx.appendChild(el('h5', 'gq-t3r-step-name', escapeHtml(m.productName)));
         var role = tplWhyText(m);
-        tx.appendChild(el('small', 'gq-t3r-step-role', 'Step ' + (i + 1) + (role ? ' · ' + escapeHtml(role) : '')));
+        tx.appendChild(el('small', 'gq-t3r-step-role', TH('stepLabel', 'Step {n}', { n: i + 1 }) + (role ? ' · ' + escapeHtml(role) : '')));
         var actions = el('div', 'gq-t3r-step-actions');
-        if (ctx.definitive) actions.appendChild(tplAddButton(m, results, 'gq-t3r-step-add'));
-        var v = tplViewLink(m, results, 'View');
-        if (v) actions.appendChild(v);
+        resultCtas(m, results, ctx.definitive, 'gq-t3r-step-add', TPL_LINK, T('viewShort', 'View')).forEach(function(n) { actions.appendChild(n); });
         tx.appendChild(actions);
         if (results.matchFootnote) tx.appendChild(buildMatchFootnote(results.matchFootnote));
         step.appendChild(tx);
@@ -6575,17 +6692,17 @@
     if (ctx.definitive) {
       var foot = el('div', 'gq-t3r-total');
       var tot = el('div', 'gq-t3r-total-text');
-      tot.appendChild(el('span', 'gq-t3r-total-label', 'Today’s total: '));
+      tot.appendChild(el('span', 'gq-t3r-total-label', TH('todaysTotal', 'Today’s total:') + ' '));
       var totVal = el('b', 'gq-t3r-total-value', '');
       totalEls.push(totVal);
       tot.appendChild(totVal);
       // Only a real discount may promise savings (migration 086); the
       // bundle button alone adds at full price.
       if (results.bundleEnabled && results.bundleDiscount) {
-        tot.appendChild(el('small', 'gq-t3r-total-save', escapeHtml(results.bundleDiscount.note || 'Bundle savings applied at checkout')));
+        tot.appendChild(el('small', 'gq-t3r-total-save', escapeHtml(results.bundleDiscount.note || T('bundleFine', 'Bundle savings applied at checkout'))));
       }
       foot.appendChild(tot);
-      var bundleRow = tplBundleRow(matches, results, 'Add routine to cart');
+      var bundleRow = tplBundleRow(matches, results, T('addRoutine', 'Add routine to cart'));
       bundleRow.classList.add('gq-t3r-addall');
       foot.appendChild(bundleRow);
       wrap.appendChild(foot);
@@ -6617,7 +6734,7 @@
     meta.appendChild(tplBackButton());
     var seg = el('div', 'gq-t4-prog');
     seg.setAttribute('role', 'progressbar');
-    seg.setAttribute('aria-label', 'Question ' + stepNumber + ' of ' + screens.length);
+    seg.setAttribute('aria-label', T('questionOf', 'Question {n} of {total}', { n: stepNumber, total: screens.length }));
     seg.setAttribute('aria-valuemin', '0');
     seg.setAttribute('aria-valuemax', String(screens.length));
     seg.setAttribute('aria-valuenow', String(isBonus ? screens.length : Math.max(0, stepNumber - 1)));
@@ -6666,7 +6783,7 @@
     var results = ctx.results;
     var hero = matches[0];
     var wrap = el('div', 'gq-t4r-wrap');
-    var kicker = results.archetypeKicker || 'Your type';
+    var kicker = results.archetypeKicker || T('yourType', 'Your type');
     wrap.appendChild(el('p', 'gq-t4r-kicker', escapeHtml(kicker)));
     var title = results.archetypeTitle || tplResultsHeadline(results, ctx);
     wrap.appendChild(el('h2', 'gq-t4r-archetype', renderAccent(renderName(title))));
@@ -6691,9 +6808,7 @@
     });
     if (why) priceLine.textContent = why;
     hi.appendChild(priceLine);
-    if (ctx.definitive) hi.appendChild(tplAddButton(hero, results, 'gq-t4r-cta'));
-    var view = tplViewLink(hero, results);
-    if (view) hi.appendChild(view);
+    resultCtas(hero, results, ctx.definitive, 'gq-t4r-cta', TPL_LINK).forEach(function(n) { hi.appendChild(n); });
     if (results.matchFootnote) hi.appendChild(buildMatchFootnote(results.matchFootnote));
     heroCard.appendChild(hi);
     wrap.appendChild(heroCard);
@@ -6705,20 +6820,21 @@
     if (kit.length >= 2) {
       var arch = archetypeName(results);
       var kitWrap = el('div', 'gq-t4r-kit');
-      kitWrap.appendChild(el('h4', 'gq-t4r-kit-title', escapeHtml(arch ? 'Your ' + arch + ' kit' : 'Your kit')));
+      kitWrap.appendChild(el('h4', 'gq-t4r-kit-title', escapeHtml(arch ? T('yourKitNamed', 'Your {name} kit', { name: arch }) : T('yourKit', 'Your kit'))));
       var row = el('div', 'gq-t4r-kit-row');
       kit.forEach(function(m) {
         var mini = el('div', 'gq-t4r-mini');
         mini.appendChild(productSlot(m, 'product', '1:1', null, 'gq-t4r-mini-slot'));
         mini.appendChild(el('h5', 'gq-t4r-mini-name', escapeHtml(m.productName)));
         mini.appendChild(tplPrice(m, 'gq-t4r-mini-price'));
-        if (ctx.definitive) mini.appendChild(tplAddButton(m, results, 'gq-t4r-mini-add'));
+        if (ctaPrimary() === 'view') mini.appendChild(viewButton(m, results, 'gq-t4r-mini-add', T('viewShort', 'View')));
+        else if (ctx.definitive) mini.appendChild(tplAddButton(m, results, 'gq-t4r-mini-add'));
         if (results.matchFootnote) mini.appendChild(buildMatchFootnote(results.matchFootnote));
         row.appendChild(mini);
       });
       kitWrap.appendChild(row);
       if (ctx.definitive && results.bundleEnabled) {
-        var bundle = tplBundleRow(kit, results, 'Add all {count} — {total}');
+        var bundle = tplBundleRow(kit, results, T('kitAddAll', 'Add all {count} — {total}'));
         bundle.classList.add('gq-t4r-addall');
         kitWrap.appendChild(bundle);
       }
@@ -6778,7 +6894,7 @@
     if (sub) {
       wrap.appendChild(el('p', 'gq-t5r-sub', escapeHtml(sub)));
     } else if (chips.length > 0) {
-      wrap.appendChild(el('p', 'gq-t5r-sub', 'Based on: ' + escapeHtml(chips.map(function(c) { return c.value; }).join(' · '))));
+      wrap.appendChild(el('p', 'gq-t5r-sub', TH('basedOn', 'Based on: {answers}', { answers: chips.map(function(c) { return c.value; }).join(' · ') })));
     }
     var grid = el('div', 'gq-t5r-grid');
     matches.slice(0, 4).forEach(function(m, i) {
@@ -6793,9 +6909,7 @@
       tx.appendChild(tplPrice(m, 'gq-t5r-price'));
       var why = tplWhyText(m);
       if (why) tx.appendChild(el('p', 'gq-t5r-why', escapeHtml(why)));
-      if (ctx.definitive) tx.appendChild(tplAddButton(m, results, 'gq-t5r-add'));
-      var view = tplViewLink(m, results);
-      if (view) tx.appendChild(view);
+      resultCtas(m, results, ctx.definitive, 'gq-t5r-add', TPL_LINK).forEach(function(n) { tx.appendChild(n); });
       if (results.matchFootnote) tx.appendChild(buildMatchFootnote(results.matchFootnote));
       card.appendChild(tx);
       grid.appendChild(card);

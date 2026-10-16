@@ -23,6 +23,7 @@ import {
   type ChatAssistantConfig,
 } from "../lib/supabase.server";
 import type { MatchProduct, MatchSettings } from "../components/studio/MatchSettingsEditor";
+import type { WhyProduct } from "../components/studio/ProductWhyEditor";
 import { validateMatchSettingsPatch } from "../lib/match-settings";
 import {
   captureLiveConfig,
@@ -269,6 +270,37 @@ function resolveSlots(
   });
 }
 
+/** Results slide "why this fits" list (migration 092): the products the
+ * quiz can recommend (the Matching scope), live only, A-Z. */
+async function loadWhyProducts(shopId: string, settings: Record<string, unknown>): Promise<WhyProduct[]> {
+  const rows: Array<Record<string, unknown>> = [];
+  for (let from = 0; from < 5000; from += 1000) {
+    const { data, error } = await supabase
+      .from("products")
+      .select("id, product_name, image_url, status")
+      .eq("shop_id", shopId)
+      .order("product_name", { ascending: true })
+      .range(from, from + 999);
+    if (error) {
+      console.error("[studio] why-this-fits products load failed:", error.message);
+      break;
+    }
+    rows.push(...((data ?? []) as Array<Record<string, unknown>>));
+    if (!data || data.length < 1000) break;
+  }
+  const selected =
+    settings.product_scope === "selected" && Array.isArray(settings.selected_product_ids) && settings.selected_product_ids.length > 0
+      ? new Set((settings.selected_product_ids as unknown[]).map(String))
+      : null;
+  return rows
+    .filter((p) => isLiveProduct(p as { status?: string | null }) && (!selected || selected.has(String(p.id))))
+    .map((p) => ({
+      id: String(p.id),
+      name: String(p.product_name ?? "Untitled product"),
+      imageUrl: typeof p.image_url === "string" ? p.image_url : null,
+    }));
+}
+
 /** Lightweight live-product list for the cross-sell picker: what a
  * merchant needs to recognize an add-on, nothing more. */
 async function loadOfferCatalog(shopId: string) {
@@ -503,7 +535,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const slideParam = url.searchParams.get("slide") ?? "";
   const onOffers = slideParam === "offers-bundle" || slideParam === "offers-crosssell";
   const onIntegrations = slideParam === "integrations";
-  const [offers, offerCatalog, klaviyo, matchProducts] = await Promise.all([
+  const [offers, offerCatalog, klaviyo, matchProducts, whyProducts] = await Promise.all([
     onOffers ? getQuizOffers(shop.id) : Promise.resolve(null as QuizOffers | null),
     slideParam === "offers-crosssell" ? loadOfferCatalog(shop.id) : Promise.resolve(null),
     onIntegrations
@@ -520,6 +552,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           )
           .catch((): MatchProduct[] => [])
       : Promise.resolve(null as MatchProduct[] | null),
+    slideParam === "results" && draft
+      ? loadWhyProducts(shop.id, draft.settings as Record<string, unknown>).catch((): WhyProduct[] => [])
+      : Promise.resolve(null as WhyProduct[] | null),
   ]);
 
   return json({
@@ -529,6 +564,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     klaviyo,
     matchSettings,
     matchProducts,
+    whyProducts,
     apiKey: process.env.SHOPIFY_API_KEY || "",
     intercomAppId: process.env.INTERCOM_APP_ID || "",
     intercomUserJwt,
@@ -1218,6 +1254,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
       s === "photo" ||
       s === "results" ||
       s === "theme" ||
+      s === "text" ||
       s === "images" ||
       s === "lead" ||
       s === "offers-bundle" ||
@@ -1362,7 +1399,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
   const echoMuteUntilRef = useRef(0);
   const stepForSlide = useCallback(
     (slideId: string) => {
-      if (slideId === "intro" || slideId === "theme" || slideId === "images") return "intro";
+      if (slideId === "intro" || slideId === "theme" || slideId === "images" || slideId === "text") return "intro";
       if (slideId === "lead" || slideId === "integrations") return "lead";
       if (slideId === "photo") return "gate";
       if (slideId === "results" || slideId === "offers-bundle" || slideId === "offers-crosssell" || slideId === "matching") return "results";
@@ -1497,6 +1534,9 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
         if (q) slideId = slideIdForQuestion(q.axisKey);
       }
       if (!slideId) return;
+      // Text & labels spans every screen: the merchant clicks through the
+      // preview to find a string, so screen echoes never steal the panel.
+      if (selectedSlideRef.current === "text") return;
       // Theme/Images map their goto to the intro step, Sell more to results
       // or the lead step — don't let an echo steal those selections.
       if (

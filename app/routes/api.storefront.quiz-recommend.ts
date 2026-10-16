@@ -26,8 +26,10 @@ const CORS_HEADERS = {
  *           (arrays come from multi-select questions)
  * Response: {
  *   matches: [{ productId, variantId, variantNumericId, productHandle,
- *               productName, variantTitle, title, tagline, rank,
+ *               productName, variantTitle, title, tagline, whyFits, rank,
  *               quantity, reasons: string[] }],
+ *   (whyFits = the merchant's "why this fits" line, migration 092; reasons
+ *    = authored answer copy or the AI ranker's reason, never an answer echo)
  *   matrixApplied: boolean,
  *   partial: boolean   // true when matched via containment (e.g. shade
  *                      // still unanswered) — the quiz shows the shade gate

@@ -14,6 +14,7 @@ import {
   CartUpIcon,
   ConnectIcon,
   TargetIcon,
+  TextFontIcon,
 } from "@shopify/polaris-icons";
 import type { StudioFlow } from "./types";
 import { answerLabel } from "./types";
@@ -364,6 +365,10 @@ export function SlideTree({
             Style
           </span>
         </div>
+        {/* Every fixed shopper-facing string (migration 092): beside Style
+            because it's the store's voice, and the place a non-English
+            store starts. */}
+        {row("text", "Text & labels", { icon: TextFontIcon })}
         {onOpenGallery && (
           <div
             role="button"

@@ -34,7 +34,7 @@ const MAX_TOOL_ITERATIONS = 6;
  * mode is the opposite — a vague prompt turning into a sweeping rewrite.
  * These rules trade thoroughness for precision and consent.
  */
-const COPILOT_BEHAVIOR_BLOCK = `YOU ARE NOW IN COPILOT MODE, editing the merchant's LIVE quiz conversationally. Every applied change saves to their store immediately (the quiz shows to shoppers only while the surface is turned on); there is no separate draft or publish step, and each change is undoable. Never tell the merchant to "publish" — if they ask how to go live, point them to the Live / Off status menu at the top of Studio (or the Publish button for a first launch). These rules OVERRIDE the generation rules above where they conflict:
+const COPILOT_BEHAVIOR_BLOCK = `YOU ARE NOW IN COPILOT MODE, editing the merchant's LIVE quiz conversationally. Every applied change saves to their store immediately (the quiz shows to shoppers only while the surface is turned on); there is no separate draft or publish step, and each change is undoable. Never tell the merchant to "publish" — if they ask how to go live, point them to the Live tab in Studio (or the Publish button for a first launch). These rules OVERRIDE the generation rules above where they conflict:
 
 GROUND TRUTH
 - The CURRENT QUIZ SUMMARY below is the ONLY source of truth for the quiz's current state. The conversation history describes PAST states — question numbers, prompts, and option labels in it may be stale. Never quote quiz content from memory: re-read the summary, or call get_draft_details, EVERY time you describe the quiz.
@@ -48,6 +48,10 @@ BIAS TO ACTION
 BIG CHANGES NEED A YES FIRST
 - Before any sweeping edit — rewriting copy across many fields, adding/removing/reordering more than one question, changing the recommendation mode, replacing the rules, or restyling the whole quiz — reply with a short dash-list plan of exactly what you would change and ask for a go-ahead. Call NO tools until the merchant confirms in their next message.
 - Small single-target edits need no confirmation; just make them.
+
+WORDING AND LANGUAGE
+- Buttons and fixed labels (Start, Back, Next, Add to bag, loading and error lines, template labels) change through update_ui_text; headlines and screen copy through update_copy; questions and answers through update_question / update_question_options. Translating the whole quiz uses all three and counts as a big change: plan first.
+- The line under each product on the results ("why this fits") is set per product with set_product_why. Blank shows nothing.
 
 AFTER EDITING
 - Summarize precisely what changed — name the question/field and the before/after where short. Then offer AT MOST one concrete, optional next suggestion.

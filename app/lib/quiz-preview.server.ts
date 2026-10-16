@@ -27,6 +27,7 @@ import { getShopCurrency } from "./shop-currency.server";
 import { getBrandProfile, servedTemplateFor } from "./brand-profile.server";
 import { defaultEmailPlacement, isTemplateId, resolveQuizTokens } from "./quiz-templates";
 import { getQuizOffers, numericShopifyId, publicOffersPayload, OFFERS_DEFAULTS } from "./quiz-offers.server";
+import { quizTextPayload, resultsCtaPayload, sanitizeProductWhy } from "./quiz-ui-text";
 
 const SWATCH_HEX_RE = /^#[0-9a-fA-F]{3,8}$/;
 const hexOrNull = (v: unknown): string | null =>
@@ -192,6 +193,21 @@ export function buildPreviewFlow(draft: QuizDraft) {
   };
 }
 
+/** "Why this fits" lines re-keyed from products.id to the product handle
+ * every preview match carries (sample and real-recommender alike). */
+async function productWhyByHandle(shopId: string, raw: unknown): Promise<Record<string, string>> {
+  const lines = sanitizeProductWhy(raw);
+  const ids = Object.keys(lines);
+  if (ids.length === 0) return {};
+  const { data, error } = await supabase.from("products").select("id, handle").in("id", ids).eq("shop_id", shopId);
+  if (error) return {};
+  const out: Record<string, string> = {};
+  for (const row of (data ?? []) as Array<{ id: string; handle: string | null }>) {
+    if (row.handle && lines[row.id]) out[row.handle] = lines[row.id];
+  }
+  return out;
+}
+
 /**
  * Live chat config merged with the draft's settings overrides, mapped into
  * the quiz-config payload shape. enabled is FORCED true — previews always
@@ -249,6 +265,7 @@ export async function buildPreviewQuizConfig(
     bundleEnabled: config.quiz_bundle_enabled,
     bundleSize: config.quiz_bundle_size,
   });
+  const productWhy = shopRow ? await productWhyByHandle(shopRow.id, config.quiz_product_why) : {};
 
   return {
     enabled: true,
@@ -261,6 +278,9 @@ export async function buildPreviewQuizConfig(
     headingFontOverride: config.quiz_heading_font_override,
     bodyFontOverride: config.quiz_body_font_override,
     headingWeightOverride: config.quiz_heading_weight_override,
+    // Text & labels overrides + body typography (migration 092). All null
+    // for an untouched quiz: the widget's English and inherited weight.
+    ...quizTextPayload(config),
     inkColor: config.quiz_ink_color,
     bgColor: config.quiz_bg_color,
     cardBgColor: config.quiz_card_bg_color,
@@ -343,6 +363,10 @@ export async function buildPreviewQuizConfig(
         : null,
       crossSell: publicOffers.crossSell,
       bundleDiscount: publicOffers.bundleDiscount,
+      ...resultsCtaPayload(config),
+      // Preview only: "why this fits" lines by product handle, so an edit
+      // shows on the cards without re-running recommendations.
+      productWhy,
       layout: config.quiz_template ? null : config.quiz_results_layout ?? null,
       // v2 template results content (storefront-endpoint parity).
       ...(tplContent
@@ -463,6 +487,7 @@ export async function buildPreviewSampleRecommend(shopId: string, draft: QuizDra
   const cents = (price: unknown): number | null =>
     typeof price === "number" && Number.isFinite(price) ? Math.round(price * 100) : null;
 
+  const whyLines = sanitizeProductWhy((draft.settings as Record<string, unknown>)?.quiz_product_why);
   const matches = targets
     .map((t, idx) => {
       const variant = t.variantId ? variantById.get(t.variantId) : null;
@@ -477,6 +502,7 @@ export async function buildPreviewSampleRecommend(shopId: string, draft: QuizDra
         variantTitle: (variant as any)?.variant_title ?? null,
         title: (product as any).product_name ?? "",
         tagline: null,
+        whyFits: whyLines[product.id as string] ?? null,
         rank: idx + 1,
         quantity: t.quantity,
         reasons: [],

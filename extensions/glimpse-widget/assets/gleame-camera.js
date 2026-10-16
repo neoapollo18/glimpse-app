@@ -22,6 +22,21 @@
   // Merchant-configurable framing instruction, set per open() call. Falls back
   // to the face-framing default when the caller doesn't pass one.
   var frameHint = DEFAULT_FRAME_HINT;
+  // Merchant text overrides (Studio → Text & labels), set per open() call
+  // from options.text: a non-empty string for a key wins, else the shipped
+  // English. Plain text — escape before it goes into innerHTML.
+  var uiText = null;
+
+  function tx(key, fallback) {
+    var v = uiText && uiText[key];
+    return typeof v === 'string' && v.trim() ? v : fallback;
+  }
+
+  // Error copy: the shipped English renders with a line break (defaultHtml);
+  // an override is escaped plain text.
+  function errorHtml(text, defaultHtml) {
+    return text === defaultHtml.replace(/<br>/g, ' ') ? defaultHtml : escapeHtml(text);
+  }
 
   function escapeHtml(s) {
     return String(s == null ? '' : s)
@@ -71,24 +86,24 @@
           '<div class="gleame-camera-viewfinder" id="gleameCameraViewfinder">' +
             '<div class="gleame-camera-loading" id="gleameCameraLoading">' +
               '<div class="gleame-camera-loading-spinner"></div>' +
-              '<div>Starting camera...</div>' +
+              '<div>' + escapeHtml(tx('cameraStarting', 'Starting camera...')) + '</div>' +
             '</div>' +
           '</div>' +
         '</div>' +
         '<div class="gleame-camera-controls">' +
           '<div class="gleame-camera-header">' +
-            '<h3>Camera</h3>' +
+            '<h3>' + escapeHtml(tx('cameraTitle', 'Camera')) + '</h3>' +
             '<button class="gleame-camera-close" id="gleameCameraClose">' + CLOSE_SVG + '</button>' +
           '</div>' +
           '<div class="gleame-camera-body">' +
             '<p class="gleame-camera-hint" id="gleameCameraHint">' + escapeHtml(frameHint) + '</p>' +
             '<div class="gleame-camera-actions" id="gleameCameraActions">' +
               '<button class="gleame-camera-capture-btn" id="gleameCameraCapture" title="Take photo"></button>' +
-              '<span class="gleame-camera-capture-label">Capture</span>' +
+              '<span class="gleame-camera-capture-label">' + escapeHtml(tx('cameraCapture', 'Capture')) + '</span>' +
             '</div>' +
           '</div>' +
           '<div class="gleame-camera-footer" id="gleameCameraFooter">' +
-            '<button class="gleame-camera-upload-btn" id="gleameCameraUploadLink">' + UPLOAD_SVG + ' Upload file</button>' +
+            '<button class="gleame-camera-upload-btn" id="gleameCameraUploadLink">' + UPLOAD_SVG + ' ' + escapeHtml(tx('cameraUpload', 'Upload file')) + '</button>' +
           '</div>' +
         '</div>' +
       '</div>';
@@ -103,7 +118,8 @@
   function showCaptureUI() {
     var actions = document.getElementById('gleameCameraActions');
     if (actions) {
-      actions.innerHTML = '<button class="gleame-camera-capture-btn" id="gleameCameraCapture" title="Take photo"></button><span class="gleame-camera-capture-label">Capture</span>';
+      actions.innerHTML = '<button class="gleame-camera-capture-btn" id="gleameCameraCapture" title="Take photo"></button><span class="gleame-camera-capture-label">' +
+        escapeHtml(tx('cameraCapture', 'Capture')) + '</span>';
       document.getElementById('gleameCameraCapture').addEventListener('click', capturePhoto);
     }
   }
@@ -112,13 +128,13 @@
     var actions = document.getElementById('gleameCameraActions');
     if (actions) {
       actions.innerHTML =
-        '<button class="gleame-camera-use-btn" id="gleameCameraUse">Use Photo</button>' +
-        '<button class="gleame-camera-retake-btn" id="gleameCameraRetake">Retake</button>';
+        '<button class="gleame-camera-use-btn" id="gleameCameraUse">' + escapeHtml(tx('cameraUse', 'Use Photo')) + '</button>' +
+        '<button class="gleame-camera-retake-btn" id="gleameCameraRetake">' + escapeHtml(tx('cameraRetake', 'Retake')) + '</button>';
       document.getElementById('gleameCameraRetake').addEventListener('click', retakePhoto);
       document.getElementById('gleameCameraUse').addEventListener('click', usePhoto);
     }
     var hint = document.getElementById('gleameCameraHint');
-    if (hint) hint.textContent = 'Looking good?';
+    if (hint) hint.textContent = tx('cameraReview', 'Looking good?');
     var footer = document.getElementById('gleameCameraFooter');
     if (footer) footer.style.display = 'none';
   }
@@ -147,7 +163,7 @@
     // 0x0 canvas. Nudge via the existing hint instead.
     if (!video.videoWidth) {
       var hint = document.getElementById('gleameCameraHint');
-      if (hint) hint.textContent = 'Camera is still starting... try again in a moment';
+      if (hint) hint.textContent = tx('cameraStill', 'Camera is still starting... try again in a moment');
       return;
     }
 
@@ -212,14 +228,14 @@
 
     // Update hint
     var hint = document.getElementById('gleameCameraHint');
-    if (hint) hint.textContent = 'Allow camera access when prompted';
+    if (hint) hint.textContent = tx('cameraAllow', 'Allow camera access when prompted');
 
     viewfinder.innerHTML =
       '<div class="gleame-camera-loading">' +
         '<div class="gleame-camera-loading-spinner"></div>' +
-        '<div>Starting camera...</div>' +
+        '<div>' + escapeHtml(tx('cameraStarting', 'Starting camera...')) + '</div>' +
       '</div>' +
-      '<div class="gleame-camera-permission-hint">Allow camera access when prompted</div>';
+      '<div class="gleame-camera-permission-hint">' + escapeHtml(tx('cameraAllow', 'Allow camera access when prompted')) + '</div>';
 
     navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'user', width: { ideal: 720 }, height: { ideal: 720 } },
@@ -249,11 +265,15 @@
       console.warn('Gleame Camera: getUserMedia failed:', err.message);
       if (hint) hint.textContent = '';
       if (err.name === 'NotAllowedError') {
-        showError('Camera access was denied.<br>Please allow camera access in your browser settings.');
+        showError(errorHtml(
+          tx('cameraDenied', 'Camera access was denied. Please allow camera access in your browser settings.'),
+          'Camera access was denied.<br>Please allow camera access in your browser settings.'));
       } else if (err.name === 'NotFoundError') {
-        showError('No camera found on this device.');
+        showError(escapeHtml(tx('cameraMissing', 'No camera found on this device.')));
       } else {
-        showError('Could not start camera.<br>Please try uploading a file instead.');
+        showError(errorHtml(
+          tx('cameraFailed', 'Could not start camera. Please try uploading a file instead.'),
+          'Could not start camera.<br>Please try uploading a file instead.'));
       }
     });
   }
@@ -265,6 +285,8 @@
       // falling back to the face-framing default.
       var hintOpt = options && options.hint;
       frameHint = (typeof hintOpt === 'string' && hintOpt.trim()) ? hintOpt.trim() : DEFAULT_FRAME_HINT;
+      var textOpt = options && options.text;
+      uiText = textOpt && typeof textOpt === 'object' ? textOpt : null;
 
       // Don't open on mobile
       if (isMobile()) {

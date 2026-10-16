@@ -19,6 +19,9 @@ vi.mock("../use-catalog-sync", () => ({
 import { StudioTopBar } from "../../components/studio/StudioTopBar";
 import { LiveTab, SETUP_VIDEO_ID, VersionHistoryModal } from "../../components/studio/PublishStep";
 import { MatchSettingsEditor, type MatchSettings } from "../../components/studio/MatchSettingsEditor";
+import { TextLabelsEditor } from "../../components/studio/TextLabelsEditor";
+import { ResultsEditor } from "../../components/studio/SettingsEditors";
+import { ProductWhyEditor } from "../../components/studio/ProductWhyEditor";
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -188,5 +191,68 @@ describe("Matching panel (moved from the Quiz settings page)", () => {
     // one is eligible for priority.
     expect(text().match(/Red Flare/g)).toHaveLength(2);
     expect(text().match(/Golden Hour/g)).toHaveLength(1);
+  });
+});
+
+describe("Text & labels, results buttons, why this fits (2026-10-16)", () => {
+  it("Text & labels lists strings pre-filled with defaults, overrides marked with Reset", () => {
+    const { text } = mount(
+      <TextLabelsEditor
+        settings={{ quiz_ui_text: { back: "Retour" }, quiz_view_product_label: "Découvrir la ressource" }}
+        template={null}
+        chatBusy={false}
+        onPreviewUpdate={() => {}}
+      />,
+    );
+    expect(text()).toContain("Text & labels");
+    expect(text()).toContain("Buttons & navigation");
+    const inputs = Array.from(document.querySelectorAll("input")) as HTMLInputElement[];
+    const byLabel = (label: string) => {
+      const lab = Array.from(document.querySelectorAll("label")).find((l) => l.textContent === label);
+      return inputs.find((i) => i.id === lab?.getAttribute("for"));
+    };
+    expect(byLabel("Start button")?.value).toBe("Start the quiz");
+    expect(byLabel("Back button")?.value).toBe("Retour");
+    expect(Array.from(document.querySelectorAll("button")).some((b) => b.textContent === "Reset")).toBe(true);
+    // Template-only strings stay out of a classic quiz.
+    expect(text()).not.toContain("Template text");
+  });
+
+  it("template quizzes get their own defaults and template text", () => {
+    const { text } = mount(<TextLabelsEditor settings={{}} template="t4" chatBusy={false} onPreviewUpdate={() => {}} />);
+    const lab = Array.from(document.querySelectorAll("label")).find((l) => l.textContent === "Next button");
+    const input = document.getElementById(lab!.getAttribute("for")!) as HTMLInputElement;
+    expect(input.value).toBe("Next");
+    expect(text()).toContain("Template text");
+  });
+
+  it("Results: main button choice and the secondary link", () => {
+    const add = mount(<ResultsEditor settings={{}} chatBusy={false} onPreviewUpdate={() => {}} />);
+    expect(add.text()).toContain("Main button");
+    expect(add.text()).toContain("Also show a “View product” link");
+    const view = mount(<ResultsEditor settings={{ quiz_results_primary_cta: "view" }} chatBusy={false} onPreviewUpdate={() => {}} />);
+    expect(view.text()).toContain("Also show an “Add to cart” link");
+    expect(view.text()).toContain("The button opens the product page");
+  });
+
+  it("Why this fits: one optional line per product, existing lines first", () => {
+    const P1 = "11111111-1111-4111-8111-111111111111";
+    const P2 = "22222222-2222-4222-8222-222222222222";
+    const { text } = mount(
+      <ProductWhyEditor
+        products={[
+          { id: P1, name: "Aurora Bible", imageUrl: null },
+          { id: P2, name: "Coeur à coeur", imageUrl: null },
+        ]}
+        initial={{ [P2]: "Un journal pour prier" }}
+        chatBusy={false}
+        onPreviewUpdate={() => {}}
+      />,
+    );
+    expect(text()).toContain("Why this fits");
+    expect(text()).toContain("1 of 2 products have a line.");
+    const inputs = Array.from(document.querySelectorAll("input")) as HTMLInputElement[];
+    expect(inputs[0].value).toBe("Un journal pour prier");
+    expect(inputs[1].value).toBe("");
   });
 });

@@ -21,6 +21,8 @@ import type { StudioLoaderData, StudioTab, StudioActionData } from "../../routes
 import { IntroEditor, LeadEditor, PhotoEditor, ResultsEditor, ThemeEditor } from "./SettingsEditors";
 import { BundleEditor, CrossSellEditor, type OfferCatalogItem } from "./OffersEditors";
 import { IntegrationsEditor } from "./IntegrationsEditor";
+import { TextLabelsEditor } from "./TextLabelsEditor";
+import { ProductWhyEditor, type WhyProduct } from "./ProductWhyEditor";
 import { CameraHintField, MatchSettingsEditor, type MatchProduct, type MatchSettings } from "./MatchSettingsEditor";
 import type { QuizOffers } from "../../lib/quiz-offers.server";
 import type { IntegrationStatus } from "../../lib/integrations.server";
@@ -234,8 +236,44 @@ function EditBody({
     );
   }
   if (selectedSlide === "results") {
+    const whyProducts = (data.whyProducts ?? null) as WhyProduct[] | null;
     return (
-      <ResultsEditor key={`results:${chatEpoch}`} settings={settings} chatBusy={chatBusy} onPreviewUpdate={onPreviewUpdate} />
+      <ResultsEditor
+        key={`results:${chatEpoch}`}
+        settings={settings}
+        chatBusy={chatBusy}
+        onPreviewUpdate={onPreviewUpdate}
+        onOpenText={() => onSelectSlide("text")}
+      >
+        {/* Loaded with the slide (?slide=results); remount when it lands. */}
+        {whyProducts ? (
+          <ProductWhyEditor
+            key={`why:${chatEpoch}`}
+            products={whyProducts}
+            initial={settings.quiz_product_why}
+            chatBusy={chatBusy}
+            onPreviewUpdate={onPreviewUpdate}
+          />
+        ) : (
+          <InlineStack gap="200" blockAlign="center">
+            <Spinner size="small" />
+            <Text as="span" tone="subdued">
+              Loading products…
+            </Text>
+          </InlineStack>
+        )}
+      </ResultsEditor>
+    );
+  }
+  if (selectedSlide === "text") {
+    return (
+      <TextLabelsEditor
+        key={`text:${chatEpoch}:${data.studio.template ?? "classic"}`}
+        settings={settings}
+        template={data.studio.template}
+        chatBusy={chatBusy}
+        onPreviewUpdate={onPreviewUpdate}
+      />
     );
   }
   if (selectedSlide === "theme") {

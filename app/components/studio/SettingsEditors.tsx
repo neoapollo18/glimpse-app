@@ -36,7 +36,15 @@ import type { StudioColorKey, StudioColorSource } from "./types";
 // on every change and everything goes live at publish. This replaces the
 // old standalone "copy & design" page as the primary editing surface.
 
-type Kind = "copy" | "design";
+// "uitext" = Text & labels overrides (update_ui_text, migration 092).
+type Kind = "copy" | "design" | "uitext";
+
+const KIND_TOOL: Record<Kind, string> = {
+  copy: "update_copy",
+  design: "update_design_tokens",
+  uitext: "update_ui_text",
+};
+const KIND_ORDER: Kind[] = ["copy", "design", "uitext"];
 
 // ---------------------------------------------------------------------
 // Shared autosave: batches field edits per tool, debounced, submitted
@@ -45,26 +53,23 @@ type Kind = "copy" | "design";
 
 export function useSettingsAutosave(onPreviewUpdate: (p: { flow?: unknown; config?: unknown }) => void) {
   const fetcher = useFetcher<StudioActionData>();
-  const pending = useRef<{ copy: Record<string, unknown>; design: Record<string, unknown> }>({
+  const pending = useRef<Record<Kind, Record<string, unknown>>>({
     copy: {},
     design: {},
+    uitext: {},
   });
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
   const [error, setError] = useState<string | null>(null);
 
   const submitBatch = () => {
-    const kind: Kind | null = Object.keys(pending.current.copy).length
-      ? "copy"
-      : Object.keys(pending.current.design).length
-        ? "design"
-        : null;
+    const kind = KIND_ORDER.find((k) => Object.keys(pending.current[k]).length > 0) ?? null;
     if (!kind) return false;
     const fields = pending.current[kind];
     pending.current[kind] = {};
     const fd = new FormData();
     fd.append("intent", "apply-tool");
-    fd.append("tool", kind === "copy" ? "update_copy" : "update_design_tokens");
+    fd.append("tool", KIND_TOOL[kind]);
     fd.append("input", JSON.stringify({ fields }));
     fetcher.submit(fd, { method: "POST", action: "/studio" });
     return true;
@@ -116,14 +121,13 @@ export function useSettingsAutosave(onPreviewUpdate: (p: { flow?: unknown; confi
       // silently drop copy/theme edits. Fire-and-forget; the next mount
       // reloads fresh data.
       const calls: Array<{ tool: string; input: unknown }> = [];
-      if (Object.keys(pending.current.copy).length > 0) {
-        calls.push({ tool: "update_copy", input: { fields: pending.current.copy } });
-      }
-      if (Object.keys(pending.current.design).length > 0) {
-        calls.push({ tool: "update_design_tokens", input: { fields: pending.current.design } });
+      for (const k of KIND_ORDER) {
+        if (Object.keys(pending.current[k]).length > 0) {
+          calls.push({ tool: KIND_TOOL[k], input: { fields: pending.current[k] } });
+        }
       }
       if (calls.length > 0) {
-        pending.current = { copy: {}, design: {} };
+        pending.current = { copy: {}, design: {}, uitext: {} };
         const fd = new FormData();
         fd.append("intent", "apply-tools");
         fd.append("calls", JSON.stringify(calls));
@@ -796,22 +800,22 @@ export function ResultsEditor({
   settings,
   chatBusy,
   onPreviewUpdate,
+  onOpenText,
+  children,
 }: {
   settings: Record<string, unknown>;
   chatBusy: boolean;
   onPreviewUpdate: (p: { flow?: unknown; config?: unknown }) => void;
+  /** Jump to Text & labels, where the button and label wording lives. */
+  onOpenText?: () => void;
+  /** Rendered after the card settings (the "why this fits" lines). */
+  children?: React.ReactNode;
 }) {
   const { schedule, saveState, error, clearError } = useSettingsAutosave(onPreviewUpdate);
   const [values, setValues] = useState<Record<string, string>>(() => ({
     quiz_results_headline_photo: str(settings, "quiz_results_headline_photo"),
     quiz_results_headline_nophoto: str(settings, "quiz_results_headline_nophoto"),
     quiz_results_subtext: str(settings, "quiz_results_subtext"),
-    quiz_best_match_pill: str(settings, "quiz_best_match_pill"),
-    quiz_also_matched_label: str(settings, "quiz_also_matched_label"),
-    quiz_view_product_label: str(settings, "quiz_view_product_label"),
-    quiz_retake_label: str(settings, "quiz_retake_label"),
-    quiz_show_matches_label: str(settings, "quiz_show_matches_label"),
-    quiz_add_button_template: str(settings, "quiz_add_button_template"),
     quiz_match_footnote: str(settings, "quiz_match_footnote"),
     quiz_upsell_title: str(settings, "quiz_upsell_title"),
     quiz_upsell_body: str(settings, "quiz_upsell_body"),
@@ -822,6 +826,10 @@ export function ResultsEditor({
     schedule("copy", key, value);
   };
   const [resultsLayout, setResultsLayout] = useState<string>(settings.quiz_results_layout === "grid" ? "grid" : "");
+  // Card CTA (migration 092). Default = today: Add to cart button with a
+  // View product link under it.
+  const [primaryCta, setPrimaryCta] = useState<"add" | "view">(settings.quiz_results_primary_cta === "view" ? "view" : "add");
+  const [secondaryLink, setSecondaryLink] = useState<boolean>(settings.quiz_results_secondary_link !== false);
   const disabled = chatBusy;
   return (
     <BlockStack gap="400">
@@ -854,33 +862,59 @@ export function ResultsEditor({
       <CopyField label="Headline (with photo)" fieldKey="quiz_results_headline_photo" values={values} setValue={setValue} disabled={disabled} />
       <CopyField label="Headline (no photo)" fieldKey="quiz_results_headline_nophoto" values={values} setValue={setValue} disabled={disabled} />
       <CopyField label="Subtext" fieldKey="quiz_results_subtext" values={values} setValue={setValue} disabled={disabled} multiline={2} />
-      <InlineStack gap="200">
-        <div style={{ flex: 1, minWidth: 130 }}>
-          <CopyField label="Best match pill" fieldKey="quiz_best_match_pill" values={values} setValue={setValue} disabled={disabled} />
-        </div>
-        <div style={{ flex: 1, minWidth: 130 }}>
-          <CopyField label="Also matched label" fieldKey="quiz_also_matched_label" values={values} setValue={setValue} disabled={disabled} />
-        </div>
-      </InlineStack>
-      {/* Grid cards link the name and photo and say "Add to bag"; these
-          two only drive the featured layout. */}
-      {resultsLayout !== "grid" && (
-        <InlineStack gap="200">
-          <div style={{ flex: 1, minWidth: 130 }}>
-            <CopyField label="View product button" fieldKey="quiz_view_product_label" values={values} setValue={setValue} disabled={disabled} />
-          </div>
-          <div style={{ flex: 1, minWidth: 130 }}>
-            <CopyField label="Add to cart template" fieldKey="quiz_add_button_template" values={values} setValue={setValue} disabled={disabled} helpText="{price} inserts the price" />
-          </div>
-        </InlineStack>
+      <Text as="h4" variant="headingSm">
+        Buttons on each product
+      </Text>
+      <Select
+        label="Main button"
+        options={[
+          { label: "Add to cart", value: "add" },
+          { label: "View product page", value: "view" },
+        ]}
+        value={primaryCta}
+        disabled={disabled}
+        onChange={(v) => {
+          const next = v === "view" ? "view" : "add";
+          setPrimaryCta(next);
+          schedule("copy", "quiz_results_primary_cta", next === "view" ? "view" : null);
+        }}
+        helpText={
+          primaryCta === "view"
+            ? "The button opens the product page, for products shoppers should read about before buying."
+            : "The button adds the product to the cart without leaving the quiz."
+        }
+      />
+      {/* Grid cards already link the photo and name to the product, so
+          there's no separate View link to switch there. */}
+      {resultsLayout === "grid" && primaryCta === "add" ? (
+        <Text as="p" variant="bodySm" tone="subdued">
+          Grid cards link the photo and name to the product page.
+        </Text>
+      ) : (
+        <Checkbox
+          label={primaryCta === "view" ? "Also show an “Add to cart” link" : "Also show a “View product” link"}
+          checked={secondaryLink}
+          disabled={disabled}
+          onChange={(checked) => {
+            setSecondaryLink(checked);
+            schedule("copy", "quiz_results_secondary_link", checked);
+          }}
+          helpText="A small text link under the button for the other action."
+        />
       )}
-      <InlineStack gap="200">
-        <div style={{ flex: 1, minWidth: 130 }}>
-          <CopyField label="Show matches label" fieldKey="quiz_show_matches_label" values={values} setValue={setValue} disabled={disabled} />
-        </div>
-        <div style={{ flex: 1, minWidth: 130 }}>
-          <CopyField label="Retake link" fieldKey="quiz_retake_label" values={values} setValue={setValue} disabled={disabled} />
-        </div>
+      <InlineStack gap="100" blockAlign="center">
+        <Text as="p" variant="bodySm" tone="subdued">
+          Button wording, like &ldquo;Add to cart&rdquo; or &ldquo;View product&rdquo;, is under
+        </Text>
+        {onOpenText ? (
+          <Button variant="plain" onClick={onOpenText}>
+            Text & labels
+          </Button>
+        ) : (
+          <Text as="span" variant="bodySm" tone="subdued">
+            Text &amp; labels
+          </Text>
+        )}
       </InlineStack>
       <CopyField
         label="Note under each match card"
@@ -909,6 +943,7 @@ export function ResultsEditor({
           <CopyField label="Button" fieldKey="quiz_upsell_cta" values={values} setValue={setValue} disabled={disabled} />
         </>
       )}
+      {children}
     </BlockStack>
   );
 }
@@ -997,6 +1032,8 @@ export function ThemeEditor({
     quiz_heading_font_override: str(settings, "quiz_heading_font_override"),
     quiz_body_font_override: str(settings, "quiz_body_font_override"),
     quiz_heading_weight_override: str(settings, "quiz_heading_weight_override"),
+    quiz_body_weight: str(settings, "quiz_body_weight"),
+    quiz_body_color: str(settings, "quiz_body_color"),
   }));
   // One "Layout" choice over two settings: Boutique (migration 088)
   // implies the compact layout, so both keys move together.
@@ -1180,7 +1217,35 @@ export function ThemeEditor({
           />
         </div>
       </InlineStack>
-      <FontSelect label="Body font" fieldKey="quiz_body_font_override" values={values} onPick={setFont} disabled={disabled} />
+      <InlineStack gap="200" wrap={false} blockAlign="start">
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <FontSelect label="Body font" fieldKey="quiz_body_font_override" values={values} onPick={setFont} disabled={disabled} />
+        </div>
+        {/* Body weight + color (migration 092): subtitles and results text
+            read too light on some themes. Default = inherit the theme. */}
+        <div style={{ width: 118, flexShrink: 0 }}>
+          <Select
+            label="Weight"
+            options={[
+              { label: "Default", value: "" },
+              { label: "Regular", value: "400" },
+              { label: "Medium", value: "500" },
+              { label: "Semibold", value: "600" },
+            ]}
+            value={values.quiz_body_weight}
+            onChange={(v) => setEnum("quiz_body_weight", v)}
+            disabled={disabled}
+          />
+        </div>
+      </InlineStack>
+      <ColorField
+        label="Body text color"
+        fieldKey="quiz_body_color"
+        values={values}
+        setValue={setColor}
+        disabled={disabled}
+        helpText="Subtitles, descriptions and small text on every screen, including results. Leave empty to use a lighter shade of the text color."
+      />
     </BlockStack>
   );
 }
