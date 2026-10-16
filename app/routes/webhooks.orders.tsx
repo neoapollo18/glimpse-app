@@ -1,6 +1,7 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
-import { findShopByDomain, normalizeEmail, recordOrder, supabase, type OrderJourneyData } from "../lib/supabase.server";
+import { findShopByDomain, normalizeEmail, recordOrder, recordQuizOrderLines, supabase, type OrderJourneyData } from "../lib/supabase.server";
+import type { OrderLinePayload } from "../lib/quiz-order-lines";
 
 // Webhooks only accept POST - return 405 for GET requests
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -25,6 +26,7 @@ interface OrderPayload {
   contact_email?: string | null;
   customer?: { id: number; email?: string | null };
   created_at: string;
+  line_items?: OrderLinePayload[];
 }
 
 interface CustomerVisitNode {
@@ -240,6 +242,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     if (result) {
       console.log(`[Orders] Order recorded successfully:`, result.id);
+      // Quiz analytics (migration 091): line items, only for quiz carts.
+      const lines = await recordQuizOrderLines(shop, order);
+      if (lines > 0) console.log(`[Orders] Stored ${lines} quiz order line(s)`);
     } else {
       console.log(`[Orders] Failed to record order (shop may not be in system)`);
     }

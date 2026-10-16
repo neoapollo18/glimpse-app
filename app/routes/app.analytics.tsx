@@ -1,342 +1,612 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { useLoaderData } from "@remix-run/react";
-import { formatMoneyWhole } from "../lib/shop-currency-format";
-import { rememberShopCurrency } from "../lib/shop-currency.server";
+import { useLoaderData, useSearchParams } from "@remix-run/react";
 import {
-  Page,
-  Text,
-  Card,
-  BlockStack,
-  InlineStack,
-  Select,
-  Box,
-  InlineGrid,
-  Divider,
-  Button,
-  Collapsible,
-  Thumbnail,
   Badge,
+  Banner,
+  BlockStack,
+  Box,
+  Button,
+  ButtonGroup,
+  Card,
+  DataTable,
+  Divider,
+  InlineGrid,
+  InlineStack,
+  Page,
+  Tabs,
+  Text,
+  Tooltip,
 } from "@shopify/polaris";
-import {
-  ChevronRightIcon,
-  ChevronDownIcon,
-  ImageIcon,
-} from "@shopify/polaris-icons";
 import { TitleBar } from "@shopify/app-bridge-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { authenticate } from "../shopify.server";
-import { findShopByDomain, getAnalytics, getConversionStats, getTopTrafficSources, getAssistantEngagement, getQuizAttribution, getQuizEngagement, getQuizLeadStats, shopHasTryOnConfig, type TrafficSourceStat, type AssistantEngagement, type AssistantFunnelCounts, type QuizAttributionStats, type QuizEngagement, type QuizFunnelCounts, type QuizLeadStats } from "../lib/supabase.server";
-import { CHAT_ASSISTANT_RETIRED, TRYON_WIDGETS_RETIRED } from "../lib/retired-features";
-import { useState, useCallback } from "react";
+import { findShopByDomain } from "../lib/supabase.server";
+import { rememberShopCurrency } from "../lib/shop-currency.server";
+import { getQuizDashboard } from "../lib/quiz-dashboard.server";
+import { buildInsights, parseRange, DASHBOARD_RANGES, type Insight, type QuizDashboardData, type WindowStats } from "../lib/quiz-dashboard";
 
-interface WidgetBreakdown {
-  [widgetType: string]: number;
-}
-
-interface ProductBreakdown {
-  product_id: string;
-  product_name: string;
-  shopify_id: string;
-  transformations: number;
-  widgets: WidgetBreakdown;
-}
-
-interface AnalyticsData {
-  totalTransformations: number;
-  widgetViews: number;
-  addToCarts: number;
-  uploadToATCRate: number;
-  productBreakdown: ProductBreakdown[];
-}
-
-interface AttributionStats {
-  totalOrders: number;
-  totalRevenue: number;
-  widgetAttributedRevenue: number;
-  widgetSessions: number;             // distinct widget-engaged carts in window
-  widgetSessionsConverted: number;    // of those, how many bought
-  widgetPurchaseRate: number;         // % of widget users who bought
-  trafficSources: TrafficSourceStat[];
-}
-
-const EMPTY_ATTRIBUTION: AttributionStats = {
-  totalOrders: 0,
-  totalRevenue: 0,
-  widgetAttributedRevenue: 0,
-  widgetSessions: 0,
-  widgetSessionsConverted: 0,
-  widgetPurchaseRate: 0,
-  trafficSources: [],
-};
-
-const EMPTY_FUNNEL_COUNTS = {
-  opens: 0,
-  starts: 0,
-  photoUploads: 0,
-  recommendationsShown: 0,
-  productClicks: 0,
-  addToBag: 0,
-  heroViews: 0,
-  heroCtaClicks: 0,
-};
-
-const EMPTY_ASSISTANT: AssistantEngagement = {
-  ...EMPTY_FUNNEL_COUNTS,
-  byDevice: {
-    mobile: { ...EMPTY_FUNNEL_COUNTS },
-    desktop: { ...EMPTY_FUNNEL_COUNTS },
-  },
-};
-
-const EMPTY_QUIZ_COUNTS: QuizFunnelCounts = {
-  views: 0,
-  starts: 0,
-  gateViews: 0,
-  photoUploads: 0,
-  photoSkips: 0,
-  resultsShown: 0,
-  productClicks: 0,
-  addToCart: 0,
-};
-
-const EMPTY_QUIZ: QuizEngagement = {
-  ...EMPTY_QUIZ_COUNTS,
-  byDevice: {
-    mobile: { ...EMPTY_QUIZ_COUNTS },
-    desktop: { ...EMPTY_QUIZ_COUNTS },
-  },
-};
+// Quiz analytics (2026-10-15 revamp). One dashboard, five tabs, every rate
+// per shopper (one cart or quiz run), with the previous period for change.
+// The pre-revamp page lives in app/archive/app.analytics.classic.tsx.
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
-
-  // The try-on/assistant sections only exist for shops with VTO enabled
-  // (backend vto_enabled override, else auto-detected from configured
-  // products). Everyone else gets a quiz-only page — and we skip the
-  // legacy queries entirely. Both features are retired
-  // (lib/retired-features.ts), so every shop gets the quiz-only page.
-  const [showLegacy, quiz7Days, quiz30Days, leads7Days, leads30Days, quizAttr7Days, quizAttr30Days] = await Promise.all([
-    TRYON_WIDGETS_RETIRED && CHAT_ASSISTANT_RETIRED ? Promise.resolve(false) : shopHasTryOnConfig(session.shop),
-    getQuizEngagement(session.shop, 7),
-    getQuizEngagement(session.shop, 30),
-    getQuizLeadStats(session.shop, 7),
-    getQuizLeadStats(session.shop, 30),
-    getQuizAttribution(session.shop, 7),
-    getQuizAttribution(session.shop, 30),
+  const url = new URL(request.url);
+  const range = parseRange(url.searchParams.get("range"));
+  const [data, shop] = await Promise.all([
+    getQuizDashboard(session.shop, range),
+    findShopByDomain(session.shop).catch(() => null),
   ]);
-
-  let analytics7Days: Awaited<ReturnType<typeof getAnalytics>> = null;
-  let analytics30Days: Awaited<ReturnType<typeof getAnalytics>> = null;
-  let conversion7Days: Awaited<ReturnType<typeof getConversionStats>> = null;
-  let conversion30Days: Awaited<ReturnType<typeof getConversionStats>> = null;
-  let sources7Days: TrafficSourceStat[] = [];
-  let sources30Days: TrafficSourceStat[] = [];
-  let assistant7Days: AssistantEngagement | null = null;
-  let assistant30Days: AssistantEngagement | null = null;
-  const productImages: Record<string, string> = {};
-
-  if (showLegacy) {
-    [
-      analytics7Days,
-      analytics30Days,
-      conversion7Days,
-      conversion30Days,
-      sources7Days,
-      sources30Days,
-      assistant7Days,
-      assistant30Days,
-    ] = await Promise.all([
-      getAnalytics(session.shop, 7),
-      getAnalytics(session.shop, 30),
-      getConversionStats(session.shop, 7),
-      getConversionStats(session.shop, 30),
-      getTopTrafficSources(session.shop, 7),
-      getTopTrafficSources(session.shop, 30),
-      getAssistantEngagement(session.shop, 7),
-      getAssistantEngagement(session.shop, 30),
-    ]);
-
-    // Product images (only the legacy product table uses them). Best
-    // effort: a failed Admin GraphQL call must not 500 the whole page.
-    try {
-      const response = await admin.graphql(`
-        query GetProducts($first: Int!) {
-          products(first: $first) {
-            edges {
-              node {
-                id
-                images(first: 1) {
-                  edges {
-                    node {
-                      url
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      `, {
-        variables: { first: 100 }
-      });
-
-      const { data } = await response.json();
-      (data?.products?.edges ?? []).forEach(({ node }: { node: any }) => {
-        const imageUrl = node.images?.edges?.[0]?.node?.url || "";
-        productImages[node.id] = imageUrl;
-      });
-    } catch (e) {
-      console.error("Analytics: product image fetch failed (thumbnails omitted):", e);
-    }
-  }
-
-  const safeAnalytics7: AnalyticsData = {
-    totalTransformations: analytics7Days?.totalTransformations || 0,
-    widgetViews: analytics7Days?.widgetViews || 0,
-    addToCarts: analytics7Days?.addToCarts || 0,
-    uploadToATCRate: analytics7Days?.uploadToATCRate || 0,
-    productBreakdown: (analytics7Days?.productBreakdown || []) as ProductBreakdown[],
-  };
-
-  const safeAnalytics30: AnalyticsData = {
-    totalTransformations: analytics30Days?.totalTransformations || 0,
-    widgetViews: analytics30Days?.widgetViews || 0,
-    addToCarts: analytics30Days?.addToCarts || 0,
-    uploadToATCRate: analytics30Days?.uploadToATCRate || 0,
-    productBreakdown: (analytics30Days?.productBreakdown || []) as ProductBreakdown[],
-  };
-
-  const buildAttribution = (
-    conv: Awaited<ReturnType<typeof getConversionStats>>,
-    sources: TrafficSourceStat[],
-  ): AttributionStats => ({
-    totalOrders: conv?.totalOrders ?? 0,
-    totalRevenue: conv?.totalRevenue ?? 0,
-    widgetAttributedRevenue: conv?.widgetAttributedRevenue ?? 0,
-    widgetSessions: conv?.widgetSessions ?? 0,
-    widgetSessionsConverted: conv?.widgetSessionsConverted ?? 0,
-    widgetPurchaseRate: conv?.widgetPurchaseRate ?? 0,
-    trafficSources: sources ?? [],
-  });
-
-  const attribution7 = buildAttribution(conversion7Days, sources7Days);
-  const attribution30 = buildAttribution(conversion30Days, sources30Days);
-
-  // Store currency (migration 084): revenue is in the shop's currency.
-  const currencyShop = await findShopByDomain(session.shop).catch(() => null);
-  const currency = currencyShop
-    ? await rememberShopCurrency(currencyShop.id, (q) => admin.graphql(q)).catch(() => null)
-    : null;
-
-  return json({
-    currency,
-    showLegacy,
-    quiz7: quiz7Days ?? EMPTY_QUIZ,
-    quiz30: quiz30Days ?? EMPTY_QUIZ,
-    leads7: leads7Days,
-    leads30: leads30Days,
-    quizAttr7: quizAttr7Days,
-    quizAttr30: quizAttr30Days,
-    analytics7: safeAnalytics7,
-    analytics30: safeAnalytics30,
-    attribution7,
-    attribution30,
-    assistant7: assistant7Days ?? EMPTY_ASSISTANT,
-    assistant30: assistant30Days ?? EMPTY_ASSISTANT,
-    productImages,
-  });
+  const currency = shop ? await rememberShopCurrency(shop.id, (q) => admin.graphql(q)).catch(() => null) : null;
+  return json({ data, currency, range });
 };
 
-export default function Analytics() {
-  const { currency, showLegacy, quiz7, quiz30, leads7, leads30, quizAttr7, quizAttr30, analytics7, analytics30, attribution7, attribution30, assistant7, assistant30, productImages } = useLoaderData<typeof loader>();
-  const [timeRange, setTimeRange] = useState("30");
-  const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
+type TabId = "overview" | "funnel" | "answers" | "products" | "leads";
+const TABS: Array<{ id: TabId; content: string }> = [
+  { id: "overview", content: "Overview" },
+  { id: "funnel", content: "Funnel" },
+  { id: "answers", content: "Answers & vibes" },
+  { id: "products", content: "Products & revenue" },
+  { id: "leads", content: "Leads" },
+];
 
-  const timeRangeOptions = [
-    { label: "Last 7 days", value: "7" },
-    { label: "Last 30 days", value: "30" },
+const BLUE = "#2C6ECB";
+const BLUE_SOFT = "#A9C6F0";
+const GRID = "#E3E3E3";
+const MUTED = "#616161";
+
+const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
+
+function useMoney(currency: string | null) {
+  return useMemo(() => {
+    const make = (digits: number) => {
+      try {
+        return new Intl.NumberFormat(undefined, { style: "currency", currency: currency || "USD", maximumFractionDigits: digits, minimumFractionDigits: digits });
+      } catch {
+        return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: digits, minimumFractionDigits: digits });
+      }
+    };
+    const whole = make(0);
+    const cents = make(2);
+    return { whole: (n: number) => whole.format(n), cents: (n: number) => cents.format(n) };
+  }, [currency]);
+}
+
+/** Change vs the previous period: % for counts, points for rates. */
+function Delta({ cur, prev, kind = "count" }: { cur: number; prev: number | null; kind?: "count" | "rate" }) {
+  if (prev == null) return null;
+  if (kind === "rate") {
+    const d = Math.round(cur - prev);
+    if (d === 0) return <Badge>No change</Badge>;
+    return <Badge tone={d > 0 ? "success" : "critical"}>{`${d > 0 ? "+" : ""}${d} pts`}</Badge>;
+  }
+  if (prev === 0) return cur > 0 ? <Badge tone="success">New</Badge> : null;
+  const d = Math.round((cur / prev - 1) * 100);
+  if (d === 0) return <Badge>No change</Badge>;
+  return <Badge tone={d > 0 ? "success" : "critical"}>{`${d > 0 ? "+" : ""}${d}%`}</Badge>;
+}
+
+function Kpi({ label, value, sub, delta, help }: { label: string; value: string; sub?: ReactNode; delta?: ReactNode; help?: string }) {
+  const title = (
+    <Text as="span" variant="bodySm" tone="subdued">
+      {label}
+    </Text>
+  );
+  return (
+    <Card padding="400">
+      <BlockStack gap="100">
+        {help ? <Tooltip content={help}>{title}</Tooltip> : title}
+        <InlineStack gap="200" blockAlign="center">
+          <Text as="p" variant="headingXl">
+            {value}
+          </Text>
+          {delta}
+        </InlineStack>
+        {sub ? (
+          <Text as="span" variant="bodySm" tone="subdued">
+            {sub}
+          </Text>
+        ) : null}
+      </BlockStack>
+    </Card>
+  );
+}
+
+function Bars({ rows, soft }: { rows: Array<{ label: string; value: number; display: string; flag?: string }>; soft?: boolean }) {
+  const max = Math.max(1, ...rows.map((r) => r.value));
+  return (
+    <BlockStack gap="200">
+      {rows.map((r) => (
+        <div key={r.label} style={{ display: "grid", gridTemplateColumns: "minmax(110px, 200px) 1fr minmax(70px, auto)", gap: 10, alignItems: "center" }}>
+          <Text as="span" variant="bodySm">
+            {r.label} {r.flag ? <Badge tone="warning">{r.flag}</Badge> : null}
+          </Text>
+          <div style={{ height: 10, borderRadius: 999, background: "#F1F1F1", overflow: "hidden" }}>
+            <div style={{ width: `${Math.max(2, (r.value / max) * 100)}%`, height: "100%", borderRadius: 999, background: soft ? BLUE_SOFT : BLUE }} />
+          </div>
+          <Text as="span" variant="bodySm" tone="subdued" alignment="end">
+            {r.display}
+          </Text>
+        </div>
+      ))}
+    </BlockStack>
+  );
+}
+
+function TrendChart({ daily }: { daily: WindowStats["daily"] }) {
+  const W = 640;
+  const H = 210;
+  const L = 34;
+  const R = 12;
+  const T = 10;
+  const B = 26;
+  const top = Math.max(4, ...daily.map((d) => d.started));
+  const step = top <= 10 ? 2 : top <= 40 ? 10 : top <= 100 ? 20 : Math.ceil(top / 5 / 50) * 50;
+  const max = Math.ceil(top / step) * step;
+  const iw = W - L - R;
+  const ih = H - T - B;
+  const x = (i: number) => L + (daily.length <= 1 ? iw / 2 : (i / (daily.length - 1)) * iw);
+  const y = (v: number) => T + ih - (v / max) * ih;
+  const line = (k: "started" | "finished") => daily.map((d, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(d[k]).toFixed(1)}`).join(" ");
+  const ticks: number[] = [];
+  for (let v = 0; v <= max; v += step) ticks.push(v);
+  const labelAt = daily.length > 1 ? [0, Math.round((daily.length - 1) / 2), daily.length - 1] : [0];
+  const fmt = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Shoppers per day" style={{ width: "100%", height: "auto", display: "block" }}>
+      {ticks.map((v) => (
+        <g key={v}>
+          <line x1={L} x2={W - R} y1={y(v)} y2={y(v)} stroke={GRID} strokeWidth={1} />
+          <text x={L - 6} y={y(v) + 4} textAnchor="end" fontSize={11} fill={MUTED}>
+            {v}
+          </text>
+        </g>
+      ))}
+      {daily.length > 1 && (
+        <path d={`${line("started")} L${x(daily.length - 1)} ${y(0)} L${x(0)} ${y(0)} Z`} fill={BLUE} opacity={0.1} />
+      )}
+      <path d={line("finished")} fill="none" stroke={BLUE_SOFT} strokeWidth={2} />
+      <path d={line("started")} fill="none" stroke={BLUE} strokeWidth={2.2} />
+      {labelAt.map((i, n) => (
+        <text key={i} x={x(i)} y={H - 6} textAnchor={n === 0 ? "start" : n === labelAt.length - 1 ? "end" : "middle"} fontSize={11} fill={MUTED}>
+          {fmt(daily[i].date)}
+        </text>
+      ))}
+    </svg>
+  );
+}
+
+function HoursChart({ hoursUtc }: { hoursUtc: number[] }) {
+  // Shift to the viewer's own clock after mount (SSR renders UTC).
+  const [offset, setOffset] = useState(0);
+  useEffect(() => setOffset(Math.round(-new Date().getTimezoneOffset() / 60)), []);
+  const hours = Array.from({ length: 24 }, (_, h) => hoursUtc[(((h - offset) % 24) + 24) % 24] || 0);
+  const W = 480;
+  const H = 160;
+  const L = 6;
+  const R = 6;
+  const T = 8;
+  const B = 22;
+  const max = Math.max(1, ...hours);
+  const bw = (W - L - R) / 24;
+  const ih = H - T - B;
+  const peak = hours.indexOf(max);
+  const lab = (h: number) => (h === 0 ? "12a" : h < 12 ? `${h}a` : h === 12 ? "12p" : `${h - 12}p`);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Quiz starts by hour, your time" style={{ width: "100%", height: "auto", display: "block" }}>
+      <line x1={L} x2={W - R} y1={T + ih} y2={T + ih} stroke={GRID} />
+      {hours.map((v, h) => (
+        <rect key={h} x={L + h * bw + 2} y={T + ih - (v / max) * ih} width={bw - 4} height={(v / max) * ih} rx={2} fill={h === peak && v > 0 ? BLUE : BLUE_SOFT} />
+      ))}
+      {[0, 6, 12, 18, 23].map((h) => (
+        <text key={h} x={L + h * bw + bw / 2} y={H - 6} textAnchor="middle" fontSize={11} fill={MUTED}>
+          {lab(h)}
+        </text>
+      ))}
+    </svg>
+  );
+}
+
+function Section({ title, badge, children, hint }: { title: string; badge?: ReactNode; children: ReactNode; hint?: ReactNode }) {
+  return (
+    <Card>
+      <BlockStack gap="300">
+        <InlineStack gap="200" blockAlign="center">
+          <Text as="h3" variant="headingSm">
+            {title}
+          </Text>
+          {badge}
+        </InlineStack>
+        {children}
+        {hint ? (
+          <Text as="p" variant="bodySm" tone="subdued">
+            {hint}
+          </Text>
+        ) : null}
+      </BlockStack>
+    </Card>
+  );
+}
+
+export default function QuizAnalytics() {
+  const { data, currency, range } = useLoaderData<typeof loader>();
+  const [params, setParams] = useSearchParams();
+  const initialTab = (TABS.find((t) => t.id === params.get("tab"))?.id ?? "overview") as TabId;
+  const [tab, setTab] = useState<TabId>(initialTab);
+  const money = useMoney(currency);
+
+  const setRange = (r: number) =>
+    setParams(
+      (p) => {
+        p.set("range", String(r));
+        p.set("tab", tab);
+        return p;
+      },
+      { preventScrollReset: true },
+    );
+
+  if (!data) {
+    return (
+      <Page title="Analytics">
+        <TitleBar title="Analytics" />
+        <Banner tone="critical">We couldn&rsquo;t load your quiz analytics. Reload the page to try again.</Banner>
+      </Page>
+    );
+  }
+  const d = data as unknown as QuizDashboardData;
+  const cur = d.current;
+  const prev = d.previous;
+
+  return (
+    <Page title="Analytics" subtitle="How shoppers use your quiz" fullWidth>
+      <TitleBar title="Analytics" />
+      <BlockStack gap="400">
+        <InlineStack align="space-between" blockAlign="center" gap="300">
+          <Text as="p" variant="bodySm" tone="subdued">
+            Last {range} days, compared with the {range} days before. A shopper is one cart.
+          </Text>
+          <ButtonGroup variant="segmented">
+            {DASHBOARD_RANGES.map((r) => (
+              <Button key={r} pressed={range === r} onClick={() => setRange(r)}>
+                {`${r} days`}
+              </Button>
+            ))}
+          </ButtonGroup>
+        </InlineStack>
+        <Card padding="0">
+          <Tabs tabs={TABS} selected={TABS.findIndex((t) => t.id === tab)} onSelect={(i) => setTab(TABS[i].id)} fitted />
+        </Card>
+        {d.truncated && (
+          <Banner tone="info">This range has more quiz activity than we read in one go, so the numbers are a minimum. Try a shorter range.</Banner>
+        )}
+        {tab === "overview" && <Overview d={d} cur={cur} prev={prev} money={money} onTab={setTab} />}
+        {tab === "funnel" && <Funnel d={d} cur={cur} />}
+        {tab === "answers" && <Answers d={d} cur={cur} />}
+        {tab === "products" && <Products d={d} money={money} />}
+        {tab === "leads" && <Leads d={d} range={range} />}
+      </BlockStack>
+    </Page>
+  );
+}
+
+type Money = ReturnType<typeof useMoney>;
+
+function topAnswer(d: QuizDashboardData) {
+  const cur = d.current;
+  for (const q of d.questions) {
+    const counts = cur.answers[q.axisKey];
+    const n = cur.answerRespondents[q.axisKey] || 0;
+    if (!counts || n === 0) continue;
+    const [value, c] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+    const label = q.options.find((o) => o.axisValue === value)?.label ?? value;
+    return { question: q.prompt, label, share: pct(c, n), respondents: n };
+  }
+  return null;
+}
+
+function NoActivity({ range }: { range: number }) {
+  return (
+    <Card>
+      <BlockStack gap="200">
+        <Text as="h3" variant="headingSm">
+          No quiz activity in the last {range} days
+        </Text>
+        <Text as="p" variant="bodySm" tone="subdued">
+          Once shoppers start your quiz, this page shows how far they get, what they answer and what they buy. Check the quiz is turned on and linked from your store, or try a longer range.
+        </Text>
+      </BlockStack>
+    </Card>
+  );
+}
+
+function Overview({ d, cur, prev, money, onTab }: { d: QuizDashboardData; cur: WindowStats; prev: WindowStats; money: Money; onTab: (t: TabId) => void }) {
+  if (cur.views === 0 && cur.started === 0) return <NoActivity range={d.range} />;
+  const o = d.orders;
+  const po = d.previousOrders;
+  const finishRate = pct(cur.finished, cur.started);
+  const addRate = pct(cur.added, cur.finished);
+  const aovLift =
+    o && o.quizOrders > 0 && o.storeOrders > o.quizOrders
+      ? Math.round((o.quizRevenue / o.quizOrders / (o.storeRevenue / o.storeOrders) - 1) * 100)
+      : null;
+  const insights: Insight[] = buildInsights(cur, d.orderStatsComplete ? o : null, topAnswer(d), money.cents);
+  const peakUtc = cur.hoursUtc.indexOf(Math.max(...cur.hoursUtc));
+  const mobileShare = pct(cur.mobile, cur.mobile + cur.desktop);
+  const tops = d.questions
+    .slice(0, 3)
+    .map((q) => {
+      const counts = cur.answers[q.axisKey];
+      if (!counts || (cur.answerRespondents[q.axisKey] || 0) < 15) return null;
+      const [value] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+      return q.options.find((x) => x.axisValue === value)?.label ?? value;
+    })
+    .filter(Boolean);
+  return (
+    <BlockStack gap="400">
+      <InlineGrid columns={{ xs: 2, md: 4 }} gap="400">
+        <Kpi label="Shoppers who started" value={cur.started.toLocaleString()} sub={`from ${cur.views.toLocaleString()} page views`} delta={<Delta cur={cur.started} prev={prev.started} />} help="Distinct carts that answered the first question." />
+        <Kpi label="Reached their matches" value={`${finishRate}%`} sub={`${cur.finished.toLocaleString()} shoppers`} delta={<Delta cur={finishRate} prev={prev.started ? pct(prev.finished, prev.started) : null} kind="rate" />} />
+        <Kpi label="Added to cart" value={`${addRate}%`} sub={`${cur.added.toLocaleString()} of ${cur.finished.toLocaleString()} who saw matches`} delta={<Delta cur={addRate} prev={prev.finished ? pct(prev.added, prev.finished) : null} kind="rate" />} />
+        <Kpi
+          label="Quiz revenue"
+          value={o ? money.whole(o.quizRevenue) : "—"}
+          sub={o ? `${o.quizOrders.toLocaleString()} orders${aovLift != null && aovLift > 0 ? ` · +${aovLift}% per order` : ""}` : "Appears after the first quiz order"}
+          delta={o ? <Delta cur={o.quizRevenue} prev={po ? po.quizRevenue : null} /> : undefined}
+          help="Orders from carts that reached their matches in this range."
+        />
+      </InlineGrid>
+      <InlineGrid columns={{ xs: 1, md: "3fr 2fr" }} gap="400">
+        <Section title="Shoppers per day" hint={<><span style={{ color: BLUE }}>■</span> Started &nbsp; <span style={{ color: BLUE_SOFT }}>■</span> Reached matches</>}>
+          <TrendChart daily={cur.daily} />
+        </Section>
+        <Section title="What to look at">
+          {insights.length === 0 ? (
+            <Text as="p" variant="bodySm" tone="subdued">
+              Insights appear once at least 20 shoppers have taken the quiz in this range.
+            </Text>
+          ) : (
+            <BlockStack gap="300">
+              {insights.map((i) => (
+                <InlineStack key={i.text} align="space-between" blockAlign="center" gap="200" wrap={false}>
+                  <Text as="p" variant="bodyMd">
+                    {i.text}
+                  </Text>
+                  {i.tab ? (
+                    <Button variant="plain" onClick={() => onTab(i.tab!)}>
+                      {TABS.find((t) => t.id === i.tab)!.content}
+                    </Button>
+                  ) : null}
+                </InlineStack>
+              ))}
+            </BlockStack>
+          )}
+        </Section>
+      </InlineGrid>
+      {cur.started >= 20 && (
+        <Box background="bg-surface-info" padding="400" borderRadius="300">
+          <Text as="p" variant="bodyMd">
+            <b>Typical quiz shopper:</b> {cur.mobile + cur.desktop > 0 ? `${mobileShare >= 50 ? "on a phone" : "on a computer"} (${Math.max(mobileShare, 100 - mobileShare)}%)` : "on any device"}
+            {Math.max(...cur.hoursUtc) > 0 ? <PeakHour utcHour={peakUtc} /> : null}
+            {tops.length > 0 ? `, answering ${tops.join(", ")}` : ""}.
+          </Text>
+        </Box>
+      )}
+    </BlockStack>
+  );
+}
+
+function PeakHour({ utcHour }: { utcHour: number }) {
+  const [label, setLabel] = useState<string | null>(null);
+  useEffect(() => {
+    const local = new Date(Date.UTC(2026, 0, 1, utcHour, 0, 0));
+    setLabel(local.toLocaleTimeString(undefined, { hour: "numeric" }));
+  }, [utcHour]);
+  return label ? <>{`, busiest around ${label} your time`}</> : null;
+}
+
+function Funnel({ d, cur }: { d: QuizDashboardData; cur: WindowStats }) {
+  if (cur.views === 0 && cur.started === 0) return <NoActivity range={d.range} />;
+  const ordered = d.orders && d.orderStatsComplete ? d.orders.quizBuyerCarts : null;
+  const steps = [
+    { label: "Started", value: cur.started },
+    { label: "Reached matches", value: cur.finished },
+    { label: "Opened or added a product", value: cur.engaged },
+    { label: "Added to cart", value: cur.added },
+    ...(ordered != null ? [{ label: "Ordered", value: ordered }] : []),
   ];
+  // Biggest drop between consecutive steps with a meaningful base.
+  let drop: { from: string; to: string; lost: number; share: number } | null = null;
+  for (let i = 1; i < steps.length; i++) {
+    const a = steps[i - 1];
+    const b = steps[i];
+    if (a.value < 20 || b.label === "Added to cart") continue;
+    const share = pct(a.value - b.value, a.value);
+    if (!drop || share > drop.share) drop = { from: a.label, to: b.label, lost: a.value - b.value, share };
+  }
+  const reach = cur.questionReach;
+  let worst = -1;
+  let worstShare = 0;
+  for (let i = 1; i < reach.length; i++) {
+    const share = pct(reach[i - 1].shoppers - reach[i].shoppers, reach[i - 1].shoppers);
+    if (reach[i - 1].shoppers >= 20 && share > worstShare) {
+      worst = i;
+      worstShare = share;
+    }
+  }
+  const qLabel = (qi: number, axisKey: string | null) => {
+    const q = (axisKey && d.questions.find((x) => x.axisKey === axisKey)) || d.questions[qi];
+    return `${qi + 1}. ${q ? q.prompt : `Question ${qi + 1}`}`;
+  };
+  const health: Array<{ title: string; value: string; sub: string }> = [];
+  if (cur.leadViewed > 0) health.push({ title: "Email step", value: `${pct(cur.leadJoined, cur.leadViewed)}% join`, sub: `${cur.leadJoined} of ${cur.leadViewed} who saw it` });
+  if (cur.photoStep > 0) health.push({ title: "Photo step", value: `${pct(cur.photoSkipped, cur.photoStep)}% skip`, sub: `${cur.photoUploaded} added a photo` });
+  if (cur.shadeDetected + cur.shadeFailed > 0) health.push({ title: "Shade detection", value: `${pct(cur.shadeFailed, cur.shadeDetected + cur.shadeFailed)}% failed`, sub: `${cur.shadeDetected} detected from photos` });
+  if (cur.mobile + cur.desktop > 0) health.push({ title: "Device", value: `${pct(cur.mobile, cur.mobile + cur.desktop)}% mobile`, sub: `${cur.mobile} phone, ${cur.desktop} computer` });
+  if (cur.finished > 0) health.push({ title: "Retakes", value: `${pct(cur.restarted, cur.finished)}%`, sub: `${cur.restarted} shoppers started over` });
+  if (cur.bundleAdds + cur.crossSellViews > 0) health.push({ title: "Bundle & cross-sell", value: `${cur.bundleAdds} bundle adds`, sub: `${cur.crossSellAdds} add-ons from ${cur.crossSellViews} who saw them` });
+  return (
+    <BlockStack gap="400">
+      <Section title="Where shoppers go">
+        <Bars rows={steps.map((s, i) => ({ label: s.label, value: s.value, display: i === 0 ? s.value.toLocaleString() : `${s.value.toLocaleString()} · ${pct(s.value, steps[0].value)}%` }))} />
+        {drop && drop.share > 0 ? (
+          <Banner tone="warning">
+            <Text as="p" variant="bodyMd">
+              <b>Biggest drop:</b> {drop.lost.toLocaleString()} shoppers ({drop.share}%) leave between &ldquo;{drop.from}&rdquo; and &ldquo;{drop.to}&rdquo;.
+            </Text>
+          </Banner>
+        ) : null}
+      </Section>
+      <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
+        <Section
+          title="Reach by question"
+          badge={cur.questionReachExact ? null : <Badge>Estimated</Badge>}
+          hint={
+            reach.length === 0
+              ? "Appears once shoppers answer questions in this range."
+              : worst > 0
+                ? `Question ${worst + 1} loses the most shoppers (${worstShare}%).${cur.questionReachExact ? "" : " Exact per-question numbers start with this release."}`
+                : cur.questionReachExact
+                  ? undefined
+                  : "Estimated from how many answers each shopper gave. Exact per-question numbers start with this release."
+          }
+        >
+          <Bars soft rows={reach.map((r, i) => ({ label: qLabel(r.qi, r.axisKey), value: r.shoppers, display: r.shoppers.toLocaleString(), flag: i === worst ? "Biggest drop" : undefined }))} />
+        </Section>
+        <Section title="When shoppers take the quiz" hint="Quiz starts by hour, in your time.">
+          <HoursChart hoursUtc={cur.hoursUtc} />
+        </Section>
+      </InlineGrid>
+      {health.length > 0 && (
+        <InlineGrid columns={{ xs: 1, sm: 2, md: 3 }} gap="400">
+          {health.map((h) => (
+            <Card key={h.title}>
+              <BlockStack gap="100">
+                <Text as="h3" variant="headingSm">
+                  {h.title}
+                </Text>
+                <Text as="p" variant="headingLg">
+                  {h.value}
+                </Text>
+                <Text as="span" variant="bodySm" tone="subdued">
+                  {h.sub}
+                </Text>
+              </BlockStack>
+            </Card>
+          ))}
+        </InlineGrid>
+      )}
+    </BlockStack>
+  );
+}
 
-  const currentData = timeRange === "7" ? analytics7 : analytics30;
-  const currentAttribution: AttributionStats =
-    (timeRange === "7" ? attribution7 : attribution30) ?? EMPTY_ATTRIBUTION;
-  const hasAttributionData =
-    currentAttribution.totalOrders > 0 || currentAttribution.widgetSessions > 0;
+function Answers({ d, cur }: { d: QuizDashboardData; cur: WindowStats }) {
+  const fromEvents = cur.answersSource !== null;
+  const leadTotal = d.leads.leads.length;
+  const cards: Array<{ key: string; title: string; multi: boolean; n: number; rows: Array<{ label: string; value: number }> }> = [];
+  if (fromEvents) {
+    for (const q of d.questions) {
+      const counts = cur.answers[q.axisKey];
+      const n = cur.answerRespondents[q.axisKey] || 0;
+      if (!counts || n === 0) continue;
+      const rows = Object.entries(counts)
+        .map(([v, c]) => ({ label: q.options.find((o) => o.axisValue === v)?.label ?? v, value: c }))
+        .sort((a, b) => b.value - a.value);
+      cards.push({ key: q.axisKey, title: q.prompt, multi: q.multiSelect, n, rows });
+    }
+  } else {
+    for (const [question, counts] of Object.entries(d.leadAnswers.counts)) {
+      const n = d.leadAnswers.respondents[question] || 0;
+      const rows = Object.entries(counts).map(([label, c]) => ({ label, value: c })).sort((a, b) => b.value - a.value);
+      cards.push({ key: question, title: question, multi: rows.reduce((s, r) => s + r.value, 0) > n, n, rows });
+    }
+  }
+  return (
+    <BlockStack gap="400">
+      <Banner tone={fromEvents ? "info" : "warning"}>
+        {fromEvents
+          ? `Answers from ${Math.max(0, ...Object.values(cur.answerRespondents)).toLocaleString()} shoppers who reached their matches in this range.`
+          : leadTotal > 0
+            ? `Early signal from ${leadTotal} email ${leadTotal === 1 ? "lead" : "leads"}. Answers from every shopper who finishes start appearing with this release.`
+            : "Answers from every shopper who finishes start appearing with this release."}
+      </Banner>
+      {cards.length === 0 ? null : (
+        <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
+          {cards.map((c) => (
+            <Section
+              key={c.key}
+              title={c.title}
+              badge={
+                <InlineStack gap="100">
+                  {c.multi ? <Badge>Pick several</Badge> : null}
+                  {c.n < 20 ? <Badge tone="warning">{`Early signal · ${c.n}`}</Badge> : null}
+                </InlineStack>
+              }
+              hint={c.multi ? "Share of shoppers who picked each answer." : undefined}
+            >
+              <Bars rows={c.rows.map((r) => ({ label: r.label, value: r.value, display: `${pct(r.value, c.n)}%` }))} />
+            </Section>
+          ))}
+        </InlineGrid>
+      )}
+    </BlockStack>
+  );
+}
 
-  const assistant: AssistantEngagement = timeRange === "7" ? assistant7 : assistant30;
-  const hasAssistantData =
-    assistant.opens > 0 ||
-    assistant.heroViews > 0 ||
-    assistant.photoUploads > 0 ||
-    assistant.recommendationsShown > 0;
+function Products({ d, money }: { d: QuizDashboardData; money: Money }) {
+  const o = d.orders;
+  const aov = o && o.quizOrders > 0 ? o.quizRevenue / o.quizOrders : null;
+  const storeAov = o && o.storeOrders > 0 ? o.storeRevenue / o.storeOrders : null;
+  const rows = d.products.map((p) => [
+    p.name,
+    p.recommended.toLocaleString(),
+    p.opened.toLocaleString(),
+    p.added.toLocaleString(),
+    p.orders == null ? "—" : p.orders.toLocaleString(),
+  ]);
+  return (
+    <BlockStack gap="400">
+      <InlineGrid columns={{ xs: 2, md: 4 }} gap="400">
+        <Kpi label="Quiz orders" value={o ? o.quizOrders.toLocaleString() : "—"} sub={o && o.finisherCarts > 0 ? `${pct(o.quizBuyerCarts, o.finisherCarts)}% of shoppers who saw matches bought` : undefined} />
+        <Kpi label="Quiz revenue" value={o ? money.whole(o.quizRevenue) : "—"} sub={o && o.storeRevenue > 0 ? `${((o.quizRevenue / o.storeRevenue) * 100).toFixed(1)}% of store revenue` : undefined} />
+        <Kpi label="Quiz order value" value={aov != null ? money.cents(aov) : "—"} sub={storeAov != null ? `store average ${money.cents(storeAov)}` : undefined} />
+        <Kpi label="Bundle adds" value={d.current.bundleAdds.toLocaleString()} sub={`${d.current.discountApplied} with the bundle discount applied`} />
+      </InlineGrid>
+      <Section
+        title="Products"
+        hint={
+          d.products.length === 0
+            ? "Shows what the quiz recommends, and what shoppers open, add and buy, as quiz activity comes in with this release."
+            : `Shoppers per product in this range.${d.productOrdersAvailable ? " Ordered counts orders from quiz carts." : " Ordered appears once order tracking is set up."}`
+        }
+      >
+        {d.products.length > 0 && (
+          <DataTable
+            columnContentTypes={["text", "numeric", "numeric", "numeric", "numeric"]}
+            headings={["Product", "Recommended", "Opened", "Added", "Ordered"]}
+            rows={rows}
+            truncate
+          />
+        )}
+      </Section>
+      <Text as="p" variant="bodySm" tone="subdued">
+        An order counts as a quiz order when it comes from a cart that reached its matches during this range.
+      </Text>
+    </BlockStack>
+  );
+}
 
-  // Clamp display percentages to [0, 100]. Counts are event volume, not unique
-  // sessions, so a downstream stage can legitimately exceed its predecessor
-  // (e.g. several product clicks per recommendation set) — a raw >100% step
-  // rate would read as nonsense, so we cap it for the badge/bar.
-  const pct = (num: number, denom: number) =>
-    denom > 0 ? Math.min((num / denom) * 100, 100) : 0;
-
-  // Funnel stages, in order. Each stage's step-conversion is measured against
-  // the immediately prior stage so the "from the prior stage" caption holds.
-  const buildFunnel = (counts: AssistantFunnelCounts) =>
-    [
-      { label: "Assistant opened", count: counts.opens },
-      { label: "Consultation started", count: counts.starts },
-      { label: "Photo uploaded", count: counts.photoUploads },
-      { label: "Recommendations shown", count: counts.recommendationsShown },
-      { label: "Product clicked", count: counts.productClicks },
-      { label: "Added to bag", count: counts.addToBag },
-    ].map((stage, i, arr) => ({
-      ...stage,
-      of: i === 0 ? stage.count : arr[i - 1].count,
-    }));
-
-  const assistantFunnel = buildFunnel(assistant);
-  const mobileFunnel = buildFunnel(assistant.byDevice.mobile);
-  const desktopFunnel = buildFunnel(assistant.byDevice.desktop);
-  const mobileOpens = assistant.byDevice.mobile.opens;
-  const desktopOpens = assistant.byDevice.desktop.opens;
-  // Share of entrances that are classified (mobile + desktop). Legacy/unclassed
-  // events have a null device_type and aren't in either bucket.
-  const classifiedOpens = mobileOpens + desktopOpens;
-
-  // Quiz funnel — same shape as the assistant funnel, over quiz_* events.
-  const quiz: QuizEngagement = timeRange === "7" ? quiz7 : quiz30;
-  const hasQuizData =
-    quiz.views > 0 || quiz.starts > 0 || quiz.resultsShown > 0;
-
-  // Step conversion is against the prior MANDATORY stage. The photo step
-  // is optional (skip and manual-shade paths reach results without an
-  // upload), so "Results shown" measures against the gate, not uploads.
-  const buildQuizFunnel = (counts: QuizFunnelCounts) => [
-    { label: "Quiz viewed", count: counts.views, of: counts.views, optional: false },
-    { label: "Quiz started", count: counts.starts, of: counts.views, optional: false },
-    { label: "Photo step reached", count: counts.gateViews, of: counts.starts, optional: false },
-    { label: "Photo uploaded", count: counts.photoUploads, of: counts.gateViews, optional: true },
-    { label: "Results shown", count: counts.resultsShown, of: counts.gateViews, optional: false },
-    { label: "Product clicked", count: counts.productClicks, of: counts.resultsShown, optional: false },
-    { label: "Added to cart", count: counts.addToCart, of: counts.productClicks, optional: false },
-  ];
-
-  const quizFunnel = buildQuizFunnel(quiz);
-  const quizMobileFunnel = buildQuizFunnel(quiz.byDevice.mobile);
-  const quizDesktopFunnel = buildQuizFunnel(quiz.byDevice.desktop);
-
-  // Quiz → purchase attribution (migration 078). Null until the RPC is
-  // deployed; the section hides itself rather than showing zeros.
-  const quizAttr: QuizAttributionStats | null = timeRange === "7" ? quizAttr7 : quizAttr30;
-
-  // Quiz leads (email capture step). Rows are capped server-side at 500
-  // newest per window; `count` is the accurate head-count total.
-  const leadStats: QuizLeadStats = timeRange === "7" ? leads7 : leads30;
-  const leadAnswerSummary = (lead: QuizLeadStats["leads"][number]) =>
+function Leads({ d, range }: { d: QuizDashboardData; range: number }) {
+  const leadStats = d.leads;
+  const cur = d.current;
+  const o = d.orders;
+  const leadAnswerSummary = (lead: QuizDashboardData["leads"]["leads"][number]) =>
     lead.quizAnswers.map((a) => `${a.question}: ${a.answer}`).join(" · ");
   const exportLeadsCsv = () => {
     // Emails and answers are shopper-typed via a public endpoint: a leading
     // = + - @ or tab would execute as a formula when the merchant opens the
-    // export in Excel/Sheets (CSV injection) — neutralize with a leading
-    // apostrophe. BOM so Excel decodes the UTF-8 separators/labels.
+    // export in Excel/Sheets (CSV injection), so neutralize it with a
+    // leading apostrophe. BOM so Excel decodes UTF-8 labels.
     const esc = (v: string) => {
       const guarded = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
       return `"${guarded.replace(/"/g, '""')}"`;
@@ -352,959 +622,110 @@ export default function Analytics() {
         (lead.matchesShown ?? []).join(" · "),
       ]),
     ];
-    const csv = "\uFEFF" + rows.map((r) => r.map(esc).join(",")).join("\r\n");
+    const csv = "﻿" + rows.map((r) => r.map(esc).join(",")).join("\r\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `quiz-leads-last-${timeRange}-days.csv`;
+    a.download = `quiz-leads-last-${range}-days.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
-  const quizMobileViews = quiz.byDevice.mobile.views;
-  const quizDesktopViews = quiz.byDevice.desktop.views;
-  const quizClassifiedViews = quizMobileViews + quizDesktopViews;
-
-  const toggleProduct = useCallback((productId: string) => {
-    setExpandedProducts((prev) => {
-      const next = new Set(prev);
-      if (next.has(productId)) {
-        next.delete(productId);
-      } else {
-        next.add(productId);
-      }
-      return next;
-    });
-  }, []);
-
-  // Sort products by transformations descending
-  const sortedProducts = [...currentData.productBreakdown].sort(
-    (a, b) => b.transformations - a.transformations
-  );
-
   return (
-    <Page>
-      <TitleBar title="Analytics" />
-      
-      <BlockStack gap="600">
-        {/* Header with time selector */}
-        <InlineStack align="space-between" blockAlign="center">
-          <Text as="h1" variant="headingXl">Analytics</Text>
-          <InlineStack gap="300">
-            <Select
-              label="Time range"
-              labelHidden
-              options={timeRangeOptions}
-              value={timeRange}
-              onChange={setTimeRange}
-            />
-          </InlineStack>
-        </InlineStack>
-
-        {/* Quiz engagement funnel — the primary (and for most shops, only) section */}
-        <BlockStack gap="300">
-          <InlineStack gap="200" blockAlign="center">
-            <Text as="h2" variant="headingMd">Quiz performance</Text>
-            <Badge tone="magic">Quiz</Badge>
-          </InlineStack>
-
-          {!hasQuizData ? (
-            <Card padding="400">
-              <BlockStack gap="200">
-                <Text as="p" variant="bodyMd" fontWeight="semibold">
-                  No quiz activity yet
-                </Text>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Once shoppers take your quiz, you'll see views, completions, and add-to-cart performance here.
-                </Text>
-              </BlockStack>
-            </Card>
-          ) : (
-            <BlockStack gap="400">
-              <InlineGrid columns={{ xs: 1, sm: 3 }} gap="400">
-                <Card padding="400">
-                  <BlockStack gap="200">
-                    <Text as="span" variant="bodySm" tone="subdued">Quiz views</Text>
-                    <Text as="p" variant="headingXl" fontWeight="bold">
-                      {quiz.views.toLocaleString()}
-                    </Text>
-                    <Text as="span" variant="bodySm" tone="subdued">
-                      {quiz.starts.toLocaleString()} started answering
-                    </Text>
-                  </BlockStack>
-                </Card>
-
-                <Card padding="400">
-                  <BlockStack gap="200">
-                    <Text as="span" variant="bodySm" tone="subdued">Completion rate</Text>
-                    <Text as="p" variant="headingXl" fontWeight="bold">
-                      {pct(quiz.resultsShown, quiz.views).toFixed(1)}%
-                    </Text>
-                    <Text as="span" variant="bodySm" tone="subdued">
-                      {quiz.resultsShown.toLocaleString()} of {quiz.views.toLocaleString()} views reached results
-                    </Text>
-                  </BlockStack>
-                </Card>
-
-                <Card padding="400">
-                  <BlockStack gap="200">
-                    <Text as="span" variant="bodySm" tone="subdued">Results → product</Text>
-                    <Text as="p" variant="headingXl" fontWeight="bold">
-                      {pct(quiz.productClicks, quiz.resultsShown).toFixed(1)}%
-                    </Text>
-                    <Text as="span" variant="bodySm" tone="subdued">
-                      {quiz.productClicks.toLocaleString()} viewed a product from their results
-                    </Text>
-                  </BlockStack>
-                </Card>
-              </InlineGrid>
-
-              <Card padding="0">
-                <Box padding="400" paddingBlockEnd="300">
-                  <Text as="h3" variant="headingSm">Funnel — from seeing the quiz to adding to cart</Text>
-                </Box>
-                <Divider />
-                <Box padding="400" paddingBlockStart="300">
-                  <BlockStack gap="300">
-                    {quizFunnel.map((stage, i) => {
-                      const shareOfViews = pct(stage.count, quiz.views);
-                      const stepConversion = i === 0 ? 100 : pct(stage.count, stage.of);
-                      return (
-                        <BlockStack gap="150" key={stage.label}>
-                          <InlineStack align="space-between" blockAlign="center">
-                            <InlineStack gap="200" blockAlign="center">
-                              <Text as="span" variant="bodyMd" fontWeight="semibold">
-                                {stage.label}
-                              </Text>
-                              {stage.label === "Photo uploaded" && quiz.photoSkips > 0 && (
-                                <Text as="span" variant="bodySm" tone="subdued">
-                                  {quiz.photoSkips.toLocaleString()} skipped the photo (optional step)
-                                </Text>
-                              )}
-                            </InlineStack>
-                            <InlineStack gap="300" blockAlign="center">
-                              <Text as="span" variant="bodyMd" fontWeight="semibold">
-                                {stage.count.toLocaleString()}
-                              </Text>
-                              {i > 0 && (
-                                <Box minWidth="52px">
-                                  <Badge
-                                    tone={
-                                      stage.optional
-                                        ? undefined
-                                        : stepConversion >= 50
-                                          ? "success"
-                                          : stepConversion >= 20
-                                            ? "attention"
-                                            : "critical"
-                                    }
-                                  >
-                                    {`${stepConversion.toFixed(0)}%`}
-                                  </Badge>
-                                </Box>
-                              )}
-                            </InlineStack>
-                          </InlineStack>
-                          <div
-                            style={{
-                              height: "8px",
-                              borderRadius: "4px",
-                              background: "var(--p-color-bg-surface-secondary)",
-                              overflow: "hidden",
-                            }}
-                          >
-                            <div
-                              style={{
-                                height: "100%",
-                                width: `${Math.max(shareOfViews, stage.count > 0 ? 2 : 0)}%`,
-                                background: "var(--p-color-bg-fill-magic)",
-                              }}
-                            />
-                          </div>
-                        </BlockStack>
-                      );
-                    })}
-                  </BlockStack>
-                </Box>
-                <Box padding="400" paddingBlockStart="300">
-                  <Text as="span" variant="bodySm" tone="subdued">
-                    Percentages show conversion from the prior required stage. The photo upload is optional (skip and manual-shade paths reach results without it), so results are measured against the photo step, not uploads. Counts are event volume, not unique shoppers.
-                  </Text>
-                </Box>
-              </Card>
-
-              {/* Mobile vs desktop split of the quiz funnel */}
-              <Card padding="0">
-                <Box padding="400" paddingBlockEnd="300">
-                  <BlockStack gap="100">
-                    <Text as="h3" variant="headingSm">Mobile vs desktop</Text>
-                    <Text as="span" variant="bodySm" tone="subdued">
-                      How shoppers entered and moved through the quiz, split by device.
-                    </Text>
-                  </BlockStack>
-                </Box>
-                <Divider />
-                {quizClassifiedViews === 0 ? (
-                  <Box padding="400" paddingBlockStart="300">
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Device data is collecting. New quiz activity will appear here split by mobile and desktop.
-                    </Text>
-                  </Box>
-                ) : (
-                  <Box padding="400" paddingBlockStart="300">
-                    <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
-                      {[
-                        { label: "Mobile", views: quizMobileViews, funnel: quizMobileFunnel },
-                        { label: "Desktop", views: quizDesktopViews, funnel: quizDesktopFunnel },
-                      ].map((device) => (
-                        <Box
-                          key={device.label}
-                          padding="400"
-                          background="bg-surface-secondary"
-                          borderRadius="200"
-                        >
-                          <BlockStack gap="300">
-                            <InlineStack align="space-between" blockAlign="center">
-                              <Badge tone={device.label === "Mobile" ? "info" : "success"}>
-                                {device.label}
-                              </Badge>
-                              <Text as="span" variant="bodySm" tone="subdued">
-                                {pct(device.views, quizClassifiedViews).toFixed(0)}% of views
-                              </Text>
-                            </InlineStack>
-                            <BlockStack gap="050">
-                              <Text as="p" variant="headingLg" fontWeight="bold">
-                                {device.views.toLocaleString()}
-                              </Text>
-                              <Text as="span" variant="bodySm" tone="subdued">
-                                quiz views
-                              </Text>
-                            </BlockStack>
-                            <Divider />
-                            <BlockStack gap="200">
-                              {device.funnel.map((stage, i) => {
-                                const shareOfViews = pct(stage.count, device.views);
-                                const stepConversion = i === 0 ? 100 : pct(stage.count, stage.of);
-                                return (
-                                  <BlockStack gap="100" key={stage.label}>
-                                    <InlineStack align="space-between" blockAlign="center">
-                                      <Text as="span" variant="bodySm">
-                                        {stage.label}
-                                      </Text>
-                                      <InlineStack gap="200" blockAlign="center">
-                                        <Text as="span" variant="bodySm" fontWeight="semibold">
-                                          {stage.count.toLocaleString()}
-                                        </Text>
-                                        {i > 0 && (
-                                          <Text as="span" variant="bodySm" tone="subdued">
-                                            {`${stepConversion.toFixed(0)}%`}
-                                          </Text>
-                                        )}
-                                      </InlineStack>
-                                    </InlineStack>
-                                    <div
-                                      style={{
-                                        height: "6px",
-                                        borderRadius: "3px",
-                                        background: "var(--p-color-bg-surface)",
-                                        overflow: "hidden",
-                                      }}
-                                    >
-                                      <div
-                                        style={{
-                                          height: "100%",
-                                          width: `${Math.max(shareOfViews, stage.count > 0 ? 2 : 0)}%`,
-                                          background: "var(--p-color-bg-fill-magic)",
-                                        }}
-                                      />
-                                    </div>
-                                  </BlockStack>
-                                );
-                              })}
-                            </BlockStack>
-                          </BlockStack>
-                        </Box>
-                      ))}
-                    </InlineGrid>
-                  </Box>
-                )}
-              </Card>
-            </BlockStack>
-          )}
-        </BlockStack>
-
-        {/* Quiz → purchases (migration 078): did quiz finishers buy, and did
-            email leads buy within 60 days. Hidden until the RPC is deployed
-            and there's quiz activity to attribute. */}
-        {quizAttr && hasQuizData && (
-          <BlockStack gap="300">
-            <InlineStack gap="200" blockAlign="center">
-              <Text as="h2" variant="headingMd">Quiz → purchases</Text>
-              <Badge tone="success">Revenue</Badge>
-            </InlineStack>
-            <InlineGrid columns={{ xs: 1, sm: 3 }} gap="400">
-              <Card padding="400">
-                <BlockStack gap="200">
-                  <Text as="span" variant="bodySm" tone="subdued">Quiz finishers who bought</Text>
-                  <Text as="p" variant="headingXl" fontWeight="bold">
-                    {quizAttr.quizPurchaseRate.toFixed(1)}%
-                  </Text>
-                  <Text as="span" variant="bodySm" tone="subdued">
-                    {quizAttr.quizFinisherConverted.toLocaleString()} of {quizAttr.quizFinisherSessions.toLocaleString()} carts that reached results placed an order
-                  </Text>
-                </BlockStack>
-              </Card>
-              <Card padding="400">
-                <BlockStack gap="200">
-                  <Text as="span" variant="bodySm" tone="subdued">Quiz-attributed revenue</Text>
-                  <Text as="p" variant="headingXl" fontWeight="bold">
-                    {formatMoneyWhole(quizAttr.quizAttributedRevenue, currency)}
-                  </Text>
-                  <Text as="span" variant="bodySm" tone="subdued">
-                    from {quizAttr.quizAttributedOrders.toLocaleString()} {quizAttr.quizAttributedOrders === 1 ? "order" : "orders"} in carts that finished the quiz
-                  </Text>
-                </BlockStack>
-              </Card>
-              <Card padding="400">
-                <BlockStack gap="200">
-                  <Text as="span" variant="bodySm" tone="subdued">Email leads who bought (60 days)</Text>
-                  <Text as="p" variant="headingXl" fontWeight="bold">
-                    {quizAttr.leadsConverted60d.toLocaleString()}
-                    {quizAttr.leadsTotal > 0 && (
-                      <Text as="span" variant="bodyMd" tone="subdued"> · {quizAttr.leadPurchaseRate.toFixed(1)}%</Text>
-                    )}
-                  </Text>
-                  <Text as="span" variant="bodySm" tone="subdued">
-                    of {quizAttr.leadsTotal.toLocaleString()} {quizAttr.leadsTotal === 1 ? "lead" : "leads"} captured in this window
-                    {quizAttr.leadAttributedRevenue > 0 &&
-                      ` · ${formatMoneyWhole(quizAttr.leadAttributedRevenue, currency)} revenue`}
-                  </Text>
-                </BlockStack>
-              </Card>
-            </InlineGrid>
-            <Text as="span" variant="bodySm" tone="subdued">
-              Finisher conversion is same-cart attribution (quiz results and the order share a cart). Lead conversion matches the lead's email to the order email within 60 days of submitting, so it also catches shoppers who came back later. Order emails are recorded from the day this feature deployed onward.
+    <BlockStack gap="400">
+      <InlineGrid columns={{ xs: 2, md: 4 }} gap="400">
+        <Kpi label="Leads" value={leadStats.count.toLocaleString()} sub={`in the last ${range} days`} />
+        <Kpi label="Join rate" value={cur.leadViewed > 0 ? `${pct(cur.leadJoined, cur.leadViewed)}%` : "—"} sub={cur.leadViewed > 0 ? `${cur.leadJoined} of ${cur.leadViewed} who saw the email step` : "Turn on the email step in Studio"} />
+        <Kpi label="Leads who bought" value={o ? o.leadsBought.toLocaleString() : "—"} sub={d.orderStatsComplete ? "same cart or email, within 60 days" : "email match within 60 days"} />
+        <Kpi label="Contact type" value={`${leadStats.leads.filter((l) => l.email).length} email`} sub={`${leadStats.leads.filter((l) => l.phone).length} with a phone number`} />
+      </InlineGrid>
+      {leadStats.count === 0 ? (
+        <Card>
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              No leads captured yet
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Turn on the email step in Studio and shoppers&rsquo; emails, with their quiz answers, appear here.
             </Text>
           </BlockStack>
-        )}
-
-        {/* Quiz leads — email/SMS captured by the quiz's lead step. Hidden
-            for legacy try-on shops with no quiz activity: the empty-state
-            nudge would advertise a flow they don't run. */}
-        {(leadStats.count > 0 || hasQuizData || !showLegacy) && (
-        <BlockStack gap="300">
-          <InlineStack gap="200" blockAlign="center">
-            <Text as="h2" variant="headingMd">Quiz leads</Text>
-            <Badge tone="attention">Email capture</Badge>
-          </InlineStack>
-
-          {leadStats.count === 0 ? (
-            <Card padding="400">
-              <BlockStack gap="200">
-                <Text as="p" variant="bodyMd" fontWeight="semibold">
-                  No leads captured yet
+        </Card>
+      ) : (
+        <Card padding="0">
+          <Box padding="400" paddingBlockEnd="300">
+            <InlineStack align="space-between" blockAlign="center">
+              <BlockStack gap="100">
+                <Text as="h3" variant="headingSm">
+                  {leadStats.count.toLocaleString()} {leadStats.count === 1 ? "lead" : "leads"} in the last {range} days
                 </Text>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Turn on the Email capture step in the Quiz Studio and shoppers' emails (with their quiz answers) will appear here.
+                <Text as="span" variant="bodySm" tone="subdued">
+                  Each lead includes the shopper&rsquo;s quiz answers at submit time.
                 </Text>
               </BlockStack>
-            </Card>
-          ) : (
-            <Card padding="0">
-              <Box padding="400" paddingBlockEnd="300">
-                <InlineStack align="space-between" blockAlign="center">
-                  <BlockStack gap="100">
-                    <Text as="h3" variant="headingSm">
-                      {leadStats.count.toLocaleString()} {leadStats.count === 1 ? "lead" : "leads"} in the last {timeRange} days
-                    </Text>
-                    <Text as="span" variant="bodySm" tone="subdued">
-                      Each lead includes the shopper's quiz answers at submit time.
-                    </Text>
-                  </BlockStack>
-                  <Button onClick={exportLeadsCsv} disabled={leadStats.leads.length === 0}>
-                    Export CSV
-                  </Button>
-                </InlineStack>
-              </Box>
-              <Divider />
-              <Box padding="400" paddingBlockStart="300" paddingBlockEnd="300" background="bg-surface-secondary">
-                <InlineGrid columns={{ xs: "1fr 1fr", md: "1.4fr 0.6fr 0.8fr 2fr" }} gap="400" alignItems="center">
-                  <Text as="span" variant="bodySm" fontWeight="semibold">Contact</Text>
-                  <Text as="span" variant="bodySm" fontWeight="semibold">Device</Text>
-                  <Text as="span" variant="bodySm" fontWeight="semibold">Captured</Text>
-                  <Text as="span" variant="bodySm" fontWeight="semibold">Quiz answers</Text>
-                </InlineGrid>
-              </Box>
-              {leadStats.leads.slice(0, 50).map((lead, index) => (
-                <div key={lead.id}>
-                  {index > 0 && <Divider />}
-                  <Box padding="400" paddingBlockStart="300" paddingBlockEnd="300">
-                    <InlineGrid columns={{ xs: "1fr 1fr", md: "1.4fr 0.6fr 0.8fr 2fr" }} gap="400" alignItems="start">
-                      <BlockStack gap="050">
-                        {lead.email && (
-                          <Text as="span" variant="bodyMd" fontWeight="semibold" breakWord>
-                            {lead.email}
-                          </Text>
-                        )}
-                        {lead.phone && (
-                          <Text as="span" variant={lead.email ? "bodySm" : "bodyMd"} tone={lead.email ? "subdued" : undefined} fontWeight={lead.email ? undefined : "semibold"}>
-                            {lead.phone}
-                          </Text>
-                        )}
-                      </BlockStack>
-                      <Text as="span" variant="bodySm" tone="subdued">
-                        {lead.deviceType ?? "—"}
+              <Button onClick={exportLeadsCsv} disabled={leadStats.leads.length === 0}>
+                Export CSV
+              </Button>
+            </InlineStack>
+          </Box>
+          <Divider />
+          <Box padding="400" paddingBlockStart="300" paddingBlockEnd="300" background="bg-surface-secondary">
+            <InlineGrid columns={{ xs: "1fr 1fr", md: "1.4fr 0.6fr 0.8fr 2fr" }} gap="400" alignItems="center">
+              <Text as="span" variant="bodySm" fontWeight="semibold">
+                Contact
+              </Text>
+              <Text as="span" variant="bodySm" fontWeight="semibold">
+                Device
+              </Text>
+              <Text as="span" variant="bodySm" fontWeight="semibold">
+                Captured
+              </Text>
+              <Text as="span" variant="bodySm" fontWeight="semibold">
+                Quiz answers
+              </Text>
+            </InlineGrid>
+          </Box>
+          {leadStats.leads.slice(0, 50).map((lead, index) => (
+            <div key={lead.id}>
+              {index > 0 && <Divider />}
+              <Box padding="400" paddingBlockStart="300" paddingBlockEnd="300">
+                <InlineGrid columns={{ xs: "1fr 1fr", md: "1.4fr 0.6fr 0.8fr 2fr" }} gap="400" alignItems="start">
+                  <BlockStack gap="050">
+                    {lead.email && (
+                      <Text as="span" variant="bodyMd" fontWeight="semibold" breakWord>
+                        {lead.email}
                       </Text>
-                      <Text as="span" variant="bodySm" tone="subdued">
-                        {new Date(lead.createdAt).toLocaleDateString()}
-                      </Text>
-                      <Text as="span" variant="bodySm" tone="subdued">
-                        {leadAnswerSummary(lead) || "—"}
-                      </Text>
-                    </InlineGrid>
-                  </Box>
-                </div>
-              ))}
-              {leadStats.count > 50 && (
-                <>
-                  <Divider />
-                  <Box padding="300">
-                    <Text as="span" variant="bodySm" tone="subdued">
-                      Showing the 50 most recent. Export CSV includes up to the {leadStats.leads.length.toLocaleString()} newest leads in this window.
-                    </Text>
-                  </Box>
-                </>
-              )}
-            </Card>
-          )}
-        </BlockStack>
-        )}
-
-        {showLegacy && (<>
-        <Divider />
-
-        {/* Attribution — widget-driven conversion + revenue */}
-        <BlockStack gap="300">
-          <InlineStack gap="200" blockAlign="center">
-            <Text as="h2" variant="headingMd">Attribution</Text>
-            <Badge tone="success">From Shopify</Badge>
-          </InlineStack>
-
-          {!hasAttributionData ? (
-            <Card padding="400">
-              <BlockStack gap="200">
-                <Text as="p" variant="bodyMd" fontWeight="semibold">
-                  No orders tracked yet
-                </Text>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Once shoppers complete a purchase, you'll see widget-attributed revenue and top traffic sources here.
-                </Text>
-              </BlockStack>
-            </Card>
-          ) : (
-            <BlockStack gap="400">
-              <InlineGrid columns={{ xs: 1, sm: 2 }} gap="400">
-                <Card padding="400">
-                  <BlockStack gap="200">
-                    <Text as="span" variant="bodySm" tone="subdued">Widget → Purchase rate</Text>
-                    <Text as="p" variant="headingXl" fontWeight="bold">
-                      {currentAttribution.widgetPurchaseRate.toFixed(1)}%
-                    </Text>
-                    <Text as="span" variant="bodySm" tone="subdued">
-                      {currentAttribution.widgetSessionsConverted.toLocaleString()} of {currentAttribution.widgetSessions.toLocaleString()} widget sessions converted
-                    </Text>
-                  </BlockStack>
-                </Card>
-
-                <Card padding="400">
-                  <BlockStack gap="200">
-                    <Text as="span" variant="bodySm" tone="subdued">Widget-attributed revenue</Text>
-                    <Text as="p" variant="headingXl" fontWeight="bold">
-                      {formatMoneyWhole(currentAttribution.widgetAttributedRevenue, currency)}
-                    </Text>
-                    <Text as="span" variant="bodySm" tone="subdued">
-                      of {formatMoneyWhole(currentAttribution.totalRevenue, currency)} total
-                    </Text>
-                  </BlockStack>
-                </Card>
-              </InlineGrid>
-
-              {currentAttribution.trafficSources.length > 0 && (
-                <Card padding="0">
-                  <Box padding="400" paddingBlockEnd="300">
-                    <Text as="h3" variant="headingSm">Top traffic sources for widget-attributed orders</Text>
-                  </Box>
-                  <Divider />
-                  <Box padding="400" paddingBlockStart="300">
-                    <BlockStack gap="200">
-                      {currentAttribution.trafficSources.map((src) => (
-                        <InlineStack key={src.source} align="space-between" blockAlign="center">
-                          <Text as="span" variant="bodyMd" fontWeight="semibold">
-                            {src.source}
-                          </Text>
-                          <InlineStack gap="400" blockAlign="center">
-                            <Text as="span" variant="bodySm" tone="subdued">
-                              {src.orders.toLocaleString()} {src.orders === 1 ? "order" : "orders"}
-                            </Text>
-                            <Text as="span" variant="bodyMd" fontWeight="semibold">
-                              {formatMoneyWhole(src.revenue, currency)}
-                            </Text>
-                          </InlineStack>
-                        </InlineStack>
-                      ))}
-                    </BlockStack>
-                  </Box>
-                </Card>
-              )}
-            </BlockStack>
-          )}
-        </BlockStack>
-
-        <Divider />
-
-        {/* Assistant engagement funnel */}
-        <BlockStack gap="300">
-          <InlineStack gap="200" blockAlign="center">
-            <Text as="h2" variant="headingMd">Assistant engagement</Text>
-            <Badge tone="info">Chat assistant</Badge>
-          </InlineStack>
-
-          {!hasAssistantData ? (
-            <Card padding="400">
-              <BlockStack gap="200">
-                <Text as="p" variant="bodyMd" fontWeight="semibold">
-                  No assistant activity yet
-                </Text>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Once shoppers open the chat assistant and upload a photo, you'll see the engagement funnel here.
-                </Text>
-              </BlockStack>
-            </Card>
-          ) : (
-            <BlockStack gap="400">
-              <InlineGrid columns={{ xs: 1, sm: 3 }} gap="400">
-                <Card padding="400">
-                  <BlockStack gap="200">
-                    <Text as="span" variant="bodySm" tone="subdued">Assistant opens</Text>
-                    <Text as="p" variant="headingXl" fontWeight="bold">
-                      {assistant.opens.toLocaleString()}
-                    </Text>
-                    {assistant.heroViews > 0 && (
-                      <Text as="span" variant="bodySm" tone="subdued">
-                        {pct(assistant.heroCtaClicks, assistant.heroViews).toFixed(0)}% hero click-through ({assistant.heroCtaClicks.toLocaleString()} of {assistant.heroViews.toLocaleString()})
+                    )}
+                    {lead.phone && (
+                      <Text as="span" variant={lead.email ? "bodySm" : "bodyMd"} tone={lead.email ? "subdued" : undefined} fontWeight={lead.email ? undefined : "semibold"}>
+                        {lead.phone}
                       </Text>
                     )}
                   </BlockStack>
-                </Card>
-
-                <Card padding="400">
-                  <BlockStack gap="200">
-                    <Text as="span" variant="bodySm" tone="subdued">Completion rate</Text>
-                    <Text as="p" variant="headingXl" fontWeight="bold">
-                      {pct(assistant.recommendationsShown, assistant.opens).toFixed(1)}%
-                    </Text>
-                    <Text as="span" variant="bodySm" tone="subdued">
-                      {assistant.recommendationsShown.toLocaleString()} of {assistant.opens.toLocaleString()} opens reached recommendations
-                    </Text>
-                  </BlockStack>
-                </Card>
-
-                <Card padding="400">
-                  <BlockStack gap="200">
-                    <Text as="span" variant="bodySm" tone="subdued">Recommendation → product</Text>
-                    <Text as="p" variant="headingXl" fontWeight="bold">
-                      {pct(assistant.productClicks, assistant.recommendationsShown).toFixed(1)}%
-                    </Text>
-                    <Text as="span" variant="bodySm" tone="subdued">
-                      {assistant.productClicks.toLocaleString()} viewed a product after seeing recommendations
-                    </Text>
-                  </BlockStack>
-                </Card>
-              </InlineGrid>
-
-              <Card padding="0">
-                <Box padding="400" paddingBlockEnd="300">
-                  <Text as="h3" variant="headingSm">Funnel — from opening the assistant to adding to bag</Text>
-                </Box>
-                <Divider />
-                <Box padding="400" paddingBlockStart="300">
-                  <BlockStack gap="300">
-                    {assistantFunnel.map((stage, i) => {
-                      const shareOfOpens = pct(stage.count, assistant.opens);
-                      const stepConversion = i === 0 ? 100 : pct(stage.count, stage.of);
-                      return (
-                        <BlockStack gap="150" key={stage.label}>
-                          <InlineStack align="space-between" blockAlign="center">
-                            <Text as="span" variant="bodyMd" fontWeight="semibold">
-                              {stage.label}
-                            </Text>
-                            <InlineStack gap="300" blockAlign="center">
-                              <Text as="span" variant="bodyMd" fontWeight="semibold">
-                                {stage.count.toLocaleString()}
-                              </Text>
-                              {i > 0 && (
-                                <Box minWidth="52px">
-                                  <Badge tone={stepConversion >= 50 ? "success" : stepConversion >= 20 ? "attention" : "critical"}>
-                                    {`${stepConversion.toFixed(0)}%`}
-                                  </Badge>
-                                </Box>
-                              )}
-                            </InlineStack>
-                          </InlineStack>
-                          <div
-                            style={{
-                              height: "8px",
-                              borderRadius: "4px",
-                              background: "var(--p-color-bg-surface-secondary)",
-                              overflow: "hidden",
-                            }}
-                          >
-                            <div
-                              style={{
-                                height: "100%",
-                                width: `${Math.max(shareOfOpens, stage.count > 0 ? 2 : 0)}%`,
-                                background: "var(--p-color-bg-fill-info)",
-                              }}
-                            />
-                          </div>
-                        </BlockStack>
-                      );
-                    })}
-                  </BlockStack>
-                </Box>
-                <Box padding="400" paddingBlockStart="300">
                   <Text as="span" variant="bodySm" tone="subdued">
-                    Percentages show step-over-step conversion from the prior stage. Counts are event volume, not unique shoppers.
+                    {lead.deviceType ?? "—"}
                   </Text>
-                </Box>
-              </Card>
-
-              {/* Mobile vs desktop split of the same funnel */}
-              <Card padding="0">
-                <Box padding="400" paddingBlockEnd="300">
-                  <BlockStack gap="100">
-                    <Text as="h3" variant="headingSm">Mobile vs desktop</Text>
-                    <Text as="span" variant="bodySm" tone="subdued">
-                      How shoppers entered and moved through the assistant, split by device.
-                    </Text>
-                  </BlockStack>
-                </Box>
-                <Divider />
-                {classifiedOpens === 0 ? (
-                  <Box padding="400" paddingBlockStart="300">
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Device data is collecting. New assistant activity will appear here split by mobile and desktop.
-                    </Text>
-                  </Box>
-                ) : (
-                  <Box padding="400" paddingBlockStart="300">
-                    <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
-                      {[
-                        { label: "Mobile", opens: mobileOpens, funnel: mobileFunnel },
-                        { label: "Desktop", opens: desktopOpens, funnel: desktopFunnel },
-                      ].map((device) => (
-                        <Box
-                          key={device.label}
-                          padding="400"
-                          background="bg-surface-secondary"
-                          borderRadius="200"
-                        >
-                          <BlockStack gap="300">
-                            <InlineStack align="space-between" blockAlign="center">
-                              <Badge tone={device.label === "Mobile" ? "info" : "success"}>
-                                {device.label}
-                              </Badge>
-                              <Text as="span" variant="bodySm" tone="subdued">
-                                {pct(device.opens, classifiedOpens).toFixed(0)}% of entrances
-                              </Text>
-                            </InlineStack>
-                            <BlockStack gap="050">
-                              <Text as="p" variant="headingLg" fontWeight="bold">
-                                {device.opens.toLocaleString()}
-                              </Text>
-                              <Text as="span" variant="bodySm" tone="subdued">
-                                assistant opens
-                              </Text>
-                            </BlockStack>
-                            <Divider />
-                            <BlockStack gap="200">
-                              {device.funnel.map((stage, i) => {
-                                const shareOfOpens = pct(stage.count, device.opens);
-                                const stepConversion = i === 0 ? 100 : pct(stage.count, stage.of);
-                                return (
-                                  <BlockStack gap="100" key={stage.label}>
-                                    <InlineStack align="space-between" blockAlign="center">
-                                      <Text as="span" variant="bodySm">
-                                        {stage.label}
-                                      </Text>
-                                      <InlineStack gap="200" blockAlign="center">
-                                        <Text as="span" variant="bodySm" fontWeight="semibold">
-                                          {stage.count.toLocaleString()}
-                                        </Text>
-                                        {i > 0 && (
-                                          <Text as="span" variant="bodySm" tone="subdued">
-                                            {`${stepConversion.toFixed(0)}%`}
-                                          </Text>
-                                        )}
-                                      </InlineStack>
-                                    </InlineStack>
-                                    <div
-                                      style={{
-                                        height: "6px",
-                                        borderRadius: "3px",
-                                        background: "var(--p-color-bg-surface)",
-                                        overflow: "hidden",
-                                      }}
-                                    >
-                                      <div
-                                        style={{
-                                          height: "100%",
-                                          width: `${Math.max(shareOfOpens, stage.count > 0 ? 2 : 0)}%`,
-                                          background: "var(--p-color-bg-fill-info)",
-                                        }}
-                                      />
-                                    </div>
-                                  </BlockStack>
-                                );
-                              })}
-                            </BlockStack>
-                          </BlockStack>
-                        </Box>
-                      ))}
-                    </InlineGrid>
-                  </Box>
-                )}
-              </Card>
-            </BlockStack>
-          )}
-        </BlockStack>
-
-        <Divider />
-
-        {/* Stats Cards */}
-        <InlineGrid columns={{ xs: 1, sm: 3, md: 3 }} gap="400">
-          <Card padding="400">
-            <BlockStack gap="200">
-              <Text as="span" variant="bodySm" tone="subdued">
-                Selfie Uploads
-              </Text>
-              <Text as="p" variant="headingXl" fontWeight="bold">
-                {currentData.totalTransformations.toLocaleString()}
-              </Text>
-            </BlockStack>
-          </Card>
-
-          <Card padding="400">
-            <BlockStack gap="200">
-              <Text as="span" variant="bodySm" tone="subdued">
-                Active Products
-              </Text>
-              <Text as="p" variant="headingXl" fontWeight="bold">
-                {currentData.productBreakdown.length}
-              </Text>
-            </BlockStack>
-          </Card>
-
-          <Card padding="400">
-            <BlockStack gap="200">
-              <Text as="span" variant="bodySm" tone="subdued">
-                Widget Views
-              </Text>
-              <Text as="p" variant="headingXl" fontWeight="bold">
-                {currentData.widgetViews.toLocaleString()}
-              </Text>
-            </BlockStack>
-          </Card>
-        </InlineGrid>
-
-        {/* Product Breakdown */}
-        <Card padding="0">
-          <Box padding="400" paddingBlockEnd="300">
-            <Text as="h2" variant="headingMd">
-              See how shoppers are engaging with Gleame across products
-            </Text>
-          </Box>
-          
-          <Divider />
-
-          {/* Table Header */}
-          <Box padding="400" paddingBlockStart="300" paddingBlockEnd="300" background="bg-surface-secondary">
-            <InlineGrid columns={{ xs: "1fr 1fr 1fr", md: "2fr 1fr 1fr 1fr" }} gap="400" alignItems="center">
-              <Text as="span" variant="bodySm" fontWeight="semibold">Product</Text>
-              <Box>
-                <Text as="span" variant="bodySm" fontWeight="semibold">Uploads</Text>
+                  <Text as="span" variant="bodySm" tone="subdued">
+                    {new Date(lead.createdAt).toLocaleDateString()}
+                  </Text>
+                  <Text as="span" variant="bodySm" tone="subdued">
+                    {leadAnswerSummary(lead) || "—"}
+                  </Text>
+                </InlineGrid>
               </Box>
-              <Box>
-                <Text as="span" variant="bodySm" fontWeight="semibold">Widgets</Text>
-              </Box>
-              <Box>
-                <Text as="span" variant="bodySm" fontWeight="semibold">Share</Text>
-              </Box>
-            </InlineGrid>
-          </Box>
-
-          {/* Product Rows */}
-          {sortedProducts.length > 0 ? (
-            <BlockStack>
-              {sortedProducts.map((product, index) => {
-                const isExpanded = expandedProducts.has(product.product_id);
-                const sharePercent = currentData.totalTransformations > 0 
-                  ? ((product.transformations / currentData.totalTransformations) * 100).toFixed(1)
-                  : "0";
-                const imageUrl = productImages[product.shopify_id] || "";
-                const truncatedName = product.product_name.length > 35 
-                  ? product.product_name.slice(0, 35) + '...' 
-                  : product.product_name;
-                
-                return (
-                  <div key={product.product_id}>
-                    {index > 0 && <Divider />}
-                    <Box padding="400">
-                      <InlineGrid columns={{ xs: "1fr 1fr 1fr", md: "2fr 1fr 1fr 1fr" }} gap="400" alignItems="center">
-                        {/* Product Info */}
-                        <InlineStack gap="300" blockAlign="center" wrap={false}>
-                          <Button
-                            variant="plain"
-                            onClick={() => toggleProduct(product.product_id)}
-                            icon={isExpanded ? ChevronDownIcon : ChevronRightIcon}
-                            accessibilityLabel={isExpanded ? "Collapse" : "Expand"}
-                          />
-                          <Thumbnail
-                            source={imageUrl || ImageIcon}
-                            alt={product.product_name}
-                            size="small"
-                          />
-                          <BlockStack gap="050">
-                            <Text as="span" variant="bodyMd" fontWeight="semibold">
-                              {truncatedName}
-                            </Text>
-                          </BlockStack>
-                        </InlineStack>
-
-                        {/* Uploads */}
-                        <Text as="span" variant="bodyMd" fontWeight="semibold">
-                          {product.transformations.toLocaleString()}
-                        </Text>
-
-                        {/* Widgets count */}
-                        <Text as="span" variant="bodyMd">
-                          {Object.keys(product.widgets || {}).length || 1}
-                        </Text>
-
-                        {/* Share */}
-                        <Box>
-                          <Badge tone="info">{`${sharePercent}%`}</Badge>
-                        </Box>
-                      </InlineGrid>
-
-                      {/* Expanded Widget Details */}
-                      <Collapsible
-                        open={isExpanded}
-                        id={`widget-details-${product.product_id}`}
-                        transition={{ duration: "200ms", timingFunction: "ease-in-out" }}
-                      >
-                        <Box paddingBlockStart="400" paddingInlineStart="1200">
-                          <BlockStack gap="200">
-                            {(() => {
-                              // Merge widget types that map to the same display name
-                              const widgetNames: Record<string, string> = {
-                                embedded: "Gleame Embedded",
-                                horizontal: "Gleame Horizontal", 
-                                button: "Gleame Button",
-                                legacy: "Gleame Legacy",
-                                unknown: "Gleame Legacy"
-                              };
-                              
-                              // Combine counts by display name
-                              const mergedWidgets: Record<string, number> = {};
-                              Object.entries(product.widgets || {}).forEach(([widgetType, count]) => {
-                                const displayName = widgetNames[widgetType] || "Gleame Legacy";
-                                mergedWidgets[displayName] = (mergedWidgets[displayName] || 0) + count;
-                              });
-                              
-                              return Object.entries(mergedWidgets).map(([displayName, count]) => {
-                                const widgetSharePercent = product.transformations > 0 
-                                  ? ((count / product.transformations) * 100).toFixed(0)
-                                  : "0";
-                                
-                                return (
-                                  <Box 
-                                    key={displayName}
-                                    padding="300" 
-                                    background="bg-surface-secondary" 
-                                    borderRadius="200"
-                                  >
-                                    <InlineGrid columns={{ xs: "1fr 1fr 1fr", md: "2fr 1fr 1fr 1fr" }} gap="400" alignItems="center">
-                                      <Text as="span" variant="bodySm">{displayName}</Text>
-                                      <Text as="span" variant="bodySm">{count}</Text>
-                                      <Text as="span" variant="bodySm">—</Text>
-                                      <Box>
-                                        <Text as="span" variant="bodySm">{widgetSharePercent}%</Text>
-                                      </Box>
-                                    </InlineGrid>
-                                  </Box>
-                                );
-                              });
-                            })()}
-                            {(!product.widgets || Object.keys(product.widgets).length === 0) && (
-                              <Box 
-                                padding="300" 
-                                background="bg-surface-secondary" 
-                                borderRadius="200"
-                              >
-                                <InlineGrid columns={{ xs: "1fr 1fr 1fr", md: "2fr 1fr 1fr 1fr" }} gap="400" alignItems="center">
-                                  <Text as="span" variant="bodySm">Gleame Widget</Text>
-                                  <Text as="span" variant="bodySm">{product.transformations}</Text>
-                                  <Text as="span" variant="bodySm">—</Text>
-                                  <Box>
-                                    <Text as="span" variant="bodySm">100%</Text>
-                                  </Box>
-                                </InlineGrid>
-                              </Box>
-                            )}
-                          </BlockStack>
-                        </Box>
-                      </Collapsible>
-                    </Box>
-                  </div>
-                );
-              })}
-            </BlockStack>
-          ) : (
-            <Box padding="800">
-              <BlockStack gap="300" inlineAlign="center">
-                <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
-                  No data yet for the selected time period.
+            </div>
+          ))}
+          {leadStats.count > 50 && (
+            <>
+              <Divider />
+              <Box padding="300">
+                <Text as="span" variant="bodySm" tone="subdued">
+                  Showing the 50 most recent. Export CSV includes up to the {leadStats.leads.length.toLocaleString()} newest leads in this range.
                 </Text>
-                <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-                  Analytics will appear as customers use the transformation widget on your store.
-                </Text>
-              </BlockStack>
-            </Box>
+              </Box>
+            </>
           )}
         </Card>
-
-        {/* Help Section */}
-        {currentData.productBreakdown.length === 0 && (
-          <Card>
-            <BlockStack gap="300">
-              <Text as="h3" variant="headingMd">Getting Started</Text>
-              <BlockStack gap="200">
-                <Text as="p" variant="bodyMd">
-                  • Configure products in the Products tab with transformation prompts
-                </Text>
-                <Text as="p" variant="bodyMd">
-                  • Add a Gleame widget block to your product pages in the theme editor
-                </Text>
-                <Text as="p" variant="bodyMd">
-                  • Analytics will populate as customers upload selfies
-                </Text>
-              </BlockStack>
-            </BlockStack>
-          </Card>
-        )}
-        </>)}
-      </BlockStack>
-    </Page>
+      )}
+    </BlockStack>
   );
 }

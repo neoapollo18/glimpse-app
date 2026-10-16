@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { quizOrderLineRows, type OrderLinePayload } from "./quiz-order-lines";
 import { dedupeRuleRanks } from "./rule-ranks";
 import { MAX_REFERENCE_IMAGES, parseReferenceImageUrls } from './reference-images';
 import { isOptionVisible } from './option-visibility';
@@ -374,6 +375,45 @@ function normalizeCartToken(raw?: string | null): string | null {
   return id || null;
 }
 
+/**
+ * Quiz analytics (migration 091): store an order's line items when its cart
+ * reached quiz results, so the dashboard can show what quiz shoppers bought.
+ * Other orders are skipped. Best-effort: a missing table (migration not run)
+ * or a write error is logged and never fails the webhook.
+ */
+export async function recordQuizOrderLines(
+  shopDomain: string,
+  order: { id: number | string; cart_token?: string | null; created_at?: string | null; line_items?: OrderLinePayload[] | null },
+): Promise<number> {
+  try {
+    const cartToken = normalizeCartToken(order.cart_token ?? null);
+    if (!cartToken || !Array.isArray(order.line_items) || order.line_items.length === 0) return 0;
+    const shop = await findShopByDomain(shopDomain);
+    if (!shop) return 0;
+    const { count, error: probeError } = await supabase
+      .from('analytics_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('shop_id', shop.id)
+      .eq('event_type', 'quiz_results_shown')
+      .eq('cart_token', cartToken)
+      .limit(1);
+    if (probeError || !count) return 0;
+    const rows = quizOrderLineRows(shop.id, order, cartToken);
+    if (rows.length === 0) return 0;
+    const { error } = await supabase
+      .from('widget_order_lines')
+      .upsert(rows, { onConflict: 'shop_id,line_item_id' });
+    if (error) {
+      console.error('recordQuizOrderLines failed:', error.message);
+      return 0;
+    }
+    return rows.length;
+  } catch (error) {
+    console.error('Error in recordQuizOrderLines:', error);
+    return 0;
+  }
+}
+
 // Analytics functions
 export async function trackTransformationEvent(
   shopDomain: string,
@@ -479,7 +519,10 @@ export async function trackAssistantEvent(
   eventType: string,
   widgetType: string = 'chat',
   cartToken?: string,
-  deviceType?: 'mobile' | 'desktop'
+  deviceType?: 'mobile' | 'desktop',
+  /** Allowlisted event payload (quiz-event-properties.ts), or a trusted
+   * server-built one (quiz_recommendations_served). */
+  properties?: Record<string, unknown> | null
 ) {
   try {
     const normalizedCartToken = normalizeCartToken(cartToken);
@@ -499,6 +542,7 @@ export async function trackAssistantEvent(
         widget_type: widgetType,
         cart_token: normalizedCartToken,
         device_type: deviceType ?? null,
+        ...(properties ? { properties } : {}),
       }])
       .select()
       .single();

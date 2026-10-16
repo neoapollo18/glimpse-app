@@ -172,6 +172,7 @@
   }
 
   var productJsonCache = {};
+  var variantHandles = {};
   function fetchProductJson(handle) {
     if (PREVIEW) {
       return Promise.resolve((PREVIEW.productJson && PREVIEW.productJson[handle]) || null);
@@ -182,6 +183,14 @@
       headers: { 'Accept': 'application/json' },
     })
       .then(function(res) { return res.ok ? res.json() : null; })
+      .then(function(pj) {
+        // Analytics: which product a bare variant id belongs to, so an add
+        // can report the product it added.
+        if (pj && Array.isArray(pj.variants)) {
+          pj.variants.forEach(function(v) { if (v && v.id != null) variantHandles[String(v.id)] = handle; });
+        }
+        return pj;
+      })
       .catch(function() { return null; });
     productJsonCache[handle] = p;
     return p;
@@ -486,7 +495,26 @@
     } catch (e) {}
   }
 
-  function trackEvent(eventType) {
+  // A random id per quiz run (reset on restart), so analytics can follow
+  // one run across events without anything personal.
+  var memorySid = null;
+  function quizSessionId(reset) {
+    var make = function() { return Math.random().toString(36).slice(2, 12) + Date.now().toString(36); };
+    try {
+      var sid = reset ? null : sessionStorage.getItem('gleame-quiz-sid');
+      if (!sid) { sid = make(); sessionStorage.setItem('gleame-quiz-sid', sid); }
+      return sid;
+    } catch (e) {
+      if (reset || !memorySid) memorySid = make();
+      return memorySid;
+    }
+  }
+
+  function productProps(m) {
+    return { h: m && m.productHandle ? m.productHandle : undefined, v: m && m.variantNumericId ? String(m.variantNumericId) : undefined };
+  }
+
+  function trackEvent(eventType, props) {
     if (PREVIEW) return; // draft previews never pollute analytics
     // Neither do on-store previews (tokenized, unlisted merchant test runs).
     if (window.GLEAME_QUIZ_FORCE || window.GLEAME_QUIZ_STORE_PREVIEW) return;
@@ -500,6 +528,10 @@
         deviceType: isMobile() ? 'mobile' : 'desktop',
       };
       if (cartToken) payload.cartToken = cartToken;
+      // Allowlisted server-side per event (quiz-event-properties.ts).
+      var properties = { sid: quizSessionId() };
+      if (props) for (var pk in props) if (props[pk] !== undefined && props[pk] !== null) properties[pk] = props[pk];
+      payload.properties = properties;
       // keepalive: navigation-adjacent events (quiz_view_product fires as
       // the same-tab product link commits) must survive document unload or
       // the funnel's click-through step is systematically undercounted.
@@ -925,7 +957,15 @@
     return fetch(SHOPIFY_APP_URL + '/api/storefront/quiz-recommend', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ shopDomain: shopDomain, criteria: state.criteria }),
+      body: JSON.stringify({
+        shopDomain: shopDomain,
+        criteria: state.criteria,
+        // Analytics: joins the served recommendations to this shopper's
+        // other events; merchant store previews are kept out.
+        cartToken: cartToken || undefined,
+        deviceType: isMobile() ? 'mobile' : 'desktop',
+        storePreview: Boolean(window.GLEAME_QUIZ_FORCE || window.GLEAME_QUIZ_STORE_PREVIEW) || undefined,
+      }),
     }).then(function(res) {
       if (!res.ok) throw new Error('quiz-recommend ' + res.status);
       return res.json();
@@ -1867,9 +1907,23 @@
 
   // Fired synchronously at commit — NOT inside the tap-acknowledge delay,
   // where a fast tab-close would drop the funnel's first-step beacons.
-  function fireAnswerEvents() {
+  function fireAnswerEvents(screenIdx) {
     if (!state.quizStarted) { state.quizStarted = true; trackEvent('quiz_start'); }
-    trackEvent('quiz_question_answered');
+    var qis = typeof screenIdx === 'number' && screens[screenIdx] ? screens[screenIdx] : [];
+    var sent = false;
+    qis.forEach(function(qi) {
+      var a = state.answers[qi];
+      var q = flow && flow.questions[qi];
+      if (!a || !q) return;
+      sent = true;
+      trackEvent('quiz_question_answered', {
+        qi: qi,
+        q: q.axisKey,
+        vals: (a.values || []).slice(0, 16),
+        edit: Boolean(editReturn) || undefined,
+      });
+    });
+    if (!sent) trackEvent('quiz_question_answered');
     reportPreviewPath();
   }
 
@@ -1895,7 +1949,7 @@
   // THAT screen returns to results (editReturn persists until then).
   function finishCommit(screenIdx) {
     committing = false; // acknowledge window over; taps commit again
-    fireAnswerEvents();
+    fireAnswerEvents(screenIdx);
     if (editReturn) {
       var broken = pruneDownstreamAnswers();
       if (broken === -1 && answeredScreenCount() >= screens.length) {
@@ -2399,7 +2453,7 @@
       submitBtn.textContent = 'Saving…';
       submitLead(email, phone)
         .then(function(response) {
-          trackEvent('quiz_lead_submitted');
+          trackEvent('quiz_lead_submitted', { has_email: Boolean(email), has_phone: Boolean(phone) });
           // Discount reveal (migration 077): swap the form for the code
           // instead of advancing. The code arrives in the submit RESPONSE
           // (server only discloses it after a stored lead); the config
@@ -2812,7 +2866,11 @@
         state.t2ComputeDone = false;
         saveState();
         pushStep();
-        trackEvent('quiz_results_shown');
+        trackEvent('quiz_results_shown', {
+          n: state.matches.length,
+          recs: state.matches.slice(0, 12).map(function(m) { return m.productHandle; }).filter(Boolean),
+          partial: state.partial || undefined,
+        });
         render('forward');
       })
       .catch(function() {
@@ -3081,7 +3139,7 @@
     var restartBtn = el('button', 'gq-link-btn', escapeHtml(results.restartLabel || 'Try another look'));
     restartBtn.type = 'button';
     restartBtn.onclick = function() {
-      trackEvent('quiz_restart');
+      trackEvent('quiz_restart', { from: state.screen });
       restartQuiz();
     };
     restartRow.appendChild(restartBtn);
@@ -3206,7 +3264,7 @@
     var restartBtn = el('button', 'gq-link-btn', escapeHtml(results.restartLabel || 'Retake the quiz'));
     restartBtn.type = 'button';
     restartBtn.onclick = function() {
-      trackEvent('quiz_restart');
+      trackEvent('quiz_restart', { from: state.screen });
       restartQuiz();
     };
     restartRow.appendChild(restartBtn);
@@ -3372,14 +3430,14 @@
       if (!href) return node;
       var a = el('a', 'gq-gr-link');
       a.href = href;
-      a.onclick = function() { trackEvent('quiz_view_product'); saveState(); };
+      a.onclick = function() { trackEvent('quiz_view_product', productProps(m)); saveState(); };
       a.appendChild(node);
       return a;
     }
     if (href) {
       // The photo opens the product page too ("See on me" stops its click).
       media.classList.add('gq-gr-media--link');
-      media.onclick = function() { trackEvent('quiz_view_product'); saveState(); window.location.href = href; };
+      media.onclick = function() { trackEvent('quiz_view_product', productProps(m)); saveState(); window.location.href = href; };
     }
     var body = el('div', 'gq-gr-body');
     var name = el('h3', 'gq-gr-name', escapeHtml(m.productName || m.title || ''));
@@ -3421,7 +3479,9 @@
           state.gridAdded[key] = { c: unitCents != null ? unitCents * qty : 0, q: qty };
           saveState();
           showAdded();
-          refreshCartToken().then(function() { trackEvent('quiz_add_to_cart'); });
+          refreshCartToken().then(function() {
+            trackEvent('quiz_add_to_cart', { h: m.productHandle, v: String(variantId), qty: qty, price: unitCents != null ? unitCents * qty : undefined });
+          });
           var bag = gridBag();
           if (bd && bag.count >= bd.minQty && state.gridDiscountApplied !== true && state.gridDiscountState !== 'pending') {
             state.gridDiscountState = 'pending';
@@ -3771,7 +3831,7 @@
       var view = el('a', 'gq-view-link', escapeHtml(results.viewProductLabel || 'View full product') + ' \u2192');
       view.href = '/products/' + encodeURIComponent(m.productHandle) +
         (m.variantNumericId ? '?variant=' + encodeURIComponent(m.variantNumericId) : '');
-      view.onclick = function() { trackEvent('quiz_view_product'); saveState(); };
+      view.onclick = function() { trackEvent('quiz_view_product', productProps(m)); saveState(); };
       body.appendChild(view);
     }
 
@@ -3882,7 +3942,9 @@
             bagLink.href = '/cart';
             btn.parentNode.insertBefore(bagLink, btn.nextSibling);
           }
-          refreshCartToken().then(function() { trackEvent('quiz_add_to_cart'); });
+          refreshCartToken().then(function() {
+            trackEvent('quiz_add_to_cart', { h: variantHandles[String(variantId)], v: String(variantId), qty: quantity });
+          });
           noteQuizAdd(variantId, quantity);
           setTimeout(function() {
             btn.classList.remove('is-added');
@@ -3898,6 +3960,15 @@
             btn.disabled = false;
           }, 2600);
         });
+    };
+  }
+
+  function bundleProps(sel) {
+    return {
+      items: (sel.items || []).slice(0, 12).map(function(it) {
+        return { h: variantHandles[String(it.id)], v: String(it.id), qty: it.quantity };
+      }),
+      price: sel.total != null ? sel.total : undefined,
     };
   }
 
@@ -4217,7 +4288,7 @@
             bagLink.href = '/cart';
             foot.appendChild(bagLink);
           }
-          refreshCartToken().then(function() { trackEvent('quiz_add_bundle_to_bag'); });
+          refreshCartToken().then(function() { trackEvent('quiz_add_bundle_to_bag', bundleProps(s)); });
           s.items.forEach(function(it) { quizAdds[String(it.id)] = (quizAdds[String(it.id)] || 0) + it.quantity; });
           if (qualifies && bundleCodeState !== 'applied') {
             bundleCodeState = 'pending';
@@ -4344,7 +4415,7 @@
             bagLink.href = '/cart';
             btn.parentNode.insertBefore(bagLink, btn.nextSibling);
           }
-          refreshCartToken().then(function() { trackEvent('quiz_add_bundle_to_bag'); });
+          refreshCartToken().then(function() { trackEvent('quiz_add_bundle_to_bag', bundleProps(s)); });
           if (bd && itemCount(s.items) >= bd.minQty) {
             applyBundleDiscount().then(function(applied) {
               if (!applied || !note) return;
@@ -4436,7 +4507,7 @@
         addToBag(variant.id, 1).then(function() {
           add.textContent = 'Added \u2713';
           add.classList.add('is-added');
-          refreshCartToken().then(function() { trackEvent('quiz_cross_sell_add'); });
+          refreshCartToken().then(function() { trackEvent('quiz_cross_sell_add', { h: entry.handle, v: String(variant.id) }); });
         }).catch(function() {
           add.disabled = false;
           add.textContent = '+ Add';
@@ -4527,6 +4598,7 @@
   }
 
   function restartQuiz() {
+    quizSessionId(true);
     pickedVariants = {};
     quizAdds = {};
     bundleCodeState = null;
@@ -5472,7 +5544,7 @@
       submitBtn.textContent = 'Saving…';
       submitLead(email, phone)
         .then(function(response) {
-          trackEvent('quiz_lead_submitted');
+          trackEvent('quiz_lead_submitted', { has_email: Boolean(email), has_phone: Boolean(phone) });
           var code = (response && response.discountCode) || lead.discountCode;
           var message = (response && response.discountMessage) || lead.discountMessage;
           state.leadDone = true;
@@ -5664,7 +5736,7 @@
     var view = el('a', 'gq-view-link gq-tpl-view', escapeHtml(label || results.viewProductLabel || 'View full product') + ' →');
     view.href = '/products/' + encodeURIComponent(m.productHandle) +
       (m.variantNumericId ? '?variant=' + encodeURIComponent(m.variantNumericId) : '');
-    view.onclick = function() { trackEvent('quiz_view_product'); saveState(); };
+    view.onclick = function() { trackEvent('quiz_view_product', productProps(m)); saveState(); };
     return view;
   }
 
@@ -5822,7 +5894,7 @@
     var restartBtn = el('button', 'gq-link-btn', escapeHtml(results.restartLabel || 'Try another look'));
     restartBtn.type = 'button';
     restartBtn.onclick = function() {
-      trackEvent('quiz_restart');
+      trackEvent('quiz_restart', { from: state.screen });
       restartQuiz();
     };
     restartRow.appendChild(restartBtn);

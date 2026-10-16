@@ -4,6 +4,7 @@ import {
   findShopByDomain,
   shopHasValidAccess,
   getChatAssistantConfig,
+  trackAssistantEvent,
   type MultiCriteria,
 } from "../lib/supabase.server";
 import { checkRateLimit, getClientIP } from "../lib/rate-limiter.server";
@@ -51,9 +52,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     } catch {
       return json({ error: "Invalid JSON body" }, { status: 400, headers: CORS_HEADERS });
     }
-    const { shopDomain, criteria: rawCriteria } = (body ?? {}) as {
+    const { shopDomain, criteria: rawCriteria, cartToken, deviceType, storePreview } = (body ?? {}) as {
       shopDomain?: string;
       criteria?: unknown;
+      cartToken?: unknown;
+      deviceType?: unknown;
+      storePreview?: unknown;
     };
 
     if (!shopDomain || typeof shopDomain !== "string") {
@@ -122,6 +126,32 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     const result = await computeQuizRecommendations({ verifiedShop, verifiedDomain, chatConfig, criteria, clientIP });
+
+    // Analytics (2026-10-15 revamp): what this shopper answered and what the
+    // quiz recommended, for every finished quiz (not only email leads).
+    // Server-built from validated criteria and our own matches. Merchant
+    // test runs on the on-store preview send storePreview and stay out.
+    if (storePreview !== true && Array.isArray(result.matches) && result.matches.length > 0) {
+      const token = typeof cartToken === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(cartToken.trim().split("?")[0])
+        ? cartToken.trim().split("?")[0]
+        : undefined;
+      const device = deviceType === "mobile" || deviceType === "desktop" ? deviceType : undefined;
+      const numeric = (v: unknown) => {
+        const m = /(\d{1,20})$/.exec(String(v ?? ""));
+        return m ? m[1] : null;
+      };
+      trackAssistantEvent(verifiedDomain, "quiz_recommendations_served", "quiz", token, device, {
+        criteria,
+        partial: Boolean(result.partial),
+        n: result.matches.length,
+        recs: result.matches.slice(0, 12).map((m, i) => ({
+          h: m.productHandle,
+          p: numeric(m.productId),
+          v: m.variantNumericId != null ? String(m.variantNumericId) : null,
+          r: i + 1,
+        })),
+      }).catch((err) => console.error("quiz_recommendations_served log failed:", err));
+    }
     return json(result, { headers: CORS_HEADERS });
   } catch (err) {
     console.error("Quiz recommend error:", err);

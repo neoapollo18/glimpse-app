@@ -2,6 +2,7 @@ import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { trackTransformationEvent, trackAssistantEvent, findShopByDomain } from "../lib/supabase.server";
 import { checkRateLimit, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
+import { sanitizeQuizEventProperties } from "../lib/quiz-event-properties";
 
 // Simple event tracking endpoint for widget views and add-to-cart events
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -41,7 +42,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   try {
     const body = await request.json();
-    const { shopDomain, productId, eventType, widgetType, cartToken, deviceType } = body;
+    const { shopDomain, productId, eventType, widgetType, cartToken, deviceType, properties } = body;
 
     // Product-level events (tied to a specific product page widget) vs.
     // assistant-level funnel events (shop-wide, no product). The chat assistant
@@ -180,7 +181,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         eventType,
         widgetType || 'chat',
         sanitizedCartToken,
-        sanitizedDeviceType
+        sanitizedDeviceType,
+        // Quiz analytics payload, allowlisted per event (no free text).
+        typeof eventType === 'string' && eventType.startsWith('quiz_')
+          ? sanitizeQuizEventProperties(eventType, properties)
+          : null
       ).catch(err => {
         console.error('Failed to track assistant event:', err);
       });

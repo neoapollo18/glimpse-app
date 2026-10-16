@@ -197,3 +197,36 @@ describe("Shopify Customer Events mirror", () => {
     expect(publish).not.toHaveBeenCalled();
   });
 });
+
+describe("analytics payloads on track-event (2026-10-15 revamp)", () => {
+  it("answers, results and the quiz run id ride on events; recommend carries the cart", async () => {
+    const root = await boot();
+    (root.querySelector(".gq-intro-question .gq-chip, .gq-intro-question .gq-option") as HTMLElement).click();
+    await wait(220 + SWAP);
+    (root.querySelector(".gq-option-block button") as HTMLElement).click();
+    await wait(220 + SWAP);
+    for (let i = 0; i < 6; i++) await tick();
+
+    const calls = ((window as any).fetch as ReturnType<typeof vi.fn>).mock.calls;
+    const bodies = calls
+      .filter((c) => String(c[0]).includes("/api/storefront/track-event"))
+      .map((c) => JSON.parse(String((c[1] as any)?.body || "{}")));
+    const answered = bodies.filter((b) => b.eventType === "quiz_question_answered");
+    expect(answered.map((b) => [b.properties.qi, b.properties.q, b.properties.vals])).toEqual([
+      [0, "vibe", ["full_glam"]],
+      [1, "finish", ["creme"]],
+    ]);
+    const sids = new Set(bodies.map((b) => b.properties && b.properties.sid));
+    expect(sids.size).toBe(1);
+    expect([...sids][0]).toMatch(/^[a-z0-9]{8,40}$/);
+    const results = bodies.find((b) => b.eventType === "quiz_results_shown");
+    expect(results.properties.recs).toEqual(["red-flare", "golden-hour"]);
+    expect(results.properties.n).toBe(2);
+
+    const rec = calls.find((c) => String(c[0]).includes("/api/storefront/quiz-recommend"));
+    const recBody = JSON.parse(String((rec![1] as any).body));
+    expect(recBody.deviceType).toBe("desktop");
+    expect(recBody.storePreview).toBeUndefined();
+  });
+});
+
