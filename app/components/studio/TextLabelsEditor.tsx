@@ -1,7 +1,10 @@
-import { useMemo, useState } from "react";
-import { Banner, BlockStack, Icon, InlineStack, Text, TextField } from "@shopify/polaris";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useFetcher } from "@remix-run/react";
+import { Banner, BlockStack, Button, Checkbox, Icon, InlineStack, Select, Spinner, Text, TextField } from "@shopify/polaris";
 import { ChevronDownIcon, ChevronRightIcon, SearchIcon } from "@shopify/polaris-icons";
 import { EditorHeader, useSettingsAutosave } from "./SettingsEditors";
+import type { StudioActionData } from "../../routes/studio";
+import { TRANSLATE_LANGUAGES } from "../../lib/quiz-translate";
 import {
   UI_TEXT_ENTRIES,
   UI_TEXT_GROUPS,
@@ -39,6 +42,134 @@ function varsHelp(entry: UiTextEntry): string | undefined {
   return entry.help ? `${entry.help} ${line}` : line;
 }
 
+function initialValues(settings: Record<string, unknown>, template: string | null): Record<string, string> {
+  const overrides = sanitizeUiText(settings.quiz_ui_text);
+  const out: Record<string, string> = {};
+  for (const e of UI_TEXT_ENTRIES) {
+    if (e.column) {
+      const v = settings[e.key];
+      out[e.key] = typeof v === "string" ? v : uiTextDefault(e, template);
+    } else {
+      out[e.key] = overrides[e.key] ?? uiTextDefault(e, template);
+    }
+  }
+  return out;
+}
+
+// Translate this quiz: Gleame machine-translates the quiz's current text
+// (translate-quiz intent) and saves it like any edit, after a labeled
+// restore point.
+function TranslateQuiz({
+  chatBusy,
+  onTranslated,
+}: {
+  chatBusy: boolean;
+  onTranslated: (data: StudioActionData) => void;
+}) {
+  const fetcher = useFetcher<StudioActionData>();
+  const [language, setLanguage] = useState<string>("French");
+  const [other, setOther] = useState("");
+  const [formality, setFormality] = useState<"informal" | "formal">("informal");
+  const [content, setContent] = useState(true);
+  const busy = fetcher.state !== "idle";
+  const target = language === "other" ? other.trim() : language;
+
+  const handled = useRef<StudioActionData | null>(null);
+  useEffect(() => {
+    if (fetcher.state !== "idle" || !fetcher.data || handled.current === fetcher.data) return;
+    handled.current = fetcher.data;
+    if (fetcher.data.ok) onTranslated(fetcher.data);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetcher.state, fetcher.data]);
+
+  const submit = () => {
+    const fd = new FormData();
+    fd.append("intent", "translate-quiz");
+    fd.append("language", target);
+    fd.append("formality", formality);
+    fd.append("content", String(content));
+    fetcher.submit(fd, { method: "POST", action: "/studio" });
+  };
+  const result = fetcher.state === "idle" && fetcher.data && fetcher.data.intent === "translate-quiz" ? fetcher.data : null;
+
+  return (
+    <div style={{ border: "1px solid #E3E3E3", borderRadius: 12, padding: 12, background: "#FAFAFA" }}>
+      <BlockStack gap="300">
+        <Text as="h4" variant="headingSm">
+          Translate this quiz
+        </Text>
+        <InlineStack gap="200" wrap={false}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <Select
+              label="Language"
+              options={[...TRANSLATE_LANGUAGES.map((l) => ({ label: l, value: l })), { label: "Other…", value: "other" }]}
+              value={language}
+              onChange={setLanguage}
+              disabled={busy || chatBusy}
+            />
+          </div>
+          <div style={{ width: 130, flexShrink: 0 }}>
+            <Select
+              label="Tone"
+              options={[
+                { label: "Informal", value: "informal" },
+                { label: "Formal", value: "formal" },
+              ]}
+              value={formality}
+              onChange={(v) => setFormality(v === "formal" ? "formal" : "informal")}
+              disabled={busy || chatBusy}
+              helpText={formality === "informal" ? "tu, tú, du" : "vous, usted, Sie"}
+            />
+          </div>
+        </InlineStack>
+        {language === "other" && (
+          <TextField
+            label="Which language?"
+            value={other}
+            onChange={setOther}
+            placeholder="e.g. Brazilian Portuguese"
+            autoComplete="off"
+            disabled={busy || chatBusy}
+          />
+        )}
+        <Checkbox
+          label="Also translate headlines, questions, answers and why-this-fits lines"
+          checked={content}
+          onChange={setContent}
+          disabled={busy || chatBusy}
+          helpText={content ? undefined : "Only the buttons and labels on this page are translated."}
+        />
+        <InlineStack gap="200" blockAlign="center">
+          <Button onClick={submit} loading={busy} disabled={chatBusy || !target}>
+            {`Translate into ${target || "…"}`}
+          </Button>
+          {busy && (
+            <InlineStack gap="100" blockAlign="center">
+              <Spinner size="small" />
+              <Text as="span" variant="bodySm" tone="subdued">
+                Translating, usually under 20 seconds
+              </Text>
+            </InlineStack>
+          )}
+        </InlineStack>
+        {result && !result.ok && result.error && (
+          <Banner tone="critical">{result.error}</Banner>
+        )}
+        {result && result.ok && (
+          <Banner tone="success">
+            {`Translated ${result.translated ?? 0} lines.`}
+            {result.untranslated ? ` ${result.untranslated} stayed as they were (edited meanwhile, or the translation didn’t keep its {placeholders}).` : ""}
+            {" "}Review any line below. To undo, restore “before translating” in Version history on the Live tab.
+          </Banner>
+        )}
+        <Text as="p" variant="bodySm" tone="subdued">
+          Changes your live quiz in one go and saves a restore point first. Product names and brand names stay as they are.
+        </Text>
+      </BlockStack>
+    </div>
+  );
+}
+
 export function TextLabelsEditor({
   settings,
   template,
@@ -64,19 +195,7 @@ export function TextLabelsEditor({
   );
 
   // Pre-filled: the merchant's text where set, else the default.
-  const [values, setValues] = useState<Record<string, string>>(() => {
-    const overrides = sanitizeUiText(settings.quiz_ui_text);
-    const out: Record<string, string> = {};
-    for (const e of UI_TEXT_ENTRIES) {
-      if (e.column) {
-        const v = settings[e.key];
-        out[e.key] = typeof v === "string" ? v : uiTextDefault(e, template);
-      } else {
-        out[e.key] = overrides[e.key] ?? uiTextDefault(e, template);
-      }
-    }
-    return out;
-  });
+  const [values, setValues] = useState<Record<string, string>>(() => initialValues(settings, template));
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Partial<Record<UiTextGroupId, boolean>>>({ nav: true });
 
@@ -116,6 +235,15 @@ export function TextLabelsEditor({
           {error}
         </Banner>
       )}
+      <TranslateQuiz
+        chatBusy={chatBusy}
+        onTranslated={(d) => {
+          // The loader has revalidated by the time the fetcher settles, so
+          // `settings` here is already the translated row.
+          setValues(initialValues(settings, template));
+          onPreviewUpdate({ flow: d.previewFlow, config: d.previewConfig });
+        }}
+      />
       <TextField
         label="Search text"
         labelHidden

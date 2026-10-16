@@ -165,6 +165,7 @@ export const UI_TEXT_ENTRIES: UiTextEntry[] = [
   { key: "bundleRefused", label: "Bundle discount refused", group: "bag", default: "We couldn’t apply the bundle discount to this cart." },
   { key: "bundleSave", label: "Bundle saving", group: "bag", default: "Save {amount}", vars: ["amount"] },
   { key: "bundleRowHint", label: "Bundle discount hint (template)", group: "bag", default: "Bundle {n}+ to save {amount}", vars: ["n", "amount"], scope: ["template"] },
+  { key: "rangeOr", label: "Pick range", group: "bag", default: "{min} or {max}", vars: ["min", "max"], varHints: { min: "the fewest", max: "the most" }, scope: ["grid"], help: "Fills {range} in the mix & match bar." },
   { key: "gridAdded", label: "Added (grid cards)", group: "bag", default: "Added", scope: ["grid"] },
   { key: "gridBundleBar", label: "Mix & match bar", group: "bag", default: "**Mix & match:** add any {range} and save {discount}", vars: ["range", "discount"], scope: ["grid"], help: "**Stars** make text bold." },
   { key: "gridAddedCount", label: "Mix & match progress", group: "bag", default: "**{n} of {min}** added", vars: ["n", "min"], scope: ["grid"] },

@@ -42,6 +42,9 @@ import { buildPreviewFlow, buildPreviewQuizConfig } from "../lib/quiz-preview.se
 import { withShopSaveLock } from "../lib/shop-save-lock.server";
 import { getLatestSessionId } from "../lib/quiz-copilot.server";
 import { isClaudeConfigured } from "../lib/claude.server";
+import { applyTranslations, collectTranslatable } from "../lib/quiz-translate";
+import { translateItems } from "../lib/quiz-translate.server";
+import { checkRateLimit } from "../lib/rate-limiter.server";
 import { getGenStatus } from "../lib/gen-status.server";
 import { shopNeedsBilling } from "../lib/billing-gate.server";
 import { draftQuestionNotes, type NotesDraft } from "../lib/guidance-generator.server";
@@ -610,6 +613,9 @@ export type StudioActionData = {
   previewConfig?: unknown;
   /** AI-drafted logic notes (draft-notes intent). */
   notesDraft?: NotesDraft;
+  /** translate-quiz: lines translated / left as they were. */
+  translated?: number;
+  untranslated?: number;
 };
 
 const NOTE_KEY_RE = /^[a-z_][a-z0-9_]*$/;
@@ -736,6 +742,54 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       // NOTE (V3-SPEC 6.2/8.1): there is no "start with a blank question"
       // intent anymore. Generation is blocking; a shop without a quiz is
       // routed to /app/onboarding/scope by the client, never seeded here.
+      case "translate-quiz": {
+        // Text & labels → Translate this quiz: machine-translates the
+        // labels (and, by default, the headlines, questions, answers and
+        // why lines) into the merchant's language. Claude runs outside the
+        // save lock; the write re-reads under it and only replaces text
+        // that is still what was sent. A labeled snapshot comes first, so
+        // Version history undoes it in one click.
+        const language = String(formData.get("language") ?? "").trim().slice(0, 60);
+        const formality = formData.get("formality") === "formal" ? "formal" : "informal";
+        const content = String(formData.get("content") ?? "true") !== "false";
+        if (!language || !/^[\p{L}][\p{L} ()\-,.]*$/u.test(language)) {
+          return json({ ok: false, error: "Pick a language to translate into.", intent }, { status: 400 });
+        }
+        if (!isClaudeConfigured()) {
+          return json({ ok: false, error: "Translation isn't available right now.", intent });
+        }
+        if (!checkRateLimit(`translate-quiz:${shop.id}`, 6, 60 * 60 * 1000).allowed) {
+          return json({ ok: false, error: "You've translated this quiz several times in the last hour. Try again a little later.", intent });
+        }
+        const before = await captureLiveConfig(shop.id);
+        const tpl = isTemplateId(before.settings.quiz_template) ? before.settings.quiz_template : null;
+        const items = collectTranslatable(before, { content, template: tpl });
+        const { translations } = await translateItems(items, language, formality, shopDomain);
+        if (Object.keys(translations).length === 0) {
+          return json({ ok: false, error: "The translation didn't come back, so nothing was changed. Try again.", intent });
+        }
+        const result = await withShopSaveLock(shop.id, async () => {
+          const current = await captureLiveConfig(shop.id);
+          const { draft, applied, skipped } = applyTranslations(current, items, translations, tpl);
+          const saved = await saveLiveQuizConfig(shop.id, draft, {
+            preWriteConfig: current,
+            snapshotLabel: `before translating to ${language}`,
+            forceSnapshot: true,
+          });
+          if (!saved.ok) return { ok: false as const, error: saved.error ?? "Save failed" };
+          return { ok: true as const, draft, applied, skipped };
+        });
+        if (!result.ok) return json({ ok: false, error: result.error, intent });
+        const translatedConfig = await buildPreviewQuizConfig(shopDomain, result.draft).catch(() => null);
+        return json({
+          ok: true,
+          intent,
+          translated: result.applied,
+          untranslated: result.skipped,
+          previewFlow: buildPreviewFlow(result.draft),
+          previewConfig: translatedConfig,
+        });
+      }
       case "set-live": {
         // The status menu's surface toggle: the one deliberate action left
         // from the publish era. Config edits are already on the site.

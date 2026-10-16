@@ -3454,7 +3454,7 @@
     if (!/\{(min|range)\}/.test(t) && !(bd && /\{discount\}/.test(t) && !discountText(bd))) return t;
     var min = bd ? bd.minQty : Math.max(2, Math.floor(Number(results.bundleSize) || 2));
     var target = bd ? bundleTarget(bd, results) : min;
-    var range = target > min ? min + ' or ' + target : min + '+';
+    var range = target > min ? T('rangeOr', '{min} or {max}', { min: min, max: target }) : min + '+';
     t = t.replace(/\{range\}/g, range).replace(/\{min\}/g, String(min));
     if (!bd || !discountText(bd)) t = t.replace(/[\s,]*(?:and\s+)?save\s*\{discount\}/gi, '');
     return t;

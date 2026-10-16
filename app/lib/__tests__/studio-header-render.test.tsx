@@ -256,3 +256,14 @@ describe("Text & labels, results buttons, why this fits (2026-10-16)", () => {
     expect(inputs[1].value).toBe("");
   });
 });
+
+describe("Translate this quiz", () => {
+  it("offers a language, tone and the content checkbox above the labels", () => {
+    const { text } = mount(<TextLabelsEditor settings={{}} template={null} chatBusy={false} onPreviewUpdate={() => {}} />);
+    expect(text()).toContain("Translate this quiz");
+    expect(text()).toContain("Translate into French");
+    expect(text()).toContain("Also translate headlines, questions, answers and why-this-fits lines");
+    const selects = Array.from(document.querySelectorAll("select")) as HTMLSelectElement[];
+    expect(selects.map((s) => s.value)).toEqual(["French", "informal"]);
+  });
+});
