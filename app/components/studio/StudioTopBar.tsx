@@ -1,14 +1,12 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { Badge, Button, Popover, Box, BlockStack, Text, ProgressBar, Tooltip } from "@shopify/polaris";
-import { ClockIcon } from "@shopify/polaris-icons";
 import { useCatalogSync } from "../../lib/use-catalog-sync";
 import type { StudioTab } from "../../routes/studio";
 
-// V2-SPEC 2.1 top bar (56px): inline-editable quiz name left; centered
-// segmented tabs Build / Check matches; right side the Live/Off status menu,
-// version history, "View on my store" (secondary) + "Publish" (primary,
-// opens the publish sheet). The Live tab folded into the status menu and
-// the history button on 2026-10-15.
+// V2-SPEC 2.1 top bar (56px): inline-editable quiz name + Live/Ready badge
+// left; centered segmented tabs Build / Check matches / Live; right side
+// "View on my store" (secondary) + "Publish" (primary, opens the publish
+// sheet). The Live tab is back (2026-10-16) with the setup guide.
 //
 // V3-SPEC 6.4: while the QUIZ_TEMPLATES_LIVE=off emergency kill is set, a
 // template quiz cannot reach the storefront, so "View on my store" is
@@ -22,11 +20,12 @@ const PREVIEW_ONLY_TIP =
   "Template quizzes are paused on storefronts right now. While paused, shoppers see the classic quiz layout.";
 
 const TEMPLATE_PENDING_TIP =
-  "Your quiz is on, but shoppers still see your previous quiz layout. Open the status menu to put this template live.";
+  "Your quiz is on, but shoppers still see your previous quiz layout. Open the Live tab to put this template live.";
 
 const TABS: Array<{ id: StudioTab; label: string }> = [
   { id: "build", label: "Build" },
   { id: "matches", label: "Check matches" },
+  { id: "live", label: "Live" },
 ];
 
 export function StudioTopBar({
@@ -42,10 +41,7 @@ export function StudioTopBar({
   onPublishClick,
   previewOnly,
   templatePending,
-  liveControl,
-  hasVersions,
-  onOpenHistory,
-  onTemplatePendingClick,
+  live,
 }: {
   tab: StudioTab;
   onTabChange: (t: StudioTab) => void;
@@ -62,11 +58,8 @@ export function StudioTopBar({
   /** Template quiz that is on but not put live yet: the canvas shows the
    * template while shoppers get the classic layout (spec 6.4). */
   templatePending?: boolean;
-  /** The Live/Off status menu (LiveStatusControl). */
-  liveControl: ReactNode;
-  hasVersions: boolean;
-  onOpenHistory: () => void;
-  onTemplatePendingClick: () => void;
+  /** Storefront surface on (Live badge) or off (Ready badge). */
+  live: boolean;
 }) {
   const [syncOpen, setSyncOpen] = useState(false);
   const sync = useCatalogSync();
@@ -128,6 +121,15 @@ export function StudioTopBar({
           onFocus={(e) => (e.target.style.borderColor = "#C9CCCF")}
           onBlurCapture={(e) => (e.target.style.borderColor = "transparent")}
         />
+        {!previewOnly && (
+          <button
+            onClick={() => onTabChange("live")}
+            style={{ border: 0, background: "transparent", padding: 0, cursor: "pointer", flexShrink: 0 }}
+            title={live ? "Your quiz is on your store" : "Not on your store yet. Open the Live tab to set it up."}
+          >
+            <Badge tone={live ? "success" : undefined}>{live ? "Live" : "Ready"}</Badge>
+          </button>
+        )}
         {previewOnly && (
           <span style={{ flexShrink: 0 }}>
             <Tooltip content={PREVIEW_ONLY_TIP}>
@@ -137,7 +139,7 @@ export function StudioTopBar({
         )}
         {!previewOnly && templatePending && (
           <button
-            onClick={onTemplatePendingClick}
+            onClick={() => onTabChange("live")}
             style={{ border: 0, background: "transparent", padding: 0, cursor: "pointer", flexShrink: 0 }}
           >
             <Tooltip content={TEMPLATE_PENDING_TIP}>
@@ -245,12 +247,6 @@ export function StudioTopBar({
       </div>
 
       <div className="studio-topbar-right">
-        {liveControl}
-        {hasVersions && (
-          <Tooltip content="Version history">
-            <Button icon={ClockIcon} onClick={onOpenHistory} accessibilityLabel="Version history" />
-          </Tooltip>
-        )}
         {!previewOnly && (
           <Button onClick={onViewStore} loading={viewStoreBusy} disabled={!hasDraft}>
             View on my store

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useFetcher, useRevalidator } from "@remix-run/react";
 import {
   Badge,
@@ -11,7 +11,7 @@ import {
   Modal,
   Text,
   Box,
-  Popover,
+  InlineGrid,
 } from "@shopify/polaris";
 import type { StudioLoaderData, StudioActionData } from "../../routes/studio";
 import type { DraftProblem } from "./draft-problems";
@@ -24,16 +24,15 @@ const NAV_SCOPE = "write_online_store_navigation";
 const SCOPE_DECLINED_LINE =
   "Publishing needs permission to add the Find My Match page to your Online Store. Click Publish again to allow it, or add the Gleame Quiz block from the theme editor instead.";
 
-// V2-SPEC Part 7: the 3-panel Live tab collapses to
+// V2-SPEC Part 7 (Live tab restored 2026-10-16 with the setup guide):
 //   1. PublishSheet — a slide-over reachable from the topbar Publish
 //      button on ANY tab: pre-publish checklist, placement (dedicated
 //      page default), add-to-menu checkbox (default on), one Publish
 //      action through the existing /app/api/publish-quiz mechanics, then
 //      a success state with the live URL.
-//   2. The Live tab itself folded into the top bar (2026-10-15):
-//      LiveStatusControl (Live/Off + URL + surface switch + placements
-//      link), VersionHistoryModal (restore list with preview) and
-//      TemplatePendingBanner over the canvas.
+//   2. LiveTab: status + on/off, the setup guide (video + four manual
+//      steps, collapsed once live), version history (VersionHistoryModal)
+//      and the placements link; TemplatePendingBanner over the canvas.
 
 const MODE_LABELS: Record<string, string> = {
   matrix: "Rules only",
@@ -383,164 +382,318 @@ const statusDot = (color: string) => (
   />
 );
 
-/** Top bar "Live / Off" menu: where the quiz is, the on/off switch, and the
- * template go-live action. */
-export function LiveStatusControl({
+// Setup tutorial (2026-10-16, Shopify asked for an in-app "how to publish"
+// guide): a short video plus the four manual steps for putting the quiz on
+// a store with the native Gleame Quiz block. One-click Publish stays the
+// shortcut for steps 1 to 3.
+export const SETUP_VIDEO_ID = "SXsqr9xmgo4";
+const SETUP_VIDEO_URL = `https://youtu.be/${SETUP_VIDEO_ID}`;
+
+function SetupVideo() {
+  // Click-to-play: the YouTube player loads only when asked for, so the
+  // Live tab stays light and nothing from YouTube loads by default.
+  const [playing, setPlaying] = useState(false);
+  return (
+    <BlockStack gap="150">
+      <div style={{ position: "relative", width: "100%", aspectRatio: "16 / 9", borderRadius: 12, overflow: "hidden", background: "#1a1a1a" }}>
+        {playing ? (
+          <iframe
+            title="How to put the Gleame quiz on your store"
+            src={`https://www.youtube-nocookie.com/embed/${SETUP_VIDEO_ID}?autoplay=1&rel=0`}
+            allow="autoplay; encrypted-media; picture-in-picture"
+            allowFullScreen
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0 }}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setPlaying(true)}
+            aria-label="Play the setup video"
+            style={{ position: "absolute", inset: 0, border: 0, padding: 0, cursor: "pointer", background: "transparent" }}
+          >
+            <img
+              src={`https://i.ytimg.com/vi/${SETUP_VIDEO_ID}/hqdefault.jpg`}
+              alt=""
+              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: 0.85 }}
+            />
+            <span
+              aria-hidden
+              style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)", width: 56, height: 56, borderRadius: "50%", background: "rgba(0,0,0,0.78)", display: "flex", alignItems: "center", justifyContent: "center" }}
+            >
+              <span style={{ width: 0, height: 0, borderTop: "10px solid transparent", borderBottom: "10px solid transparent", borderLeft: "16px solid #fff", marginLeft: 4 }} />
+            </span>
+            <span style={{ position: "absolute", left: 12, bottom: 12, background: "rgba(255,255,255,0.92)", color: "#1a1a1a", fontSize: 12.5, fontWeight: 500, padding: "3px 8px", borderRadius: 6 }}>
+              Watch the full setup
+            </span>
+          </button>
+        )}
+      </div>
+      <Button variant="plain" url={SETUP_VIDEO_URL} external>
+        Watch on YouTube
+      </Button>
+    </BlockStack>
+  );
+}
+
+function SetupStep({ n, title, children, action }: { n: number; title: string; children: ReactNode; action?: ReactNode }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "28px 1fr", gap: 10, padding: "12px 0", borderTop: n > 1 ? "1px solid #E3E3E3" : undefined }}>
+      <span
+        aria-hidden
+        style={{ width: 24, height: 24, borderRadius: "50%", border: "1px solid #C9CCCF", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12.5, color: "#616161" }}
+      >
+        {n}
+      </span>
+      <BlockStack gap="150">
+        <Text as="h4" variant="headingSm">
+          {title}
+        </Text>
+        <Text as="p" variant="bodySm" tone="subdued">
+          {children}
+        </Text>
+        {action ? <InlineStack>{action}</InlineStack> : null}
+      </BlockStack>
+    </div>
+  );
+}
+
+function SetupGuide({ data, quizName, onViewStore, onOpenPublish, previewOnly }: { data: StudioLoaderData; quizName: string; onViewStore: () => void; onOpenPublish: () => void; previewOnly: boolean }) {
+  const handle = data.shopDomain.replace(".myshopify.com", "");
+  const admin = `https://admin.shopify.com/store/${handle}`;
+  const pageName = quizName.trim() || "Find my match";
+  return (
+    <InlineGrid columns={{ xs: 1, md: "2fr 3fr" }} gap="500">
+      <SetupVideo />
+      <BlockStack gap="0">
+        {!previewOnly && (
+          <Box paddingBlockEnd="300">
+            <InlineStack gap="200" blockAlign="center" wrap>
+              <Text as="p" variant="bodySm">
+                Prefer one click? Publish creates the page and adds it to your menu for you (steps 1 to 3).
+              </Text>
+              <Button size="slim" onClick={onOpenPublish}>
+                Publish
+              </Button>
+            </InlineStack>
+          </Box>
+        )}
+        <SetupStep
+          n={1}
+          title="Create the quiz template"
+          action={
+            <Button variant="primary" url={`${admin}/themes/current/editor?template=page`} external>
+              Open theme editor
+            </Button>
+          }
+        >
+          In your theme editor, open the page menu at the top and go to <b>Pages → Create template</b>. Name it <b>find-my-match</b>, then click <b>Add block → Gleame Quiz → Save</b>. Use your live theme: templates made in a draft theme won&rsquo;t show up in the next step.
+        </SetupStep>
+        <SetupStep
+          n={2}
+          title="Create the quiz page"
+          action={
+            <Button url={`${admin}/pages/new`} external>
+              Add a page
+            </Button>
+          }
+        >
+          In Shopify, go to <b>Online Store → Pages → Add page</b>. Title it <b>{pageName}</b>. On the right, under <b>Theme template</b>, choose <b>find-my-match</b>, then click <b>Save</b>.
+        </SetupStep>
+        <SetupStep
+          n={3}
+          title="Add it to your menu"
+          action={
+            <Button url={`${admin}/menus`} external>
+              Open navigation
+            </Button>
+          }
+        >
+          Go to <b>Online Store → Navigation → Main menu</b>, click <b>Add menu item</b>, choose the <b>{pageName}</b> page, then click <b>Save</b>.
+        </SetupStep>
+        <SetupStep
+          n={4}
+          title="Check it on your store"
+          action={previewOnly ? undefined : <Button onClick={onViewStore}>View on my store</Button>}
+        >
+          Take the quiz once as a shopper to make sure everything looks right. Your quiz needs an Online Store 2.0 theme.
+        </SetupStep>
+      </BlockStack>
+    </InlineGrid>
+  );
+}
+
+// ---------------------------------------------------------------------
+// Live tab (restored 2026-10-16): status and on/off first, then the setup
+// guide (collapsed once the quiz is live), version history and placements.
+// ---------------------------------------------------------------------
+
+export function LiveTab({
   data,
-  open,
-  onToggle,
-  onClose,
+  quizName,
   onOpenPublish,
   onOpenHistory,
+  onViewStore,
+  viewStoreBusy,
 }: {
   data: StudioLoaderData;
-  open: boolean;
-  onToggle: () => void;
-  onClose: () => void;
+  quizName: string;
   onOpenPublish: () => void;
   onOpenHistory: () => void;
+  onViewStore: () => void;
+  viewStoreBusy: boolean;
 }) {
-  const live = useSetLive();
-  const { setLive, toggling } = live;
-  // An error from an earlier attempt doesn't greet the next opening.
-  const [dismissed, setDismissed] = useState<unknown>(null);
-  useEffect(() => {
-    if (open) setDismissed(live.data ?? null);
-    // Only on opening; a new attempt's response is a new object.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-  const error = live.data && live.data !== dismissed ? live.error : null;
+  const { setLive, toggling, error } = useSetLive();
   const settings = (data.draft?.settings ?? {}) as Record<string, unknown>;
   const questionCount = data.draft?.flow.questions.length ?? 0;
   const ruleCount = data.draft?.flow.rules.length ?? 0;
   const mode = String(settings.recommendation_mode ?? "matrix");
   const surfaceOn = data.quizSurfaceEnabled !== false;
   const matrixWithoutRules = mode === "matrix" && ruleCount === 0;
-  const liveUrl = `https://${data.shopDomain}/pages/find-my-match`;
   const previewOnly = isPreviewOnly(data);
   const awaitingPublish = templateAwaitingPublish(data);
-  const label = surfaceOn ? "Live" : previewOnly ? "Preview only" : "Off";
+  const [showSteps, setShowSteps] = useState(!surfaceOn);
+  useEffect(() => setShowSteps(!surfaceOn), [surfaceOn]);
 
   return (
-    <Popover
-      active={open}
-      onClose={onClose}
-      preferredAlignment="right"
-      activator={
-        // Plain button: Polaris Button takes text only, and the status dot
-        // is the point of this control.
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-label={`Quiz status: ${label}`}
-          aria-expanded={open}
+    <div style={{ flex: 1, overflowY: "auto" }}>
+      <div style={{ maxWidth: 880, margin: "0 auto", padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+        {/* Status */}
+        <div
           style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            height: 32,
-            padding: "0 10px",
-            border: "1px solid #C9CCCF",
-            borderRadius: 8,
-            background: "#fff",
-            fontSize: 13,
-            fontWeight: 600,
-            color: "#202223",
-            cursor: "pointer",
-            whiteSpace: "nowrap",
+            border: `1px solid ${surfaceOn ? "#B4E1C3" : "#E3E3E3"}`,
+            background: surfaceOn ? "#ECF8F0" : "#FFFFFF",
+            borderRadius: 12,
+            padding: "14px 16px",
           }}
         >
-          {statusDot(surfaceOn ? (awaitingPublish ? "#B98900" : "#29845A") : "#8C9196")}
-          {label}
-          <span aria-hidden style={{ fontSize: 10, color: "#6D7175" }}>
-            {open ? "\u25B2" : "\u25BC"}
-          </span>
-        </button>
-      }
-    >
-      <Box padding="400" width="340px">
-        <BlockStack gap="300">
-          <InlineStack gap="200" blockAlign="center" wrap={false}>
-            <Badge tone={surfaceOn ? "success" : "info"}>{surfaceOn ? "Live" : "Off"}</Badge>
-            {surfaceOn && (
-              <a href={liveUrl} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: "#2C6ECB", overflowWrap: "anywhere" }}>
-                {liveUrl.replace(/^https:\/\//, "")}
-              </a>
-            )}
-          </InlineStack>
-          {previewOnly && (
-            <Text as="p" variant="bodySm" tone="subdued">
-              {PREVIEW_ONLY_LINE}
-            </Text>
-          )}
-          {awaitingPublish && (
-            <Banner tone="warning">
-              <BlockStack gap="200">
-                <Text as="p" variant="bodySm">
-                  Your store is still showing your previous quiz layout. Put this template live to
-                  show it where your quiz already appears.
-                </Text>
-                <InlineStack>
-                  {/* Re-sends Turn on (which stamps the template live), not
-                      the full Publish, which would also create a page and a
-                      main-menu link. */}
-                  <Button variant="primary" loading={toggling} onClick={() => setLive(true)}>
-                    Put template live
+          <BlockStack gap="200">
+            <InlineStack align="space-between" blockAlign="center" gap="300">
+              <InlineStack gap="200" blockAlign="center" wrap={false}>
+                {statusDot(surfaceOn ? (awaitingPublish ? "#B98900" : "#29845A") : "#8C9196")}
+                <BlockStack gap="050">
+                  <Text as="p" variant="headingSm" tone={surfaceOn ? "success" : undefined}>
+                    {surfaceOn ? "Your quiz is live on your store" : previewOnly ? "Your quiz is in preview" : "Your quiz is ready. Add it to your store."}
+                  </Text>
+                  {!surfaceOn && !previewOnly && (
+                    <Text as="span" variant="bodySm" tone="subdued">
+                      Four steps, about two minutes, or one click with Publish.
+                    </Text>
+                  )}
+                </BlockStack>
+              </InlineStack>
+              <InlineStack gap="200">
+                {!previewOnly && (
+                  <Button variant={surfaceOn ? "primary" : undefined} onClick={onViewStore} loading={viewStoreBusy}>
+                    View on my store
                   </Button>
-                </InlineStack>
-              </BlockStack>
-            </Banner>
-          )}
-          <Text as="p" variant="bodySm" tone="subdued">
-            Edits save to {data.shopDomain} as you make them; shoppers see the quiz only while it's on.{" "}
-            {questionCount} {questionCount === 1 ? "question" : "questions"}
-            {ruleCount > 0 ? ` · ${ruleCount} ${ruleCount === 1 ? "rule" : "rules"}` : ""} · {MODE_LABELS[mode] ?? mode}{" "}
-            matching.
-          </Text>
-          {matrixWithoutRules && !surfaceOn && !previewOnly && (
-            <Text as="p" variant="bodySm" tone="subdued">
-              Pin products to answer paths in Check matches before turning the quiz on.
-            </Text>
-          )}
-          {error && <Banner tone="critical">{error}</Banner>}
-          {/* The emergency kill pauses going live, never turning off: a live
-              template quiz keeps its Turn off switch. */}
-          {!(previewOnly && !surfaceOn) && (
-            <InlineStack gap="200">
-              {surfaceOn ? (
-                <Button loading={toggling} onClick={() => setLive(false)}>
-                  Turn off
-                </Button>
-              ) : (
-                <Button
-                  variant="primary"
-                  loading={toggling}
-                  disabled={questionCount === 0 || matrixWithoutRules}
-                  onClick={() => setLive(true)}
-                >
-                  Turn on
-                </Button>
-              )}
-              {!surfaceOn && (
-                <Button variant="plain" onClick={onOpenPublish}>
-                  Publish for the first time
-                </Button>
-              )}
+                )}
+                {/* The emergency kill pauses going live, never turning off. */}
+                {surfaceOn ? (
+                  <Button loading={toggling} onClick={() => setLive(false)}>
+                    Turn off
+                  </Button>
+                ) : !previewOnly ? (
+                  <Button variant="primary" loading={toggling} disabled={questionCount === 0 || matrixWithoutRules} onClick={() => setLive(true)}>
+                    Turn on
+                  </Button>
+                ) : null}
+              </InlineStack>
             </InlineStack>
-          )}
-          <InlineStack gap="300">
-            {data.versions.length > 0 && (
-              <Button variant="plain" onClick={onOpenHistory}>
-                Version history
-              </Button>
+            {previewOnly && (
+              <Text as="p" variant="bodySm" tone="subdued">
+                {PREVIEW_ONLY_LINE}
+              </Text>
             )}
-            <Button variant="plain" url={themeEditorUrl(data.shopDomain)} external>
-              Placement settings
-            </Button>
-          </InlineStack>
-        </BlockStack>
-      </Box>
-    </Popover>
+            {awaitingPublish && (
+              <Banner tone="warning">
+                <BlockStack gap="200">
+                  <Text as="p" variant="bodySm">
+                    Your store is still showing your previous quiz layout. Put this template live to show it where your quiz already appears.
+                  </Text>
+                  <InlineStack>
+                    {/* Re-sends Turn on (which stamps the template live), not
+                        the full Publish, which would also create a page and a
+                        main-menu link. */}
+                    <Button variant="primary" loading={toggling} onClick={() => setLive(true)}>
+                      Put template live
+                    </Button>
+                  </InlineStack>
+                </BlockStack>
+              </Banner>
+            )}
+            <Text as="p" variant="bodySm" tone="subdued">
+              Edits save to {data.shopDomain} as you make them; shoppers see the quiz only while it&rsquo;s on. {questionCount}{" "}
+              {questionCount === 1 ? "question" : "questions"}
+              {ruleCount > 0 ? ` · ${ruleCount} ${ruleCount === 1 ? "rule" : "rules"}` : ""} · {MODE_LABELS[mode] ?? mode} matching.
+            </Text>
+            {matrixWithoutRules && !surfaceOn && !previewOnly && (
+              <Text as="p" variant="bodySm" tone="subdued">
+                Pin products to answer paths in Check matches before turning the quiz on.
+              </Text>
+            )}
+            {error && <Banner tone="critical">{error}</Banner>}
+          </BlockStack>
+        </div>
+
+        {/* Setup guide */}
+        {surfaceOn && !showSteps ? (
+          <div style={{ border: "1px solid #E3E3E3", borderRadius: 12, padding: "12px 16px", background: "#FFFFFF" }}>
+            <InlineStack align="space-between" blockAlign="center">
+              <InlineStack gap="200" blockAlign="center">
+                <span aria-hidden style={{ width: 18, height: 18, borderRadius: "50%", background: "#29845A", color: "#fff", fontSize: 11, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                  ✓
+                </span>
+                <Text as="p" variant="bodyMd">
+                  Setup complete
+                </Text>
+              </InlineStack>
+              <Button variant="plain" onClick={() => setShowSteps(true)}>
+                Show setup steps
+              </Button>
+            </InlineStack>
+          </div>
+        ) : (
+          <Card>
+            <BlockStack gap="400">
+              <InlineStack align="space-between" blockAlign="center">
+                <Text as="h3" variant="headingMd">
+                  Put the quiz on your store
+                </Text>
+                {surfaceOn && (
+                  <Button variant="plain" onClick={() => setShowSteps(false)}>
+                    Hide steps
+                  </Button>
+                )}
+              </InlineStack>
+              <SetupGuide data={data} quizName={quizName} onViewStore={onViewStore} onOpenPublish={onOpenPublish} previewOnly={previewOnly} />
+            </BlockStack>
+          </Card>
+        )}
+
+        {/* Version history */}
+        {data.versions.length > 0 && (
+          <Card>
+            <InlineStack align="space-between" blockAlign="center" gap="300">
+              <BlockStack gap="100">
+                <Text as="h3" variant="headingMd">
+                  Version history
+                </Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Gleame saves restore points as you edit, and before template switches and restores. Preview any version and restore it if you want it back.
+                </Text>
+              </BlockStack>
+              <Button onClick={onOpenHistory}>{`View ${data.versions.length} ${data.versions.length === 1 ? "version" : "versions"}`}</Button>
+            </InlineStack>
+          </Card>
+        )}
+
+        <InlineStack gap="200">
+          <Button variant="plain" url={themeEditorUrl(data.shopDomain)} external>
+            Placement settings in the theme editor
+          </Button>
+        </InlineStack>
+      </div>
+    </div>
   );
 }
 

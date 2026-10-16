@@ -1,9 +1,8 @@
 // @vitest-environment jsdom
 //
-// Render smoke test for the Studio pieces that replaced the Live tab and
-// the Quiz settings page (2026-10-15): the top bar with its Live/Off status
-// menu and version history button, the history modal, and the Matching
-// panel. Studio itself needs an embedded Shopify session, so these mount in
+// Render smoke test for the Studio top bar, the restored Live tab with its
+// setup guide (2026-10-16), the history modal, and the Matching panel that
+// replaced the Quiz settings page. Studio itself needs an embedded Shopify session, so these mount in
 // a memory data router (useFetcher needs one) inside Polaris' AppProvider.
 
 import { describe, it, expect, beforeAll, vi } from "vitest";
@@ -18,7 +17,7 @@ vi.mock("../use-catalog-sync", () => ({
 }));
 
 import { StudioTopBar } from "../../components/studio/StudioTopBar";
-import { LiveStatusControl, VersionHistoryModal } from "../../components/studio/PublishStep";
+import { LiveTab, SETUP_VIDEO_ID, VersionHistoryModal } from "../../components/studio/PublishStep";
 import { MatchSettingsEditor, type MatchSettings } from "../../components/studio/MatchSettingsEditor";
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -59,66 +58,76 @@ function mount(ui: React.ReactElement) {
   return { text: () => document.body.textContent ?? "", root };
 }
 
-describe("Studio header (Live tab folded into the top bar)", () => {
-  it("has no Live tab; status menu, history button, View and Publish sit on the right", () => {
-    const data = studioData();
-    const { text } = mount(
-      <StudioTopBar
-        tab="build"
-        onTabChange={() => {}}
-        quizName="Find Your Vibe"
-        onQuizNameChange={() => {}}
-        hasDraft
-        problemCount={0}
-        catalog={{ syncEnabled: true, cursor: null, productCount: 10 }}
-        onViewStore={() => {}}
-        viewStoreBusy={false}
-        onPublishClick={() => {}}
-        liveControl={
-          <LiveStatusControl data={data} open={false} onToggle={() => {}} onClose={() => {}} onOpenPublish={() => {}} onOpenHistory={() => {}} />
-        }
-        hasVersions
-        onOpenHistory={() => {}}
-        onTemplatePendingClick={() => {}}
-      />,
-    );
+describe("Studio top bar and Live tab", () => {
+  const topBar = (live: boolean) => (
+    <StudioTopBar
+      tab="build"
+      onTabChange={() => {}}
+      quizName="Find Your Vibe"
+      onQuizNameChange={() => {}}
+      hasDraft
+      problemCount={0}
+      catalog={{ syncEnabled: true, cursor: null, productCount: 10 }}
+      onViewStore={() => {}}
+      viewStoreBusy={false}
+      onPublishClick={() => {}}
+      live={live}
+    />
+  );
+  const liveTab = (data: any) => (
+    <LiveTab data={data} quizName="Find Your Vibe" onOpenPublish={() => {}} onOpenHistory={() => {}} onViewStore={() => {}} viewStoreBusy={false} />
+  );
+
+  it("top bar: Build / Check matches / Live tabs, a Live or Ready badge, View and Publish", () => {
+    const on = mount(topBar(true));
     const tabs = Array.from(document.querySelectorAll(".studio-step-pill")).map((b) => b.textContent);
-    expect(tabs).toEqual(["Build", "Check matches"]);
-    expect(document.querySelector('[aria-label="Quiz status: Live"]')).not.toBeNull();
-    expect(document.querySelector('[aria-label="Version history"]')).not.toBeNull();
-    expect(text()).toContain("View on my store");
-    expect(text()).toContain("Publish");
+    expect(tabs).toEqual(["Build", "Check matches", "Live"]);
+    expect(on.text()).toContain("View on my store");
+    expect(on.text()).toContain("Publish");
+    expect(on.text()).not.toContain("Ready");
+    const off = mount(topBar(false));
+    expect(off.text()).toContain("Ready");
   });
 
-  it("open status menu: store link, Turn off, history and placement links", () => {
-    const { text } = mount(
-      <LiveStatusControl data={studioData()} open onToggle={() => {}} onClose={() => {}} onOpenPublish={() => {}} onOpenHistory={() => {}} />,
-    );
-    expect(text()).toContain("review-store.myshopify.com/pages/find-my-match");
+  it("ready quiz: Turn on, one-click Publish, the video and the four setup steps", () => {
+    const { text } = mount(liveTab(studioData({ quizSurfaceEnabled: false })));
+    expect(text()).toContain("Your quiz is ready. Add it to your store.");
+    expect(text()).toContain("Turn on");
+    expect(text()).toContain("Prefer one click?");
+    for (const step of ["Create the quiz template", "Create the quiz page", "Add it to your menu", "Check it on your store"]) {
+      expect(text(), step).toContain(step);
+    }
+    expect(text()).toContain("Title it Find Your Vibe");
+    const links = Array.from(document.querySelectorAll("a")).map((a) => a.getAttribute("href"));
+    expect(links).toContain("https://admin.shopify.com/store/review-store/themes/current/editor?template=page");
+    expect(links).toContain("https://admin.shopify.com/store/review-store/pages/new");
+    expect(links).toContain("https://admin.shopify.com/store/review-store/menus");
+    expect(links).toContain(`https://youtu.be/${SETUP_VIDEO_ID}`);
+    // The YouTube player loads only on click.
+    expect(document.querySelector("iframe")).toBeNull();
+    act(() => (document.querySelector('[aria-label="Play the setup video"]') as HTMLButtonElement).click());
+    expect(document.querySelector("iframe")!.getAttribute("src")).toContain(`youtube-nocookie.com/embed/${SETUP_VIDEO_ID}`);
+  });
+
+  it("live quiz: Turn off, setup collapsed to 'Setup complete' until asked, history and placements", () => {
+    const { text } = mount(liveTab(studioData()));
+    expect(text()).toContain("Your quiz is live on your store");
     expect(text()).toContain("Turn off");
     expect(text()).toContain("3 questions");
     expect(text()).toContain("Rules + AI matching");
-    expect(text()).toContain("Version history");
-    expect(text()).toContain("Placement settings");
+    expect(text()).toContain("Setup complete");
+    expect(text()).not.toContain("Create the quiz template");
+    const show = Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "Show setup steps")!;
+    act(() => show.click());
+    expect(text()).toContain("Create the quiz template");
+    expect(text()).toContain("Hide steps");
+    expect(text()).toContain("View 2 versions");
+    expect(text()).toContain("Placement settings in the theme editor");
   });
 
-  it("an off quiz offers Turn on and first publish; a pending template offers Put template live", () => {
-    const off = mount(
-      <LiveStatusControl data={studioData({ quizSurfaceEnabled: false })} open onToggle={() => {}} onClose={() => {}} onOpenPublish={() => {}} onOpenHistory={() => {}} />,
-    );
-    expect(off.text()).toContain("Turn on");
-    expect(off.text()).toContain("Publish for the first time");
-    const pending = mount(
-      <LiveStatusControl
-        data={studioData({ studio: { template: "t1", templatesLive: true, templateServed: false } })}
-        open
-        onToggle={() => {}}
-        onClose={() => {}}
-        onOpenPublish={() => {}}
-        onOpenHistory={() => {}}
-      />,
-    );
-    expect(pending.text()).toContain("Put template live");
+  it("a pending template offers Put template live", () => {
+    const { text } = mount(liveTab(studioData({ studio: { template: "t1", templatesLive: true, templateServed: false } })));
+    expect(text()).toContain("Put template live");
   });
 
   it("version history lists restore points with Preview and Restore", () => {

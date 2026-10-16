@@ -80,7 +80,7 @@ import {
   type MatchesSelection,
 } from "../components/studio/MatchesTab";
 import {
-  LiveStatusControl,
+  LiveTab,
   PublishSheet,
   TemplatePendingBanner,
   VersionHistoryModal,
@@ -1027,8 +1027,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 // :quizId path param would be fake; the single /studio route carries a
 // ?tab=build|matches|live search param instead (legacy ?step= deep links
 // map onto it).
-// The Live tab folded into the top bar status menu + version history (2026-10-15).
-export type StudioTab = "build" | "matches";
+// Live is back (2026-10-16): status, the setup guide and version history.
+export type StudioTab = "build" | "matches" | "live";
 export type StudioLoaderData = Exclude<
   ReturnType<typeof useLoaderData<typeof loader>>,
   { billingRequired: true }
@@ -1177,8 +1177,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
   const tab = ((): StudioTab => {
     const t = params.get("tab") ?? params.get("step");
     if (t === "matches" || t === "logic") return "matches";
-    // Old ?tab=live / ?step=publish links land on Build; status, on/off and
-    // version history are in the top bar now.
+    if (t === "live" || t === "publish") return "live";
     return "build";
   })();
   const setTab = useCallback(
@@ -1295,7 +1294,6 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
 
   // ---- V2 surfaces state ----
   const [publishOpen, setPublishOpen] = useState(false);
-  const [statusOpen, setStatusOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [viewStoreBusy, setViewStoreBusy] = useState(false);
   const [tplBusy, setTplBusy] = useState(false);
@@ -1809,25 +1807,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
             onPublishClick={() => setPublishOpen(true)}
             previewOnly={previewOnly}
             templatePending={templateAwaitingPublish(data)}
-            liveControl={
-              <LiveStatusControl
-                data={data}
-                open={statusOpen}
-                onToggle={() => setStatusOpen((v) => !v)}
-                onClose={() => setStatusOpen(false)}
-                onOpenPublish={() => {
-                  setStatusOpen(false);
-                  setPublishOpen(true);
-                }}
-                onOpenHistory={() => {
-                  setStatusOpen(false);
-                  setHistoryOpen(true);
-                }}
-              />
-            }
-            hasVersions={data.versions.length > 0}
-            onOpenHistory={() => setHistoryOpen(true)}
-            onTemplatePendingClick={() => setStatusOpen(true)}
+            live={data.quizSurfaceEnabled !== false}
           />
         }
         rail={
@@ -1882,7 +1862,16 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
             {/* Template on but not live yet: shoppers still see the previous
                 layout (was a banner on the Live tab). */}
             <TemplatePendingBanner data={data} />
-            {tab === "matches" ? (
+            {tab === "live" ? (
+            <LiveTab
+              data={data}
+              quizName={quizName}
+              onOpenPublish={() => setPublishOpen(true)}
+              onOpenHistory={() => setHistoryOpen(true)}
+              onViewStore={() => void viewStore()}
+              viewStoreBusy={viewStoreBusy}
+            />
+          ) : tab === "matches" ? (
             <MatchesCenter
               state={matchesState}
               matching={(data.matching ?? null) as MatchingData | null}
