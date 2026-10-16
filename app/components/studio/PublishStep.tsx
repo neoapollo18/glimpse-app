@@ -17,6 +17,7 @@ import type { StudioLoaderData, StudioActionData } from "../../routes/studio";
 import type { DraftProblem } from "./draft-problems";
 import { isQuestionServable } from "../../lib/option-visibility";
 import { useAppBridge } from "@shopify/app-bridge-react";
+import { addQuizBlockUrl } from "../../lib/theme-extension";
 
 // Optional scopes for one-click publish (shopify.app.glimpse-app.toml).
 const PAGE_SCOPE = "write_online_store_pages";
@@ -39,8 +40,6 @@ const MODE_LABELS: Record<string, string> = {
   ai: "AI",
   hybrid: "Rules + AI",
 };
-
-const THEME_EXT_UUID = "1013fc3f-b18d-aa39-07f6-10dfd57397a6749693b0";
 
 /** V3-SPEC 6.4: a template quiz cannot be published while the
  * QUIZ_TEMPLATES_LIVE=off emergency kill is set. Otherwise templates go
@@ -67,10 +66,6 @@ export function templateAwaitingPublish(data: StudioLoaderData): boolean {
 const PREVIEW_ONLY_LINE =
   "Template quizzes are paused on storefronts right now, so publishing is paused for this quiz. While paused, shoppers see the classic quiz layout.";
 
-function themeEditorUrl(shopDomain: string): string {
-  const handle = shopDomain.replace(".myshopify.com", "");
-  return `https://admin.shopify.com/store/${handle}/themes/current/editor?template=page.gleame-quiz&addAppBlockId=${THEME_EXT_UUID}/gleame-quiz&target=newAppsSection`;
-}
 
 // ---------------------------------------------------------------------
 // Publish sheet (slide-over)
@@ -688,7 +683,7 @@ export function LiveTab({
         )}
 
         <InlineStack gap="200">
-          <Button variant="plain" url={themeEditorUrl(data.shopDomain)} external>
+          <Button variant="plain" url={addQuizBlockUrl(data.shopDomain, data.apiKey)} external>
             Placement settings in the theme editor
           </Button>
         </InlineStack>

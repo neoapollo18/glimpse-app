@@ -15,6 +15,7 @@ import { templateRenderable, templateServedLive } from "../lib/template-live.ser
 import { getShopCurrency } from "../lib/shop-currency.server";
 import { getQuizOffers, publicOffersPayload } from "../lib/quiz-offers.server";
 import { verifyStorePreviewToken } from "../lib/app-proxy.server";
+import { storefrontCached } from "../lib/storefront-cache.server";
 import { quizTextPayload, resultsCtaPayload } from "../lib/quiz-ui-text";
 
 /** Template contract the widget must declare (`&tpl=`) to receive template
@@ -46,14 +47,39 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return json({ error: "Missing shopDomain" }, { status: 400, headers: CORS_HEADERS });
   }
 
+  // Every shopper of a shop gets the same payload, so it rides the 20 s
+  // in-process cache (storefront-cache.server.ts). Signed store previews
+  // are per-request and never cached.
+  const result = url.searchParams.get("previewToken")
+    ? await buildQuizConfig(shopDomain, url)
+    : await storefrontCached(shopDomain, `quiz-config|tpl=${url.searchParams.get("tpl") ?? ""}`, () =>
+        buildQuizConfig(shopDomain, url),
+      );
+
+  return json(result.body, {
+    status: result.status,
+    headers:
+      result.status === 200
+        ? {
+            ...CORS_HEADERS,
+            // Preview responses differ from the public one: never share-cache.
+            "Cache-Control": result.preview ? "no-store" : "public, max-age=60",
+          }
+        : CORS_HEADERS,
+  });
+};
+
+type QuizConfigResult = { status: number; body: Record<string, unknown>; preview: boolean };
+
+async function buildQuizConfig(shopDomain: string, url: URL): Promise<QuizConfigResult> {
   const verifiedShop = await findShopByDomain(shopDomain);
   if (!verifiedShop) {
-    return json({ error: "Unknown shop" }, { status: 403, headers: CORS_HEADERS });
+    return { status: 403, body: { error: "Unknown shop" }, preview: false };
   }
 
   const hasAccess = await shopHasValidAccess(verifiedShop.shop_domain);
   if (!hasAccess) {
-    return json({ error: "Subscription inactive" }, { status: 403, headers: CORS_HEADERS });
+    return { status: 403, body: { error: "Subscription inactive" }, preview: false };
   }
 
   const [config, currency, offers] = await Promise.all([
@@ -138,8 +164,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const quizActive = config.enabled &&
     (config.assistant_mode === "quiz" || config.assistant_mode === "both");
 
-  return json(
-    {
+  return {
+    status: 200,
+    preview: isStorePreview,
+    body: {
       // The section renders nothing when the quiz surface isn't active —
       // the block shows a setup hint in the theme editor instead.
       enabled: quizActive,
@@ -326,12 +354,5 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         // stored submit instead.
       },
     },
-    {
-      headers: {
-        ...CORS_HEADERS,
-        // Preview responses differ from the public one: never share-cache.
-        "Cache-Control": isStorePreview ? "no-store" : "public, max-age=60",
-      },
-    }
-  );
-};
+  };
+}

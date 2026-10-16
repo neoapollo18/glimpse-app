@@ -1,5 +1,13 @@
 <!-- Gleame Quiz — "Find My Fit" full-page section block -->
 {%- assign gq_domain = block.settings.manual_shop_domain | default: shop.permanent_domain -%}
+{%- comment -%}
+  Latency (2026-10-16): open the connections the quiz needs while the page
+  is still parsing (config API, answer images), and reserve one viewport of
+  height so the footer doesn't jump when the quiz renders. gleame-quiz.js
+  releases the reserve after its first paint.
+{%- endcomment -%}
+<link rel="preconnect" href="https://glimpse-app-charles.onrender.com" crossorigin>
+<link rel="preconnect" href="https://glglqybgabptczqskbcj.supabase.co">
 <div id="gleame-quiz-root"
      data-shop-domain="{{ gq_domain }}"
      data-cart-token="{{ cart.token }}"
@@ -7,6 +15,7 @@
      style="--gq-max-width: {{ block.settings.content_max_width | default: 1080 }}px;
             --gq-pad-top: {{ block.settings.section_padding_top | default: 24 }}px;
             --gq-pad-bottom: {{ block.settings.section_padding_bottom | default: 64 }}px;
+            {%- unless request.design_mode %} min-height: 100vh;{% endunless %}
             {%- if block.settings.background_color != blank %} --gq-bg: {{ block.settings.background_color }};{% endif %}">
   {%- if request.design_mode -%}
     <div class="gq-editor-hint">
@@ -16,6 +25,33 @@
   {%- endif -%}
 </div>
 
+<script>
+  // Start the quiz's two config requests now instead of after
+  // gleame-quiz.js downloads and runs. The urls must match the ones
+  // gleame-quiz.js builds (bootFetch reuses a promise only on an exact
+  // match, so a mismatch just costs the head start). tpl mirrors
+  // TEMPLATE_PROTOCOL there: bump both together.
+  (function () {
+    try {
+      var api = 'https://glimpse-app-charles.onrender.com/api/storefront/';
+      var shop = encodeURIComponent({{ gq_domain | json }});
+      var configUrl = api + 'quiz-config?shopDomain=' + shop + '&tpl=3';
+      var flowUrl = api + 'recommendation-config?shopDomain=' + shop;
+      window.GLEAME_QUIZ_BOOT = {
+        configUrl: configUrl,
+        flowUrl: flowUrl,
+        config: fetch(configUrl).then(function (r) { return r.json(); }).catch(function () { return null; }),
+        flow: fetch(flowUrl).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
+      };
+    } catch (e) {}
+    // Safety net: never leave an empty reserved viewport if the quiz bundle
+    // fails to load at all.
+    setTimeout(function () {
+      var root = document.getElementById('gleame-quiz-root');
+      if (root && !root.classList.contains('gq-active')) root.style.minHeight = '';
+    }, 15000);
+  })();
+</script>
 {{ 'gleame-quiz.css' | asset_url | stylesheet_tag }}
 {{ 'gleame-camera.css' | asset_url | stylesheet_tag }}
 <script src="{{ 'gleame-camera.js' | asset_url }}" defer></script>

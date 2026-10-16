@@ -5,6 +5,7 @@ import { MAX_REFERENCE_IMAGES, parseReferenceImageUrls } from './reference-image
 import { isOptionVisible } from './option-visibility';
 import { ALL_TIERS_FREE } from './pricing-tiers';
 import { sanitizeProductWhy, sanitizeUiText } from './quiz-ui-text';
+import { invalidateStorefrontCache } from './storefront-cache.server';
 
 if (!process.env.SUPABASE_URL) {
   throw new Error('SUPABASE_URL environment variable is required');
@@ -4033,6 +4034,9 @@ export async function saveChatAssistantConfig(
     console.error(`Error saving chat assistant config for ${shopDomain}:`, error);
     throw new Error(`Failed to save assistant settings: ${error.message}`);
   }
+  // The storefront quiz-config cache would otherwise serve the old row for
+  // up to 20 s (e.g. right after "Make it live").
+  invalidateStorefrontCache(shopDomain);
 }
 
 export async function getAllChatAssistantConfigs(): Promise<

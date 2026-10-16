@@ -184,6 +184,105 @@
     return /^https:\/\//.test(u) ? u : null;
   }
 
+  // ---- Image sizing ----
+  // Merchant uploads and catalog photos arrive full size: ORLY's first
+  // screen loaded two 0.6 MB answer PNGs into ~180px tiles (Lighthouse,
+  // 2026-10-16). Both hosts we serve from resize on the fly: Supabase
+  // Storage's render endpoint (WebP when the browser accepts it) and
+  // Shopify's CDN `width` param. Other hosts, SVGs, GIFs and URLs that
+  // already carry a size pass through untouched. The capture-phase error
+  // listener below swaps a failed resize back to the original, so a
+  // transform outage costs speed, never the image.
+  var SUPABASE_OBJECT_RE = /^(https:\/\/[a-z0-9-]+\.supabase\.co\/storage\/v1)\/object\/public\/([^?#]+)$/i;
+  var SUPABASE_RESIZABLE_RE = /\.(png|jpe?g|webp)$/i;
+  var SHOPIFY_CDN_RE = /^https:\/\/(cdn\.shopify\.com\/|[^/?#]+\/cdn\/shop\/)/i;
+  var IMG_WIDTH = { tile: 540, card: 900, frame: 800, hero: 1400, lifestyle: 1000, thumb: 320 };
+
+  function sizedImageUrl(u, width) {
+    var url = httpsImage(u);
+    if (!url || !(width > 0)) return url;
+    var sb = SUPABASE_OBJECT_RE.exec(url);
+    if (sb) {
+      if (!SUPABASE_RESIZABLE_RE.test(sb[2])) return url;
+      return sb[1] + '/render/image/public/' + sb[2] + '?width=' + width + '&quality=75&resize=contain';
+    }
+    if (SHOPIFY_CDN_RE.test(url)) {
+      var hash = url.indexOf('#');
+      var base = hash === -1 ? url : url.slice(0, hash);
+      var path = base.split('?')[0];
+      if (/\.(svg|gif)$/i.test(path) || /[?&](width|height)=/i.test(base)) return url;
+      return base + (base.indexOf('?') === -1 ? '?' : '&') + 'width=' + width;
+    }
+    return url;
+  }
+
+  // Point an <img> at the resized url, remembering the original for the
+  // fallback. Returns false when there's no usable https url.
+  function setImgSrc(img, u, width) {
+    var orig = httpsImage(u);
+    if (!orig) return false;
+    var sized = sizedImageUrl(orig, width);
+    img.removeAttribute('data-gq-orig');
+    img.removeAttribute('data-gq-sized');
+    if (sized !== orig) {
+      img.setAttribute('data-gq-orig', orig);
+      img.setAttribute('data-gq-sized', sized);
+    }
+    img.src = sized;
+    return true;
+  }
+
+  // HTML-string form of setImgSrc for templated markup.
+  function sizedImgAttrs(u, width) {
+    var orig = httpsImage(u);
+    if (!orig) return '';
+    var sized = sizedImageUrl(orig, width);
+    return 'src="' + escapeHtml(sized) + '"' + (sized !== orig
+      ? ' data-gq-orig="' + escapeHtml(orig) + '" data-gq-sized="' + escapeHtml(sized) + '"'
+      : '');
+  }
+
+  // A resized url that fails (unsupported format, transform outage) falls
+  // back to the original once. Capture phase on document: image errors
+  // don't bubble, and catching it here keeps an img's own onerror (e.g. a
+  // slot collapsing) for when the original fails too. Only the resized url
+  // itself qualifies: a card later swapped to a try-on data: URI keeps its
+  // own error handling.
+  if (!window.__gleameImgFallback) {
+    window.__gleameImgFallback = true;
+    document.addEventListener('error', onSizedImageError, true);
+  }
+  function onSizedImageError(ev) {
+    var img = ev.target;
+    if (!img || img.tagName !== 'IMG') return;
+    var orig = img.getAttribute('data-gq-orig');
+    var sized = img.getAttribute('data-gq-sized');
+    if (!orig || !sized) return;
+    try {
+      if (new URL(sized, document.baseURI).href !== img.src) return;
+    } catch (e) { return; }
+    img.removeAttribute('data-gq-orig');
+    img.removeAttribute('data-gq-sized');
+    ev.stopPropagation();
+    img.src = orig;
+  }
+
+  // First screen only: answer art and slot images are created lazy, which
+  // holds them back until after layout. Promote the ones actually in the
+  // viewport so the intro paints with its imagery.
+  function prioritizeVisibleImages() {
+    var imgs = root.querySelectorAll('img[loading="lazy"]');
+    var vh = window.innerHeight || document.documentElement.clientHeight || 800;
+    var promoted = 0;
+    for (var i = 0; i < imgs.length && promoted < 6; i++) {
+      var r = imgs[i].getBoundingClientRect();
+      if (r.bottom <= 0 || r.top >= vh) continue;
+      imgs[i].setAttribute('fetchpriority', 'high');
+      imgs[i].loading = 'eager';
+      promoted++;
+    }
+  }
+
   var productJsonCache = {};
   var variantHandles = {};
   function fetchProductJson(handle) {
@@ -1316,7 +1415,8 @@
         var fig = el('figure', 'gq-ba-frame' + (f.after ? ' gq-ba-frame-after' : ''));
         fig.appendChild(el('span', 'gq-ba-tag' + (f.after ? ' gq-ba-tag-after' : ''), f.tag));
         var img = el('img', 'gq-ba-img');
-        img.src = f.url; img.alt = f.alt;
+        if (!setImgSrc(img, f.url, IMG_WIDTH.frame)) img.src = f.url;
+        img.alt = f.alt;
         fig.appendChild(img);
         frames.appendChild(fig);
       });
@@ -1407,7 +1507,8 @@
         var b = el('figure', 'gq-ba-frame');
         b.appendChild(el('span', 'gq-ba-tag', TH('beforeTag', 'Before')));
         var bImg = el('img', 'gq-ba-img');
-        bImg.src = landing.beforeImageUrl; bImg.alt = 'Before'; bImg.loading = 'lazy';
+        if (!setImgSrc(bImg, landing.beforeImageUrl, IMG_WIDTH.frame)) bImg.src = landing.beforeImageUrl;
+        bImg.alt = 'Before'; bImg.loading = 'lazy';
         b.appendChild(bImg);
         frames.appendChild(b);
       }
@@ -1415,7 +1516,8 @@
         var a = el('figure', 'gq-ba-frame gq-ba-frame-after');
         a.appendChild(el('span', 'gq-ba-tag gq-ba-tag-after', TH('afterTag', 'After')));
         var aImg = el('img', 'gq-ba-img');
-        aImg.src = landing.afterImageUrl; aImg.alt = 'After'; aImg.loading = 'lazy';
+        if (!setImgSrc(aImg, landing.afterImageUrl, IMG_WIDTH.frame)) aImg.src = landing.afterImageUrl;
+        aImg.alt = 'After'; aImg.loading = 'lazy';
         a.appendChild(aImg);
         frames.appendChild(a);
       }
@@ -1766,7 +1868,8 @@
     switch (variant) {
       case 'visual':
         return (opt.imageUrl
-            ? '<img class="gq-option-img" src="' + escapeHtml(opt.imageUrl) + '" alt="" loading="lazy">'
+            ? '<img class="gq-option-img" ' + (sizedImgAttrs(opt.imageUrl, IMG_WIDTH.tile) || 'src="' + escapeHtml(opt.imageUrl) + '"') +
+              ' alt="" loading="lazy" decoding="async">'
             : '<span class="gq-option-img gq-option-img--empty"></span>') +
           '<span class="gq-option-visual-label">' + label + '</span>' + sub + CHECK_SVG;
       case 'rich': {
@@ -3560,7 +3663,7 @@
         media.classList.add('gq-media--tryon');
         setMediaBadge(media);
       } else if (src) {
-        img.src = src;
+        if (!setImgSrc(img, src, IMG_WIDTH.card)) img.src = src;
       }
       unitCents = priceCentsForRec(pj, m);
       if (unitCents != null) price.textContent = formatMoney(unitCents * qty);
@@ -3868,7 +3971,7 @@
         media.classList.add('gq-media--tryon');
         setMediaBadge(media);
       } else if (src) {
-        img.src = src;
+        if (!setImgSrc(img, src, IMG_WIDTH.card)) img.src = src;
       }
       var unit = priceCentsForRec(pj, m);
       var qty = Math.max(1, m.quantity || 1);
@@ -4285,7 +4388,7 @@
         var img = httpsImage(imageForRec(pj, p.m));
         if (img) {
           var im = document.createElement('img');
-          im.src = img;
+          setImgSrc(im, img, IMG_WIDTH.thumb);
           im.alt = '';
           im.loading = 'lazy';
           p.media.appendChild(im);
@@ -4509,7 +4612,8 @@
     var img = httpsImage((pj && pj.featured_image) || entry.imageUrl);
     if (img) {
       var im = el('img', 'gq-xsell-img');
-      im.src = img; im.alt = ''; im.loading = 'lazy';
+      setImgSrc(im, img, IMG_WIDTH.tile);
+      im.alt = ''; im.loading = 'lazy';
       media.appendChild(im);
     }
     card.appendChild(media);
@@ -4798,13 +4902,25 @@
       slot.style.aspectRatio = rp[0] + ' / ' + rp[1];
       slot.style.setProperty('--gq-slot-pad', ((rp[1] / rp[0]) * 100).toFixed(3) + '%');
     }
-    slot.gqSpec = { key: spec.key, kind: kind, alt: spec.alt || '', initial: spec.initial, color: spec.color || null };
+    slot.gqSpec = { key: spec.key, kind: kind, alt: spec.alt || '', initial: spec.initial, color: spec.color || null, sizePx: spec.sizePx || 0 };
     if (spec.pending) {
       slot.classList.add('gq-slot--unresolved', 'gq-slot--pending');
     } else {
       slotSetUrl(slot, resolveSlotUrl(spec.key, spec.url));
     }
     return slot;
+  }
+
+  // Requested pixel width for a slot's image (~2-3x its rendered size).
+  function slotImageWidth(s) {
+    if (s.sizePx) return Math.max(120, Math.round(s.sizePx * 3));
+    switch (s.kind) {
+      case 'hero': return IMG_WIDTH.hero;
+      case 'lifestyle': return IMG_WIDTH.lifestyle;
+      case 'variant': return IMG_WIDTH.tile; // answer art tiles
+      case 'swatch': case 'icon': case 'logo': case 'thumb': return IMG_WIDTH.thumb;
+      default: return IMG_WIDTH.card;
+    }
   }
 
   // Settle (or re-settle) a slot: an https url resolves it; null applies
@@ -4827,7 +4943,7 @@
       img.loading = 'lazy';
       img.decoding = 'async';
       img.onerror = function() { slotSetUrl(slot, null); }; // never a broken glyph
-      img.src = resolved;
+      setImgSrc(img, resolved, slotImageWidth(s));
       slot.appendChild(img);
       return slot;
     }
@@ -7069,18 +7185,39 @@
     return '&previewToken=' + encodeURIComponent(sp.token) + '&previewId=' + encodeURIComponent(sp.id || '');
   }
 
+  // The theme block (gleame-quiz.liquid) starts both config requests inline,
+  // before this deferred bundle has even downloaded, and parks the promises
+  // on window.GLEAME_QUIZ_BOOT with the exact urls it fetched. Reuse them
+  // only on an exact url match (same shop, same template protocol, no
+  // preview token); anything else fetches here as before.
+  function bootFetch(url, which, parse) {
+    var boot = window.GLEAME_QUIZ_BOOT;
+    if (boot && boot[which + 'Url'] === url && boot[which] && typeof boot[which].then === 'function') {
+      var early = boot[which];
+      boot[which] = null; // one consumer
+      return early;
+    }
+    return fetch(url).then(parse).catch(function() { return null; });
+  }
+
+  // The block reserves one viewport of height (inline min-height) so the
+  // footer doesn't jump when the quiz renders (Lighthouse measured a 0.65
+  // CLS from that). Release it once the quiz has painted, or straight away
+  // when the quiz isn't going to render.
+  function releaseReservedHeight() {
+    if (root.style.minHeight) root.style.minHeight = '';
+  }
+
   function init() {
     Promise.all([
       PREVIEW
         ? Promise.resolve(PREVIEW.config)
-        : fetch(SHOPIFY_APP_URL + '/api/storefront/quiz-config?shopDomain=' + encodeURIComponent(shopDomain) + '&tpl=' + TEMPLATE_PROTOCOL + storePreviewQuery())
-            .then(function(res) { return res.json(); })
-            .catch(function() { return null; }),
+        : bootFetch(SHOPIFY_APP_URL + '/api/storefront/quiz-config?shopDomain=' + encodeURIComponent(shopDomain) + '&tpl=' + TEMPLATE_PROTOCOL + storePreviewQuery(),
+            'config', function(res) { return res.json(); }),
       PREVIEW
         ? Promise.resolve(PREVIEW.flow)
-        : fetch(SHOPIFY_APP_URL + '/api/storefront/recommendation-config?shopDomain=' + encodeURIComponent(shopDomain))
-            .then(function(res) { return res.ok ? res.json() : null; })
-            .catch(function() { return null; }),
+        : bootFetch(SHOPIFY_APP_URL + '/api/storefront/recommendation-config?shopDomain=' + encodeURIComponent(shopDomain),
+            'flow', function(res) { return res.ok ? res.json() : null; }),
     ]).then(function(results) {
       config = results[0];
       flow = results[1];
@@ -7090,10 +7227,12 @@
       // the point of previewing before publish.
       var forced = Boolean(window.GLEAME_QUIZ_FORCE);
       if (!config || (!config.enabled && !forced)) {  // quiz mode off — section stays empty
+        releaseReservedHeight();
         if (PREVIEW) renderPreviewPlaceholder();      // previews explain themselves instead
         return;
       }
       if (!flow || !flow.configured || !Array.isArray(flow.questions) || flow.questions.length === 0) {
+        releaseReservedHeight();
         if (PREVIEW) renderPreviewPlaceholder();
         return;
       }
@@ -7150,6 +7289,8 @@
       } else {
         render('forward');
       }
+      releaseReservedHeight();
+      prioritizeVisibleImages();
       // After the token resolves, so a view joins to the same shopper as
       // their later events (refreshCartToken never rejects).
       tokenReady.then(function() { trackEvent('quiz_view'); });

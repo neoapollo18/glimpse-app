@@ -27,6 +27,7 @@ import {
 } from "../lib/supabase.server";
 import { shouldOfferSetup } from "../lib/setup-offer.server";
 import { SetupOfferModal } from "../components/SetupOfferModal";
+import { QuizPlacementStatus } from "../components/QuizPlacementStatus";
 import { TRYON_WIDGETS_RETIRED } from "../lib/retired-features";
 
 // Z0 (V3-SPEC Part 1): the setup wizard, its step components, the manual
@@ -220,8 +221,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 // (which hosts everything else). Replaces both the old try-on dashboard
 // and the standalone quiz hub page.
 
-const THEME_EXT_UUID = "1013fc3f-b18d-aa39-07f6-10dfd57397a6749693b0";
-
 const GLEAME_HERO_CSS = `
   .gleame-hero { position: relative; overflow: hidden; border-radius: 20px; background: linear-gradient(135deg, #FFFFFF 0%, #F7F3FF 55%, #FFF1EA 100%); border: 1px solid #ECE8F4; padding: 40px 48px; box-shadow: 0 6px 24px rgba(23, 23, 27, 0.06); }
   .gleame-hero-glow { position: absolute; width: 420px; height: 420px; border-radius: 50%; top: -240px; right: -100px; background: radial-gradient(circle, rgba(196, 164, 255, 0.18) 0%, rgba(196, 164, 255, 0) 65%); pointer-events: none; }
@@ -286,10 +285,11 @@ function DashboardView({
   useEffect(() => {
     setNavToken(Math.random().toString(36).slice(2, 10));
   }, []);
-  const openStudio = () => {
+  const openStudio = (step?: string) => {
     setParams(
       (prev) => {
         prev.set("open", "studio");
+        if (step) prev.set("step", step);
         return prev;
       },
       { replace: true },
@@ -344,8 +344,6 @@ function DashboardView({
   // try-on shops (VTO configured, quiz not live) see the selfie try-on count.
   // Off while the try-on widgets are retired (lib/retired-features.ts).
   const showTryOnStat = !TRYON_WIDGETS_RETIRED && quiz.vtoEnabled && !quiz.quizLive;
-  const storeHandle = shopDomain.replace(".myshopify.com", "");
-  const themeEditorUrl = `https://admin.shopify.com/store/${storeHandle}/themes/current/editor?template=index&addAppBlockId=${THEME_EXT_UUID}/gleame-quiz&target=newAppsSection`;
 
   return (
     <Page>
@@ -412,14 +410,20 @@ function DashboardView({
                 >
                   Save
                 </Button>
-                <Button url={themeEditorUrl} external>
-                  Add the quiz section to your theme
+                {/* The quiz goes on its own page (Studio setup guide or
+                    one-click Publish), never the home page: a full-page
+                    quiz there would sit on a page Shopify scores for
+                    storefront speed. */}
+                <Button onClick={() => openStudio("live")}>
+                  Set up the quiz page
                 </Button>
               </InlineStack>
               <Text as="p" variant="bodySm" tone="subdued">
                 Two steps: set the storefront to "Quiz page" or "Both", then
-                add the Gleame Quiz section to a page in the theme editor.
+                put the quiz on its own page. The setup guide in Studio walks
+                you through it, or publish with one click.
               </Text>
+              <QuizPlacementStatus quizLive={false} />
             </BlockStack>
           </Card>
         )}
@@ -483,10 +487,11 @@ function DashboardView({
                   >
                     Save
                   </Button>
-                  <Button size="slim" variant="plain" url={themeEditorUrl} external>
-                    Theme editor
+                  <Button size="slim" variant="plain" onClick={() => openStudio("live")}>
+                    Placement
                   </Button>
                 </InlineStack>
+                <QuizPlacementStatus quizLive />
               </BlockStack>
             </Card>
           )}

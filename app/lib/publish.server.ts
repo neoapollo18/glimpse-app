@@ -114,7 +114,9 @@ const MENU_UPDATE = `#graphql
 
 function pageBody(shopDomain: string, appUrl: string): string {
   return [
-    `<div id="gleame-quiz-root" data-shop-domain="${shopDomain}"></div>`,
+    // min-height reserves the quiz's space until it paints (gleame-quiz.js
+    // clears it), so the theme footer doesn't jump when it renders.
+    `<div id="gleame-quiz-root" data-shop-domain="${shopDomain}" style="min-height:100vh"></div>`,
     `<script src="${appUrl}/quiz-embed.js" defer></script>`,
   ].join("\n");
 }

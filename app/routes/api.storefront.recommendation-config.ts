@@ -5,6 +5,7 @@ import {
   shopHasValidAccess,
   getRecommendationFlow,
 } from "../lib/supabase.server";
+import { storefrontCached } from "../lib/storefront-cache.server";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -33,22 +34,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return json({ error: "Missing shopDomain" }, { status: 400, headers: CORS_HEADERS });
   }
 
-  const verifiedShop = await findShopByDomain(shopDomain);
-  if (!verifiedShop) {
-    return json({ error: "Unknown shop" }, { status: 403, headers: CORS_HEADERS });
-  }
+  // Same payload for every shopper: 20 s in-process cache, see
+  // storefront-cache.server.ts.
+  const result = await storefrontCached(shopDomain, "recommendation-config", async () => {
+    const verifiedShop = await findShopByDomain(shopDomain);
+    if (!verifiedShop) return { status: 403, body: { error: "Unknown shop" } as unknown };
 
-  const hasAccess = await shopHasValidAccess(verifiedShop.shop_domain);
-  if (!hasAccess) {
-    return json({ error: "Subscription inactive" }, { status: 403, headers: CORS_HEADERS });
-  }
+    const hasAccess = await shopHasValidAccess(verifiedShop.shop_domain);
+    if (!hasAccess) return { status: 403, body: { error: "Subscription inactive" } as unknown };
 
-  const flow = await getRecommendationFlow(verifiedShop.id);
+    return { status: 200, body: (await getRecommendationFlow(verifiedShop.id)) as unknown };
+  });
 
-  return json(flow, {
-    headers: {
-      ...CORS_HEADERS,
-      "Cache-Control": "public, max-age=60",
-    },
+  return json(result.body, {
+    status: result.status,
+    headers:
+      result.status === 200
+        ? { ...CORS_HEADERS, "Cache-Control": "public, max-age=60" }
+        : CORS_HEADERS,
   });
 };

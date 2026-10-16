@@ -20,6 +20,7 @@ import {
 import { TitleBar } from "@shopify/app-bridge-react";
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { authenticate } from "../shopify.server";
+import { invalidateStorefrontCache } from "../lib/storefront-cache.server";
 import {
   findShopByDomain,
   getRecommendationAdminConfig,
@@ -100,6 +101,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     saveRecommendationConfig(shop.id, payload),
   );
   if (!result.ok) return json({ success: false, error: result.error });
+  invalidateStorefrontCache(shopDomain);
 
   // Multi-set try-on prompt rides along with the matrix save. Saved AFTER the
   // matrix so a matrix failure aborts the whole save; empty stores NULL

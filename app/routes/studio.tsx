@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import jwt from "jsonwebtoken";
 
 import { authenticate } from "../shopify.server";
+import { invalidateStorefrontCache } from "../lib/storefront-cache.server";
 import {
   findShopByDomain,
   supabase,
@@ -1051,6 +1052,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       { ok: false, error: err instanceof Error ? err.message : "Action failed", intent },
       { status: 500 },
     );
+  } finally {
+    // Studio edits go straight to live: drop the storefront config cache so
+    // the next quiz page load serves them (storefront-cache.server.ts).
+    invalidateStorefrontCache(shopDomain);
   }
 };
 
