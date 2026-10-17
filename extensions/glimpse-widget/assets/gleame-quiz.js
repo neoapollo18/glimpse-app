@@ -1287,9 +1287,13 @@
     var current = stageEl.firstElementChild;
 
     nextEl.classList.add('gq-screen');
+    // Template question steps fit themselves to the viewport once mounted
+    // (before the first paint, so there is no visible reflow).
+    var mounted = function() { if (nextEl.gqFit) nextEl.gqFit(); };
     if (reduce) {
       stageEl.innerHTML = '';
       stageEl.appendChild(nextEl);
+      mounted();
       return;
     }
 
@@ -1300,12 +1304,14 @@
         if (seq !== renderSeq) return;
         stageEl.innerHTML = '';
         stageEl.appendChild(nextEl);
+        mounted();
         requestAnimationFrame(function() {
           requestAnimationFrame(function() { nextEl.classList.add('gq-enter-active'); });
         });
       }, 160);
     } else {
       stageEl.appendChild(nextEl);
+      mounted();
       requestAnimationFrame(function() {
         requestAnimationFrame(function() { nextEl.classList.add('gq-enter-active'); });
       });
@@ -1314,7 +1320,8 @@
     setTimeout(function() {
       if (seq !== renderSeq) return;
       var rect = root.getBoundingClientRect();
-      if (rect.top < 0) root.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+      if (nextEl.gqFit && fitActive()) fitScrollIntoView(nextEl, rect.top, Boolean(current), reduce);
+      else if (rect.top < 0) root.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
     }, 180);
   }
 
@@ -3396,7 +3403,7 @@
 
     var restartRow = el('div', 'gq-restart-row gq-gr-restart');
     restartRow.appendChild(el('span', 'gq-gr-restart-q', TH('notQuiteRight', 'Not quite right?')));
-    var restartBtn = el('button', 'gq-link-btn', escapeHtml(results.restartLabel || 'Retake the quiz'));
+    var restartBtn = el('button', 'gq-link-btn', escapeHtml(results.restartLabel || 'Try another look'));
     restartBtn.type = 'button';
     restartBtn.onclick = function() {
       trackEvent('quiz_restart', { from: state.screen });
@@ -4779,7 +4786,7 @@
   //   t2 TplConsult  - "Help me decide."             top pick + comparison
   //   t3 TplRoutine  - "What should I use together?" regimen + add-all
   //   t4 TplDiscover - "What's my type?"             archetype + kit of 3
-  //   t5 TplClean    - any of the above, no imagery  simple grid
+  //   t5 TplClean    - any of the above, text bars or image cards  simple grid
   // Each template also owns its visual design (gleame-quiz.css, keyed off
   // the gq-t{n} root class); there is no separate Look since 2026-10-01. Every image position is an
   // ImageSlot (spec 4.2): Studio previews render a placeholder for an
@@ -5180,6 +5187,10 @@
     });
     var block = el('div', 'gq-option-block' + (noAnim ? ' gq-no-anim' : ''));
     var list = tpl.optionList(q, specific);
+    // Answer-count bucket: the desktop fit levels pick columns from it.
+    var bucket = fitCountBucket(specific.length);
+    list.classList.add('gq-tpl-n-' + bucket);
+    if (bucket === 'xl' && fitPrefersFour(specific.length)) list.classList.add('gq-tpl-c4');
     specific.forEach(function(opt, idx) {
       var btn = tpl.optionButton(q, opt, idx);
       btn.type = 'button';
@@ -5282,6 +5293,8 @@
           if (old && old.parentNode) old.parentNode.replaceChild(fresh, old);
           listHolders[qi] = fresh;
         });
+        // Revealed/hidden answers change the height: fit again.
+        fitTplStep(screen);
       }
       refreshContinue();
     }
@@ -5314,7 +5327,331 @@
     }
 
     screen.appendChild(body);
+    // swapScreen calls this once the step is in the document (it needs
+    // layout); resizes and late web fonts call it again.
+    screen.gqFit = function() { fitTplStep(screen); };
     return screen;
+  }
+
+  // ---- Desktop fit (template question screens) ----
+  //
+  // On desktop the whole question step (chrome, prompt, every answer, the
+  // Continue row) should sit in one visible frame. The step renders as
+  // designed first; only when it runs past the fold does this step through
+  // compactness levels (gq-fit-1 tighter rhythm, gq-fit-2 text answers in
+  // columns, gq-fit-3 compact answers and prompt; the stylesheet scopes all
+  // three to desktop) and lay the answer images out again (fitImageLayout).
+  // Images keep their designed frame (no extra crop) and never grow. Below
+  // 990px nothing runs and the step renders exactly as before.
+  var FIT_MEDIA = '(min-width: 990px)';
+  var FIT_IMG_FLOOR = 110; // answer images stay recognisable
+  var FIT_SWATCH_FLOOR = 72; // a flat color reads at any size
+  var FIT_MARGIN = 16; // breathing room between the Continue row and the fold
+  // The Studio canvas floats its Desktop/Mobile toggle over the bottom of
+  // the preview frame.
+  var FIT_MARGIN_STUDIO = 64;
+  var FIT_LEVELS = 3;
+  // Images within 15% of their designed size beat a denser text layout.
+  // Below that the next level is tried, and it has to win by 10%.
+  var FIT_IMG_KEEP = 0.85;
+  var FIT_LEVEL_GAIN = 1.1;
+  // A grid that fills the column at its natural size beats a narrowed one
+  // unless the narrowed images are 10% taller.
+  var FIT_FULL_GAIN = 1.1;
+
+  function fitCountBucket(n) {
+    if (n <= 4) return 's';
+    if (n <= 6) return 'm';
+    if (n <= 8) return 'l';
+    return 'xl';
+  }
+
+  // Long lists: 4 columns when they leave fewer empty cells than 5
+  // (12 answers read 4 + 4 + 4, not 5 + 5 + 2).
+  function fitPrefersFour(n) {
+    return (4 - n % 4) % 4 < (5 - n % 5) % 5;
+  }
+
+  function fitActive() {
+    return Boolean(window.matchMedia && window.matchMedia(FIT_MEDIA).matches);
+  }
+
+  function fitMargin() {
+    return isStudio() ? FIT_MARGIN_STUDIO : FIT_MARGIN;
+  }
+
+  // Height fixed or sticky theme bars cover at the top of the window (0
+  // without any). The fit budget leaves it out and the step-change scroll
+  // never tucks the quiz under it. Probes down the page's centre line:
+  // past static bars (an announcement bar above a sticky header) and
+  // through stacked fixed ones, stopping at the quiz.
+  function fitTopInset() {
+    if (!root || typeof document.elementsFromPoint !== 'function') return 0;
+    var x = Math.round(window.innerWidth / 2);
+    var inset = 0, y = 1;
+    for (var probe = 0; probe < 4 && y < window.innerHeight / 2; probe++) {
+      var hits = document.elementsFromPoint(x, y) || [];
+      var hit = null;
+      for (var i = 0; i < hits.length && !hit; i++) {
+        if (!root.contains(hits[i]) && !hits[i].contains(root)) hit = hits[i];
+      }
+      if (!hit) break; // reached the quiz (or nothing above it)
+      var block = hit, bar = null, pos = '';
+      for (var n = hit; n && n !== document.body && !n.contains(root); n = n.parentElement) {
+        pos = window.getComputedStyle(n).position;
+        if (pos === 'fixed' || pos === 'sticky') { bar = n; break; }
+        block = n;
+      }
+      if (!bar) {
+        if (inset) break; // static content under the header
+        y = Math.ceil(block.getBoundingClientRect().bottom) + 1;
+        continue;
+      }
+      var r = bar.getBoundingClientRect();
+      // A full-window overlay (drawer, modal) is not a header.
+      if (r.height <= 0 || r.height > window.innerHeight / 2) break;
+      // Sticky: where it rests once the shopper scrolls to the quiz.
+      var stuck = pos === 'sticky' ? parseFloat(window.getComputedStyle(bar).top) : r.top;
+      if (isNaN(stuck)) break;
+      var bottom = Math.round(Math.max(0, stuck) + r.height);
+      if (bottom <= inset) break;
+      inset = bottom;
+      y = Math.ceil(r.bottom) + 1;
+    }
+    return inset;
+  }
+
+  // Pixels the step runs past the visible frame (room) when the quiz root
+  // sits right under the header, where swapScreen scrolls it. Differences
+  // of rects, so the entry animation's translate cancels out.
+  function fitOverflow(screen, body, room) {
+    var contentH = body.getBoundingClientRect().bottom - screen.getBoundingClientRect().top;
+    var above = stageEl.getBoundingClientRect().top - root.getBoundingClientRect().top;
+    return above + contentH - room;
+  }
+
+  function fitSetLevel(screen, level) {
+    for (var i = 1; i <= FIT_LEVELS; i++) screen.classList.toggle('gq-fit-' + i, i <= level);
+  }
+
+  // Grid columns set by the fit (null = designed): the stylesheet reads
+  // --gq-fit-cols on lists tagged gq-fit-cols.
+  function fitListCols(list, n) {
+    list.classList.toggle('gq-fit-cols', Boolean(n));
+    if (n) list.style.setProperty('--gq-fit-cols', String(n));
+    else list.style.removeProperty('--gq-fit-cols');
+  }
+
+  function fitReset(screen, body) {
+    fitSetLevel(screen, 0);
+    screen.classList.remove('gq-fit-img');
+    var blocks = body ? body.querySelectorAll('.gq-option-block') : [];
+    for (var i = 0; i < blocks.length; i++) {
+      blocks[i].style.removeProperty('max-width');
+      if (blocks[i].firstElementChild) fitListCols(blocks[i].firstElementChild, null);
+    }
+  }
+
+  // Answer-image grids on the step (Match tiles, Consult cards): their
+  // images scale with the column. Fixed icon/thumb slots are sized by the
+  // levels instead. Records the designed columns, rows and image height.
+  function fitImageGrids(body) {
+    var grids = [];
+    var blocks = body.querySelectorAll('.gq-option-block');
+    for (var i = 0; i < blocks.length; i++) {
+      var list = blocks[i].firstElementChild;
+      if (!list || window.getComputedStyle(list).display !== 'grid') continue;
+      var slots = list.querySelectorAll('.gq-slot:not(.gq-slot--fixed)');
+      var slot = null, swatch = true;
+      for (var s = 0; s < slots.length; s++) {
+        if (slots[s].offsetHeight <= 0) continue;
+        if (!slot) slot = slots[s];
+        if (!slots[s].classList.contains('gq-slot--swatch')) swatch = false;
+      }
+      if (!slot) continue;
+      // offsetTop, not rects: a selected tile is scaled up a little.
+      var items = list.children;
+      var cols = 1;
+      while (cols < items.length && Math.abs(items[cols].offsetTop - items[0].offsetTop) < 2) cols++;
+      grids.push({
+        block: blocks[i], list: list, slot: slot, n: items.length, swatch: swatch,
+        cols0: cols, rows: Math.ceil(items.length / cols), h0: slot.offsetHeight,
+      });
+    }
+    return grids;
+  }
+
+  // Fewest columns that hold each grid's answers in r rows, so the rows
+  // stay balanced (9 answers: 3 + 3 + 3 or 5 + 4, never 4 + 4 + 1).
+  function fitColsForRows(grids, r) {
+    var cols = [];
+    for (var i = 0; i < grids.length; i++) cols.push(Math.ceil(grids[i].n / Math.min(r, grids[i].rows)));
+    return cols;
+  }
+
+  // Columns for every grid (null = designed), measured at full width.
+  function fitGridCols(grids, cols) {
+    for (var i = 0; i < grids.length; i++) {
+      var g = grids[i];
+      g.block.style.removeProperty('max-width');
+      fitListCols(g.list, cols ? cols[i] : null);
+      g.cols = cols ? cols[i] : g.cols0;
+      g.w = g.list.getBoundingClientRect().width;
+      g.sw = g.slot.offsetWidth;
+      g.sh = g.slot.offsetHeight;
+      // Natural image height at these columns, never above the design.
+      g.top = Math.min(g.sh, g.h0);
+    }
+  }
+
+  // Images at most h tall: the answer block narrows so every column (and
+  // its image) scales down with its aspect ratio intact, nothing cropped.
+  function fitGridCap(grids, h) {
+    for (var i = 0; i < grids.length; i++) {
+      var g = grids[i];
+      var cap = Math.min(h, g.top);
+      if (!g.sh || cap >= g.sh - 0.5) {
+        g.block.style.removeProperty('max-width');
+        continue;
+      }
+      var narrower = g.cols * (g.sw - cap * g.sw / g.sh);
+      g.block.style.setProperty('max-width', Math.floor(g.w - narrower) + 'px');
+    }
+  }
+
+  // Best image layout at the current level, or null. For each row count
+  // from the designed one down: balanced columns, images at their natural
+  // size for those columns, then scaled down until the step fits. Keeps
+  // the layout with the tallest images (score: full-width grids get
+  // FIT_FULL_GAIN); ties keep fewer columns.
+  function fitImageLayout(grids, over, floor) {
+    var best = null, rows = 0, i;
+    for (i = 0; i < grids.length; i++) rows = Math.max(rows, grids[i].rows);
+    for (var r = rows; r >= 1; r--) {
+      var cols = fitColsForRows(grids, r);
+      var lines = 0, top = 0, low = Infinity, full = true;
+      fitGridCols(grids, cols);
+      for (i = 0; i < grids.length; i++) {
+        top = Math.max(top, grids[i].top);
+        low = Math.min(low, grids[i].top);
+        lines += Math.ceil(grids[i].n / cols[i]);
+        if (grids[i].top < grids[i].sh - 0.5) full = false;
+      }
+      // More columns only make the images smaller from here on.
+      if (low < floor || (best && low * FIT_FULL_GAIN <= best.score)) break;
+      var h = top;
+      for (var tries = 0; tries < 8 && h >= floor; tries++) {
+        fitGridCap(grids, h);
+        var o = over();
+        if (o <= 0) {
+          var size = Math.min(h, low);
+          var score = full && h >= top ? size * FIT_FULL_GAIN : size;
+          if (!best || score > best.score) best = { cols: cols, h: size, score: score };
+          break;
+        }
+        h -= Math.max(1, Math.ceil(o / lines));
+      }
+    }
+    return best;
+  }
+
+  function fitTplStep(screen) {
+    if (!stageEl || screen.parentNode !== stageEl) return;
+    var body = screen.querySelector('.gq-tpl-body');
+    fitReset(screen, body);
+    if (!body || !fitActive()) return;
+    var room = window.innerHeight - fitTopInset() - fitMargin();
+    var over = function() { return fitOverflow(screen, body, room); };
+    if (over() <= 0) return;
+    var grids = fitImageGrids(body);
+    var floor = FIT_IMG_FLOOR, h0 = 0, rows = 0, last = null, i;
+    for (i = 0; i < grids.length; i++) {
+      h0 = Math.max(h0, grids[i].h0);
+      rows = Math.max(rows, grids[i].rows);
+    }
+    if (grids.length && grids.every(function(g) { return g.swatch; })) floor = FIT_SWATCH_FLOOR;
+    var best = null;
+    for (var level = 1; level <= FIT_LEVELS; level++) {
+      fitSetLevel(screen, level);
+      var o = over();
+      if (o <= 0) return; // fits with the designed images
+      // Lay the images out again only when this level changed the step.
+      if (!grids.length || (last !== null && Math.abs(o - last) < 1)) continue;
+      last = o;
+      var layout = fitImageLayout(grids, over, floor);
+      fitGridCols(grids, null);
+      if (layout && (!best || layout.score > best.score * FIT_LEVEL_GAIN)) {
+        best = layout;
+        best.level = level;
+      }
+      if (best && best.h >= h0 * FIT_IMG_KEEP) break;
+    }
+    if (best) {
+      fitSetLevel(screen, best.level);
+      fitGridCols(grids, best.cols);
+      fitGridCap(grids, best.h);
+      screen.classList.add('gq-fit-img');
+      return;
+    }
+    // Nothing fits (a very long screen): the most compact layout, images
+    // at the floor in as few rows as the floor allows, and the shopper
+    // scrolls a little.
+    fitSetLevel(screen, FIT_LEVELS);
+    if (!grids.length) return;
+    var compact = null;
+    for (var r = rows; r >= 1; r--) {
+      var cols = fitColsForRows(grids, r);
+      fitGridCols(grids, cols);
+      if (grids.some(function(g) { return g.top < floor; })) break;
+      compact = cols;
+    }
+    fitGridCols(grids, compact);
+    fitGridCap(grids, floor);
+    screen.classList.add('gq-fit-img');
+  }
+
+  // Desktop template question steps, 180ms after they mount: bring the
+  // quiz top out from under the window edge or a fixed/sticky header, or
+  // (after a step change) scroll just enough to show the Continue row,
+  // never tucking the quiz top under the header.
+  function fitScrollIntoView(screen, rootTop, stepChanged, reduce) {
+    var behavior = reduce ? 'auto' : 'smooth';
+    var inset = fitTopInset();
+    if (rootTop < inset) {
+      // No header: exactly the default keep-in-view scroll.
+      if (!inset) root.scrollIntoView({ behavior: behavior, block: 'start' });
+      else window.scrollBy({ top: rootTop - inset, behavior: behavior });
+      return;
+    }
+    if (!stepChanged || rootTop <= inset) return;
+    var body = screen.querySelector('.gq-tpl-body');
+    if (!body) return;
+    // Untransformed bottom: the stage carries no entry animation.
+    var bottom = stageEl.getBoundingClientRect().top +
+      (body.getBoundingClientRect().bottom - screen.getBoundingClientRect().top);
+    var below = bottom + fitMargin() - window.innerHeight;
+    if (below > 0) window.scrollBy({ top: Math.min(rootTop - inset, below), behavior: behavior });
+  }
+
+  var fitTimer = null;
+  var fitBound = false;
+  function refitSoon() {
+    clearTimeout(fitTimer);
+    fitTimer = setTimeout(function() {
+      var current = stageEl && stageEl.firstElementChild;
+      if (current && current.gqFit) current.gqFit();
+    }, 120);
+  }
+
+  // Re-fit on resize, and when theme web fonts finish loading after a step
+  // was fitted (font-display: swap changes the text height).
+  function bindFitRefresh() {
+    if (fitBound) return;
+    fitBound = true;
+    window.addEventListener('resize', refitSoon);
+    var fonts = document.fonts;
+    if (fonts && fonts.ready && typeof fonts.ready.then === 'function') fonts.ready.then(refitSoon);
+    if (fonts && typeof fonts.addEventListener === 'function') fonts.addEventListener('loadingdone', refitSoon);
   }
 
   // Default question header: prompt + helper (+ multi-select hint).
@@ -6988,11 +7325,43 @@
     return meta;
   }
 
-  function cleanOptionList() {
+  // Image cards: a visual question renders as a grid of cards unless the
+  // merchant picked a non-image answer style (chips, boxed, list...) for
+  // it, which keeps the bars. Mirrors cleanShowsAnswerArt in
+  // app/lib/quiz-templates.ts so the Images rail lists the same slots.
+  function cleanShowsCards(q) {
+    if (q.optionStyle && q.optionStyle !== 'visual') return false;
+    return questionIsVisual(q);
+  }
+
+  function cleanOptionList(q, specific) {
+    if (cleanShowsCards(q)) {
+      // Columns by count so rows fill evenly: pairs, rows of four, else
+      // threes. One-word answers keep three across on phones too.
+      var n = specific.length;
+      var cols = n <= 2 ? 2 : (n === 4 || n === 8) ? 4 : 3;
+      var shortLabels = specific.every(function(o) { return (o.label || '').length <= 12 && !optionDesc(o); });
+      return el('div', 'gq-t5-cards gq-t5-cards--' + cols + (shortLabels ? ' gq-t5-cards--short' : ''));
+    }
     return el('div', 'gq-t5-bars');
   }
 
   function cleanOptionButton(q, opt) {
+    if (cleanShowsCards(q)) {
+      var art = optionArt(opt);
+      var card = el('button', 'gq-t5-card');
+      card.appendChild(imageSlot({
+        key: answerSlotKey(q, opt), kind: art.kind, ratio: '1:1', url: art.url, color: art.color,
+        alt: opt.label, initial: initialOf(opt.label), className: 'gq-t5-card-slot',
+      }));
+      var desc2 = optionDesc(opt);
+      // appendChild, never innerHTML +=: re-serializing would drop the
+      // slot's click handler and spec.
+      var cap = el('span', 'gq-t5-card-cap', '<span class="gq-t5-card-tx"><span class="gq-t5-card-label">' + escapeHtml(opt.label) + '</span>' +
+        (desc2 ? '<small class="gq-t5-card-desc">' + escapeHtml(desc2) + '</small>' : '') + '</span>' + CHECK_MINI);
+      card.appendChild(cap);
+      return card;
+    }
     var bar = el('button', 'gq-t5-bar');
     var desc = optionDesc(opt);
     bar.innerHTML = '<span class="gq-t5-bar-tx"><span class="gq-t5-bar-label">' + escapeHtml(opt.label) + '</span>' +
@@ -7115,6 +7484,7 @@
     root.classList.add('gq-active');
     stageEl = el('div', 'gq-stage');
     root.appendChild(stageEl);
+    bindFitRefresh();
   }
 
   function initPreviewListener() {

@@ -987,7 +987,7 @@ function FontSelect({
       disabled={disabled}
       helpText={
         value && !FONT_CHOICES.some((c) => c.value === value)
-          ? "Custom font set via chat. Pick an option to replace it."
+          ? "Custom font set with Build with AI. Pick an option to replace it."
           : undefined
       }
     />

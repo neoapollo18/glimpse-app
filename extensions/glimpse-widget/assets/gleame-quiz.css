@@ -4218,6 +4218,48 @@
 #gleame-quiz-root.gq-t5 .gq-t5-bars .gq-t5-bar.is-selected { border-color: var(--gq-accent); box-shadow: inset 0 0 0 0.5px var(--gq-accent); background: var(--gq-accent-08); }
 #gleame-quiz-root.gq-t5 .gq-t5-bar-tx { flex: 1; display: flex; flex-direction: column; gap: 2px; }
 #gleame-quiz-root.gq-t5 .gq-t5-bar-desc { font-size: 12.5px; color: var(--gq-ink-faint); }
+/* S2: image cards for visual questions. Square image over a caption row
+   that reads like a bar (label, description, check on the right). */
+#gleame-quiz-root.gq-t5 .gq-t5-cards { display: grid; gap: 10px; }
+/* No helper line under the prompt: give the grid the gap the helper would. */
+#gleame-quiz-root.gq-t5 .gq-tpl-q + .gq-option-block > .gq-t5-cards { margin-top: 16px; }
+#gleame-quiz-root.gq-t5 .gq-t5-cards--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+#gleame-quiz-root.gq-t5 .gq-t5-cards--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+#gleame-quiz-root.gq-t5 .gq-t5-cards--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+#gleame-quiz-root.gq-t5 .gq-t5-cards .gq-t5-card {
+  appearance: none;
+  -webkit-appearance: none;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+  background: var(--gq-card-bg);
+  border: 1px solid var(--gq-line);
+  border-radius: var(--gq-r-10);
+  overflow: hidden;
+  color: var(--gq-ink);
+  font-family: var(--gq-font-body);
+  cursor: pointer;
+  transition: border-color 140ms ease;
+}
+#gleame-quiz-root.gq-t5 .gq-t5-card-slot { border-radius: 0; }
+#gleame-quiz-root.gq-t5 .gq-t5-card-cap {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 13px 14px 14px;
+  border-top: 1px solid var(--gq-line);
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+#gleame-quiz-root.gq-t5 .gq-t5-card-tx { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+#gleame-quiz-root.gq-t5 .gq-t5-card-label { font-size: 15px; font-weight: 500; line-height: 1.3; overflow-wrap: anywhere; text-wrap: pretty; }
+#gleame-quiz-root.gq-t5 .gq-t5-card-desc { font-size: 12.5px; line-height: 1.4; color: var(--gq-ink-faint); }
+#gleame-quiz-root.gq-t5 .gq-t5-card-cap .gq-tpl-check { margin-top: 2px; }
+#gleame-quiz-root.gq-t5 .gq-t5-card.is-selected .gq-tpl-check { opacity: 1; transform: scale(1); }
 /* S6: 2-col grid, up to 4 cards */
 #gleame-quiz-root.gq-t5 .gq-t5r-wrap { --gq-tpl-width: 760px; }
 #gleame-quiz-root.gq-t5 .gq-t5r-headline {
@@ -4526,6 +4568,14 @@
 #gleame-quiz-root.gq-t5 .gq-t5-bars .gq-t5-bar.is-selected .gq-t5-bar-desc,
 #gleame-quiz-root.gq-t5 .gq-t5-bars .gq-t5-bar.is-selected .gq-tpl-check { color: var(--gq-accent-text); }
 #gleame-quiz-root.gq-t5 .gq-t5-bar-desc { font-weight: var(--gq-body-weight, 400); }
+/* Image cards share the bars' inverted selection: the caption fills with ink. */
+#gleame-quiz-root.gq-t5 .gq-t5-cards .gq-t5-card:hover { border-color: var(--gq-ink); }
+#gleame-quiz-root.gq-t5 .gq-t5-cards .gq-t5-card:hover .gq-t5-card-cap { border-top-color: var(--gq-ink); }
+#gleame-quiz-root.gq-t5 .gq-t5-cards .gq-t5-card.is-selected { border-color: var(--gq-accent); }
+#gleame-quiz-root.gq-t5 .gq-t5-card.is-selected .gq-t5-card-cap { background: var(--gq-accent); border-top-color: var(--gq-accent); color: var(--gq-accent-text); }
+#gleame-quiz-root.gq-t5 .gq-t5-card.is-selected .gq-t5-card-desc,
+#gleame-quiz-root.gq-t5 .gq-t5-card.is-selected .gq-tpl-check { color: var(--gq-accent-text); }
+#gleame-quiz-root.gq-t5 .gq-t5-card-desc { font-weight: var(--gq-body-weight, 400); }
 #gleame-quiz-root.gq-t5 .gq-t5r-headline { text-align: left; font-size: clamp(32px, 4.4vw, 54px); line-height: 0.98; }
 #gleame-quiz-root.gq-t5 .gq-t5r-sub { text-align: left; font-family: var(--gq-mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; padding-bottom: 20px; border-bottom: 2px solid var(--gq-ink); }
 #gleame-quiz-root.gq-t5 .gq-t5r-grid { gap: 12px; }
@@ -4620,6 +4670,118 @@
   #gleame-quiz-root.gq-t4 .gq-t4r-mini-slot { width: 72px; flex: none; }
   #gleame-quiz-root.gq-t4 .gq-t4r-mini-name { flex: 1; margin: 0; }
   #gleame-quiz-root.gq-t4 .gq-t4r-mini-add { width: 100%; }
+  #gleame-quiz-root.gq-t5 .gq-t5-cards { gap: 8px; }
+  #gleame-quiz-root.gq-t5 .gq-t5-cards--3,
+  #gleame-quiz-root.gq-t5 .gq-t5-cards--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #gleame-quiz-root.gq-t5 .gq-t5-card-cap { padding: 11px 12px 12px; gap: 8px; }
+  #gleame-quiz-root.gq-t5 .gq-t5-card-label { font-size: 14px; }
+  /* One-word answers stay three across; the inked caption marks the pick. */
+  #gleame-quiz-root.gq-t5 .gq-t5-cards--3.gq-t5-cards--short { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  #gleame-quiz-root.gq-t5 .gq-t5-cards--3.gq-t5-cards--short .gq-t5-card-cap { padding: 9px 10px 10px; }
+  #gleame-quiz-root.gq-t5 .gq-t5-cards--3.gq-t5-cards--short .gq-t5-card-label { font-size: 13px; }
+  #gleame-quiz-root.gq-t5 .gq-t5-cards--3.gq-t5-cards--short .gq-tpl-check { display: none; }
+}
+
+/* ---- Desktop fit: question steps in one viewport (2026-10-16) ----
+   gleame-quiz.js (fitTplStep) adds these to a template question step
+   only when it runs past the fold, one level at a time. Levels are
+   cumulative: gq-fit-1 tightens the vertical rhythm, gq-fit-2 puts text
+   answers in columns (gq-tpl-n-{s,m,l,xl} = up to 4 / 6 / 8 / more
+   answers), gq-fit-3 compacts the answers and the prompt. Steps keep
+   their designed width so the chrome never shifts between questions.
+   Answer-image grids (Match tiles, Consult cards) are laid out by the
+   script: balanced columns and a narrower answer block, so images scale
+   down whole instead of being cropped. Desktop only; never phones. */
+@media (min-width: 990px) {
+  /* Level 1: tighter vertical rhythm */
+  #gleame-quiz-root .gq-tpl-step.gq-fit-1 { padding-top: 0; }
+  #gleame-quiz-root .gq-fit-1 .gq-tpl-body { margin-top: 16px; }
+  #gleame-quiz-root .gq-fit-1 .gq-tpl-q { margin-bottom: 6px; }
+  #gleame-quiz-root .gq-fit-1 .gq-tpl-q--sub { margin-top: 18px; }
+  #gleame-quiz-root .gq-fit-1 .gq-tpl-help { margin-bottom: 14px; }
+  #gleame-quiz-root .gq-fit-1 .gq-tpl-multi { margin-top: -2px; margin-bottom: 12px; }
+  #gleame-quiz-root .gq-fit-1 .gq-tpl-help + .gq-tpl-multi { margin-top: -8px; }
+  #gleame-quiz-root .gq-fit-1 .gq-option-block { gap: 12px; }
+  #gleame-quiz-root .gq-fit-1 .gq-tpl-continue-row { margin-top: 18px; }
+  #gleame-quiz-root.gq-t1 .gq-fit-1 .gq-t1-top { margin-bottom: 8px; }
+  #gleame-quiz-root.gq-t1 .gq-fit-1 .gq-t1-phases { margin-bottom: 18px; }
+  #gleame-quiz-root.gq-t1 .gq-fit-1 .gq-t1-rows { gap: 8px; }
+  #gleame-quiz-root.gq-t1 .gq-fit-1 .gq-t1-tiles { gap: 12px; }
+  #gleame-quiz-root.gq-t1 .gq-fit-1 .gq-t1-tile-label { margin-top: 8px; }
+  #gleame-quiz-root.gq-t1 .gq-fit-1 .gq-t1-tip { margin-top: 12px; padding: 10px 16px; }
+  #gleame-quiz-root.gq-t2 .gq-fit-1 .gq-t2-meta { margin-bottom: 8px; }
+  #gleame-quiz-root.gq-t2 .gq-fit-1 .gq-t2-bar { margin-bottom: 22px; }
+  #gleame-quiz-root.gq-t2 .gq-fit-1 .gq-t2-cards { gap: 18px; }
+  #gleame-quiz-root.gq-t2 .gq-fit-1 .gq-t2-card-tx { padding-top: 10px; }
+  #gleame-quiz-root.gq-t3 .gq-fit-1 .gq-t3-meta { margin-bottom: 14px; }
+  #gleame-quiz-root.gq-t3 .gq-fit-1 .gq-t3-sub { margin-bottom: 14px; }
+  #gleame-quiz-root.gq-t3 .gq-fit-1 .gq-t3-bars { gap: 10px; }
+  #gleame-quiz-root.gq-t3 .gq-fit-1 .gq-t3-icons { gap: 12px; }
+  #gleame-quiz-root.gq-t3 .gq-fit-1 .gq-t3-icon { min-height: 0; padding: 18px 14px; gap: 10px; }
+  #gleame-quiz-root.gq-t3 .gq-fit-1 .gq-t3-icon-desc { margin-top: -4px; }
+  #gleame-quiz-root.gq-t4 .gq-fit-1 .gq-t4-meta { margin-bottom: 18px; }
+  #gleame-quiz-root.gq-t4 .gq-fit-1 .gq-t4-cards { gap: 12px; }
+  #gleame-quiz-root.gq-t5 .gq-fit-1 .gq-t5-meta { margin-bottom: 20px; }
+
+  /* Level 2: text answers (and fixed-icon tiles) in columns */
+  #gleame-quiz-root.gq-t1 .gq-fit-2 .gq-t1-rows:not(.gq-tpl-n-s) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #gleame-quiz-root.gq-t2 .gq-fit-2 .gq-t2-rows:not(.gq-tpl-n-s) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 32px; }
+  #gleame-quiz-root.gq-t3 .gq-fit-2 .gq-t3-bars.gq-tpl-n-m { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 640px; }
+  #gleame-quiz-root.gq-t3 .gq-fit-2 .gq-t3-bars.gq-tpl-n-m .gq-t3-bar:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  #gleame-quiz-root.gq-t3 .gq-fit-2 .gq-t3-bars.gq-tpl-n-xl { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  #gleame-quiz-root.gq-t3 .gq-fit-2 .gq-t3-bars.gq-tpl-n-xl .gq-t3-bar:last-child:nth-child(odd) { grid-column: auto; }
+  #gleame-quiz-root.gq-t3 .gq-fit-2 .gq-t3-icons.gq-tpl-n-s { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+  #gleame-quiz-root.gq-t3 .gq-fit-2 .gq-t3-icons.gq-tpl-n-l,
+  #gleame-quiz-root.gq-t3 .gq-fit-2 .gq-t3-icons.gq-tpl-n-xl.gq-tpl-c4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  /* Five icon tiles need Ritual's full 760px: the centred grid breaks out
+     of the 640px column evenly; the chrome stays put. */
+  #gleame-quiz-root.gq-t3 .gq-fit-2 .gq-t3-icons.gq-tpl-n-xl:not(.gq-tpl-c4) { grid-template-columns: repeat(5, minmax(0, 1fr)); margin-left: -60px; margin-right: -60px; }
+  #gleame-quiz-root.gq-t4 .gq-fit-2 .gq-t4-cards.gq-tpl-n-l,
+  #gleame-quiz-root.gq-t4 .gq-fit-2 .gq-t4-cards.gq-tpl-n-xl { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  #gleame-quiz-root.gq-t5 .gq-fit-2 .gq-t5-bars:not(.gq-tpl-n-s) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* Short text lists (2-4 answers, e.g. several questions on one screen) go side by side. */
+  #gleame-quiz-root.gq-t1 .gq-fit-2 .gq-t1-rows.gq-tpl-n-s,
+  #gleame-quiz-root.gq-t2 .gq-fit-2 .gq-t2-rows.gq-tpl-n-s,
+  #gleame-quiz-root.gq-t3 .gq-fit-2 .gq-t3-bars.gq-tpl-n-s,
+  #gleame-quiz-root.gq-t4 .gq-fit-2 .gq-t4-cards.gq-tpl-n-s,
+  #gleame-quiz-root.gq-t5 .gq-fit-2 .gq-t5-bars.gq-tpl-n-s {
+    display: grid;
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+  }
+  #gleame-quiz-root.gq-t2 .gq-fit-2 .gq-t2-rows.gq-tpl-n-s { column-gap: 24px; }
+  #gleame-quiz-root.gq-t3 .gq-fit-2 .gq-t3-bars.gq-tpl-n-s { max-width: 640px; }
+  /* Half-width bars: less room held back for the check, so labels wrap later. */
+  #gleame-quiz-root.gq-t5 .gq-fit-2 .gq-t5-bars .gq-t5-bar { padding-right: 12px; gap: 8px; }
+
+  /* Level 3: compact answers and prompt */
+  #gleame-quiz-root.gq-t1 .gq-fit-3 .gq-tpl-q { font-size: 26px; }
+  #gleame-quiz-root.gq-t2 .gq-fit-3 .gq-tpl-q { font-size: 30px; }
+  #gleame-quiz-root.gq-t3 .gq-fit-3 .gq-tpl-q { font-size: 27px; }
+  #gleame-quiz-root.gq-t4 .gq-fit-3 .gq-t4-body .gq-tpl-q { font-size: 28px; }
+  #gleame-quiz-root.gq-t5 .gq-fit-3 .gq-tpl-q { font-size: 30px; }
+  #gleame-quiz-root .gq-fit-3 .gq-tpl-body .gq-tpl-q.gq-tpl-q--sub { font-size: 20px; margin-top: 14px; }
+  #gleame-quiz-root .gq-fit-3 .gq-tpl-any { padding-top: 10px; padding-bottom: 10px; }
+  #gleame-quiz-root .gq-fit-3 .gq-tpl-continue-row { margin-top: 14px; }
+  #gleame-quiz-root.gq-t1 .gq-fit-3 .gq-t1-phases { margin-bottom: 12px; }
+  #gleame-quiz-root.gq-t1 .gq-fit-3 .gq-t1-row { padding: 12px 18px; }
+  #gleame-quiz-root.gq-t2 .gq-fit-3 .gq-t2-bar { margin-bottom: 16px; }
+  #gleame-quiz-root.gq-t2 .gq-fit-3 .gq-t2-row { padding-top: 12px; padding-bottom: 12px; }
+  #gleame-quiz-root.gq-t2 .gq-fit-3 .gq-t2-cards { gap: 14px 16px; }
+  #gleame-quiz-root.gq-t3 .gq-fit-3 .gq-t3-bar { padding: 11px 24px; }
+  #gleame-quiz-root.gq-t3 .gq-fit-3 .gq-t3-icon { padding: 12px 10px; gap: 8px; }
+  #gleame-quiz-root.gq-t3 .gq-fit-3 .gq-t3-icon-slot { width: 64px !important; height: 64px !important; }
+  #gleame-quiz-root.gq-t4 .gq-fit-3 .gq-t4-card { min-height: 56px; padding: 11px 14px; }
+  #gleame-quiz-root.gq-t4 .gq-fit-3 .gq-t4-cards.gq-tpl-n-xl { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  /* Four cards to a row: a smaller thumb leaves the label room. */
+  #gleame-quiz-root.gq-t4 .gq-fit-3 .gq-t4-cards.gq-tpl-n-xl .gq-t4-card { padding: 10px; gap: 10px; font-size: 15px; overflow-wrap: break-word; }
+  #gleame-quiz-root.gq-t4 .gq-fit-3 .gq-t4-cards.gq-tpl-n-xl .gq-t4-card-slot { width: 48px !important; height: 48px !important; }
+  #gleame-quiz-root.gq-t5 .gq-fit-3 .gq-t5-meta { margin-bottom: 14px; }
+  #gleame-quiz-root.gq-t5 .gq-fit-3 .gq-t5-bars .gq-t5-bar { padding: 12px 12px 12px 16px; }
+
+  /* Image grids: the columns the script picked (balanced rows) */
+  #gleame-quiz-root .gq-tpl-step .gq-option-block > .gq-fit-cols { grid-template-columns: repeat(var(--gq-fit-cols), minmax(0, 1fr)); }
 }
 
 /* ---- Reduced motion / animation-off parity for template chrome ---- */
@@ -4637,6 +4799,8 @@
   #gleame-quiz-root .gq-t3-icon,
   #gleame-quiz-root .gq-t4-card,
   #gleame-quiz-root .gq-t5-bars .gq-t5-bar,
+  #gleame-quiz-root.gq-t5 .gq-t5-cards .gq-t5-card,
+  #gleame-quiz-root.gq-t5 .gq-t5-card-cap,
   #gleame-quiz-root .gq-t1-phase-fill,
   #gleame-quiz-root .gq-t2-bar-fill,
   #gleame-quiz-root .gq-t5-prog-fill,

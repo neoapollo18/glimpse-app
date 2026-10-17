@@ -239,7 +239,13 @@ function resolveSlots(
 ): StudioSlot[] {
   const imageByOptionKey = new Map<string, string | null>();
   for (const q of flow?.questions ?? []) {
-    for (const o of q.options) imageByOptionKey.set(`answer:${q.axisKey}:${o.axisValueValue}`, o.imageUrl ?? null);
+    for (const o of q.options) {
+      // A select-all row can share a real answer's value ("Open to
+      // anything" = almond); it is never a tile, so it must not blank
+      // that answer's image.
+      if (o.selectAll) continue;
+      imageByOptionKey.set(`answer:${q.axisKey}:${o.axisValueValue}`, o.imageUrl ?? null);
+    }
   }
   const titleByImage = new Map<string, string>();
   for (const p of opts.catalog ?? []) {
@@ -1308,7 +1314,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
         app_id: data.intercomAppId,
         intercom_user_jwt: data.intercomUserJwt || undefined,
         name: data.shopDomain,
-        // The default bottom-right spot is the right rail's chat input —
+        // The default bottom-right spot is the right rail's composer, so
         // shift the launcher left of the rail, onto the canvas.
         horizontal_padding: 340,
       });
@@ -1713,7 +1719,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
       // (update_rules / removeAxis=false); translate it for merchants.
       setTreeError(
         raw.includes("is referenced by rules")
-          ? "This question can't be deleted while recommendation rules use its answers to pick products. Ask Gleame in the Chat tab to delete it; it will update those rules at the same time."
+          ? "This question can't be deleted while recommendation rules use its answers to pick products. Ask Gleame in the Build with AI tab to delete it; it will update those rules at the same time."
           : raw,
       );
     }

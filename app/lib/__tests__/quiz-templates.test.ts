@@ -3,6 +3,7 @@ import {
   TEMPLATES,
   TEMPLATE_IDS,
   TEMPLATE_STYLES,
+  cleanShowsAnswerArt,
   declareSlots,
   isVisualQuestion,
   resolveQuizTokens,
@@ -157,10 +158,41 @@ describe("declareSlots", () => {
     }
   });
 
-  it("Clean: results only", () => {
+  it("Clean: optional 1:1 image card per visual answer + results; never a required slot", () => {
     const slots = declareSlots("t5", flow);
-    expect(slots).toHaveLength(1);
-    expect(slots[0]).toMatchObject({ key: "results", screen: "results", optional: true });
+    expect(slots.map((s) => s.key)).toEqual([...answerKeys, "results"]);
+    for (const s of slots.filter((x) => x.screen === "question")) {
+      expect(s).toMatchObject({ kind: "variant", ratio: "1:1", optional: true });
+      expect(s.sizePx).toBeUndefined();
+    }
+    expect(slots[slots.length - 1]).toMatchObject({ key: "results", screen: "results", optional: true });
+    // Clean never gates on imagery (generation report counts required slots).
+    expect(slots.every((s) => s.optional)).toBe(true);
+  });
+
+  it("Clean: an explicit non-image answer style keeps bars, so no answer slots", () => {
+    const styled = (optionStyle: string | null): SlotFlow => ({
+      questions: flow.questions.map((q) => (q.axisKey === "undertone" ? { ...q, optionStyle } : q)),
+    });
+    for (const style of ["chips", "boxed", "list", "rich", "vibe", "nails"]) {
+      const keys = declareSlots("t5", styled(style)).map((s) => s.key);
+      expect(keys.some((k) => k.startsWith("answer:undertone:")), style).toBe(false);
+      expect(keys, style).toContain("answer:finish:dewy");
+    }
+    for (const style of ["visual", null, ""]) {
+      expect(declareSlots("t5", styled(style as string | null)).map((s) => s.key)).toEqual([...answerKeys, "results"]);
+    }
+    // Other templates render tiles whatever the style, so they keep the slots.
+    expect(declareSlots("t1", styled("chips")).map((s) => s.key)).toContain("answer:undertone:pink");
+    expect(cleanShowsAnswerArt({ ...flow.questions[1], optionStyle: "visual" })).toBe(true);
+    expect(cleanShowsAnswerArt({ ...flow.questions[0], optionStyle: "visual" })).toBe(false); // no artwork
+  });
+
+  it("Clean copy no longer claims it can't show imagery; imagery stays optional", () => {
+    expect(TEMPLATES.t5.shopperQuestion).not.toMatch(/imagery|image/i);
+    expect(TEMPLATES.t5.visualQuestions).toBe("optional");
+    // Generation imagery floors are unchanged: none for Clean.
+    expect(TEMPLATES.t5.imageryModel).toBe("none");
   });
 
   it("emits no answer slots when no question is visual", () => {

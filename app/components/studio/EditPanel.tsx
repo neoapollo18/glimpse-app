@@ -16,7 +16,7 @@ import {
   Spinner,
   Divider,
 } from "@shopify/polaris";
-import { XSmallIcon } from "@shopify/polaris-icons";
+import { MagicIcon, XSmallIcon } from "@shopify/polaris-icons";
 import type { StudioLoaderData, StudioTab, StudioActionData } from "../../routes/studio";
 import { IntroEditor, LeadEditor, PhotoEditor, ResultsEditor, ThemeEditor } from "./SettingsEditors";
 import { BundleEditor, CrossSellEditor, type OfferCatalogItem } from "./OffersEditors";
@@ -32,8 +32,8 @@ import { slideIdForQuestion } from "./SlideTree";
 import { postStudioAction } from "./studio-data";
 import { defaultEmailPlacement } from "../../lib/quiz-templates";
 
-// Right panel: Edit | Chat tabs. Edit renders the contextual editor for the
-// selected slide; every manual edit goes through the SAME appliers the AI
+// Right panel: Edit | Build with AI tabs. Edit renders the contextual editor
+// for the selected slide; every manual edit goes through the SAME appliers the AI
 // copilot uses (apply-tool intent), so validation is shared and the preview
 // hot-swaps via gleame-preview-update without an iframe reload.
 
@@ -118,10 +118,17 @@ export function EditPanel({
           }}
           style={editHidden ? { flex: "unset", width: "100%" } : undefined}
         >
-          Chat
+          <MagicIcon aria-hidden />
+          Build with AI
         </button>
       </div>
-      <div style={{ flex: 1, minHeight: 0, display: activeTab === "chat" ? "flex" : "none", flexDirection: "column" }}>
+      {/* studio-ai-pane[data-active] lets the shell tint the right panel
+          while Build with AI is showing (StudioShell CSS). */}
+      <div
+        className="studio-ai-pane"
+        data-active={activeTab === "chat"}
+        style={{ flex: 1, minHeight: 0, display: activeTab === "chat" ? "flex" : "none", flexDirection: "column" }}
+      >
         {chat}
       </div>
       {activeTab === "edit" && (

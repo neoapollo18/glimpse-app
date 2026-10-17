@@ -29,6 +29,12 @@ const SHELL_CSS = `
   .studio-panel-tabs { display: flex; border-bottom: 1px solid #E1E3E5; }
   .studio-panel-tab { flex: 1; border: 0; background: transparent; padding: 10px 0; font-size: 13px; font-weight: 600; color: #6D7175; cursor: pointer; border-bottom: 2px solid transparent; }
   .studio-panel-tab[data-active="true"] { color: #202223; border-bottom-color: #1a1a1a; }
+  .studio-panel-tab svg { width: 16px; height: 16px; fill: currentColor; vertical-align: -3px; margin-right: 4px; }
+  /* Build with AI is an optional tool, not a mode: the rail keeps its
+     320px and the canvas never shifts. While it shows, the panel takes
+     ChatPanel's warm canvas and line colour so tabs and chat read as one. */
+  .studio-panel:has(.studio-ai-pane[data-active="true"] .gai) { background: #FAF8F4; }
+  .studio-panel:has(.studio-ai-pane[data-active="true"] .gai) .studio-panel-tabs { border-bottom-color: #E8E2D8; }
   @media (max-width: 1280px) { .studio-root, .studio-topbar { grid-template-columns: 240px minmax(0, 1fr) 320px; } }
   @media (max-width: 1024px) { .studio-root, .studio-topbar { grid-template-columns: 48px minmax(0, 1fr) 320px; } .studio-rail .studio-rail-wide { display: none; } .studio-topbar-left { padding: 0 8px; overflow: hidden; } .studio-topbar-left > :not(:first-child) { display: none; } }
 `;

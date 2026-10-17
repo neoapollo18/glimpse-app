@@ -299,15 +299,19 @@ export const TEMPLATES: Record<TemplateId, TemplateDef> = {
     name: "Clean",
     componentName: "TplClean",
     rootClass: "gq-t5",
-    shopperQuestion: "Any of the above, with no imagery.",
+    // Merchant-facing (gallery card, onboarding scope picker): Clean shows
+    // answer images as cards, so the copy must not promise "no imagery".
+    shopperQuestion: "Any of the above, kept simple.",
     outputShape: "A simple grid",
     questionRange: [4, 6],
     questionRangeLabel: "4–6 questions",
-    resultsShapeLabel: "The fallback. Every other template degrades here.",
+    resultsShapeLabel: "text or image answers · a simple grid of matches",
     introType: "minimal",
     emailPlacementDefault: "gate_results",
     loading: "absent",
-    visualQuestions: "absent",
+    visualQuestions: "optional",
+    // Images are optional, never required: no generation imagery floor,
+    // and Clean stays every degradation's destination.
     imageryModel: "none",
     resultsMarker: "gq-t5r",
     gates: "always eligible — the universal default and every degradation's destination",
@@ -349,6 +353,8 @@ export interface SlotFlowOption {
 export interface SlotFlowQuestion {
   axisKey: string;
   prompt: string;
+  /** Merchant answer style (migration 048); only Clean reads it. */
+  optionStyle?: string | null;
   options: SlotFlowOption[];
 }
 export interface SlotFlow {
@@ -363,6 +369,16 @@ export function isVisualQuestion(q: SlotFlowQuestion): boolean {
     const meta = o.displayMeta ?? {};
     return typeof meta.swatch === "string" || typeof meta.swatch2 === "string";
   });
+}
+
+/**
+ * Clean (t5) shows a visual question as image cards unless the merchant
+ * picked a non-image answer style (chips, boxed, list...), which keeps the
+ * text bars. Mirrors cleanShowsCards in gleame-quiz.js.
+ */
+export function cleanShowsAnswerArt(q: SlotFlowQuestion): boolean {
+  if (q.optionStyle && q.optionStyle !== "visual") return false;
+  return isVisualQuestion(q);
 }
 
 /** The slot key for an answer tile: `answer:{axisKey}:{axisValue}`. */
@@ -397,9 +413,15 @@ export function declareSlots(
   opts: { hasFounder?: boolean } = {}
 ): SlotDecl[] {
   const out: SlotDecl[] = [];
-  const answerSlots = (kind: SlotKind, ratio: string, optional: boolean, sizePx?: number) => {
+  const answerSlots = (
+    kind: SlotKind,
+    ratio: string,
+    optional: boolean,
+    sizePx?: number,
+    showsArt: (q: SlotFlowQuestion) => boolean = isVisualQuestion,
+  ) => {
     flow.questions.forEach((q, i) => {
-      if (!isVisualQuestion(q)) return;
+      if (!showsArt(q)) return;
       for (const o of q.options) {
         if (o.selectAll || !o.axisValueValue) continue;
         out.push({
@@ -484,6 +506,9 @@ export function declareSlots(
       break;
     case "t5":
     default:
+      // Image cards on visual questions; always optional, so Clean never
+      // gates on imagery (the generation report counts required slots only).
+      answerSlots("variant", "1:1", true, undefined, cleanShowsAnswerArt);
       results("Match cards");
       break;
   }

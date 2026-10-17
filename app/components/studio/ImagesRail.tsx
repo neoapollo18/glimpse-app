@@ -30,6 +30,14 @@ const KIND_GLYPH: Record<StudioSlot["kind"], string> = {
   thumb: "◫",
 };
 
+// Whole-image mats for the picker tiles and logo thumbs. Logos are often
+// white on transparent and vanish on a light mat, so they get a
+// checkerboard (the usual transparency cue) that keeps light and dark
+// marks visible.
+const TILE_MAT = "#F3F4F5";
+const logoMat = (square: number) =>
+  `repeating-conic-gradient(#B9BFC6 0% 25%, #DDE1E5 0% 50%) 50% / ${square}px ${square}px`;
+
 /** Picker filter chip pre-selected for a slot kind (spec 4.5). */
 export function filterForKind(kind: StudioSlot["kind"]): string {
   if (kind === "hero" || kind === "lifestyle") return "lifestyle";
@@ -40,6 +48,10 @@ export function filterForKind(kind: StudioSlot["kind"]): string {
 function SlotThumb({ slot, theme }: { slot: StudioSlot; theme: SlotTheme }) {
   const round = slot.key === "founder";
   if (slot.url) {
+    // A cropped wordmark reads as a fragment ("ON I"), so a logo shows
+    // whole on the picker's checkerboard. Its padding sits inside the
+    // 52 px border box so every thumb keeps the same footprint.
+    const logo = slot.kind === "logo";
     return (
       <img
         src={slot.url}
@@ -47,8 +59,11 @@ function SlotThumb({ slot, theme }: { slot: StudioSlot; theme: SlotTheme }) {
         style={{
           width: 52,
           height: 52,
+          boxSizing: "border-box",
+          padding: logo ? 4 : 0,
+          background: logo ? logoMat(8) : undefined,
           borderRadius: round ? "50%" : 8,
-          objectFit: "cover",
+          objectFit: logo ? "contain" : "cover",
           flexShrink: 0,
           border: "1px solid rgba(0,0,0,.06)",
         }}
@@ -319,6 +334,13 @@ const FILTERS = [
   { id: "logos", label: "Logos" },
 ];
 
+/** Tiles are under 200 px, so ask Shopify's CDN for a small rendition
+ * instead of every full-size original (Select still returns img.url). */
+function tileSrc(url: string): string {
+  if (!/^https:\/\/cdn\.shopify\.com\//i.test(url) || /[?&](width|height)=/i.test(url)) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}width=480`;
+}
+
 export function BrandLibraryPicker({
   slotName,
   initialFilter,
@@ -340,6 +362,21 @@ export function BrandLibraryPicker({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const seq = useRef(0);
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const [moreBelow, setMoreBelow] = useState(false);
+
+  // Scroll cue: when a row ends exactly at the grid's bottom edge nothing
+  // peeks into view, so the footer casts a shadow while tiles remain below
+  // (more than the grid's 18 px bottom padding is out of view).
+  const checkMoreBelow = useCallback(() => {
+    const g = gridRef.current;
+    setMoreBelow(!!g && g.scrollHeight - g.scrollTop - g.clientHeight > 18);
+  }, []);
+  useEffect(() => {
+    checkMoreBelow();
+    window.addEventListener("resize", checkMoreBelow);
+    return () => window.removeEventListener("resize", checkMoreBelow);
+  }, [status, images, checkMoreBelow]);
 
   const load = useCallback(async (f: string, s: string) => {
     const my = ++seq.current;
@@ -392,6 +429,8 @@ export function BrandLibraryPicker({
     }
   };
 
+  const showingTiles = status === "ok" && images.length > 0;
+
   return (
     <div
       style={{
@@ -442,7 +481,7 @@ export function BrandLibraryPicker({
             }}
           />
         </div>
-        <div style={{ display: "flex", gap: 8, padding: "12px 20px", borderBottom: "1px solid #E1E3E5" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: "12px 20px", borderBottom: "1px solid #E1E3E5" }}>
           {FILTERS.map((f) => (
             <button
               key={f.id}
@@ -463,14 +502,27 @@ export function BrandLibraryPicker({
             </button>
           ))}
         </div>
+        {/* The grid is the modal's only flexible part: it shrinks to fit
+            82vh and scrolls. Once shrunk, plain auto rows size from each
+            tile's MINIMUM height (0 for an overflow-hidden box) and share
+            out the leftover space, which squashed every tile into a strip;
+            min-content rows take each tile's full height instead. The
+            spinner and empty states keep the old single stretched row in
+            a 180 px floor, so they stay centered as before. The 45% cap
+            on the column minimum keeps two columns on a phone. */}
         <div
+          ref={gridRef}
+          onScroll={checkMoreBelow}
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(4, 1fr)",
+            gridTemplateColumns: "repeat(auto-fill, minmax(min(160px, 45%), 1fr))",
             gap: 12,
             padding: "18px 20px",
             overflowY: "auto",
-            minHeight: 180,
+            flex: "1 1 auto",
+            ...(showingTiles
+              ? { gridAutoRows: "min-content", alignContent: "start", minHeight: 0 }
+              : { minHeight: 180 }),
           }}
         >
           {status === "loading" && (
@@ -495,11 +547,22 @@ export function BrandLibraryPicker({
           )}
           {status === "ok" &&
             images.map((img) => (
+              // The square comes from the tile, not the <img>: a lazy image
+              // has no size until it loads, so the tile must not depend on
+              // it. Contain on a neutral mat shows the whole image, since the
+              // library mixes wide banners, logos, packshots and lifestyle.
+              // The img is squared by aspect-ratio on its own width, not by
+              // a 100% height: Safari resolves that percentage against the
+              // tile's border box, so the image slid down and lost its bottom.
               <figure
                 key={img.id}
                 onClick={() => setSelected(img)}
                 style={{
                   margin: 0,
+                  aspectRatio: "1",
+                  boxSizing: "border-box",
+                  padding: 8,
+                  background: img.role === "logo" ? logoMat(14) : TILE_MAT,
                   borderRadius: 10,
                   overflow: "hidden",
                   position: "relative",
@@ -509,10 +572,10 @@ export function BrandLibraryPicker({
                 }}
               >
                 <img
-                  src={img.url}
+                  src={tileSrc(img.url)}
                   alt=""
                   loading="lazy"
-                  style={{ display: "block", width: "100%", aspectRatio: "1", objectFit: "cover" }}
+                  style={{ display: "block", width: "100%", aspectRatio: "1", objectFit: "contain" }}
                 />
                 <span
                   style={{
@@ -543,6 +606,7 @@ export function BrandLibraryPicker({
                       fontSize: 11,
                       display: "grid",
                       placeItems: "center",
+                      boxShadow: "0 0 0 2px #fff",
                     }}
                   >
                     ✓
@@ -551,7 +615,20 @@ export function BrandLibraryPicker({
               </figure>
             ))}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 20px", borderTop: "1px solid #E1E3E5" }}>
+        {/* Positioned so its scroll-cue shadow paints over the tiles,
+            which are positioned too. */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "14px 20px",
+            borderTop: "1px solid #E1E3E5",
+            position: "relative",
+            boxShadow: moreBelow ? "0 -8px 16px -6px rgba(20,22,26,.2)" : "none",
+            transition: "box-shadow 150ms ease",
+          }}
+        >
           {/* Upload is allowed HERE (post-Reveal) and only when the library
               endpoint exists to receive it. */}
           {status === "ok" && (

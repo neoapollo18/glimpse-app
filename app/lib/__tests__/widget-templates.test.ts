@@ -425,7 +425,7 @@ describe("v3 widget templates", () => {
   });
 
   it("(4a) Studio renders the placeholder for unresolved declared slots", async () => {
-    for (const t of ["t1", "t2", "t3", "t4"] as Tpl[]) {
+    for (const t of TEMPLATES) {
       let count = 0;
       for (const step of ["intro", "q2", "q4"]) {
         const root = await boot(previewFor(t, step, true));
@@ -772,5 +772,158 @@ describe("v3 widget templates", () => {
     const loading = root.querySelector(".gq-tpl-loading");
     expect(loading).not.toBeNull();
     expect(loading!.querySelector(".gq-tpl-loading-rot")!.textContent).toBe("Made for every skin tone.");
+  });
+});
+
+// Clean (t5) image cards (2026-10-16 Trello: "I uploaded images and put
+// style as 'image cards'. Won't show up."). A visual question renders as a
+// card grid unless the merchant picked a non-image answer style.
+describe("Clean image cards", () => {
+  type Flow = ReturnType<typeof makeFlow>;
+  const cleanPreview = (step: string, studio: boolean, mutate?: (flow: Flow) => void, configOverrides: Record<string, unknown> = {}) => {
+    const p = previewFor("t5", step, studio, configOverrides);
+    if (mutate) mutate(p.flow);
+    return p;
+  };
+  // EditPanel OPTION_STYLE_CHOICES minus "visual" (Image cards).
+  const NON_IMAGE_STYLES = ["chips", "boxed", "list", "rich", "vibe", "nails"];
+  const setStyle = (flow: Flow, qi: number, style: string) => {
+    (flow.questions[qi] as Record<string, unknown>).optionStyle = style;
+  };
+
+  it("renders a visual question as image cards with the answer images", async () => {
+    const root = await boot(cleanPreview("q2", false));
+    expect(root.querySelector(".gq-t5-cards.gq-t5-cards--3")).not.toBeNull();
+    expect(root.querySelectorAll(".gq-t5-bar").length).toBe(0);
+    const cards = Array.from(root.querySelectorAll(".gq-t5-cards > .gq-t5-card"));
+    expect(cards.map((c) => c.querySelector(".gq-t5-card-label")!.textContent)).toEqual(["Neutral", "Pink", "Yellow"]);
+    expect(cards[1].querySelector(".gq-t5-card-slot.gq-slot--resolved img")!.getAttribute("src")).toBe(IMG + "pink.jpg");
+    expect(cards[2].querySelector(".gq-t5-card-slot.gq-slot--resolved img")!.getAttribute("src")).toBe(IMG + "yellow.jpg");
+    expect(cards[1].querySelector(".gq-t5-card-slot")!.getAttribute("data-slot-key")).toBe("answer:undertone:pink");
+    // The answer without an image keeps the grid even: an initial block on
+    // the storefront, never the Studio placeholder.
+    expect(cards[0].querySelector(".gq-slot--initial")).not.toBeNull();
+    expect(root.querySelectorAll(".gq-slot--placeholder").length).toBe(0);
+    // Every card carries the bar's check for the selected state.
+    expect(cards.every((c) => c.querySelector(".gq-t5-card-cap .gq-tpl-check"))).toBe(true);
+    // One-word labels with no sublabel: three across on phones too.
+    expect(root.querySelector(".gq-t5-cards--short")).not.toBeNull();
+    // Text-only questions keep the bars.
+    const q1 = await boot(cleanPreview("q1", false));
+    expect(q1.querySelectorAll(".gq-t5-bar").length).toBe(4);
+    expect(q1.querySelector(".gq-t5-cards")).toBeNull();
+  });
+
+  it("shows sublabels under the label, and swatch-only answers paint their swatch", async () => {
+    const swatches = ["#e8c4a0", "#f2b8c6", "#f4d58d"];
+    const root = await boot(
+      cleanPreview("q2", false, (flow) => {
+        flow.questions[1].options.forEach((o, i) => {
+          Object.assign(o, { imageUrl: null, displayMeta: { swatch: swatches[i], sublabel: "Tone " + (i + 1) } });
+        });
+      }),
+    );
+    const cards = root.querySelectorAll(".gq-t5-card");
+    expect(cards.length).toBe(3);
+    const slot = cards[1].querySelector(".gq-t5-card-slot") as HTMLElement;
+    expect(slot.classList.contains("gq-slot--color")).toBe(true);
+    expect(slot.getAttribute("data-slot-kind")).toBe("swatch");
+    expect(slot.style.background).toMatch(/242,\s*184,\s*198|#f2b8c6/i);
+    expect(cards[1].querySelector(".gq-t5-card-desc")!.textContent).toBe("Tone 2");
+    // Sublabels opt out of the phone's three-across short-label layout.
+    expect(root.querySelector(".gq-t5-cards--short")).toBeNull();
+  });
+
+  it("an explicit non-image answer style keeps the bars; 'Image cards' or unset shows cards", async () => {
+    for (const style of NON_IMAGE_STYLES) {
+      const root = await boot(cleanPreview("q2", false, (flow) => setStyle(flow, 1, style)));
+      expect(root.querySelectorAll(".gq-t5-bar").length, style).toBe(3);
+      expect(root.querySelector(".gq-t5-cards"), style).toBeNull();
+      expect(root.querySelectorAll(".gq-slot").length, style).toBe(0);
+    }
+    const visual = await boot(cleanPreview("q2", false, (flow) => setStyle(flow, 1, "visual")));
+    expect(visual.querySelectorAll(".gq-t5-card").length).toBe(3);
+    // 'Image cards' with no artwork at all has nothing to show: bars.
+    const noArt = await boot(cleanPreview("q1", false, (flow) => setStyle(flow, 0, "visual")));
+    expect(noArt.querySelectorAll(".gq-t5-bar").length).toBe(4);
+  });
+
+  it("Studio: unresolved cards are pickable slots, and the Images rail map wins", async () => {
+    const studio = await boot(cleanPreview("q2", true));
+    expect(studio.querySelectorAll(".gq-t5-card .gq-slot--resolved img").length).toBe(2);
+    const ph = studio.querySelector(".gq-t5-card .gq-slot--placeholder") as HTMLElement;
+    expect(ph).not.toBeNull();
+    const msgs: any[] = [];
+    const orig = window.parent.postMessage;
+    (window.parent as any).postMessage = (m: any) => msgs.push(m);
+    ph.click();
+    (window.parent as any).postMessage = orig;
+    expect(msgs.some((m) => m.type === "gleame:pick-slot" && m.slotKey === "answer:undertone:neutral")).toBe(true);
+    // Picking an image from the placeholder must not answer the question.
+    expect(studio.querySelector(".gq-t5-card.is-selected")).toBeNull();
+
+    const railed = await boot(cleanPreview("q2", true, undefined, { imageSlots: { "answer:undertone:neutral": IMG + "rail.jpg" } }));
+    expect(railed.querySelectorAll(".gq-t5-card .gq-slot--placeholder").length).toBe(0);
+    expect(railed.querySelector(".gq-t5-card .gq-slot-img")!.getAttribute("src")).toBe(IMG + "rail.jpg");
+  });
+
+  it("clicking a card answers a single-select question and moves on", async () => {
+    // Play through from Q1 so Back has a step to return to.
+    const root = await boot(cleanPreview("q1", false));
+    (root.querySelector(".gq-t5-bar") as HTMLElement).click();
+    await wait(220 + SWAP);
+    const card = root.querySelectorAll(".gq-t5-card")[2] as HTMLElement;
+    card.click();
+    expect(card.classList.contains("is-selected")).toBe(true);
+    await wait(220 + SWAP);
+    expect(root.querySelector(".gq-t5-count")!.textContent).toBe("3/5");
+    // Back restores the pick on the card.
+    (root.querySelector(".gq-tpl-back") as HTMLElement).click();
+    await wait(220 + SWAP);
+    const again = root.querySelectorAll(".gq-t5-card");
+    expect(again.length).toBe(3);
+    expect(again[2].classList.contains("is-selected")).toBe(true);
+    expect(again[0].classList.contains("is-selected")).toBe(false);
+  });
+
+  it("multi-select cards honor max picks, the open-to-anything button, and Continue", async () => {
+    const root = await boot(
+      cleanPreview("q3", false, (flow) => {
+        const q = flow.questions[2] as Record<string, any>;
+        q.maxSelections = 2;
+        q.options.forEach((o: Record<string, unknown>) => {
+          o.imageUrl = IMG + o.axisValue + ".jpg";
+        });
+        q.options.push({ ...q.options[0], label: "Open to anything", imageUrl: null, selectAll: true, displayMeta: null });
+      }),
+    );
+    const cards = Array.from(root.querySelectorAll(".gq-t5-cards > .gq-t5-card")) as HTMLElement[];
+    expect(cards.length).toBe(4); // the select-all answer is never a card
+    expect(root.querySelector(".gq-t5-cards--4")).not.toBeNull();
+    expect(root.querySelector(".gq-tpl-multi")!.textContent).toBe("Select up to 2");
+    const any = root.querySelector(".gq-option-block > .gq-tpl-any") as HTMLElement;
+    expect(any).not.toBeNull();
+    const cont = root.querySelector(".gq-tpl-continue") as HTMLButtonElement;
+    expect(cont.disabled).toBe(true);
+
+    cards[0].click();
+    cards[1].click();
+    cards[2].click(); // past the cap: ignored
+    expect(cards.map((c) => c.classList.contains("is-selected"))).toEqual([true, true, false, false]);
+    expect(cont.disabled).toBe(false);
+    cards[1].click(); // deselecting is always allowed
+    expect(cards.map((c) => c.classList.contains("is-selected"))).toEqual([true, false, false, false]);
+
+    // Open to anything clears the cards; a card pick clears it again.
+    any.click();
+    expect(any.classList.contains("is-selected")).toBe(true);
+    expect(cards.some((c) => c.classList.contains("is-selected"))).toBe(false);
+    cards[3].click();
+    expect(any.classList.contains("is-selected")).toBe(false);
+    expect(cards[3].classList.contains("is-selected")).toBe(true);
+
+    cont.click();
+    await wait(220 + SWAP);
+    expect(root.querySelector(".gq-t5-count")!.textContent).toBe("4/5");
   });
 });
