@@ -16,7 +16,7 @@ import {
   type Candidate,
 } from "./recommendation-engine.server";
 import { llmOrderCandidates, guardAndPrioritize, applyPriorityOrdering } from "./llm-recommender.server";
-import { checkRateLimit } from "./rate-limiter.server";
+import { checkRateLimit, checkRateLimits, RATE_LIMITS } from "./rate-limiter.server";
 import {
   loadAnswerLayer,
   narrowPool,
@@ -146,9 +146,25 @@ export async function computeQuizRecommendations({
     // Beyond either we degrade, not 429 — a shopper still gets
     // guarded-shuffle results.
     const llmLimit = checkRateLimit(`quiz-recommend:llm:${clientIP}:minute`, 6, 60_000);
-    const shopLlmLimit = checkRateLimit(`quiz-recommend:llm-shop:${verifiedShop.id}:minute`, 60, 60_000);
+    // Shop windows (minute plus a daily ceiling, atomic) only count calls
+    // the IP cap let through, so one noisy IP can't drain the shop's daily
+    // ranking budget with requests that never reach the LLM.
+    const shopLlmLimit = llmLimit.allowed
+      ? checkRateLimits([
+          {
+            key: `quiz-recommend:llm-shop:${verifiedShop.id}:minute`,
+            limit: RATE_LIMITS.QUIZ_RECOMMEND_LLM_PER_SHOP_MINUTE.limit,
+            windowMs: RATE_LIMITS.QUIZ_RECOMMEND_LLM_PER_SHOP_MINUTE.windowMs,
+          },
+          {
+            key: `quiz-recommend:llm-shop:${verifiedShop.id}:day`,
+            limit: RATE_LIMITS.QUIZ_RECOMMEND_LLM_PER_SHOP_DAY.limit,
+            windowMs: RATE_LIMITS.QUIZ_RECOMMEND_LLM_PER_SHOP_DAY.windowMs,
+          },
+        ])
+      : null;
     const flow = await getFlow();
-    const ranked = llmLimit.allowed && shopLlmLimit.allowed
+    const ranked = llmLimit.allowed && shopLlmLimit?.allowed
       ? await llmOrderCandidates({
           candidates: pool.candidates,
           criteria,

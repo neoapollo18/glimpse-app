@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://glimpse-app-charles.onrender.com" crossorigin>
 <link rel="preconnect" href="https://glglqybgabptczqskbcj.supabase.co">
 <div id="gleame-quiz-root"
-     data-shop-domain="{{ gq_domain }}"
+     data-shop-domain="{{ gq_domain | escape }}"
      data-cart-token="{{ cart.token }}"
      data-customer-first-name="{{ customer.first_name | escape }}"
      style="--gq-max-width: {{ block.settings.content_max_width | default: 1080 }}px;

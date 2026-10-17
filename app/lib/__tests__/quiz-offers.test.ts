@@ -27,6 +27,7 @@ import {
   OFFERS_DEFAULTS,
   buildBundleDiscountInput,
   bundleDiscountLive,
+  bundleDiscountRangeError,
   effectiveMinQty,
   generateBundleCode,
   mapOffersRow,
@@ -302,5 +303,87 @@ describe("syncManagedBundleDiscount", () => {
     }, { bundleSize: 2 });
     expect(r.ok).toBe(true);
     expect(table.row).toMatchObject({ bundle_discount_shopify_id: "gid://x/new", bundle_discount_code: "QUIZBUNDLE-BBBBBB" });
+  });
+});
+
+describe("discount range on the merged offer", () => {
+  beforeEach(() => {
+    table.row = null;
+  });
+
+  const managedRow = (extra: Record<string, unknown> = {}) => ({
+    shop_id: "s1",
+    bundle_discount_mode: "managed",
+    bundle_discount_type: "percentage",
+    bundle_discount_value: 20,
+    bundle_discount_code: "QUIZBUNDLE-CCCCCC",
+    bundle_discount_shopify_id: "gid://x/1",
+    ...extra,
+  });
+
+  it("the shared rule keeps the validator's messages", () => {
+    expect(bundleDiscountRangeError("percentage", 90)).toBe(null);
+    expect(bundleDiscountRangeError("percentage", 100)).toBe("A bundle percentage must be between 1% and 90%");
+    expect(bundleDiscountRangeError("percentage", 0.5)).toBe("A bundle percentage must be between 1% and 90%");
+    expect(bundleDiscountRangeError("fixed_amount", 10000)).toBe(null);
+    expect(bundleDiscountRangeError("fixed_amount", 10001)).toBe("That fixed discount is too large");
+    expect(bundleDiscountRangeError("percentage", null)).toBe(null);
+    expect(validateOffersPatch({ bundleDiscountType: "percentage", bundleDiscountValue: 95 })).toEqual({
+      ok: false,
+      error: "A bundle percentage must be between 1% and 90%",
+    });
+  });
+
+  it("a value-only patch can't push 100% off to Shopify", async () => {
+    table.row = managedRow();
+    const before = { ...table.row };
+    const v = validateOffersPatch({ bundleDiscountValue: 100 });
+    expect(v.ok).toBe(true); // alone it has no type to check against
+    const gql = vi.fn();
+    const r = await syncManagedBundleDiscount("s1", gql, { bundleSize: 2, pendingPatch: v.ok ? v.patch : {} });
+    expect(r).toEqual({ ok: false, error: "A bundle percentage must be between 1% and 90%" });
+    expect(gql).not.toHaveBeenCalled();
+    expect(table.row).toEqual(before);
+  });
+
+  it("a type-only patch can't turn a stored $100 into 100% off", async () => {
+    table.row = managedRow({ bundle_discount_type: "fixed_amount", bundle_discount_value: 100 });
+    const gql = vi.fn();
+    const r = await syncManagedBundleDiscount("s1", gql, { bundleSize: 2, pendingPatch: { bundleDiscountType: "percentage" } });
+    expect(r).toEqual({ ok: false, error: "A bundle percentage must be between 1% and 90%" });
+    expect(gql).not.toHaveBeenCalled();
+  });
+
+  it("a first sync from an out-of-range stored row creates nothing", async () => {
+    table.row = { shop_id: "s1", bundle_discount_mode: "managed", bundle_discount_type: "fixed_amount", bundle_discount_value: 50000 };
+    const gql = vi.fn();
+    const r = await syncManagedBundleDiscount("s1", gql, { bundleSize: 2 });
+    expect(r).toEqual({ ok: false, error: "That fixed discount is too large" });
+    expect(gql).not.toHaveBeenCalled();
+  });
+
+  it("switching off still deactivates whatever is stored", async () => {
+    table.row = managedRow({ bundle_discount_value: 100 });
+    const queries: string[] = [];
+    const r = await syncManagedBundleDiscount("s1", async (q) => {
+      queries.push(q);
+      return { discountCodeDeactivate: { codeDiscountNode: { id: "gid://x/1" }, userErrors: [] } };
+    }, { bundleSize: 2, pendingPatch: { bundleDiscountMode: "off" } });
+    expect(r.ok).toBe(true);
+    expect(queries[0]).toContain("discountCodeDeactivate");
+  });
+
+  it("an in-range edit syncs exactly as before", async () => {
+    table.row = managedRow();
+    let sent: any = null;
+    const r = await syncManagedBundleDiscount("s1", async (q, vars: any) => {
+      if (q.includes("discountCodeBasicUpdate")) {
+        sent = vars.input;
+        return { discountCodeBasicUpdate: { codeDiscountNode: { id: "gid://x/1" }, userErrors: [] } };
+      }
+      return { discountCodeActivate: { codeDiscountNode: { id: "gid://x/1" }, userErrors: [] } };
+    }, { bundleSize: 2, pendingPatch: { bundleDiscountValue: 90 } });
+    expect(r.ok).toBe(true);
+    expect(sent.customerGets.value).toEqual({ percentage: 0.9 });
   });
 });

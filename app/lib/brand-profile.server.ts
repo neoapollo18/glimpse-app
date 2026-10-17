@@ -20,6 +20,18 @@
  */
 
 import { supabase } from "./supabase.server";
+import { boundedPublicFetch } from "./safe-fetch.server";
+import {
+  HOMEPAGE_MAX_BYTES,
+  buttonRadii,
+  capHomepageHtml,
+  cssVariable,
+  h1FontFamily,
+  imgTags,
+  isPasswordPage,
+  stripElements,
+  stripTags,
+} from "./homepage-html.server";
 import {
   TEMPLATE_STYLES,
   isTemplateEligible,
@@ -391,36 +403,42 @@ interface HomepageExtract {
 }
 
 /**
- * GET a page's text with ONE budget covering headers AND body: the abort
- * stays armed through `res.text()`, so a host that answers headers fast
- * and then trickles the body can't hang extraction (the timer used to be
- * cleared as soon as the headers arrived). null on any failure.
+ * GET a page's text with ONE budget covering headers AND body, so a host
+ * that answers headers fast and then trickles the body can't hang
+ * extraction. boundedPublicFetch re-checks every redirect hop against
+ * private addresses (https only: storefronts are https end to end) and stops
+ * reading at HOMEPAGE_MAX_BYTES (keeping what it read), so the page can be
+ * neither an internal service nor an endless body. null on any failure.
  */
 async function fetchWithTimeout(url: string, ms: number): Promise<{ url: string; text: string } | null> {
-  const ctl = new AbortController();
-  const t = setTimeout(() => ctl.abort(), ms);
-  try {
-    const res = await fetch(url, {
-      signal: ctl.signal,
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; GleameBrandBot/1.0)" },
-      redirect: "follow",
-    });
-    if (!res.ok) return null;
-    const text = await res.text();
-    return { url: res.url, text };
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(t);
-  }
+  const res = await boundedPublicFetch(url, {
+    timeoutMs: ms,
+    maxBytes: HOMEPAGE_MAX_BYTES,
+    truncate: true,
+    httpsOnly: true,
+    headers: { "User-Agent": "Mozilla/5.0 (compatible; GleameBrandBot/1.0)" },
+  });
+  if (!res) return null;
+  // UTF-8, the same decoding res.text() did.
+  return { url: res.url, text: new TextDecoder().decode(res.body) };
 }
 
 export async function analyzeHomepage(shopDomain: string): Promise<HomepageExtract | null> {
   const res = await fetchWithTimeout(`https://${shopDomain}/`, 6000);
   if (!res) return null;
-  const html = res.text;
+  return analyzeHomepageHtml(res.text, res.url);
+}
+
+/**
+ * The parsing half of analyzeHomepage (exported for tests). The HTML is
+ * merchant-controlled, so the scans come from homepage-html.server: the
+ * same values the old regexes extracted, in linear time, so a crafted page
+ * can no longer stall the event loop for every shop.
+ */
+export function analyzeHomepageHtml(fullHtml: string, finalUrl: string): HomepageExtract | null {
+  const html = capHomepageHtml(fullHtml);
   // Password page → no public homepage; caller degrades gracefully.
-  if (/\/password/.test(res.url) || /<body[^>]*class="[^"]*password/i.test(html)) return null;
+  if (isPasswordPage(finalUrl, html)) return null;
 
   const out: HomepageExtract = {
     headingFont: null, headingSerif: false, headingRounded: false,
@@ -430,15 +448,10 @@ export async function analyzeHomepage(shopDomain: string): Promise<HomepageExtra
   };
 
   // Dawn (and many OS 2.0 themes) print font CSS custom properties inline.
-  const fontVar = (name: string) => {
-    const m = new RegExp(`--${name}\\s*:\\s*([^;}]+)[;}]`).exec(html);
-    return m ? m[1].trim() : null;
-  };
-  out.headingFont = fontVar("font-heading-family");
-  out.bodyFont = fontVar("font-body-family");
+  out.headingFont = cssVariable(html, "font-heading-family");
+  out.bodyFont = cssVariable(html, "font-body-family");
   if (!out.headingFont) {
-    const m = /h1[^{}]*\{[^}]*font-family\s*:\s*([^;}]+)/i.exec(html);
-    out.headingFont = m ? m[1].trim() : null;
+    out.headingFont = h1FontFamily(html);
   }
   if (out.headingFont) {
     out.headingSerif = SERIF_FAMILIES.test(out.headingFont) || /\bserif\s*$/i.test(out.headingFont);
@@ -446,10 +459,10 @@ export async function analyzeHomepage(shopDomain: string): Promise<HomepageExtra
   }
 
   // Button radius: scan inline CSS for button border-radius declarations.
-  const radiusMatches = [...html.matchAll(/(?:button|btn)[^{}]*\{[^}]*border-radius\s*:\s*(\d+(?:\.\d+)?)px/gi)];
-  if (radiusMatches.length) {
+  const radii = buttonRadii(html);
+  if (radii.length) {
     out.buttonRadius = Math.round(
-      radiusMatches.map((m) => parseFloat(m[1])).reduce((a, b) => a + b, 0) / radiusMatches.length
+      radii.map((r) => parseFloat(r)).reduce((a, b) => a + b, 0) / radii.length
     );
   }
 
@@ -469,7 +482,7 @@ export async function analyzeHomepage(shopDomain: string): Promise<HomepageExtra
   // Imagery: count <img> in the first 60% of the document (fold proxy);
   // lifestyle = srcset/width hints ≥ 1600px.
   const head = html.slice(0, Math.floor(html.length * 0.6));
-  const imgs = [...head.matchAll(/<img\b[^>]*>/gi)].map((m) => m[0]);
+  const imgs = [...imgTags(head)];
   out.imageryDensity = Math.min(1, imgs.length / 12);
   out.lifestyleImageCount = imgs.filter((tag) => {
     const widths = [...tag.matchAll(/(\d{3,4})w/g)].map((m) => parseInt(m[1], 10));
@@ -478,10 +491,7 @@ export async function analyzeHomepage(shopDomain: string): Promise<HomepageExtra
   }).length;
 
   // Copy sample for tone classification: strip scripts/styles/tags.
-  out.copySample = html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
+  out.copySample = stripTags(stripElements(stripElements(html, "script"), "style"))
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 2000);

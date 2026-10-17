@@ -5,6 +5,30 @@
 
 export const MAX_REFERENCE_IMAGES = 5;
 
+/**
+ * A shop's folder in the shared `reference-images` bucket. Every upload helper
+ * keys objects under `${referenceImageShopFolder(shop)}/`.
+ */
+export function referenceImageShopFolder(shopDomain: string): string {
+  return shopDomain.replace(/[^a-zA-Z0-9.-]/g, "_");
+}
+
+/**
+ * Whether a decoded `reference-images` storage key is safe to delete. The
+ * bucket is shared across shops and removal runs with the service role, so
+ * refuse traversal-shaped keys and, when the owner is known, anything outside
+ * that shop's folder.
+ */
+export function isDeletableReferenceImageKey(storageKey: string, ownerShopDomain?: string): boolean {
+  if (!storageKey || storageKey.includes("..") || storageKey.startsWith("/") || storageKey.includes("\\")) {
+    return false;
+  }
+  if (ownerShopDomain !== undefined) {
+    return storageKey.startsWith(`${referenceImageShopFolder(ownerShopDomain)}/`);
+  }
+  return true;
+}
+
 function coerceReferenceUrlArray(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
   return raw

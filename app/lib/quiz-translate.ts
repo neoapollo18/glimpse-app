@@ -48,7 +48,7 @@ export type TranslateTarget =
   | { kind: "axis"; axisKey: string }
   | { kind: "prompt"; axisKey: string }
   | { kind: "helper"; axisKey: string }
-  | { kind: "option"; axisKey: string; value: string; field: "label" | "reasonText" | "sublabel" }
+  | { kind: "option"; axisKey: string; index: number; value: string; field: "label" | "reasonText" | "sublabel" }
   | { kind: "why"; productId: string };
 
 export interface TranslateItem {
@@ -103,12 +103,15 @@ export function collectTranslatable(draft: DraftLike, opts: { content: boolean; 
   for (const q of draft.flow.questions) {
     add(q.prompt, { kind: "prompt", axisKey: q.axisKey });
     add(q.helperText, { kind: "helper", axisKey: q.axisKey });
-    for (const o of q.options) {
-      add(o.label, { kind: "option", axisKey: q.axisKey, value: o.axisValueValue, field: "label" });
-      add(o.reasonText, { kind: "option", axisKey: q.axisKey, value: o.axisValueValue, field: "reasonText" });
+    // Options go by position: a select-all answer ("Surprise me") reuses
+    // another answer's value, so the value alone can't tell them apart.
+    q.options.forEach((o, index) => {
+      const at = { kind: "option", axisKey: q.axisKey, index, value: o.axisValueValue } as const;
+      add(o.label, { ...at, field: "label" });
+      add(o.reasonText, { ...at, field: "reasonText" });
       const sub = o.displayMeta && typeof o.displayMeta === "object" ? (o.displayMeta as Record<string, unknown>).sublabel : null;
-      add(sub, { kind: "option", axisKey: q.axisKey, value: o.axisValueValue, field: "sublabel" });
-    }
+      add(sub, { ...at, field: "sublabel" });
+    });
   }
   for (const [productId, line] of Object.entries(sanitizeProductWhy(s.quiz_product_why))) {
     add(line, { kind: "why", productId });
@@ -116,17 +119,37 @@ export function collectTranslatable(draft: DraftLike, opts: { content: boolean; 
   return items;
 }
 
+/** One run's budget. A real quiz is a few hundred short strings (Aurora's:
+ * 258); trust items and why lines have no count cap, so a padded config
+ * could otherwise turn one click into hundreds of Opus calls. Characters
+ * bound the tokens; the item count bounds the calls (one per 60 items), so
+ * thousands of one-letter strings can't slip under the character budget. */
+export const TRANSLATE_MAX_SOURCE_CHARS = 200_000;
+export const TRANSLATE_MAX_ITEMS = 3_000;
+
+export function exceedsTranslateBudget(items: TranslateItem[]): boolean {
+  if (items.length > TRANSLATE_MAX_ITEMS) return true;
+  let total = 0;
+  for (const it of items) total += it.text.length;
+  return total > TRANSLATE_MAX_SOURCE_CHARS;
+}
+
 const braces = (s: string) => [...s.matchAll(/\{\w+\}/g)].map((m) => m[0]).sort().join("|");
 const stars = (s: string) => (s.match(/\*\*/g) ?? []).length;
+const angles = (s: string) => /[<>]/.test(s);
 
 /** A translation is only used if it kept every {placeholder} and **bold**
- * marker and isn't empty or wildly longer than the source. */
+ * marker, added no angle brackets the source didn't have, and isn't empty
+ * or wildly longer than the source. */
 export function acceptTranslation(source: string, translated: unknown): string | null {
   if (typeof translated !== "string") return null;
   const t = translated.trim();
   if (!t) return null;
   if (braces(t) !== braces(source)) return null;
   if (stars(t) !== stars(source)) return null;
+  // Model output lands in shopper-facing labels: markup the merchant never
+  // wrote is dropped, the line keeps its source text.
+  if (angles(t) && !angles(source)) return null;
   if (t.length > source.length * 4 + 60) return null;
   return t;
 }
@@ -192,8 +215,11 @@ export function applyTranslations<D extends DraftLike>(
         ok = true;
       }
     } else if (tg.kind === "option") {
+      // Same position and value as when sent, else skipped: an option
+      // reordered meanwhile is never written onto its neighbor.
       const q = next.flow.questions.find((x) => x.axisKey === tg.axisKey);
-      const o = q?.options.find((x) => x.axisValueValue === tg.value);
+      const at = q?.options[tg.index];
+      const o = at && at.axisValueValue === tg.value ? at : undefined;
       if (o && tg.field === "label" && o.label === item.text) {
         o.label = t;
         ok = true;

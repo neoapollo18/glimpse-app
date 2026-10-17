@@ -580,6 +580,21 @@ describe("v3 widget templates", () => {
     expect(after.querySelector(".gq-tpl-begin")!.textContent).not.toBe("Unlock my discount");
   });
 
+  it("the discount hook keeps its own label when start is overridden (translated quiz)", async () => {
+    // A translation pins both keys: the hook shows unlockDiscount, not start.
+    const translated = await boot(previewFor("t2", "intro", false, { uiText: { start: "Trouver mon match", unlockDiscount: "Débloquer ma remise" } }));
+    expect(translated.querySelector(".gq-tpl-begin")!.textContent).toBe("Débloquer ma remise");
+    const startOnly = await boot(previewFor("t2", "intro", false, { uiText: { start: "Trouver mon match" } }));
+    expect(startOnly.querySelector(".gq-tpl-begin")!.textContent).toBe("Unlock my discount");
+    // Without the hook, start still applies; landing.ctaLabel still wins.
+    const off = await boot(previewFor("t2", "intro", false, { emailPlacement: "off", uiText: { start: "Trouver mon match" } }));
+    expect(off.querySelector(".gq-tpl-begin")!.textContent).toBe("Trouver mon match");
+    const noDiscount = await boot(previewFor("t1", "intro", false, { emailPlacement: "hook_start", lead: { ...(makeConfig("t1").lead as object), hasDiscount: false }, uiText: { start: "Trouver mon match" } }));
+    expect(noDiscount.querySelector(".gq-tpl-begin")!.textContent).toBe("Trouver mon match");
+    const merchant = await boot(previewFor("t2", "intro", false, { landing: { ...(makeConfig("t2").landing as object), ctaLabel: "Take the quiz" }, uiText: { unlockDiscount: "Débloquer ma remise" } }));
+    expect(merchant.querySelector(".gq-tpl-begin")!.textContent).toBe("Take the quiz");
+  });
+
   it("(5-fix) stale phase axis keys fall back to the plain per-screen bar", async () => {
     const root = await boot(previewFor("t1", "q2", false, { phases: [{ label: "Old", axisKeys: ["renamed_axis"] }] }));
     expect(root.querySelector(".gq-t1-phases--plain")).not.toBeNull();

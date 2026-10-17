@@ -1,11 +1,17 @@
 import { createClient } from '@supabase/supabase-js';
 import { quizOrderLineRows, type OrderLinePayload } from "./quiz-order-lines";
 import { dedupeRuleRanks } from "./rule-ranks";
-import { MAX_REFERENCE_IMAGES, parseReferenceImageUrls } from './reference-images';
+import {
+  MAX_REFERENCE_IMAGES,
+  parseReferenceImageUrls,
+  referenceImageShopFolder,
+  isDeletableReferenceImageKey,
+} from './reference-images';
 import { isOptionVisible } from './option-visibility';
 import { ALL_TIERS_FREE } from './pricing-tiers';
 import { sanitizeProductWhy, sanitizeUiText } from './quiz-ui-text';
 import { invalidateStorefrontCache } from './storefront-cache.server';
+import { phoneMatchCandidates } from './gdpr-phone';
 
 if (!process.env.SUPABASE_URL) {
   throw new Error('SUPABASE_URL environment variable is required');
@@ -20,13 +26,26 @@ export const supabase = createClient(
   process.env.SUPABASE_API_KEY
 );
 
+// A hostname: letters, digits, dots and hyphens, at most 253 characters, no
+// leading or trailing dot.
+const PLAUSIBLE_HOST_RE = /^(?!\.)(?!.*\.$)[A-Za-z0-9.-]{1,253}$/;
+
 // Helper function to find shop - SECURE VERSION
 // Only uses exact match and explicit alternate_domains whitelist
 // No fuzzy matching or guessing to prevent impersonation attacks
 // Exported for use in API validation
 export async function findShopByDomain(shopDomain: string) {
   console.log('🔍 Finding shop for domain:', shopDomain);
-  
+
+  // Anything that isn't a hostname never names a shop, and must not reach
+  // the filters below: .contains() writes its value into an unquoted array
+  // literal, where a space, comma or brace reshapes the match (' ' matched
+  // the oldest shop). Surrounding whitespace, which that literal always
+  // ignored, is trimmed so a hand-typed manual_shop_domain still resolves.
+  const domain = typeof shopDomain === 'string' ? shopDomain.trim() : '';
+  if (!PLAUSIBLE_HOST_RE.test(domain)) return null;
+  shopDomain = domain;
+
   // Method 1: Exact match on shop_domain. limit(1) + deterministic order,
   // not .single(): shops had no unique constraint on shop_domain until
   // migration 083, and .single() errors on 2+ rows, which turned a
@@ -1437,6 +1456,49 @@ export function normalizeEmail(email: string): string {
 }
 
 /**
+ * GDPR webhooks: exact shop_domain lookup that reports a query error instead
+ * of reading it as "no shop". findShopByDomain swallows errors, which turned
+ * a transient DB failure into an acknowledged redact that never ran. Webhook
+ * domains are always the myshopify domain, so no alternate_domains fallback.
+ */
+async function findShopIdForGdpr(
+  shopDomain: string
+): Promise<{ ok: true; shopId: string | null } | { ok: false; error: string }> {
+  const { data, error } = await supabase
+    .from('shops')
+    .select('id')
+    .eq('shop_domain', shopDomain)
+    .order('id', { ascending: true })
+    .limit(1);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, shopId: data?.[0]?.id ?? null };
+}
+
+/** Shopify order and customer ids from a customers/* compliance payload. */
+export type GdprOrderRefs = {
+  orderIds?: Array<number | string> | null;
+  customerId?: number | string | null;
+};
+
+// PostgREST puts filters in the URL; keep each .in() list short.
+const GDPR_ORDER_ID_CHUNK = 100;
+
+// widget_orders stores both ids as String(numeric id); anything else can't match.
+function gdprOrderIdChunks(refs?: GdprOrderRefs): string[][] {
+  const ids = [...new Set((refs?.orderIds ?? []).map(String))].filter((id) => /^\d+$/.test(id));
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += GDPR_ORDER_ID_CHUNK) {
+    chunks.push(ids.slice(i, i + GDPR_ORDER_ID_CHUNK));
+  }
+  return chunks;
+}
+
+function gdprCustomerId(refs?: GdprOrderRefs): string | null {
+  const id = refs?.customerId == null ? '' : String(refs.customerId);
+  return /^\d+$/.test(id) ? id : null;
+}
+
+/**
  * GDPR customers/data_request: every stored lead matching the customer's
  * email or phone for this shop.
  */
@@ -1446,8 +1508,14 @@ export async function findQuizLeadsForCustomer(
   phone: string | null
 ): Promise<QuizLeadRow[]> {
   try {
-    const shop = await findShopByDomain(shopDomain);
-    if (!shop || (!email && !phone)) return [];
+    const lookup = await findShopIdForGdpr(shopDomain);
+    if (!lookup.ok) {
+      console.error('findQuizLeadsForCustomer shop lookup error:', lookup.error);
+      return [];
+    }
+    const shopId = lookup.shopId;
+    const phones = phoneMatchCandidates(phone);
+    if (!shopId || (!email && phones.length === 0)) return [];
     // Two exact-match queries instead of a PostgREST .or() — email values
     // may legally contain the .or() grammar's delimiter characters.
     const queries = [];
@@ -1456,17 +1524,18 @@ export async function findQuizLeadsForCustomer(
         supabase
           .from('quiz_leads')
           .select('id, email, phone, quiz_answers, device_type, created_at')
-          .eq('shop_id', shop.id)
+          .eq('shop_id', shopId)
           .eq('email', normalizeEmail(email))
       );
     }
-    if (phone) {
+    if (phones.length > 0) {
+      // Candidates are digits with an optional '+', safe in the in() grammar.
       queries.push(
         supabase
           .from('quiz_leads')
           .select('id, email, phone, quiz_answers, device_type, created_at')
-          .eq('shop_id', shop.id)
-          .eq('phone', phone.replace(/[\s().-]/g, ''))
+          .eq('shop_id', shopId)
+          .in('phone', phones)
       );
     }
     const results = await Promise.all(queries);
@@ -1500,8 +1569,11 @@ export async function redactQuizLeadsForCustomer(
   phone: string | null
 ): Promise<{ ok: boolean; deleted: number; error?: string }> {
   try {
-    const shop = await findShopByDomain(shopDomain);
-    if (!shop || (!email && !phone)) return { ok: true, deleted: 0 };
+    const lookup = await findShopIdForGdpr(shopDomain);
+    if (!lookup.ok) return { ok: false, deleted: 0, error: lookup.error };
+    const shopId = lookup.shopId;
+    const phones = phoneMatchCandidates(phone);
+    if (!shopId || (!email && phones.length === 0)) return { ok: true, deleted: 0 };
     let deleted = 0;
     // Two exact-match deletes instead of a PostgREST .or() — email values
     // may legally contain the .or() grammar's delimiter characters.
@@ -1509,17 +1581,17 @@ export async function redactQuizLeadsForCustomer(
       const { error, count } = await supabase
         .from('quiz_leads')
         .delete({ count: 'exact' })
-        .eq('shop_id', shop.id)
+        .eq('shop_id', shopId)
         .eq('email', normalizeEmail(email));
       if (error) return { ok: false, deleted, error: error.message };
       deleted += count ?? 0;
     }
-    if (phone) {
+    if (phones.length > 0) {
       const { error, count } = await supabase
         .from('quiz_leads')
         .delete({ count: 'exact' })
-        .eq('shop_id', shop.id)
-        .eq('phone', phone.replace(/[\s().-]/g, ''));
+        .eq('shop_id', shopId)
+        .in('phone', phones);
       if (error) return { ok: false, deleted, error: error.message };
       deleted += count ?? 0;
     }
@@ -1540,31 +1612,77 @@ function isMissingColumnError(error: { code?: string } | null): boolean {
 
 /**
  * GDPR customers/data_request: how many order rows hold this customer's
- * email (migration 078). Disclosure counterpart of redactOrderEmailsForCustomer.
+ * email (migration 078), or belong to the payload's orders / customer id.
+ * Disclosure counterpart of redactOrderEmailsForCustomer (same predicates).
  */
 export async function countOrderEmailsForCustomer(
   shopDomain: string,
-  email: string | null
+  email: string | null,
+  refs?: GdprOrderRefs
 ): Promise<number> {
   try {
-    const shop = await findShopByDomain(shopDomain);
-    if (!shop || !email) return 0;
-    const { count, error } = await supabase
-      .from('widget_orders')
-      .select('id', { count: 'exact', head: true })
-      .eq('shop_id', shop.id)
-      .eq('customer_email', normalizeEmail(email));
-    if (error) {
-      if (!isMissingColumnError(error)) {
-        console.error('countOrderEmailsForCustomer error:', error);
-      }
+    const lookup = await findShopIdForGdpr(shopDomain);
+    if (!lookup.ok) {
+      console.error('countOrderEmailsForCustomer shop lookup error:', lookup.error);
       return 0;
     }
-    return count ?? 0;
+    const shopId = lookup.shopId;
+    const customerId = gdprCustomerId(refs);
+    const orderIdChunks = gdprOrderIdChunks(refs);
+    if (!shopId || (!email && !customerId && orderIdChunks.length === 0)) return 0;
+    // One query per predicate (no .or()), unioned by row id so an order
+    // matched by both email and order id counts once.
+    const rows = () => supabase.from('widget_orders').select('id').eq('shop_id', shopId);
+    const queries = [];
+    if (email) queries.push(rows().eq('customer_email', normalizeEmail(email)));
+    for (const ids of orderIdChunks) queries.push(rows().in('shopify_order_id', ids));
+    if (customerId) queries.push(rows().eq('customer_id', customerId));
+    const seen = new Set<string>();
+    for (const { data, error } of await Promise.all(queries)) {
+      if (error) {
+        if (!isMissingColumnError(error)) {
+          console.error('countOrderEmailsForCustomer error:', error);
+        }
+        continue;
+      }
+      for (const r of data ?? []) seen.add(String(r.id));
+    }
+    return seen.size;
   } catch (error) {
     console.error('Error in countOrderEmailsForCustomer:', error);
     return 0;
   }
+}
+
+/**
+ * Null the buyer's identifiers on the shop's order rows whose `column` is in
+ * `values`. Same 079 fallback as the email pass in redactOrderEmailsForCustomer,
+ * plus a pre-078 step where customer_id is the only identifier stored.
+ */
+async function redactOrderIdentifiers(
+  shopId: string,
+  column: 'shopify_order_id' | 'customer_id',
+  values: string[]
+): Promise<{ ok: boolean; redacted: number; error?: string }> {
+  const run = (fields: Record<string, string | null>) =>
+    supabase
+      .from('widget_orders')
+      .update(fields, { count: 'exact' })
+      .eq('shop_id', shopId)
+      .in(column, values);
+  let { error, count } = await run({
+    customer_email: null,
+    customer_id: null,
+    email_redacted_at: new Date().toISOString(),
+  });
+  if (error && isMissingColumnError(error)) {
+    ({ error, count } = await run({ customer_email: null, customer_id: null }));
+  }
+  if (error && isMissingColumnError(error)) {
+    ({ error, count } = await run({ customer_id: null }));
+  }
+  if (error) return { ok: false, redacted: 0, error: error.message };
+  return { ok: true, redacted: count ?? 0 };
 }
 
 /**
@@ -1573,19 +1691,39 @@ export async function countOrderEmailsForCustomer(
  * stay — they're the merchant's sales records — only the PII column goes.
  * Also stamps email_redacted_at (migration 079); a DB trigger keeps the
  * column NULL from then on, so a webhook redelivery can't resurrect it.
+ * Rows for the payload's orders_to_redact and customer.id also lose
+ * customer_id, and their email even when it was an older address.
  */
 export async function redactOrderEmailsForCustomer(
   shopDomain: string,
-  email: string | null
+  email: string | null,
+  refs?: GdprOrderRefs
 ): Promise<{ ok: boolean; redacted: number; error?: string }> {
   try {
-    const shop = await findShopByDomain(shopDomain);
-    if (!shop || !email) return { ok: true, redacted: 0 };
+    const lookup = await findShopIdForGdpr(shopDomain);
+    if (!lookup.ok) return { ok: false, redacted: 0, error: lookup.error };
+    const shopId = lookup.shopId;
+    if (!shopId) return { ok: true, redacted: 0 };
+    let redacted = 0;
+    // Order ids and customer id first: a row they clear no longer matches
+    // the later passes, so the count doesn't double up.
+    for (const ids of gdprOrderIdChunks(refs)) {
+      const r = await redactOrderIdentifiers(shopId, 'shopify_order_id', ids);
+      if (!r.ok) return { ok: false, redacted, error: r.error };
+      redacted += r.redacted;
+    }
+    const customerId = gdprCustomerId(refs);
+    if (customerId) {
+      const r = await redactOrderIdentifiers(shopId, 'customer_id', [customerId]);
+      if (!r.ok) return { ok: false, redacted, error: r.error };
+      redacted += r.redacted;
+    }
+    if (!email) return { ok: true, redacted };
     const stamp = { customer_email: null, email_redacted_at: new Date().toISOString() };
     const { error, count } = await supabase
       .from('widget_orders')
       .update(stamp, { count: 'exact' })
-      .eq('shop_id', shop.id)
+      .eq('shop_id', shopId)
       .eq('customer_email', normalizeEmail(email));
     if (error) {
       // 079 not run yet: retry without the stamp column; 078 not run
@@ -1594,17 +1732,17 @@ export async function redactOrderEmailsForCustomer(
         const retry = await supabase
           .from('widget_orders')
           .update({ customer_email: null }, { count: 'exact' })
-          .eq('shop_id', shop.id)
+          .eq('shop_id', shopId)
           .eq('customer_email', normalizeEmail(email));
         if (retry.error) {
-          if (isMissingColumnError(retry.error)) return { ok: true, redacted: 0 };
-          return { ok: false, redacted: 0, error: retry.error.message };
+          if (isMissingColumnError(retry.error)) return { ok: true, redacted };
+          return { ok: false, redacted, error: retry.error.message };
         }
-        return { ok: true, redacted: retry.count ?? 0 };
+        return { ok: true, redacted: redacted + (retry.count ?? 0) };
       }
-      return { ok: false, redacted: 0, error: error.message };
+      return { ok: false, redacted, error: error.message };
     }
-    return { ok: true, redacted: count ?? 0 };
+    return { ok: true, redacted: redacted + (count ?? 0) };
   } catch (error) {
     return { ok: false, redacted: 0, error: (error as Error).message };
   }
@@ -1941,11 +2079,84 @@ export async function getConfiguredVariantsForStorefront(
 // SHOP DATA CLEANUP (for uninstall)
 // ============================================
 
+const SKIN_PHOTOS_BUCKET = 'skin-analysis-photos';
+// Storage remove() takes at most 1000 paths per call; list pages match.
+const STORAGE_BATCH = 1000;
+
+/** Storage folder for a shop's skin-analysis selfies (save and purge must agree). */
+function skinPhotoPrefix(shopDomain: string): string {
+  return shopDomain.replace(/[^a-zA-Z0-9.-]/g, '_');
+}
+
+function isMissingBucketError(error: { message?: string } | null): boolean {
+  return /bucket not found/i.test(error?.message ?? '');
+}
+
+/**
+ * Remove every skin-analysis selfie stored for a shop: all objects in its
+ * folder, plus any indexed path outside it. The shops cascade drops the
+ * skin_analysis_uploads rows but never the image bytes, so this runs on
+ * uninstall and on shop/redact, including after the shops row is gone.
+ */
+async function purgeSkinAnalysisPhotos(
+  shopDomain: string,
+  shopId: string | null
+): Promise<{ ok: boolean; removed: number; error?: string }> {
+  const bucket = supabase.storage.from(SKIN_PHOTOS_BUCKET);
+  const prefix = skinPhotoPrefix(shopDomain);
+  const paths = new Set<string>();
+
+  // An empty or dots-only prefix would list the bucket root (every shop).
+  if (/[a-zA-Z0-9]/.test(prefix)) {
+    for (let offset = 0; ; ) {
+      const { data, error } = await bucket.list(prefix, { limit: STORAGE_BATCH, offset });
+      if (error) {
+        // No bucket (a DB without migration 028) means nothing was stored.
+        if (isMissingBucketError(error)) return { ok: true, removed: 0 };
+        return { ok: false, removed: 0, error: error.message };
+      }
+      const before = paths.size;
+      for (const obj of data ?? []) paths.add(`${prefix}/${obj.name}`);
+      // Advance by what came back rather than trusting the page size; stop
+      // on an empty page or one that added nothing new.
+      if (!data?.length || paths.size === before) break;
+      offset += data.length;
+    }
+  }
+
+  if (shopId) {
+    const { data, error } = await supabase
+      .from('skin_analysis_uploads')
+      .select('storage_path')
+      .eq('shop_id', shopId);
+    // 42P01/PGRST205: no index table (pre-028), so nothing indexed.
+    if (error && error.code !== '42P01' && error.code !== 'PGRST205') {
+      return { ok: false, removed: 0, error: error.message };
+    }
+    for (const row of data ?? []) {
+      if (row.storage_path) paths.add(row.storage_path);
+    }
+  }
+
+  const all = [...paths];
+  let removed = 0;
+  for (let i = 0; i < all.length; i += STORAGE_BATCH) {
+    const { data, error } = await bucket.remove(all.slice(i, i + STORAGE_BATCH));
+    if (error) {
+      if (isMissingBucketError(error)) return { ok: true, removed };
+      return { ok: false, removed, error: error.message };
+    }
+    removed += data?.length ?? 0;
+  }
+  return { ok: true, removed };
+}
+
 /**
  * Delete all data for a shop when they uninstall the app
  * Called from the APP_UNINSTALLED webhook
  * 
  * Deletion order (to respect foreign keys):
+ * 0. skin-analysis selfies in storage (by folder, even if the shop row is gone)
  * 1. analytics_events (references shop_id)
  * 2. product_variants (references product_id)
  * 3. products (references shop_id)
@@ -1957,6 +2168,7 @@ export async function getConfiguredVariantsForStorefront(
 export async function deleteShopData(shopDomain: string): Promise<{
   success: boolean;
   deleted: {
+    skinAnalysisPhotos: number;
     analyticsEvents: number;
     productVariants: number;
     products: number;
@@ -1969,6 +2181,7 @@ export async function deleteShopData(shopDomain: string): Promise<{
   const result = {
     success: false,
     deleted: {
+      skinAnalysisPhotos: 0,
       analyticsEvents: 0,
       productVariants: 0,
       products: 0,
@@ -1977,14 +2190,34 @@ export async function deleteShopData(shopDomain: string): Promise<{
   };
 
   try {
-    // Step 1: Find the shop
+    // Step 1: Find the shop. maybeSingle, so "no row" and "query failed" stay
+    // distinct: a failed lookup must fail the cleanup (the webhook retries),
+    // not read as already deleted.
     const { data: shop, error: shopError } = await supabase
       .from('shops')
       .select('id')
       .eq('shop_domain', shopDomain)
-      .single();
+      .maybeSingle();
 
-    if (shopError || !shop) {
+    if (shopError) {
+      console.error('[Uninstall Cleanup] Error looking up shop:', shopError);
+      return { ...result, success: false, error: shopError.message };
+    }
+
+    // Selfies first, and before the not-found return below: shop/redact
+    // arrives ~48h after uninstall, when the row is already gone, and this
+    // is the only pass that can still reach the image bytes.
+    const photos = await purgeSkinAnalysisPhotos(shopDomain, shop?.id ?? null);
+    if (!photos.ok) {
+      console.error('[Uninstall Cleanup] Error removing skin-analysis photos:', photos.error);
+      return { ...result, success: false, error: photos.error };
+    }
+    result.deleted.skinAnalysisPhotos = photos.removed;
+    if (photos.removed > 0) {
+      console.log(`[Uninstall Cleanup] Removed ${photos.removed} skin-analysis photos`);
+    }
+
+    if (!shop) {
       // Shop not found - might have been deleted already or never existed
       // This is OK - webhook can fire multiple times
       console.log(`[Uninstall Cleanup] Shop not found in Supabase: ${shopDomain}`);
@@ -2836,7 +3069,7 @@ export async function uploadReferenceImage(
   fileName: string,
   contentType: string
 ): Promise<string> {
-  const sanitizedShop = shopDomain.replace(/[^a-zA-Z0-9.-]/g, '_');
+  const sanitizedShop = referenceImageShopFolder(shopDomain);
   const ext = fileName.split('.').pop() || 'jpg';
   const storagePath = `${sanitizedShop}/${productId}-${Date.now()}.${ext}`;
 
@@ -2865,7 +3098,7 @@ export async function uploadAvatarImage(
   fileName: string,
   contentType: string
 ): Promise<string> {
-  const sanitizedShop = shopDomain.replace(/[^a-zA-Z0-9.-]/g, '_');
+  const sanitizedShop = referenceImageShopFolder(shopDomain);
   const ext = fileName.split('.').pop() || 'jpg';
   const storagePath = `${sanitizedShop}/avatar-${Date.now()}.${ext}`;
 
@@ -2904,13 +3137,13 @@ export async function saveSkinAnalysisPhoto(
   contentType: string,
   visitorName?: string | null
 ): Promise<string> {
-  const sanitizedShop = shopDomain.replace(/[^a-zA-Z0-9.-]/g, '_');
+  const sanitizedShop = skinPhotoPrefix(shopDomain);
   const ext = (fileName.split('.').pop() || 'jpg').toLowerCase();
   const rand = Math.random().toString(36).slice(2, 10);
   const storagePath = `${sanitizedShop}/${Date.now()}-${rand}.${ext}`;
 
   const { error: uploadError } = await supabase.storage
-    .from('skin-analysis-photos')
+    .from(SKIN_PHOTOS_BUCKET)
     .upload(storagePath, fileBuffer, { contentType, upsert: false });
 
   if (uploadError) {
@@ -5210,15 +5443,21 @@ export async function saveRecommendationConfig(
 }
 
 /**
- * Delete a reference image from Supabase Storage given its URL
+ * Delete a reference image from Supabase Storage given its URL.
+ * Pass ownerShopDomain from merchant-facing callers so only that shop's
+ * folder can be touched (every upload helper keys objects under it).
  */
-export async function deleteReferenceImage(imageUrl: string) {
+export async function deleteReferenceImage(imageUrl: string, ownerShopDomain?: string) {
   try {
     const url = new URL(imageUrl);
     const pathMatch = url.pathname.match(/\/storage\/v1\/object\/public\/reference-images\/(.+)/);
     if (!pathMatch) return;
 
     const storagePath = decodeURIComponent(pathMatch[1]);
+    if (!isDeletableReferenceImageKey(storagePath, ownerShopDomain)) {
+      console.warn(`Refusing to delete reference image key: ${storagePath}`);
+      return;
+    }
     await supabase.storage.from('reference-images').remove([storagePath]);
   } catch (error) {
     console.error('Error deleting reference image:', error);

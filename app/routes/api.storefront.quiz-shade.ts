@@ -8,7 +8,8 @@ import {
 } from "../lib/supabase.server";
 import { classifyPhotoAxesForShopDetailed } from "../lib/photo-axis-classifier.server";
 import { shadeBoardConfigForShop } from "../lib/shade-board-config.server";
-import { checkRateLimit, getClientIP } from "../lib/rate-limiter.server";
+import { checkRateLimit, checkRateLimits, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
+import { isValidImageFile, rejectOversizedBody } from "../lib/storefront-api.server";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -17,6 +18,8 @@ const CORS_HEADERS = {
 };
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+// Whole multipart body: the photo plus room for the form fields.
+const MAX_BODY_BYTES = MAX_IMAGE_BYTES + 1024 * 1024;
 
 /**
  * Classify-only endpoint for the quiz's shade detection: takes a shopper
@@ -44,6 +47,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (request.method !== "POST") {
     return json({ error: "Method not allowed" }, { status: 405, headers: CORS_HEADERS });
   }
+  const oversized = rejectOversizedBody(request, MAX_BODY_BYTES, CORS_HEADERS, "Image too large");
+  if (oversized) return oversized;
 
   let requestShopDomain = "";
   try {
@@ -60,6 +65,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
     if (imageFile.size > MAX_IMAGE_BYTES) {
       return json({ error: "Image too large" }, { status: 413, headers: CORS_HEADERS });
+    }
+    // Same type gate as analyze-skin, minus its filename test for untyped
+    // files: the quiz accepts photos the browser couldn't type (they arrive
+    // as application/octet-stream, often with no extension), and
+    // compressImage still refuses any of those it can't decode.
+    const untyped = !imageFile.type || imageFile.type === "application/octet-stream";
+    if (!untyped && !isValidImageFile(imageFile)) {
+      return json(
+        { error: "Please upload an image file (JPG, PNG, HEIC)." },
+        { status: 400, headers: CORS_HEADERS }
+      );
     }
 
     const verifiedShop = await findShopByDomain(shopDomain);
@@ -82,8 +98,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       );
     }
     // Per-shop backstop: the per-IP key is spoofable via X-Forwarded-For
-    // rotation, and each call here is a paid Gemini vision request.
-    const shopLimit = checkRateLimit(`quiz-shade:shop:${verifiedDomain}:hour`, 600, 60 * 60 * 1000);
+    // rotation, and each call here is a paid Gemini vision request. The
+    // daily window stops a loop held under the hourly cap from running all
+    // day.
+    const shopLimit = checkRateLimits([
+      {
+        key: `quiz-shade:shop:${verifiedDomain}:hour`,
+        limit: RATE_LIMITS.QUIZ_SHADE_PER_SHOP_HOUR.limit,
+        windowMs: RATE_LIMITS.QUIZ_SHADE_PER_SHOP_HOUR.windowMs,
+      },
+      {
+        key: `quiz-shade:shop:${verifiedDomain}:day`,
+        limit: RATE_LIMITS.QUIZ_SHADE_PER_SHOP_DAY.limit,
+        windowMs: RATE_LIMITS.QUIZ_SHADE_PER_SHOP_DAY.windowMs,
+      },
+    ]);
     if (!shopLimit.allowed) {
       return json(
         { error: "Too many requests. Please wait a moment." },

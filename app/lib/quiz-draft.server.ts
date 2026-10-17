@@ -83,6 +83,9 @@ const SETTINGS_KEY_ALLOWLIST = new Set([
   "ai_guidance",
   "recommendation_tuning",
   "priority_product_ids",
+  // Results restart button: a chat-era column the quiz widget reads too,
+  // edited from Text & labels and written by Translate this quiz.
+  "end_restart_label",
 ]);
 
 function filterSettings(settings: Partial<ChatAssistantConfig>): Partial<ChatAssistantConfig> {
@@ -231,9 +234,9 @@ export async function captureLiveConfig(shopId: string): Promise<QuizDraft> {
  * written) are pruned from what goes live, not blocked: the runtime
  * candidate pool drops non-live products anyway, and the pre-write snapshot
  * keeps the full rule set restorable. Only rules with no target at all
- * block the save.
+ * block the save. Exported for tests.
  */
-async function checkRuleTargets(
+export async function checkRuleTargets(
   shopId: string,
   flow: SaveRecommendationConfigInput,
 ): Promise<{ blocking: string[]; pruneIndexes: Set<number>; prunedNames: string[] }> {
@@ -265,21 +268,25 @@ async function checkRuleTargets(
 
   // Best-effort names for the save warning: vanished targets usually still
   // exist as archived/soft-deleted rows, so the merchant sees "Cherry Red"
-  // instead of a UUID they can't map to anything.
+  // instead of a UUID they can't map to anything. Only this shop's rows are
+  // named: the warning goes back to the client, so another shop's UUID must
+  // fall back to the generic label instead of reading out its name.
   const prunedNames: string[] = [];
   if (missingProducts.size > 0) {
     const { data } = await supabase
       .from("products")
       .select("id, product_name")
-      .in("id", [...missingProducts]);
+      .in("id", [...missingProducts])
+      .eq("shop_id", shopId);
     const nameById = new Map((data ?? []).map((p: any) => [p.id as string, p.product_name as string]));
     for (const id of missingProducts) prunedNames.push(nameById.get(id) || `product ${id.slice(0, 8)}`);
   }
   if (missingVariants.size > 0) {
     const { data } = await supabase
       .from("product_variants")
-      .select("id, variant_title, products ( product_name )")
-      .in("id", [...missingVariants]);
+      .select("id, variant_title, products!inner ( product_name, shop_id )")
+      .in("id", [...missingVariants])
+      .eq("products.shop_id", shopId);
     const labelById = new Map(
       (data ?? []).map((v: any) => [
         v.id as string,

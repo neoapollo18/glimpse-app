@@ -230,6 +230,13 @@ export const RATE_LIMITS = {
     limit: 10,
     windowMs: 60 * 1000,
   },
+  // Klaviyo forwards per shop (integrations.server.ts), per event kind.
+  // Not a request limit: past it the lead is still stored and answered
+  // normally, it just stops reaching the merchant's Klaviyo for the hour.
+  KLAVIYO_FORWARDS_PER_SHOP_HOUR: {
+    limit: 300,
+    windowMs: 60 * 60 * 1000,
+  },
   // Bundle discount code fetch (migration 086): one per bundle add.
   BUNDLE_DISCOUNT_PER_IP_MINUTE: {
     limit: 10,
@@ -238,39 +245,72 @@ export const RATE_LIMITS = {
   // Analyze-skin API - vision LLM call, more expensive than transform per call
   // but feature is gated to allowlisted shops so volume is bounded. Stricter
   // per-IP limits to discourage casual abuse on the public endpoint.
-  // NOTE: limits raised for conference booth use. At a venue, every attendee
-  // shares one public IP (NAT) — or a single kiosk device is the only client —
-  // so the original per-IP caps (5/min, 20/hr) locked out the whole booth.
-  // Revert to 5 / 20 / 200 after the event if cost becomes a concern.
   ANALYZE_SKIN_PER_IP_MINUTE: {
-    limit: 60,
+    limit: 5,
     windowMs: 60 * 1000,
   },
   ANALYZE_SKIN_PER_IP_HOUR: {
-    limit: 1000,
+    limit: 20,
     windowMs: 60 * 60 * 1000,
   },
   ANALYZE_SKIN_PER_SHOP_HOUR: {
-    limit: 3000,
+    limit: 200,
     windowMs: 60 * 60 * 1000,
+  },
+  // Daily ceiling: a loop held just under the hourly cap would otherwise
+  // run all day.
+  ANALYZE_SKIN_PER_SHOP_DAY: {
+    limit: 2000,
+    windowMs: 24 * 60 * 60 * 1000,
   },
   // Project-skin API — runs 2× Gemini image generations per call (one per
   // projection), so each request costs roughly 2× a try-on transform. Same
   // gating chain as analyze-skin but tighter ceilings to keep cost bounded.
-  // Also raised for the conference (shared IP / kiosk). Kept lower than
-  // analyze-skin because each call = 2× Gemini image generations ($$). If
-  // cost runs hot at the booth, drop these or disable the projections row.
   PROJECT_SKIN_PER_IP_MINUTE: {
-    limit: 40,
+    limit: 3,
     windowMs: 60 * 1000,
   },
   PROJECT_SKIN_PER_IP_HOUR: {
-    limit: 500,
+    limit: 10,
     windowMs: 60 * 60 * 1000,
   },
   PROJECT_SKIN_PER_SHOP_HOUR: {
-    limit: 1500,
+    limit: 100,
     windowMs: 60 * 60 * 1000,
+  },
+  PROJECT_SKIN_PER_SHOP_DAY: {
+    limit: 1000,
+    windowMs: 24 * 60 * 60 * 1000,
+  },
+  // Quiz storefront AI (public endpoints, keyed on the verified shop).
+  // Daily windows sit far above the busiest real shop-day (~470 try-on
+  // generations, ~23 shade detections, ~225 results screens); they only
+  // stop a loop held under the hourly cap from running around the clock.
+  QUIZ_TRYON_PER_SHOP_HOUR: {
+    limit: 1000,
+    windowMs: 60 * 60 * 1000,
+  },
+  QUIZ_TRYON_PER_SHOP_DAY: {
+    limit: 10000,
+    windowMs: 24 * 60 * 60 * 1000,
+  },
+  QUIZ_SHADE_PER_SHOP_HOUR: {
+    limit: 600,
+    windowMs: 60 * 60 * 1000,
+  },
+  QUIZ_SHADE_PER_SHOP_DAY: {
+    limit: 2000,
+    windowMs: 24 * 60 * 60 * 1000,
+  },
+  // quiz-recommend's LLM ranker only (never the matrix path). Over either
+  // window the endpoint degrades to the guarded shuffle, not a 429.
+  QUIZ_RECOMMEND_LLM_PER_SHOP_MINUTE: {
+    limit: 60,
+    windowMs: 60 * 1000,
+  },
+  QUIZ_RECOMMEND_LLM_PER_SHOP_DAY: {
+    limit: 5000,
+    windowMs: 24 * 60 * 60 * 1000,
   },
   // AI quiz creator (Claude, admin-authenticated). Generation is the
   // expensive call (~$0.50); copilot messages are cheap (~$0.10) thanks to
@@ -300,6 +340,30 @@ export const RATE_LIMITS = {
     windowMs: 60 * 60 * 1000,
   },
   GUIDANCE_GENERATE_PER_SHOP_DAY: {
+    limit: 20,
+    windowMs: 24 * 60 * 60 * 1000,
+  },
+  // Products page "test transform": a paid Gemini image generation with
+  // the product's prompt. Manual testing runs a handful an hour.
+  ADMIN_TRANSFORM_PER_SHOP_HOUR: {
+    limit: 30,
+    windowMs: 60 * 60 * 1000,
+  },
+  ADMIN_TRANSFORM_PER_SHOP_DAY: {
+    limit: 150,
+    windowMs: 24 * 60 * 60 * 1000,
+  },
+  // Category suggestion: one Gemini text call per new-product modal open.
+  CLASSIFY_PRODUCT_PER_SHOP_HOUR: {
+    limit: 120,
+    windowMs: 60 * 60 * 1000,
+  },
+  // Studio "Translate this quiz": one Opus call per 60 strings per run.
+  TRANSLATE_QUIZ_PER_SHOP_HOUR: {
+    limit: 6,
+    windowMs: 60 * 60 * 1000,
+  },
+  TRANSLATE_QUIZ_PER_SHOP_DAY: {
     limit: 20,
     windowMs: 24 * 60 * 60 * 1000,
   },

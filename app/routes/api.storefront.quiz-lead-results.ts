@@ -10,7 +10,7 @@ import {
 import { getShopCurrency } from "../lib/shop-currency.server";
 import { formatMoneyDisplay } from "../lib/shop-currency-format";
 import { checkRateLimits, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
-import { CORS_HEADERS } from "../lib/storefront-api.server";
+import { CORS_HEADERS, JSON_BODY_LIMIT_BYTES, rejectOversizedBody } from "../lib/storefront-api.server";
 import { sendResultsToKlaviyo, verifyLeadToken } from "../lib/integrations.server";
 import { numericShopifyId } from "../lib/quiz-offers.server";
 
@@ -36,6 +36,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (request.method !== "POST") {
     return json({ error: "Method not allowed" }, { status: 405, headers: CORS_HEADERS });
   }
+  const oversized = rejectOversizedBody(request, JSON_BODY_LIMIT_BYTES);
+  if (oversized) return oversized;
   let body: any;
   try {
     body = await request.json();
@@ -88,7 +90,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   ]);
   // myshopify.com URLs redirect to the store's primary domain.
   const storeBase = `https://${shop.shop_domain}`;
-  const byHandle = new Map(((rows ?? []) as Array<Record<string, any>>).map((r) => [String(r.handle), r]));
+  // Active (or legacy NULL) rows only, like the recommendation pool real
+  // results come from: a draft's title, image and price must never reach
+  // an email. Filtered before the map so a soft-deleted row sharing a
+  // handle with its active replacement can't win.
+  const byHandle = new Map(
+    ((rows ?? []) as Array<Record<string, any>>)
+      .filter((r) => r.status == null || r.status === "active")
+      .map((r) => [String(r.handle), r]),
+  );
   const products: QuizLeadProduct[] = handles
     .map((h) => byHandle.get(h))
     .filter((r): r is Record<string, any> => Boolean(r && r.product_name))

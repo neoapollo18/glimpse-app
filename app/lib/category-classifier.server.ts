@@ -90,7 +90,9 @@ export async function classifyProduct(
 ): Promise<ClassificationResult | null> {
   console.log('='.repeat(60));
   console.log('🏷️ CLASSIFYING PRODUCT');
-  console.log('   Name:', productName);
+  // Names come from the request; log a bounded slice so a huge one can't
+  // flood the logs.
+  console.log('   Name:', productName.slice(0, 120));
   console.log('   Type:', productType || '(none)');
   console.log('   Description:', productDescription ? productDescription.substring(0, 100) + '...' : '(none)');
   console.log('='.repeat(60));
@@ -175,7 +177,7 @@ If you cannot confidently classify the product (confidence < 0.5), respond with:
     // 4. Call Gemini
     console.log('🤖 Calling Gemini for classification...');
     console.log('   Model:', CLASSIFICATION_MODEL);
-    console.log('   Product:', productName);
+    console.log('   Product:', productName.slice(0, 120));
     
     let response;
     try {

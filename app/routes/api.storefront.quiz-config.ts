@@ -41,19 +41,35 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   const url = new URL(request.url);
-  const shopDomain = url.searchParams.get("shopDomain");
+  // Trimmed so the cache key is the exact string findShopByDomain resolves
+  // (it ignores surrounding whitespace).
+  const shopDomain = url.searchParams.get("shopDomain")?.trim();
 
   if (!shopDomain) {
     return json({ error: "Missing shopDomain" }, { status: 400, headers: CORS_HEADERS });
   }
 
   // Every shopper of a shop gets the same payload, so it rides the 20 s
-  // in-process cache (storefront-cache.server.ts). Signed store previews
-  // are per-request and never cached.
-  const result = url.searchParams.get("previewToken")
-    ? await buildQuizConfig(shopDomain, url)
-    : await storefrontCached(shopDomain, `quiz-config|tpl=${url.searchParams.get("tpl") ?? ""}`, () =>
-        buildQuizConfig(shopDomain, url),
+  // in-process cache (storefront-cache.server.ts). Only a signed store
+  // preview whose token verifies for this shop skips it: any other token
+  // gets the public payload anyway, so it must not force an uncached build.
+  const storePreview = verifyStorePreviewToken(
+    url.searchParams.get("previewToken") ?? "",
+    shopDomain,
+    url.searchParams.get("previewId") ?? "",
+  );
+  // The payload only depends on whether tpl names the current protocol, so
+  // key on that rather than the raw value.
+  const tplKey = url.searchParams.get("tpl") === WIDGET_TEMPLATE_PROTOCOL ? WIDGET_TEMPLATE_PROTOCOL : "";
+  const result = storePreview
+    ? await buildQuizConfig(shopDomain, url, true)
+    : await storefrontCached(
+        shopDomain,
+        `quiz-config|tpl=${tplKey}`,
+        () => buildQuizConfig(shopDomain, url, false),
+        // Only a served config is kept: a cached 403 would blank the quiz
+        // for every shopper until it expired.
+        { keep: (r) => r.status === 200, shopOf: (r) => r.shop },
       );
 
   return json(result.body, {
@@ -69,9 +85,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   });
 };
 
-type QuizConfigResult = { status: number; body: Record<string, unknown>; preview: boolean };
+// shop: the verified shop_domain, for cache invalidation (never sent).
+type QuizConfigResult = { status: number; body: Record<string, unknown>; preview: boolean; shop?: string };
 
-async function buildQuizConfig(shopDomain: string, url: URL): Promise<QuizConfigResult> {
+async function buildQuizConfig(shopDomain: string, url: URL, storePreview: boolean): Promise<QuizConfigResult> {
   const verifiedShop = await findShopByDomain(shopDomain);
   if (!verifiedShop) {
     return { status: 403, body: { error: "Unknown shop" }, preview: false };
@@ -83,7 +100,9 @@ async function buildQuizConfig(shopDomain: string, url: URL): Promise<QuizConfig
   }
 
   const [config, currency, offers] = await Promise.all([
-    getChatAssistantConfig(verifiedShop.shop_domain),
+    // throwOnError: a failed read rejects (and isn't cached) instead of
+    // resolving to the defaults, which read as "quiz off".
+    getChatAssistantConfig(verifiedShop.shop_domain, { throwOnError: true }),
     // Store currency (migration 084): the widget's price fallback when the
     // page has no window.Shopify.currency. null = unknown (USD fallback).
     getShopCurrency(verifiedShop.id).catch(() => null),
@@ -125,7 +144,10 @@ async function buildQuizConfig(shopDomain: string, url: URL): Promise<QuizConfig
   const widgetRendersTemplates = url.searchParams.get("tpl") === WIDGET_TEMPLATE_PROTOCOL;
   const previewToken = url.searchParams.get("previewToken") ?? "";
   const previewId = url.searchParams.get("previewId") ?? "";
-  const isStorePreview = verifyStorePreviewToken(previewToken, verifiedShop.shop_domain, previewId);
+  // Only the uncached branch may build a preview: a cached payload is served
+  // to every shopper.
+  const isStorePreview =
+    storePreview && verifyStorePreviewToken(previewToken, verifiedShop.shop_domain, previewId);
   const templatesLive =
     widgetRendersTemplates && (isStorePreview ? templateRenderable(config) : templateServedLive(config));
   const brandProfile =
@@ -167,6 +189,7 @@ async function buildQuizConfig(shopDomain: string, url: URL): Promise<QuizConfig
   return {
     status: 200,
     preview: isStorePreview,
+    shop: verifiedShop.shop_domain,
     body: {
       // The section renders nothing when the quiz surface isn't active —
       // the block shows a setup hint in the theme editor instead.

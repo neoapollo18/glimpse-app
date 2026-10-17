@@ -22,6 +22,14 @@
  */
 
 import { supabase, findShopByDomain, uploadReferenceImage } from "./supabase.server";
+import { boundedPublicFetch, type BoundedFetchResult } from "./safe-fetch.server";
+import {
+  HOMEPAGE_MAX_BYTES,
+  capHomepageHtml,
+  imgTags,
+  isPasswordPage,
+  ogImageContent,
+} from "./homepage-html.server";
 import {
   isMissingColumnError,
   libraryStatusPatch,
@@ -282,20 +290,26 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
-async function fetchWithTimeout(url: string, ms: number): Promise<Response | null> {
-  const ctl = new AbortController();
-  const t = setTimeout(() => ctl.abort(), ms);
-  try {
-    return await fetch(url, {
-      signal: ctl.signal,
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; GleameBrandBot/1.0)" },
-      redirect: "follow",
-    });
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(t);
-  }
+/**
+ * GET with the brand bot UA through boundedPublicFetch: every redirect hop
+ * is checked against private addresses and must stay on https (storefronts
+ * and Shopify's CDN are https end to end), one timeout covers headers AND
+ * body, and the body is streamed against maxBytes (past it the fetch fails,
+ * or with `truncate` keeps what it read). null on any failure or non-2xx.
+ */
+function fetchWithTimeout(
+  url: string,
+  ms: number,
+  maxBytes: number,
+  truncate = false
+): Promise<BoundedFetchResult | null> {
+  return boundedPublicFetch(url, {
+    timeoutMs: ms,
+    maxBytes,
+    truncate,
+    httpsOnly: true,
+    headers: { "User-Agent": "Mozilla/5.0 (compatible; GleameBrandBot/1.0)" },
+  });
 }
 
 async function isCatalogSyncEnabledInline(shopDomain: string): Promise<boolean> {
@@ -558,14 +572,12 @@ export function extractHomepageImageCandidates(html: string): Array<{ url: strin
     out.push({ url, width });
   };
 
-  const og = /<meta[^>]+property=["']og:image(?::secure_url)?["'][^>]+content=["']([^"']+)["']/i.exec(html) ||
-    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image(?::secure_url)?["']/i.exec(html);
-  push(og ? og[1].replace(/&amp;/g, "&") : null, null);
+  const og = ogImageContent(html);
+  push(og ? og.replace(/&amp;/g, "&") : null, null);
 
   // Hero candidates: large imgs in the first 60% of the document.
   const head = html.slice(0, Math.floor(html.length * 0.6));
-  for (const m of head.matchAll(/<img\b[^>]*>/gi)) {
-    const tag = m[0];
+  for (const tag of imgTags(head)) {
     const src = /src=["']([^"']+)["']/i.exec(tag)?.[1] ?? null;
     if (!src) continue;
     const widths = [...tag.matchAll(/(\d{3,4})w/g)].map((x) => parseInt(x[1], 10));
@@ -583,12 +595,18 @@ export function extractHomepageImageCandidates(html: string): Array<{ url: strin
  * tiny CDN rendition; never throws. */
 async function extractDominantColor(url: string): Promise<string[] | null> {
   try {
-    const sized = /cdn\.shopify\.com/.test(url)
-      ? `${url}${url.includes("?") ? "&" : "?"}width=64`
-      : url;
-    const res = await fetchWithTimeout(sized, 3000);
-    if (!res || !res.ok) return null;
-    const buf = Buffer.from(await res.arrayBuffer());
+    // Images are only fetched over TLS. Dawn prints og:image as http:, which
+    // Shopify redirects to https anyway, so ask for https up front.
+    const secureUrl = url.replace(/^http:\/\//i, "https://");
+    if (!/^https:\/\//i.test(secureUrl)) return null;
+    const sized = /cdn\.shopify\.com/.test(secureUrl)
+      ? `${secureUrl}${secureUrl.includes("?") ? "&" : "?"}width=64`
+      : secureUrl;
+    // The 2 MB cap is enforced while streaming, so an oversized body is
+    // cut off instead of buffered whole.
+    const res = await fetchWithTimeout(sized, 3000, 2_000_000);
+    if (!res) return null;
+    const buf = res.body;
     if (buf.length === 0 || buf.length > 2_000_000) return null;
     const sharp = (await import("sharp")).default;
     const { dominant } = await sharp(buf).stats();
@@ -827,11 +845,15 @@ async function runLibraryBuild(
   if (timeLeft() <= 3000) timedOut = true;
   if (timeLeft() > 3000) {
     try {
-      const res = await fetchWithTimeout(`https://${shopDomain}/`, Math.min(6000, timeLeft() - 1000));
-      if (res?.ok) {
-        const html = await res.text();
-        const isPassword = /\/password/.test(res.url) || /<body[^>]*class="[^"]*password/i.test(html);
-        if (!isPassword) {
+      const res = await fetchWithTimeout(
+        `https://${shopDomain}/`,
+        Math.min(6000, timeLeft() - 1000),
+        HOMEPAGE_MAX_BYTES,
+        true
+      );
+      if (res) {
+        const html = capHomepageHtml(new TextDecoder().decode(res.body));
+        if (!isPasswordPage(res.url, html)) {
           for (const cand of extractHomepageImageCandidates(html)) {
             collected.push({
               url: cand.url,

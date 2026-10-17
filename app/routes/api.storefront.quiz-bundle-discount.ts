@@ -2,7 +2,7 @@ import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { findShopByDomain, getChatAssistantConfig, shopHasValidAccess } from "../lib/supabase.server";
 import { checkRateLimits, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
-import { CORS_HEADERS } from "../lib/storefront-api.server";
+import { CORS_HEADERS, JSON_BODY_LIMIT_BYTES, rejectOversizedBody } from "../lib/storefront-api.server";
 import { bundleDiscountLive, getQuizOffers } from "../lib/quiz-offers.server";
 
 /**
@@ -19,6 +19,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (request.method !== "POST") {
     return json({ error: "Method not allowed" }, { status: 405, headers: CORS_HEADERS });
   }
+  const oversized = rejectOversizedBody(request, JSON_BODY_LIMIT_BYTES);
+  if (oversized) return oversized;
   let body: any;
   try {
     body = await request.json();

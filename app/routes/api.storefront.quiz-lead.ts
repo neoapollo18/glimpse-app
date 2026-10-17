@@ -4,12 +4,14 @@ import {
   findShopByDomain,
   shopHasValidAccess,
   getChatAssistantConfig,
+  getRecommendationFlow,
   saveQuizLead,
   type QuizLeadAnswer,
 } from "../lib/supabase.server";
 import { checkRateLimits, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
-import { CORS_HEADERS } from "../lib/storefront-api.server";
+import { CORS_HEADERS, rejectOversizedBody } from "../lib/storefront-api.server";
 import { sendLeadToKlaviyo, signLeadToken } from "../lib/integrations.server";
+import { isAllowedLeadAnswer, leadAnswerAllowlist } from "../lib/quiz-lead-answers";
 
 // Practical shapes, not RFC exhaustiveness: something@something.tld.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -17,6 +19,9 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const PHONE_RE = /^\+?\d{7,15}$/;
 
 const MAX_ANSWERS = 40;
+// More room than the other JSON posts: the answers snapshot carries the
+// merchant's own question and answer wording, which the widget doesn't cap.
+const MAX_BODY_BYTES = 256 * 1024;
 
 /**
  * Quiz lead capture (migration 067). The widget's lead step posts an email
@@ -31,6 +36,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (request.method !== "POST") {
     return json({ error: "Method not allowed" }, { status: 405, headers: CORS_HEADERS });
   }
+  const oversized = rejectOversizedBody(request, MAX_BODY_BYTES);
+  if (oversized) return oversized;
 
   let body: any;
   try {
@@ -59,37 +66,42 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ error: "Enter an email or phone number." }, { status: 400, headers: CORS_HEADERS });
   }
 
-  // Rate limit BEFORE any DB work so an over-limit caller can't use this
-  // endpoint as a free query amplifier. The per-shop key uses the claimed
-  // domain string — verification happens below, and a spoofed claim only
-  // burns the attacker's own IP budget alongside it.
+  const tooMany = (retryAfterSeconds: number | undefined) =>
+    json(
+      { error: "Too many requests — please try again shortly." },
+      {
+        status: 429,
+        headers: { ...CORS_HEADERS, "Retry-After": String(retryAfterSeconds ?? 30) },
+      }
+    );
+
+  // Per-IP limit BEFORE any DB work so an over-limit caller can't use this
+  // endpoint as a free query amplifier.
   const clientIP = getClientIP(request);
-  const rate = checkRateLimits([
+  const ipRate = checkRateLimits([
     {
       key: `quiz-lead:ip:${clientIP}:minute`,
       limit: RATE_LIMITS.QUIZ_LEAD_PER_IP_MINUTE.limit,
       windowMs: RATE_LIMITS.QUIZ_LEAD_PER_IP_MINUTE.windowMs,
     },
-    {
-      key: `quiz-lead:shop:${shopDomain.toLowerCase()}:hour`,
-      limit: RATE_LIMITS.QUIZ_LEAD_PER_SHOP_HOUR.limit,
-      windowMs: RATE_LIMITS.QUIZ_LEAD_PER_SHOP_HOUR.windowMs,
-    },
   ]);
-  if (!rate.allowed) {
-    return json(
-      { error: "Too many requests — please try again shortly." },
-      {
-        status: 429,
-        headers: { ...CORS_HEADERS, "Retry-After": String(rate.retryAfterSeconds ?? 30) },
-      }
-    );
-  }
+  if (!ipRate.allowed) return tooMany(ipRate.retryAfterSeconds);
 
   const verifiedShop = await findShopByDomain(shopDomain);
   if (!verifiedShop) {
     return json({ error: "Unknown shop" }, { status: 403, headers: CORS_HEADERS });
   }
+
+  // Per-shop key on the verified canonical domain: keyed on the claimed
+  // string, each of a shop's alternate domains got its own bucket.
+  const shopRate = checkRateLimits([
+    {
+      key: `quiz-lead:shop:${verifiedShop.shop_domain}:hour`,
+      limit: RATE_LIMITS.QUIZ_LEAD_PER_SHOP_HOUR.limit,
+      windowMs: RATE_LIMITS.QUIZ_LEAD_PER_SHOP_HOUR.windowMs,
+    },
+  ]);
+  if (!shopRate.allowed) return tooMany(shopRate.retryAfterSeconds);
 
   // Anti-spoofing (same policy as track-event): an Origin that RESOLVES to a
   // different shop than the body claims is a spoofed submission — accept
@@ -118,17 +130,31 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   // The merchant may have turned the step off after this shopper loaded the
   // (60s-cached) config — accept without storing rather than erroring at a
-  // shopper who did nothing wrong.
-  const config = await getChatAssistantConfig(verifiedShop.shop_domain);
+  // shopper who did nothing wrong. The flow is read alongside so the
+  // answers check below adds no round trip.
+  const [config, flow] = await Promise.all([
+    getChatAssistantConfig(verifiedShop.shop_domain),
+    getRecommendationFlow(verifiedShop.id).catch(() => null),
+  ]);
   if (!config.quiz_lead_enabled) {
     return json({ success: true }, { headers: CORS_HEADERS });
   }
 
   // ---- Answers snapshot: bounded, strings only ----
+  // Only this shop's own questions and answer labels are kept: the pairs
+  // land in the merchant's Klaviyo events, so free text from a caller is
+  // dropped silently (the lead itself still saves). Checked before the
+  // length caps so a long label still matches.
+  // getRecommendationFlow answers an empty flow when its read fails, so an
+  // empty or missing flow means "unknown", not "no answers allowed": keep
+  // the answers as before rather than silently dropping a real shopper's.
+  const flowKnown = Boolean(flow && Array.isArray(flow.questions) && flow.questions.length > 0);
+  const allowedAnswers = leadAnswerAllowlist(flow, config.quiz_ui_text?.openToAnything);
   const answers: QuizLeadAnswer[] = Array.isArray(body.answers)
     ? body.answers
         .filter((a: any) => a && typeof a.question === "string" && typeof a.answer === "string")
         .slice(0, MAX_ANSWERS)
+        .filter((a: any) => !flowKnown || isAllowedLeadAnswer(allowedAnswers, a.question, a.answer))
         .map((a: any) => ({
           question: a.question.slice(0, 300),
           answer: a.answer.slice(0, 500),
@@ -158,6 +184,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   // Klaviyo (migration 086): subscribe + "Gleame Quiz Lead" event. Fire
   // and forget: the shopper never waits on (or sees) a third-party call.
+  // Past the shop's hourly forwarding budget (takeKlaviyoForward) the lead
+  // stays stored here but isn't sent.
   if (result.leadId) {
     void sendLeadToKlaviyo(verifiedShop.id, {
       leadId: result.leadId,

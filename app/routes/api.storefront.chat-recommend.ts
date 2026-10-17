@@ -20,7 +20,7 @@ import { classifyPhotoAxesForShop } from "../lib/photo-axis-classifier.server";
 import { checkRateLimit, getClientIP } from "../lib/rate-limiter.server";
 import { neverMatches } from "../lib/answer-rules-layer";
 import { normalizeGlobalRules } from "../lib/answer-rules-shared";
-import { isValidImageFile } from "../lib/storefront-api.server";
+import { isValidImageFile, rejectOversizedBody } from "../lib/storefront-api.server";
 import { CHAT_ASSISTANT_RETIRED, retiredJson } from "../lib/retired-features";
 
 const CORS_HEADERS = {
@@ -30,6 +30,8 @@ const CORS_HEADERS = {
 };
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+// Whole multipart body: the photo plus room for criteria and other fields.
+const MAX_BODY_BYTES = MAX_IMAGE_BYTES + 1024 * 1024;
 
 // CORS preflight — Remix routes OPTIONS to the LOADER, not the action (same
 // pattern as quiz-recommend/track-event). Without a loader, preflights got a
@@ -48,6 +50,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (request.method !== "POST") {
     return json({ error: "Method not allowed" }, { status: 405, headers: CORS_HEADERS });
   }
+  const oversized = rejectOversizedBody(request, MAX_BODY_BYTES, CORS_HEADERS, "Image too large");
+  if (oversized) return oversized;
 
   try {
     const formData = await request.formData();

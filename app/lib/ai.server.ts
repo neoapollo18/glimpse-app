@@ -3,6 +3,7 @@ import https from "https";
 import NodeFormData from "form-data";
 import sharp from "sharp";
 import heicConvert from "heic-convert";
+import heicDecode from "heic-decode";
 
 const client = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
@@ -83,20 +84,68 @@ interface ImageTransformationResponse {
   error?: string;
 }
 
+// The largest iPhone HEIC is 48 MP. A crafted HEIC can declare far more in
+// a few KB, and heic-convert allocates the full RGBA frame up front.
+const MAX_HEIC_PIXELS = 60_000_000;
+
+// HEIC decode + JPEG encode run synchronously on the main thread and each
+// holds a full-size frame in memory, so only this many run at once; the
+// rest wait their turn instead of piling up.
+const MAX_CONCURRENT_HEIC = 2;
+let activeHeicConversions = 0;
+const heicQueue: Array<() => void> = [];
+
+async function withHeicSlot<T>(task: () => Promise<T>): Promise<T> {
+  if (activeHeicConversions < MAX_CONCURRENT_HEIC) {
+    activeHeicConversions++;
+  } else {
+    await new Promise<void>((resolve) => heicQueue.push(resolve));
+  }
+  try {
+    return await task();
+  } finally {
+    // Hand the slot straight to the next waiter, or give it back.
+    const next = heicQueue.shift();
+    if (next) next();
+    else activeHeicConversions--;
+  }
+}
+
+// Reads the primary image's size from the HEIF header without decoding
+// pixels. heic-convert decodes images[0] too, so the check covers exactly
+// the frame it would allocate.
+async function assertHeicWithinPixelLimit(inputBuffer: Buffer): Promise<void> {
+  const images = await heicDecode.all({ buffer: inputBuffer });
+  try {
+    const width = Number(images[0]?.width) || 0;
+    const height = Number(images[0]?.height) || 0;
+    if (width * height > MAX_HEIC_PIXELS) {
+      throw new Error(`UNSUPPORTED_IMAGE: HEIC photo is ${width}x${height}, over the ${MAX_HEIC_PIXELS} pixel limit`);
+    }
+  } finally {
+    // all() keeps the libheif handles alive until disposed; skipping this
+    // leaks WASM memory on every upload.
+    images.dispose();
+  }
+}
+
 // Convert HEIC to JPEG using heic-convert (Sharp doesn't support HEIC on all platforms)
 async function convertHeicToJpeg(inputBuffer: Buffer): Promise<Buffer> {
-  try {
-    const outputBuffer = await heicConvert({
-      buffer: inputBuffer,
-      format: 'JPEG',
-      quality: 0.92
-    });
-    console.log('HEIC converted to JPEG successfully');
-    return Buffer.from(new Uint8Array(outputBuffer));
-  } catch (error) {
-    console.error('HEIC conversion failed:', error);
-    throw error;
-  }
+  return withHeicSlot(async () => {
+    try {
+      await assertHeicWithinPixelLimit(inputBuffer);
+      const outputBuffer = await heicConvert({
+        buffer: inputBuffer,
+        format: 'JPEG',
+        quality: 0.92
+      });
+      console.log('HEIC converted to JPEG successfully');
+      return Buffer.from(new Uint8Array(outputBuffer));
+    } catch (error) {
+      console.error('HEIC conversion failed:', error);
+      throw error;
+    }
+  });
 }
 
 // Check if buffer is HEIC format (check magic bytes)
@@ -137,8 +186,10 @@ export async function compressImage(base64Image: string, mimeType: string, maxPx
       inputBuffer = await convertHeicToJpeg(inputBuffer);
     }
     
-    // Use Sharp to resize image to maxPx on the larger dimension
-    const compressedBuffer = await sharp(inputBuffer)
+    // Use Sharp to resize image to maxPx on the larger dimension. The pixel
+    // cap sits well above any phone camera (48-50 MP) and stops a few-KB
+    // decompression bomb from expanding to gigabytes of raster.
+    const compressedBuffer = await sharp(inputBuffer, { limitInputPixels: 100_000_000 })
       .rotate() // Auto-rotate based on EXIF orientation data
       .resize({
         width: maxPx,
@@ -163,6 +214,10 @@ export async function compressImage(base64Image: string, mimeType: string, maxPx
     };
   } catch (error) {
     console.error('Image compression failed:', error);
+    // Already a deliberate rejection (e.g. the HEIC pixel cap): keep its reason.
+    if (error instanceof Error && error.message.startsWith('UNSUPPORTED_IMAGE')) {
+      throw error;
+    }
     // HEIC that failed to convert must NOT fall through: the AI APIs can't
     // read raw HEIC, so shipping the original bytes (often mislabeled as
     // JPEG downstream) guarantees a slow, retried, still-failing request.
@@ -177,6 +232,12 @@ export async function compressImage(base64Image: string, mimeType: string, maxPx
         throw heicCheckError;
       }
       // magic-byte check itself failed — fall through to the legacy path
+    }
+    // Bytes sharp can't read that don't even claim to be an image (text,
+    // PDF, audio, video) must not reach the model either: Gemini bills them
+    // as huge inline documents, and no image model can use them anyway.
+    if (!/^image\//i.test(mimeType || '')) {
+      throw new Error('UNSUPPORTED_IMAGE: undecodable upload without an image content type');
     }
     // Non-HEIC failure (odd but sharp-processable formats): return the
     // original image — the models handle standard formats at full size.

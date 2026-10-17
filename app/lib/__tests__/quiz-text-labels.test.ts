@@ -164,6 +164,21 @@ describe("Studio / copilot appliers", () => {
     expect(cleared.ok && (cleared.draft.settings as any).quiz_results_primary_cta).toBeNull();
   });
 
+  it("update_copy takes every column entry, including the restart label", () => {
+    const r = applyUpdateCopy(
+      draft(),
+      { fields: { end_restart_label: "Refaire le quiz", quiz_view_product_label: "Voir" } },
+      catalog,
+    );
+    expect(r.ok && r.draft.settings).toMatchObject({ end_restart_label: "Refaire le quiz", quiz_view_product_label: "Voir" });
+    // NOT NULL column: clearing stores "" (the widget falls back), never null.
+    const cleared = applyUpdateCopy(draft({ end_restart_label: "Refaire" }), { fields: { end_restart_label: null } }, catalog);
+    expect(cleared.ok && (cleared.draft.settings as any).end_restart_label).toBe("");
+    for (const e of UI_TEXT_ENTRIES.filter((x) => x.column)) {
+      expect(applyUpdateCopy(draft(), { fields: { [e.key]: "Text" } }, catalog).ok, `${e.key} rejected`).toBe(true);
+    }
+  });
+
   it("update_design_tokens validates body weight and color", () => {
     const ok = applyUpdateDesignTokens(draft(), { fields: { quiz_body_weight: "500", quiz_body_color: "#2b2b2b" } }, catalog);
     expect(ok.ok && ok.draft.settings).toMatchObject({ quiz_body_weight: "500", quiz_body_color: "#2b2b2b" });

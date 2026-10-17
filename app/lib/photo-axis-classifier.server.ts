@@ -177,9 +177,15 @@ export async function classifyShadeBoard(
       reason?: unknown;
     };
 
-    // Full verdict in the logs: when a merchant disputes a match, this is
-    // the only record of what the model saw (the photo is never stored).
-    console.log('[shade-board] verdict:', JSON.stringify(parsed));
+    // The pick in the logs: when a merchant disputes a match, this is the
+    // only record of what the model chose (the photo is never stored). Its
+    // descriptions of the shopper (tone, darkness, reason, lighting notes)
+    // stay out of log retention.
+    console.log('[shade-board] verdict:', JSON.stringify({
+      match: parsed.match,
+      second_match: parsed.second_match,
+      confidence: parsed.confidence,
+    }));
 
     const match = typeof parsed.match === 'string' ? parsed.match.trim() : '';
     if (match.toUpperCase() === 'NO_MATCH') return { values: {}, noMatch: true };

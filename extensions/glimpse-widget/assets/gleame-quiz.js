@@ -1413,7 +1413,8 @@
       ].forEach(function(f) {
         if (!f.url) return;
         var fig = el('figure', 'gq-ba-frame' + (f.after ? ' gq-ba-frame-after' : ''));
-        fig.appendChild(el('span', 'gq-ba-tag' + (f.after ? ' gq-ba-tag-after' : ''), f.tag));
+        // Tags are merchant text (T), so escape before el() sets innerHTML.
+        fig.appendChild(el('span', 'gq-ba-tag' + (f.after ? ' gq-ba-tag-after' : ''), escapeHtml(f.tag)));
         var img = el('img', 'gq-ba-img');
         if (!setImgSrc(img, f.url, IMG_WIDTH.frame)) img.src = f.url;
         img.alt = f.alt;
@@ -5107,12 +5108,14 @@
   function introCtaLabel(tpl) {
     var landing = config.landing || {};
     if (landing.ctaLabel) return landing.ctaLabel;
-    // A Text & labels start override is a merchant label too.
-    var ui = config.uiText;
-    if (ui && typeof ui.start === 'string' && ui.start.trim()) return ui.start;
+    // The discount hook has its own Text & labels key (unlockDiscount), so
+    // it wins over start: a translation pins both and must keep the offer.
     if (leadActive() && tplEmailPlacement() === 'hook_start' && config.lead && config.lead.hasDiscount) {
       return T('unlockDiscount', 'Unlock my discount');
     }
+    // A Text & labels start override is a merchant label too.
+    var ui = config.uiText;
+    if (ui && typeof ui.start === 'string' && ui.start.trim()) return ui.start;
     return TPL_CTA[tpl.id] || 'Start the quiz';
   }
 

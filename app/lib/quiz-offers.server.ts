@@ -202,6 +202,25 @@ export type OffersPatch = Partial<
   >
 >;
 
+/**
+ * Cross-field range rule for the bundle discount. A patch only carries the
+ * fields it changes, so callers also run this on the merged offer (stored
+ * values + patch): that pair is what reaches Shopify.
+ */
+export function bundleDiscountRangeError(
+  type: BundleDiscountType | null | undefined,
+  value: number | null | undefined,
+): string | null {
+  // The percentage is a whole percent the widget can show.
+  if (type === "percentage" && value != null && (value < 1 || value > 90)) {
+    return "A bundle percentage must be between 1% and 90%";
+  }
+  if (type === "fixed_amount" && value != null && value > 10000) {
+    return "That fixed discount is too large";
+  }
+  return null;
+}
+
 export function validateOffersPatch(
   raw: unknown,
 ): { ok: true; patch: OffersPatch } | { ok: false; error: string } {
@@ -288,15 +307,8 @@ export function validateOffersPatch(
     patch.bundleDiscountOncePerCustomer = r.bundleDiscountOncePerCustomer;
   }
 
-  // Cross-field: the percentage is a whole percent the widget can show.
-  const type = patch.bundleDiscountType;
-  const value = patch.bundleDiscountValue;
-  if (type === "percentage" && value != null && (value < 1 || value > 90)) {
-    return { ok: false, error: "A bundle percentage must be between 1% and 90%" };
-  }
-  if (type === "fixed_amount" && value != null && value > 10000) {
-    return { ok: false, error: "That fixed discount is too large" };
-  }
+  const rangeError = bundleDiscountRangeError(patch.bundleDiscountType, patch.bundleDiscountValue);
+  if (rangeError) return { ok: false, error: rangeError };
   return { ok: true, patch };
 }
 
@@ -587,6 +599,12 @@ export async function syncManagedBundleDiscount(
   if (!offers.bundleDiscountValue) {
     return { ok: false, error: "Set the discount amount first." };
   }
+  // The patch validator only sees the fields a patch carries; a value-only
+  // or type-only patch merged onto the stored offer could otherwise push
+  // 100% off to Shopify. Checked here (not above) so switching off stays
+  // possible whatever is stored.
+  const rangeError = bundleDiscountRangeError(offers.bundleDiscountType, offers.bundleDiscountValue);
+  if (rangeError) return { ok: false, error: rangeError };
   const minQty = effectiveMinQty(offers, opts.bundleSize);
   // Managed codes are always Gleame-generated: a merchant-typed code in
   // 'code' mode refers to THEIR discount, never ours.

@@ -22,6 +22,10 @@ import {
 import { checkRateLimit, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
 import { safeFetch } from "../lib/safe-fetch.server";
 import { TRYON_WIDGETS_RETIRED, retiredJson, retiredPreflight } from "../lib/retired-features";
+import { rejectOversizedBody } from "../lib/storefront-api.server";
+
+// Whole multipart body: the 5MB photo cap (STEP 5b) plus room for the fields.
+const MAX_BODY_BYTES = 6 * 1024 * 1024;
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   // Try-on widgets are retired (lib/retired-features.ts); the code below is
@@ -52,6 +56,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
       });
     }
+    const oversized = rejectOversizedBody(
+      request,
+      MAX_BODY_BYTES,
+      { "Access-Control-Allow-Origin": "*" },
+      "File too large. Please upload an image smaller than 5MB.",
+    );
+    if (oversized) return oversized;
 
     // ============================================
     // STEP 1: Parse request and validate fields

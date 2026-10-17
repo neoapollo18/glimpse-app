@@ -22,7 +22,19 @@ export const ADMIN_ALLOWED_SHOPS = [
   "hx5hqt-na.myshopify.com",
 ];
 
-const TOKEN_TTL_MS = 12 * 60 * 60 * 1000; // 12h — outlives any admin session tab
+/**
+ * What a token may be used for. "actions" (the default) authorizes the
+ * founders POSTs. "csv" only downloads the skin-uploads export: that link
+ * carries its token in the URL, where access logs and browser history keep
+ * it, so it gets a short-lived purpose of its own that can never drive a
+ * mutation (and an action token can never pull the export).
+ */
+export type AdminTokenPurpose = "actions" | "csv";
+
+const TOKEN_TTL_MS: Record<AdminTokenPurpose, number> = {
+  actions: 12 * 60 * 60 * 1000, // 12h, outlives any admin session tab
+  csv: 10 * 60 * 1000, // 10 min; the open /admin page re-mints it
+};
 
 function secret(): string {
   const s = process.env.SHOPIFY_API_SECRET;
@@ -34,15 +46,19 @@ function sign(payload: string): string {
   return crypto.createHmac("sha256", secret()).update(payload).digest("base64url");
 }
 
-export function mintAdminToken(shop: string): string {
+export function mintAdminToken(shop: string, purpose: AdminTokenPurpose = "actions"): string {
   const payload = Buffer.from(
-    JSON.stringify({ shop, exp: Date.now() + TOKEN_TTL_MS })
+    JSON.stringify({ shop, exp: Date.now() + TOKEN_TTL_MS[purpose], purpose })
   ).toString("base64url");
   return `${payload}.${sign(payload)}`;
 }
 
-/** Returns the authenticated shop domain, or null if the token is missing/invalid/expired. */
-export function verifyAdminToken(token: string | null | undefined): string | null {
+/** Returns the authenticated shop domain, or null if the token is missing/invalid/expired
+ * or was minted for a different purpose. */
+export function verifyAdminToken(
+  token: string | null | undefined,
+  purpose: AdminTokenPurpose = "actions"
+): string | null {
   if (!token || typeof token !== "string") return null;
   const dot = token.lastIndexOf(".");
   if (dot <= 0) return null;
@@ -53,8 +69,10 @@ export function verifyAdminToken(token: string | null | undefined): string | nul
   const b = Buffer.from(expected);
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
   try {
-    const { shop, exp } = JSON.parse(Buffer.from(payload, "base64url").toString());
+    const { shop, exp, purpose: minted } = JSON.parse(Buffer.from(payload, "base64url").toString());
     if (typeof shop !== "string" || typeof exp !== "number" || Date.now() > exp) return null;
+    // Tokens minted before purposes existed carry none: those are action tokens.
+    if ((minted ?? "actions") !== purpose) return null;
     if (!ADMIN_ALLOWED_SHOPS.includes(shop)) return null;
     return shop;
   } catch {

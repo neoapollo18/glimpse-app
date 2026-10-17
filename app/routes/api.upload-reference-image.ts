@@ -48,7 +48,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // bucket is shared across shops and currentUrl is attacker-controllable,
     // so trusting the raw URL allowed deleting any shop's files.
     if (currentUrl && parseReferenceImageUrls(product).includes(currentUrl)) {
-      await deleteReferenceImage(currentUrl);
+      await deleteReferenceImage(currentUrl, session.shop);
     }
     await saveProductReferenceImage(productId, null);
     return json({ success: true, referenceImageUrl: null });

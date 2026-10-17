@@ -3,6 +3,7 @@ import { json } from "@remix-run/node";
 import { trackTransformationEvent, trackAssistantEvent, findShopByDomain } from "../lib/supabase.server";
 import { checkRateLimit, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
 import { sanitizeQuizEventProperties } from "../lib/quiz-event-properties";
+import { JSON_BODY_LIMIT_BYTES, rejectOversizedBody } from "../lib/storefront-api.server";
 
 // Simple event tracking endpoint for widget views and add-to-cart events
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -24,6 +25,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       headers: { "Access-Control-Allow-Origin": "*" }
     });
   }
+  const oversized = rejectOversizedBody(request, JSON_BODY_LIMIT_BYTES, { "Access-Control-Allow-Origin": "*" });
+  if (oversized) return oversized;
 
   // Rate limiting - lighter limits since this is just analytics
   const clientIP = getClientIP(request);
@@ -43,6 +46,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   try {
     const body = await request.json();
     const { shopDomain, productId, eventType, widgetType, cartToken, deviceType, properties } = body;
+    // Stored verbatim as widget_type: only the short ids the widgets send
+    // ('quiz', 'chat', 'banner', ...) get through. Anything else takes the
+    // same default as a missing value.
+    const safeWidgetType =
+      typeof widgetType === 'string' && /^[a-z_]{1,24}$/.test(widgetType) ? widgetType : undefined;
 
     // Product-level events (tied to a specific product page widget) vs.
     // assistant-level funnel events (shop-wide, no product). The chat assistant
@@ -179,7 +187,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       trackAssistantEvent(
         effectiveShopDomain,
         eventType,
-        widgetType || 'chat',
+        safeWidgetType || 'chat',
         sanitizedCartToken,
         sanitizedDeviceType,
         // Quiz analytics payload, allowlisted per event (no free text).
@@ -194,7 +202,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         effectiveShopDomain,
         productId,
         eventType,
-        widgetType || 'unknown',
+        safeWidgetType || 'unknown',
         sanitizedCartToken
       ).catch(err => {
         console.error('Failed to track event:', err);

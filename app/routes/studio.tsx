@@ -42,9 +42,9 @@ import { buildPreviewFlow, buildPreviewQuizConfig } from "../lib/quiz-preview.se
 import { withShopSaveLock } from "../lib/shop-save-lock.server";
 import { getLatestSessionId } from "../lib/quiz-copilot.server";
 import { isClaudeConfigured } from "../lib/claude.server";
-import { applyTranslations, collectTranslatable } from "../lib/quiz-translate";
+import { applyTranslations, collectTranslatable, exceedsTranslateBudget } from "../lib/quiz-translate";
 import { translateItems } from "../lib/quiz-translate.server";
-import { checkRateLimit } from "../lib/rate-limiter.server";
+import { checkRateLimits, RATE_LIMITS } from "../lib/rate-limiter.server";
 import { getGenStatus } from "../lib/gen-status.server";
 import { shopNeedsBilling } from "../lib/billing-gate.server";
 import { draftQuestionNotes, type NotesDraft } from "../lib/guidance-generator.server";
@@ -100,6 +100,7 @@ import { templatesKilled, templateServedLive } from "../lib/template-live.server
 import { loadMatchingView } from "../lib/answer-rules.server";
 import { rememberShopCurrency } from "../lib/shop-currency.server";
 import {
+  bundleDiscountRangeError,
   getQuizOffers,
   numericShopifyId,
   saveQuizOffers,
@@ -758,12 +759,29 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         if (!isClaudeConfigured()) {
           return json({ ok: false, error: "Translation isn't available right now.", intent });
         }
-        if (!checkRateLimit(`translate-quiz:${shop.id}`, 6, 60 * 60 * 1000).allowed) {
+        // Atomic across both windows: an hour-blocked retry must not burn
+        // the daily allowance (see checkRateLimits).
+        const translateLimit = checkRateLimits([
+          {
+            key: `translate-quiz:${shop.id}`,
+            limit: RATE_LIMITS.TRANSLATE_QUIZ_PER_SHOP_HOUR.limit,
+            windowMs: RATE_LIMITS.TRANSLATE_QUIZ_PER_SHOP_HOUR.windowMs,
+          },
+          {
+            key: `translate-quiz:${shop.id}:day`,
+            limit: RATE_LIMITS.TRANSLATE_QUIZ_PER_SHOP_DAY.limit,
+            windowMs: RATE_LIMITS.TRANSLATE_QUIZ_PER_SHOP_DAY.windowMs,
+          },
+        ]);
+        if (!translateLimit.allowed) {
           return json({ ok: false, error: "You've translated this quiz several times in the last hour. Try again a little later.", intent });
         }
         const before = await captureLiveConfig(shop.id);
         const tpl = isTemplateId(before.settings.quiz_template) ? before.settings.quiz_template : null;
         const items = collectTranslatable(before, { content, template: tpl });
+        if (exceedsTranslateBudget(items)) {
+          return json({ ok: false, error: "This quiz has too much text to translate in one go.", intent });
+        }
         const { translations } = await translateItems(items, language, formality, shopDomain);
         if (Object.keys(translations).length === 0) {
           return json({ ok: false, error: "The translation didn't come back, so nothing was changed. Try again.", intent });
@@ -890,6 +908,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           } catch {
             return json({ ok: false, error: "Malformed request", intent }, { status: 400 });
           }
+        }
+        // Opus with the whole catalog in context: the guidance compiler's
+        // per-shop budget, on its own keys so drafting never spends the
+        // merchant's compile allowance.
+        const draftLimit = checkRateLimits([
+          {
+            key: `draft-notes:${shop.id}:hour`,
+            limit: RATE_LIMITS.GUIDANCE_GENERATE_PER_SHOP_HOUR.limit,
+            windowMs: RATE_LIMITS.GUIDANCE_GENERATE_PER_SHOP_HOUR.windowMs,
+          },
+          {
+            key: `draft-notes:${shop.id}:day`,
+            limit: RATE_LIMITS.GUIDANCE_GENERATE_PER_SHOP_DAY.limit,
+            windowMs: RATE_LIMITS.GUIDANCE_GENERATE_PER_SHOP_DAY.windowMs,
+          },
+        ]);
+        if (!draftLimit.allowed) {
+          return json({ ok: false, error: "You've drafted notes several times recently. Try again a little later.", intent });
         }
         const drafted = await draftQuestionNotes({ shopId: shop.id, shopDomain, axisKeys });
         if (!drafted.ok) return json({ ok: false, error: drafted.error, intent });
@@ -1029,6 +1065,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         const v = validateOffersPatch(raw);
         if (!v.ok) return json({ ok: false, error: v.error, intent });
         const before = await getQuizOffers(shop.id);
+        // The validator range-checks type and value only when both are in
+        // the patch; check the pair this save will store, so a one-field
+        // patch can't park an out-of-range discount for a later sync.
+        if ("bundleDiscountType" in v.patch || "bundleDiscountValue" in v.patch) {
+          const rangeError = bundleDiscountRangeError(
+            v.patch.bundleDiscountType ?? before.bundleDiscountType,
+            "bundleDiscountValue" in v.patch ? v.patch.bundleDiscountValue : before.bundleDiscountValue,
+          );
+          if (rangeError) return json({ ok: false, error: rangeError, intent });
+        }
         const nextMode = v.patch.bundleDiscountMode ?? before.bundleDiscountMode;
         if (nextMode === "managed") delete v.patch.bundleDiscountCode;
         // Leaving managed mode: forget the generated code client-side too,

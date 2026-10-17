@@ -9,6 +9,7 @@ import {
   subscribeProfile,
   type KlaviyoList,
 } from "./klaviyo.server";
+import { checkRateLimit, RATE_LIMITS } from "./rate-limiter.server";
 
 // ---------------------------------------------------------------------
 // Per-shop third-party integrations (migration 086, shop_integrations).
@@ -289,6 +290,37 @@ async function recordResult(shopId: string, error: string | null): Promise<void>
     });
 }
 
+// ---- Forwarding budget -------------------------------------------------
+//
+// The lead form is public, so anyone can post well-formed addresses for
+// any shop, and each forward subscribes the address and fires the
+// merchant's flows. Each event kind gets KLAVIYO_FORWARDS_PER_SHOP_HOUR
+// per shop: past it the lead and its matches are still stored and the
+// shopper still gets the normal response, but nothing more reaches
+// Klaviyo until the window resets. Results count separately because every
+// stored lead hands back a leadToken that can fire them.
+
+const forwardBudgetLoggedUntil = new Map<string, number>();
+
+/** Spends one forward of this kind for the shop; false once the hour's budget is used. */
+export function takeKlaviyoForward(shopId: string, kind: "lead" | "results"): boolean {
+  const { limit, windowMs } = RATE_LIMITS.KLAVIYO_FORWARDS_PER_SHOP_HOUR;
+  const budget = checkRateLimit(`klaviyo-forward:${kind}:shop:${shopId}:hour`, limit, windowMs);
+  if (budget.allowed) return true;
+  // Once per window: a flood would otherwise log on every request.
+  const logKey = `${kind}:${shopId}`;
+  if (forwardBudgetLoggedUntil.get(logKey) !== budget.resetAt) {
+    const now = Date.now();
+    for (const [k, until] of forwardBudgetLoggedUntil) if (until < now) forwardBudgetLoggedUntil.delete(k);
+    forwardBudgetLoggedUntil.set(logKey, budget.resetAt);
+    console.warn(
+      `[integrations] klaviyo ${kind} forwards over ${limit}/hour for shop ${shopId}; ` +
+        `still stored, not sent to Klaviyo until ${new Date(budget.resetAt).toISOString()}`,
+    );
+  }
+  return false;
+}
+
 // ---- Storefront fan-out (never throws; callers fire and forget) --------
 
 function answersObject(answers: QuizLeadAnswer[]): Record<string, string> {
@@ -304,6 +336,7 @@ export async function sendLeadToKlaviyo(
   try {
     const { status, apiKey } = await getKlaviyoConnection(shopId);
     if (!apiKey || !status.enabled || !status.settings.sendLeads) return;
+    if (!takeKlaviyoForward(shopId, "lead")) return;
     const errors: string[] = [];
     if (status.settings.listId && (lead.email || (lead.phone && status.settings.smsConsent))) {
       // Never lift an opt-out: check first, and fail CLOSED (no subscribe)
@@ -354,6 +387,7 @@ export async function sendResultsToKlaviyo(
     const { status, apiKey } = await getKlaviyoConnection(shopId);
     if (!apiKey || !status.enabled || !status.settings.sendResults) return;
     if (!lead.email && !lead.phone) return;
+    if (!takeKlaviyoForward(shopId, "results")) return;
     const top = products[0] ?? null;
     const ev = await createEvent(apiKey, {
       metric: KLAVIYO_RESULTS_METRIC,

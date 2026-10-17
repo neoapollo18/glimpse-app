@@ -13,6 +13,9 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type, X-Requested-With",
 };
 
+// shop: the verified shop_domain, for cache invalidation (never sent).
+type FlowResult = { status: number; body: unknown; shop?: string };
+
 /**
  * Returns the user-facing portion of the recommendation flow for a shop:
  * questions to ask, their options, and which axes come from the photo.
@@ -28,7 +31,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   const url = new URL(request.url);
-  const shopDomain = url.searchParams.get("shopDomain");
+  // Trimmed so the cache key is the exact string findShopByDomain resolves
+  // (it ignores surrounding whitespace).
+  const shopDomain = url.searchParams.get("shopDomain")?.trim();
 
   if (!shopDomain) {
     return json({ error: "Missing shopDomain" }, { status: 400, headers: CORS_HEADERS });
@@ -36,15 +41,30 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   // Same payload for every shopper: 20 s in-process cache, see
   // storefront-cache.server.ts.
-  const result = await storefrontCached(shopDomain, "recommendation-config", async () => {
-    const verifiedShop = await findShopByDomain(shopDomain);
-    if (!verifiedShop) return { status: 403, body: { error: "Unknown shop" } as unknown };
+  const result = await storefrontCached(
+    shopDomain,
+    "recommendation-config",
+    async (): Promise<FlowResult> => {
+      const verifiedShop = await findShopByDomain(shopDomain);
+      if (!verifiedShop) return { status: 403, body: { error: "Unknown shop" } };
 
-    const hasAccess = await shopHasValidAccess(verifiedShop.shop_domain);
-    if (!hasAccess) return { status: 403, body: { error: "Subscription inactive" } as unknown };
+      const hasAccess = await shopHasValidAccess(verifiedShop.shop_domain);
+      if (!hasAccess) return { status: 403, body: { error: "Subscription inactive" } };
 
-    return { status: 200, body: (await getRecommendationFlow(verifiedShop.id)) as unknown };
-  });
+      return {
+        status: 200,
+        body: await getRecommendationFlow(verifiedShop.id),
+        shop: verifiedShop.shop_domain,
+      };
+    },
+    {
+      // Only a configured flow is kept: a cached 403, or the unconfigured
+      // flow a failed read returns, would blank the quiz for every shopper
+      // until it expired.
+      keep: (r) => r.status === 200 && (r.body as { configured?: boolean } | null)?.configured !== false,
+      shopOf: (r) => r.shop,
+    },
+  );
 
   return json(result.body, {
     status: result.status,

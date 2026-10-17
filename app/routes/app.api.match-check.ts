@@ -56,13 +56,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
 
   // Resolve targets -> product cards (variant targets resolve the parent).
+  // Both lookups are shop-scoped: rule targets aren't ownership-checked on
+  // every save path, and a foreign UUID must not resolve another shop's
+  // catalog. product_variants has no shop_id, so scope via the parent.
   const variantIds = [...new Set(fired.map((r) => r.variant_id).filter(Boolean))] as string[];
   const variants = variantIds.length
     ? (
         await supabase
           .from("product_variants")
-          .select("id, product_id, variant_title, price, image_url")
+          .select("id, product_id, variant_title, price, image_url, products!inner ( shop_id )")
           .in("id", variantIds)
+          .eq("products.shop_id", shop.data.id)
       ).data ?? []
     : [];
   const vById = new Map(variants.map((v) => [v.id, v]));
@@ -78,6 +82,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           .from("products")
           .select("id, product_name, handle, image_url, price, status")
           .in("id", productIds)
+          .eq("shop_id", shop.data.id)
       ).data ?? []
     : [];
   const pById = new Map(products.map((p) => [p.id, p]));
@@ -128,8 +133,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       (
         await supabase
           .from("product_variants")
-          .select("id, product_id")
+          .select("id, product_id, products!inner ( shop_id )")
           .in("id", otherVariantIds.slice(i, i + 200))
+          .eq("products.shop_id", shop.data.id)
       ).data ?? [];
     for (const v of vs) targeted.add(v.product_id as string);
   }

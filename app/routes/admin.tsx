@@ -1,7 +1,7 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { useLoaderData, useFetcher, type ShouldRevalidateFunction } from "@remix-run/react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   AppProvider,
   Page,
@@ -237,6 +237,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         shops: [],
         stats: { totalShops: 0, totalProducts: 0, totalTransformations: 0 },
         adminToken: mintAdminToken(session.shop),
+        csvToken: mintAdminToken(session.shop, "csv"),
         error: shopsError.message
       });
     }
@@ -405,6 +406,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         totalTransformations: totalTransformations || 0,
       },
       adminToken: mintAdminToken(session.shop),
+      csvToken: mintAdminToken(session.shop, "csv"),
       error: null,
     });
   } catch (error) {
@@ -413,6 +415,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       shops: [],
       stats: { totalShops: 0, totalProducts: 0, totalTransformations: 0 },
       adminToken: mintAdminToken(session.shop),
+      csvToken: mintAdminToken(session.shop, "csv"),
       error: String(error)
     });
   }
@@ -501,6 +504,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   const actionType = formData.get("action");
+
+  // The export link's csv token lives 10 minutes and loader revalidation is
+  // off, so the open page swaps its 12h action token for a fresh one here.
+  if (actionType === "mint-csv-token") {
+    return json({ success: true, csvToken: mintAdminToken(shopDomain, "csv") });
+  }
 
   if (actionType === "update-prompt") {
     const productId = formData.get("productId") as string;
@@ -801,8 +810,70 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   return json({ success: false, error: "Unknown action" });
 };
 
+// Re-mint the export link's csv token once it is this old. It lives 10
+// minutes, so the link always carries one with minutes to spare.
+const CSV_TOKEN_REFRESH_MS = 4 * 60 * 1000;
+
+/**
+ * The CSV export link carries a csv-only token (lib/admin-auth) because its
+ * URL lands in access logs and browser history. That token lives 10 minutes,
+ * loader revalidation is off, and this page stays open for hours, so keep
+ * the link's token fresh: a wall-clock check every 30s (sleep pauses timers,
+ * not the clock), on returning to the tab, and when the pointer reaches the
+ * button. Raw fetch rather than a fetcher, so a network blip after waking
+ * can't throw the whole page into an error boundary.
+ */
+function useFreshCsvToken(adminToken: string, loaderCsvToken: string) {
+  const [csvToken, setCsvToken] = useState(loaderCsvToken);
+  const mintedAt = useRef(Date.now());
+  const inFlight = useRef(false);
+  const stopped = useRef(false);
+
+  const refresh = useCallback(async () => {
+    if (inFlight.current || stopped.current) return;
+    if (Date.now() - mintedAt.current < CSV_TOKEN_REFRESH_MS) return;
+    inFlight.current = true;
+    const requestedAt = Date.now();
+    try {
+      const formData = new FormData();
+      formData.append("action", "mint-csv-token");
+      formData.set("adminToken", adminToken);
+      const response = await fetch("/admin?_data=routes/admin", { method: "POST", body: formData });
+      // 403 means the 12h action token itself expired: only a reload helps
+      // (as before), so stop asking.
+      if (response.status === 403) {
+        stopped.current = true;
+        return;
+      }
+      const data = await response.json();
+      if (typeof data?.csvToken === "string") {
+        setCsvToken(data.csvToken);
+        mintedAt.current = requestedAt;
+      }
+    } catch {
+      // Offline (e.g. just woke from sleep): the next check retries.
+    } finally {
+      inFlight.current = false;
+    }
+  }, [adminToken]);
+
+  useEffect(() => {
+    const timer = setInterval(refresh, 30 * 1000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [refresh]);
+
+  return { csvToken, refresh };
+}
+
 export default function FoundersAdmin() {
-  const { shops, stats, error, adminToken } = useLoaderData<typeof loader>();
+  const { shops, stats, error, adminToken, csvToken: loaderCsvToken } = useLoaderData<typeof loader>();
+  const { csvToken, refresh: refreshCsvToken } = useFreshCsvToken(adminToken, loaderCsvToken);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedShop, setExpandedShop] = useState<string | null>(null);
@@ -1169,8 +1240,10 @@ export default function FoundersAdmin() {
         secondaryActions={[
           {
             content: "Export skin uploads CSV",
-            url: `/admin/skin-uploads.csv?token=${encodeURIComponent(adminToken)}`,
+            // Export-only token: the 12h action token never goes in a URL.
+            url: `/admin/skin-uploads.csv?token=${encodeURIComponent(csvToken)}`,
             external: true,
+            onMouseEnter: refreshCsvToken,
           },
         ]}
       >

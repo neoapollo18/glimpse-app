@@ -1,3 +1,12 @@
 .cache
 build
 node_modules
+
+# Local secrets and tool state never belong in an image layer.
+.env
+.env.*
+.git
+.shopify
+.claude
+.cursor
+scripts/backups

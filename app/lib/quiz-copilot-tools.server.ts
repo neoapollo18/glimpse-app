@@ -462,7 +462,15 @@ const COPY_KEYS = new Set([
   // Results card CTA (migration 092): which action is the button, and
   // whether the other one shows as a small link.
   "quiz_results_primary_cta", "quiz_results_secondary_link",
+  // Results restart button (Text & labels). A chat-era column without the
+  // quiz_ prefix; the quiz widget reads it as results.restartLabel.
+  "end_restart_label",
 ]);
+
+// Copy keys whose column is NOT NULL (migration 034): a null would fail the
+// settings upsert after the flow already saved, so clearing stores "" and
+// the widget falls back to its default, same as the Studio field does.
+const NOT_NULL_COPY_KEYS = new Set(["end_restart_label"]);
 
 // Copy keys with a closed value set — anything else is rejected, so a
 // stray string can never violate the migration-080 CHECK constraints.
@@ -538,7 +546,7 @@ export function applyUpdateCopy(draft: DraftShape, input: any, _catalog: Catalog
       : INT_COPY_KEYS.has(k)
         ? Number(v)
         : v == null
-          ? null
+          ? (NOT_NULL_COPY_KEYS.has(k) ? "" : null)
           : Array.isArray(v)
             ? v.map((s) => String(s).slice(0, 400))
             : String(v).slice(0, 400);

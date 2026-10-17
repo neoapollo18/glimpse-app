@@ -41,6 +41,8 @@ import {
   deleteReferenceImage,
   findShopByDomain,
   productBelongsToShop,
+  parseReferenceImageUrls,
+  supabase,
 } from "../lib/supabase.server";
 import { generatePromptFromFunnel, validateFunnelResponses } from "../lib/prompt-generator.server";
 
@@ -360,6 +362,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return { success: false, message: "File too large. Max 10MB." };
       }
 
+      // Stored with the client's content type in a public bucket, so take
+      // images only. No SVG: it can carry script and Gemini can't use it.
+      if (!imageFile.type.startsWith("image/") || /svg/i.test(imageFile.type)) {
+        return { success: false, message: "Please upload an image file." };
+      }
+
       // Ownership guard: productId is a client-supplied internal UUID
       if (!shop || !(await productBelongsToShop(productId, shop.id))) {
         return { success: false, message: "Product not found for this shop." };
@@ -390,13 +398,27 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       const productId = formData.get("productId") as string;
       const currentUrl = formData.get("currentUrl") as string;
 
-      // Ownership guard: productId is a client-supplied internal UUID
-      if (!shop || !(await productBelongsToShop(productId, shop.id))) {
+      // Ownership guard: productId is a client-supplied internal UUID. The
+      // shop-scoped read also returns the URLs this product references.
+      const { data: product } = shop
+        ? await supabase
+            .from("products")
+            .select("id, reference_image_url, reference_image_urls")
+            .eq("id", productId)
+            .eq("shop_id", shop.id)
+            .maybeSingle()
+        : { data: null };
+      if (!product) {
         return { success: false, message: "Product not found for this shop." };
       }
 
-      if (currentUrl) {
-        await deleteReferenceImage(currentUrl);
+      // Only delete a file this product actually references: the bucket is
+      // shared across shops and currentUrl is client-supplied (same guard as
+      // api.upload-reference-image.ts). The page posts the legacy column, so
+      // it counts too.
+      const ownedUrls = [...parseReferenceImageUrls(product), product.reference_image_url];
+      if (currentUrl && ownedUrls.includes(currentUrl)) {
+        await deleteReferenceImage(currentUrl, session.shop);
       }
       await saveProductReferenceImage(productId, null);
 

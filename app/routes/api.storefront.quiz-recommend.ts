@@ -9,6 +9,7 @@ import {
 } from "../lib/supabase.server";
 import { checkRateLimit, getClientIP } from "../lib/rate-limiter.server";
 import { computeQuizRecommendations } from "../lib/quiz-recommend.server";
+import { JSON_BODY_LIMIT_BYTES, rejectOversizedBody } from "../lib/storefront-api.server";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -46,6 +47,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (request.method !== "POST") {
     return json({ error: "Method not allowed" }, { status: 405, headers: CORS_HEADERS });
   }
+  const oversized = rejectOversizedBody(request, JSON_BODY_LIMIT_BYTES, CORS_HEADERS);
+  if (oversized) return oversized;
 
   try {
     let body: unknown = null;

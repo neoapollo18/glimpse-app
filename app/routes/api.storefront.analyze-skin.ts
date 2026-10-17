@@ -9,8 +9,11 @@ import {
   type ScoreKey,
 } from "../lib/skin-analysis.server";
 import { findShopByDomain, shopHasValidAccess, saveSkinAnalysisPhoto } from "../lib/supabase.server";
-import { checkRateLimit, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
-import { CORS_HEADERS, isValidImageFile } from "../lib/storefront-api.server";
+import { checkRateLimit, checkRateLimits, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
+import { CORS_HEADERS, isValidImageFile, rejectOversizedBody } from "../lib/storefront-api.server";
+
+// Whole multipart body: the 5MB photo cap (STEP 6) plus room for the fields.
+const MAX_BODY_BYTES = 6 * 1024 * 1024;
 
 /**
  * Storefront API: POST a selfie + shopDomain, get back skin scores and product
@@ -32,6 +35,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (request.method !== "POST") {
       return json({ error: "Method not allowed" }, { status: 405, headers: CORS_HEADERS });
     }
+    const oversized = rejectOversizedBody(
+      request,
+      MAX_BODY_BYTES,
+      CORS_HEADERS,
+      "File too large. Please upload an image smaller than 5MB.",
+    );
+    if (oversized) return oversized;
 
     // ============================================
     // STEP 1: Parse + validate fields
@@ -130,17 +140,27 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       );
     }
 
-    const shopHour = checkRateLimit(
-      `analyze-skin:shop:${verifiedShopDomain}:hour`,
-      RATE_LIMITS.ANALYZE_SKIN_PER_SHOP_HOUR.limit,
-      RATE_LIMITS.ANALYZE_SKIN_PER_SHOP_HOUR.windowMs
-    );
-    if (!shopHour.allowed) {
+    // Hourly plus a daily ceiling, atomic (see checkRateLimits): a loop held
+    // under the hourly cap would otherwise run all day. Both keep the
+    // existing message; Retry-After carries the real wait.
+    const shopLimit = checkRateLimits([
+      {
+        key: `analyze-skin:shop:${verifiedShopDomain}:hour`,
+        limit: RATE_LIMITS.ANALYZE_SKIN_PER_SHOP_HOUR.limit,
+        windowMs: RATE_LIMITS.ANALYZE_SKIN_PER_SHOP_HOUR.windowMs,
+      },
+      {
+        key: `analyze-skin:shop:${verifiedShopDomain}:day`,
+        limit: RATE_LIMITS.ANALYZE_SKIN_PER_SHOP_DAY.limit,
+        windowMs: RATE_LIMITS.ANALYZE_SKIN_PER_SHOP_DAY.windowMs,
+      },
+    ]);
+    if (!shopLimit.allowed) {
       return json(
         { error: "This store has reached its hourly limit. Please try again later." },
         {
           status: 429,
-          headers: { ...CORS_HEADERS, "Retry-After": shopHour.retryAfterSeconds.toString() },
+          headers: { ...CORS_HEADERS, "Retry-After": shopLimit.retryAfterSeconds.toString() },
         }
       );
     }

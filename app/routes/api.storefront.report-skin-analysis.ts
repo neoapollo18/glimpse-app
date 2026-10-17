@@ -3,6 +3,7 @@ import { json } from "@remix-run/node";
 import { findShopByDomain } from "../lib/supabase.server";
 import { isSkinAnalysisEnabledByShopId } from "../lib/skin-analysis.server";
 import { checkRateLimit, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
+import { JSON_BODY_LIMIT_BYTES, rejectOversizedBody } from "../lib/storefront-api.server";
 
 /**
  * Storefront feedback endpoint for "Report a bad analysis" clicks.
@@ -32,6 +33,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (request.method !== "POST") {
       return json({ error: "Method not allowed" }, { status: 405, headers: CORS_HEADERS });
     }
+    // Before reading anything. Looser than the character cap below, which
+    // stays the real limit (8K characters can be ~24KB of UTF-8).
+    const oversized = rejectOversizedBody(request, JSON_BODY_LIMIT_BYTES, CORS_HEADERS, "Body too large");
+    if (oversized) return oversized;
 
     const raw = await request.text();
     if (raw.length > MAX_BODY_BYTES) {

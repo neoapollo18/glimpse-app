@@ -11,17 +11,19 @@ import { verifyAdminToken } from "../lib/admin-auth.server";
  * time-limited signed URL (valid 7 days) — long enough to download after the
  * event, short enough not to leak faces forever.
  *
- * Auth: requires ?token=<adminToken> — the HMAC token minted by the /admin
- * loader after real authenticate.admin + allowlist verification (see
- * lib/admin-auth.server.ts). The /admin page renders the export link with the
- * token attached. A shop-domain string alone no longer grants access.
+ * Auth: requires ?token=<csv token>, an HMAC token the /admin page mints
+ * with purpose "csv" after real authenticate.admin + allowlist verification
+ * (see lib/admin-auth.server.ts). It lives 10 minutes and the open page keeps
+ * the export link's copy fresh. The 12h action token is refused here, so the
+ * credential that can change shops never travels in a URL. A shop-domain
+ * string alone no longer grants access.
  *
  * By default only rows WITH a visitor name are exported (the conference
  * pairings) — the older nameless uploads are skipped as noise. Pass
  * includeUnnamed=1 to get everything.
  *
  * Usage (via the export link on /admin):
- *   /admin/skin-uploads.csv?token=<adminToken>
+ *   /admin/skin-uploads.csv?token=<csv token>
  *   ...&dataShop=pursuitbeauty.myshopify.com   → only that store's rows
  *   ...&includeUnnamed=1                        → include nameless uploads too
  * `dataShop` is optional — omit it to export every shop's uploads.
@@ -44,7 +46,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Real auth: the HMAC token can only be minted by the /admin loader after
   // authenticate.admin + the allowlist check. We avoid authenticate.admin
   // here because it bounces on the session-token handshake for direct GETs.
-  if (!verifyAdminToken(url.searchParams.get("token"))) {
+  // Only an export-only "csv" token is accepted: this one sits in a URL.
+  if (!verifyAdminToken(url.searchParams.get("token"), "csv")) {
     return new Response("Forbidden", { status: 403 });
   }
 
