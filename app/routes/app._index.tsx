@@ -412,7 +412,7 @@ function DashboardView({
             </InlineStack>
             <Text as="p" variant="bodyMd" tone="subdued">
               {quiz.questions === 0
-                ? "Let's build your quiz. Gleame drafts the whole thing from your catalog in about a minute."
+                ? "Let's build your quiz. Gleame drafts the whole thing from your catalog in a minute or two."
                 : quiz.quizLive
                   ? "Your quiz is live and matching shoppers to products."
                   : "Your quiz isn't live yet."}

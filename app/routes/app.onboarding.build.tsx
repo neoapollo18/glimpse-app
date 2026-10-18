@@ -150,6 +150,9 @@ export default function OnboardingBuild() {
   // Real streamed character count from the generator's `progress` events
   // (drafting phase only); 0 = not drafting.
   const [streamed, setStreamed] = useState(0);
+  // The generator's repair pass ("Fixing a few issues…") re-writes the
+  // quiz; shown so a second pass doesn't read as one stalled step.
+  const [repairing, setRepairing] = useState(false);
   // Set while this screen is waiting for a run it did NOT start to finish.
   const [waiting, setWaiting] = useState(false);
   // Run token: a superseded run (unmount, StrictMode re-mount, retry) must
@@ -188,6 +191,7 @@ export default function OnboardingBuild() {
     setSteps(freshSteps());
     setElapsed(0);
     setStreamed(0);
+    setRepairing(false);
     setWaiting(false);
 
     const handoff = readScopeHandoff();
@@ -298,7 +302,10 @@ export default function OnboardingBuild() {
           if (evt.type === "step" && STEP_ORDER.includes(evt.key)) {
             const key = evt.key as StepKey;
             patch(key, { state: "done", detail: String(evt.detail ?? "") });
-            if (live()) setStreamed(0);
+            if (live()) {
+              setStreamed(0);
+              setRepairing(false);
+            }
             const next = STEP_ORDER[STEP_ORDER.indexOf(key) + 1];
             if (next) {
               active = next;
@@ -306,6 +313,10 @@ export default function OnboardingBuild() {
             }
           } else if (evt.type === "progress") {
             const n = Number(evt.streamed);
+            if (live() && String(evt.phase ?? "").startsWith("Fixing")) {
+              setRepairing(true);
+              setStreamed(0);
+            }
             if (live() && Number.isFinite(n) && n > 0) setStreamed(n);
           } else if (evt.type === "result") {
             warnings = evt.warnings ?? null;
@@ -364,6 +375,7 @@ export default function OnboardingBuild() {
     setFailure(null);
     setElapsed(0);
     setStreamed(0);
+    setRepairing(false);
     setSteps(() => {
       const rows = freshSteps();
       rows[0] = { ...rows[0], state: "now", detail: "Checking on your last build…" };
@@ -459,6 +471,7 @@ export default function OnboardingBuild() {
     if (s.detail) return s.detail;
     const parts: string[] = [];
     if (elapsed >= 3) parts.push(`${elapsed}s`);
+    if (repairing) parts.push("double-checking against your catalog");
     if (streamed > 0) parts.push(`writing… ${fmtChars(streamed)} characters`);
     return parts.join(" · ");
   };
@@ -533,7 +546,7 @@ export default function OnboardingBuild() {
               </Text>
             ) : (
               <Text as="p" variant="bodySm" tone="subdued">
-                About a minute. Nothing goes live until you turn it on.
+                About a minute or two. Nothing goes live until you turn it on.
               </Text>
             )}
           </BlockStack>

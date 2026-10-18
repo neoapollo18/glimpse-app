@@ -649,7 +649,7 @@ function OnboardingScopeScreen({ footer }: { footer: ReactNode }) {
                 Build my quiz
               </Button>
               <Text as="span" variant="bodySm" tone="subdued">
-                About 60 seconds · nothing goes live
+                About a minute or two · nothing goes live
               </Text>
             </InlineStack>
             <InlineStack gap="200" blockAlign="center">
