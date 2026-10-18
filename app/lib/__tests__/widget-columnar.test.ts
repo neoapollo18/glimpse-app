@@ -298,8 +298,9 @@ describe("branching (contract 3) against the Oct 17 pool", () => {
     await tap(root, "Short");
     await next(root);
     expect(labels(root)).toEqual(["Almond", "Oval", "Round", "Squoval", "Open to anything"]);
-    // gq-n-6 keeps the tile size; gq-grid-trimmed centres the four left.
-    expect(screenEl(root).querySelector(".gq-option-grid.gq-n-6.gq-grid-trimmed")).not.toBeNull();
+    // gq-n-6 keeps the tile size; gq-grid-trimmed centres the four left
+    // and gq-shown-4 lets phones sit them 2x2 instead of 3 + 1.
+    expect(screenEl(root).querySelector(".gq-option-grid.gq-n-6.gq-grid-trimmed.gq-shown-4")).not.toBeNull();
   });
 
   it("a grid the pool doesn't trim stays a plain grid", async () => {
@@ -320,6 +321,19 @@ describe("branching (contract 3) against the Oct 17 pool", () => {
     await tap(root, "Pinks & purples");
     await next(root);
     expect(screenEl(root).querySelector(".gq-nail-grid.gq-n-6.gq-grid-trimmed")).not.toBeNull();
+  });
+
+  it("a finish grid trimmed to four tiles is tagged for the 2x2 layout", async () => {
+    const { root } = await bootPreview();
+    await toLength(root);
+    await tap(root, "Short");
+    await next(root);
+    await tap(root, "Oval");
+    await next(root);
+    await tap(root, "Pinks & purples");
+    await next(root);
+    expect(labels(root)).toEqual(["Classic Glossy", "Glazed & Pearlescent", "Velvet & Cateye", "Surprise Me!"]);
+    expect(screenEl(root).querySelector(".gq-nail-grid.gq-n-6.gq-grid-trimmed.gq-shown-4")).not.toBeNull();
   });
 
   it("Medium only hides Round and Squoval (Square stays with 7)", async () => {

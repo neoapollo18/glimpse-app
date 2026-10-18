@@ -2215,7 +2215,8 @@
     // A question the pool trims keeps the grid of its full option count,
     // so tiles stay the same size when a few drop out (4 shapes keep the
     // 6-shape tile), and gq-grid-trimmed centres what's left so a short
-    // row doesn't read as tiles that failed to load.
+    // row doesn't read as tiles that failed to load. gq-shown-N lets the
+    // CSS even out the rows (four in a three-across grid go 2x2, not 3+1).
     var shownN = specific.length + (anyInGrid ? 1 : 0);
     var layoutN = shownN;
     if (branchEntry(q)) {
@@ -2223,7 +2224,7 @@
       var allAny = all.some(function(o) { return o.selectAll; });
       layoutN = Math.max(layoutN, all.filter(function(o) { return !o.selectAll; }).length + (variant === 'nails' && allAny ? 1 : 0));
     }
-    var list = el('div', VARIANT_CONTAINER[variant] + countClass(layoutN) + (layoutN > shownN ? ' gq-grid-trimmed' : ''));
+    var list = el('div', VARIANT_CONTAINER[variant] + countClass(layoutN) + (layoutN > shownN ? ' gq-grid-trimmed gq-shown-' + shownN : ''));
 
     specific.forEach(function(opt, idx) {
       var btn = el('button', VARIANT_BTN_CLASS[variant], optionButtonHtml(opt, variant));

@@ -2326,8 +2326,17 @@
   justify-content: center;
   gap: var(--gq-trim-gap);
 }
+/* Rows hold --gq-row-cols tiles (default: a full-count row). The grid is
+   exactly that many full-count tiles wide and centred, so fewer per row
+   keeps the tile size: four left of a three-across grid sit 2x2, not
+   3 + 1 (gq-shown-4 below). */
+#gleame-quiz-root.gq-boutique.gq-pool .gq-grid-trimmed { --gq-row-cols: var(--gq-trim-cols); }
+#gleame-quiz-root.gq-boutique.gq-pool .gq-option-grid.gq-n-6.gq-grid-trimmed {
+  width: calc(var(--gq-row-cols) * (100% - (var(--gq-trim-cols) - 1) * var(--gq-trim-gap)) / var(--gq-trim-cols) + (var(--gq-row-cols) - 1) * var(--gq-trim-gap));
+  margin-inline: auto;
+}
 #gleame-quiz-root.gq-boutique.gq-pool .gq-grid-trimmed > * {
-  flex: 0 0 calc((100% - (var(--gq-trim-cols) - 1) * var(--gq-trim-gap)) / var(--gq-trim-cols));
+  flex: 0 0 calc((100% - (var(--gq-row-cols) - 1) * var(--gq-trim-gap)) / var(--gq-row-cols));
   min-width: 0;
 }
 /* Swatches (finish): the three-across tile, a short last row centred.
@@ -2340,7 +2349,10 @@
     flex-wrap: wrap;
     justify-content: center;
     gap: var(--gq-trim-gap);
+    width: calc(var(--gq-row-cols) * (100% - (var(--gq-trim-cols) - 1) * var(--gq-trim-gap)) / var(--gq-trim-cols) + (var(--gq-row-cols) - 1) * var(--gq-trim-gap));
+    margin-inline: auto;
   }
+  #gleame-quiz-root.gq-boutique.gq-pool .gq-nail-grid.gq-grid-trimmed.gq-shown-4 { --gq-row-cols: 2; }
 }
 /* "Surprise me" on the landing carries a sparkle, like the swatch tiles. */
 #gleame-quiz-root.gq-boutique .gq-option-sparkle {
@@ -2530,6 +2542,7 @@
   #gleame-quiz-root.gq-boutique .gq-option--visual .gq-option-check { top: 14px; right: 14px; width: 18px; height: 18px; }
   /* Trimmed shapes: the three-up tile, a short last row centred. */
   #gleame-quiz-root.gq-boutique.gq-pool .gq-option-grid.gq-n-6.gq-grid-trimmed { --gq-trim-cols: 3; --gq-trim-gap: 10px; }
+  #gleame-quiz-root.gq-boutique.gq-pool .gq-option-grid.gq-n-6.gq-grid-trimmed.gq-shown-4 { --gq-row-cols: 2; }
   /* Three photo choices with a line each (length): one per row, photo on
      the left, so the line has room. */
   #gleame-quiz-root.gq-boutique.gq-pool .gq-option-grid.gq-n-3:has(> .gq-option--visual > .gq-option-sub) { grid-template-columns: minmax(0, 1fr); gap: 10px; }
