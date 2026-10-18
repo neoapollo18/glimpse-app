@@ -21,6 +21,7 @@ import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
 import { useLoaderData, useNavigate, useSearchParams } from "@remix-run/react";
 import { BlockStack, Button, Card, InlineStack, Page, Spinner, Text } from "@shopify/polaris";
+import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { ensureShopExists, supabase } from "../lib/supabase.server";
 import { shopHasRealQuiz } from "../lib/quiz-draft.server";
@@ -440,7 +441,7 @@ export default function OnboardingBuild() {
 
   const getHelp = () => {
     const where = failure?.step ? `stopped while ${STEP_WHILE[failure.step]}` : failure ? "couldn't start" : "stopped";
-    const text = `Hi — my quiz build on ${shopDomain} ${where}${failure ? ` (${failure.reason})` : ""}. Can you take a look?`;
+    const text = `Hi, my quiz build on ${shopDomain} ${where}${failure ? ` (${failure.reason})` : ""}. Can you take a look?`;
     import("@intercom/messenger-js-sdk")
       .then((m) => m.showNewMessage(text))
       .catch(() => {
@@ -464,6 +465,7 @@ export default function OnboardingBuild() {
 
   return (
     <Page narrowWidth>
+      <TitleBar title="Set up your quiz" />
       <style>{BUILD_CSS}</style>
       <div className="gq-ob">
         <Card padding="600">

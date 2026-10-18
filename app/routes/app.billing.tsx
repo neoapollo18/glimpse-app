@@ -136,7 +136,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   const state = await getShopBillingState(shopDomain);
   if (state?.subscription_status === "grandfathered") {
-    return json({ error: "This store is grandfathered — no subscription needed." }, { status: 400 });
+    return json({ error: "This store is grandfathered, so no subscription is needed." }, { status: 400 });
   }
   // Refuse to stack a second flex subscription on an existing one: a
   // transient read error on the page must not lead to a duplicate
@@ -211,7 +211,7 @@ export default function BillingPage() {
                 <Badge tone="success">Free forever</Badge>
               </InlineStack>
               <Text as="p" variant="bodyMd">
-                Your store is grandfathered — every Gleame feature is included
+                Your store is grandfathered: every Gleame feature is included
                 at no charge, permanently. Nothing to do here.
               </Text>
             </BlockStack>
@@ -261,7 +261,7 @@ export default function BillingPage() {
               <Text as="p" variant="bodyMd">
                 Our new traffic-based pricing adjusts your charge to your
                 store's actual sessions each month (free under 2,500, capped
-                at $399) — one approval, no plan changes ever again.
+                at $399). One approval, no plan changes ever again.
               </Text>
               <InlineStack gap="300" blockAlign="center">
                 <Button
@@ -315,7 +315,7 @@ export default function BillingPage() {
                 )}
               </InlineStack>
               <Text as="p" variant="bodySm" tone="subdued">
-                Tier changes apply automatically — no approvals needed. Cancel
+                Tier changes apply automatically, with no approvals needed. Cancel
                 any time by uninstalling the app.
               </Text>
             </BlockStack>
@@ -342,7 +342,7 @@ export default function BillingPage() {
                 <Text as="h2" variant="headingMd">Simple, traffic-based pricing</Text>
                 <Text as="p" variant="bodyMd">
                   One approval covers every tier. Your monthly charge follows
-                  your store's traffic — up when you grow, down when you slow,
+                  your store's traffic: up when you grow, down when you slow,
                   free under 2,500 sessions. Capped at $399/month, always.
                 </Text>
               </BlockStack>

@@ -13,7 +13,7 @@
 // the Studio. Nothing here writes quiz content; template choices go
 // through /app/api/quiz-template (eligibility enforced server-side).
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
 import { useLoaderData, useNavigate } from "@remix-run/react";
@@ -23,19 +23,22 @@ import {
   Button,
   Card,
   ChoiceList,
+  Icon,
   InlineStack,
   Page,
   Spinner,
   Text,
   TextField,
 } from "@shopify/polaris";
+import { ProductIcon, ThemeTemplateIcon } from "@shopify/polaris-icons";
+import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { ensureShopExists, supabase } from "../lib/supabase.server";
 import { shopHasRealQuiz } from "../lib/quiz-draft.server";
 import { useCatalogSync } from "../lib/use-catalog-sync";
 import { writeScopeHandoff, type ScopeChip } from "../lib/onboarding-scope";
 import { getSetupOfferContact, shouldOfferSetup } from "../lib/setup-offer.server";
-import { SetupOfferModal } from "../components/SetupOfferModal";
+import { SetupOfferCard } from "../components/SetupOfferModal";
 
 /** `/app?open=studio` with the embedded-admin params (host/shop/embedded)
  * carried over, so App Bridge doesn't re-bootstrap the frame. */
@@ -74,8 +77,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const syncCursor = (shop.data.catalog_sync_cursor as string | null) ?? null;
   const lastSyncedAt = (shop.data.catalog_last_synced_at as string | null) ?? null;
   const productCount = Number(shop.data.catalog_product_count ?? 0) || 0;
-  // New installs land here first: the done-for-you setup offer pops over
-  // the screen until the merchant answers it.
+  // New installs land here first: the done-for-you setup offer sits as a
+  // dismissible card under the screen until the merchant answers it.
   const showSetupOffer = await shouldOfferSetup(shop.data.id).catch(() => false);
   const setupEmail = showSetupOffer ? (await getSetupOfferContact(admin)).email : "";
   return json({
@@ -171,16 +174,24 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 export default function OnboardingScope() {
   const { setupOffer } = useLoaderData<typeof loader>();
   return (
-    <>
-      <OnboardingScopeScreen />
-      {setupOffer.show && <SetupOfferModal defaultEmail={setupOffer.email} source="onboarding" />}
-    </>
+    <OnboardingScopeScreen
+      footer={setupOffer.show ? <SetupOfferCard defaultEmail={setupOffer.email} source="onboarding" /> : null}
+    />
   );
 }
 
-function OnboardingScopeScreen() {
+function OnboardingScopeScreen({ footer }: { footer: ReactNode }) {
   const { shopDomain, syncNeeded, syncCursor } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
+  // Every state of the screen: admin title, the content, then the setup
+  // offer card (never a popup) at the bottom.
+  const page = (children: ReactNode) => (
+    <Page narrowWidth>
+      <TitleBar title="Set up your quiz" />
+      {children}
+      {footer && <div style={{ paddingBottom: 48 }}>{footer}</div>}
+    </Page>
+  );
 
   const [prep, setPrep] = useState<Prep>(syncNeeded ? "sync" : "index");
   const [prepNote, setPrepNote] = useState<string | null>(null);
@@ -368,26 +379,22 @@ function OnboardingScopeScreen() {
   // ------------------------------------------------------------------
 
   if (loadError) {
-    return (
-      <Page narrowWidth>
-        <div style={{ paddingTop: 48 }}>
-          <Card>
-            <BlockStack gap="400">
-              <Text as="h1" variant="headingLg">
-                We couldn't read your store
-              </Text>
-              <Text as="p" tone="subdued">
-                {loadError}
-              </Text>
-              <InlineStack gap="300">
-                <Button variant="primary" onClick={() => window.location.reload()}>
-                  Try again
-                </Button>
-              </InlineStack>
-            </BlockStack>
-          </Card>
-        </div>
-      </Page>
+    return page(
+      <div style={{ paddingTop: 48, paddingBottom: 16 }}>
+        <Card>
+          <BlockStack gap="400">
+            <Text as="h1" variant="headingLg">
+              We couldn't read your store
+            </Text>
+            <Banner tone="critical">{loadError}</Banner>
+            <InlineStack gap="300">
+              <Button variant="primary" onClick={() => window.location.reload()}>
+                Try again
+              </Button>
+            </InlineStack>
+          </BlockStack>
+        </Card>
+      </div>,
     );
   }
 
@@ -396,32 +403,31 @@ function OnboardingScopeScreen() {
       prep === "sync" && sync.progress && sync.progress.done > 0
         ? `${plural(sync.progress.done, "product")} so far`
         : null;
-    return (
-      <Page narrowWidth>
-        <div style={{ paddingTop: 96 }}>
-          <Card padding="800">
-            <BlockStack gap="400" inlineAlign="center">
-              <Spinner size="large" accessibilityLabel="Reading your store" />
-              <Text as="p" variant="headingMd" alignment="center">
-                {PREP_LINES[prep] || "Reading your store…"}
+    return page(
+      <div style={{ paddingTop: 96, paddingBottom: 16 }}>
+        <Card padding="800">
+          <BlockStack gap="400" inlineAlign="center">
+            <Spinner size="large" accessibilityLabel="Reading your store" />
+            <Text as="p" variant="headingMd" alignment="center">
+              {PREP_LINES[prep] || "Reading your store…"}
+            </Text>
+            {syncLine && (
+              <Text as="p" tone="subdued" alignment="center">
+                {syncLine}
               </Text>
-              {syncLine && (
-                <Text as="p" tone="subdued" alignment="center">
-                  {syncLine}
-                </Text>
-              )}
-              <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-                Usually under a minute. Nothing goes live.
+            )}
+            <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+              Usually under a minute. Nothing goes live.
+            </Text>
+            {/* A sync failure doesn't stop the chain, but it is an error. */}
+            {prepNote && (
+              <Text as="p" variant="bodySm" tone="critical" alignment="center">
+                {prepNote}
               </Text>
-              {prepNote && (
-                <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-                  {prepNote}
-                </Text>
-              )}
-            </BlockStack>
-          </Card>
-        </div>
-      </Page>
+            )}
+          </BlockStack>
+        </Card>
+      </div>,
     );
   }
 
@@ -429,8 +435,8 @@ function OnboardingScopeScreen() {
   // generator would refuse or produce an empty quiz); say why and offer a
   // re-read from page 1.
   if (options.productCount === 0) {
-    return (
-      <Page narrowWidth>
+    return page(
+      <>
         <style>{SCOPE_CSS}</style>
         <div className="gq-ob">
           <Card padding="600">
@@ -445,7 +451,7 @@ function OnboardingScopeScreen() {
                     : "Your store has no products with the status Active, so there is nothing for a quiz to recommend yet. Draft and archived products are left out on purpose."}
                 </Text>
               </BlockStack>
-              {prepNote && <Banner tone="warning">{prepNote}</Banner>}
+              {prepNote && <Banner tone="critical">{prepNote}</Banner>}
               <BlockStack gap="200">
                 <Text as="p">
                   {prepNote
@@ -465,15 +471,28 @@ function OnboardingScopeScreen() {
           </Card>
           <p className="gq-ob-foot">{shopDomain}</p>
         </div>
-      </Page>
+      </>,
     );
   }
 
   const tplDef = options.templates.find((t) => t.id === template) ?? options.templates[options.templates.length - 1];
   const scopeIsAll = !currentChip || currentChip.kind === "all";
 
-  return (
-    <Page narrowWidth>
+  // One banner at a time (Built for Shopify 4.3.4), most urgent first: a
+  // failed template save, then a partial sync, then the thin-catalog note.
+  const notice: { tone: "critical" | "info"; text: string } | null = choiceError
+    ? { tone: "critical", text: choiceError }
+    : prepNote
+      ? { tone: "critical", text: `${prepNote.replace(/[.\s]+$/, "")}. The quiz is built from what did sync.` }
+      : options.productCount < SMALL_CATALOG
+        ? {
+            tone: "info",
+            text: `Only ${plural(options.productCount, "active product")} to choose from. The quiz will be short and every answer will land on the same few products. Add more active products in Shopify for a richer quiz, or build now and come back later.`,
+          }
+        : null;
+
+  return page(
+    <>
       <style>{SCOPE_CSS}</style>
       <div className="gq-ob">
         <Card padding="600">
@@ -488,10 +507,10 @@ function OnboardingScopeScreen() {
             </BlockStack>
 
             <div className="gq-ob-rows">
-              {/* Row 1 — scope */}
+              {/* Row 1: scope */}
               <div className="gq-ob-row">
                 <span className="gq-ob-ic" aria-hidden>
-                  {options.productCount}
+                  <Icon source={ProductIcon} tone="subdued" />
                 </span>
                 <div className="gq-ob-body">
                   <Text as="p">
@@ -550,7 +569,7 @@ function OnboardingScopeScreen() {
                             <div style={{ marginTop: 8 }}>
                               <Text as="p" variant="bodySm" tone="subdued">
                                 {freeState.result.count < 5
-                                  ? `Only ${plural(freeState.result.count, "product")} match — a quiz needs more to choose from. `
+                                  ? `Only ${plural(freeState.result.count, "product")} match. A quiz needs more to choose from. `
                                   : `${plural(freeState.result.count, "product")} matched.`}
                                 {freeState.result.count < 5 && (
                                   <Button variant="plain" onClick={() => setSelected(0)}>
@@ -570,10 +589,10 @@ function OnboardingScopeScreen() {
                 </Button>
               </div>
 
-              {/* Row 2 — store type → template */}
+              {/* Row 2: store type to template */}
               <div className="gq-ob-row">
                 <span className="gq-ob-ic" aria-hidden>
-                  ◐
+                  <Icon source={ThemeTemplateIcon} tone="subdued" />
                 </span>
                 <div className="gq-ob-body">
                   <Text as="p">
@@ -618,19 +637,7 @@ function OnboardingScopeScreen() {
 
             </div>
 
-            {choiceError && <Banner tone="critical">{choiceError}</Banner>}
-            {prepNote && (
-              <Banner tone="warning">
-                {prepNote} — the quiz is built from what did sync.
-              </Banner>
-            )}
-            {options.productCount < SMALL_CATALOG && (
-              <Banner tone="info">
-                Only {plural(options.productCount, "active product")} to choose from. The quiz will be short and every
-                answer will land on the same few products. Add more active products in Shopify for a richer quiz, or
-                build now and come back later.
-              </Banner>
-            )}
+            {notice && <Banner tone={notice.tone}>{notice.text}</Banner>}
 
             <InlineStack gap="400" blockAlign="center">
               <Button
@@ -658,7 +665,7 @@ function OnboardingScopeScreen() {
         </Card>
         <p className="gq-ob-foot">{shopDomain}</p>
       </div>
-    </Page>
+    </>,
   );
 }
 
@@ -667,7 +674,7 @@ const SCOPE_CSS = `
   .gq-ob-rows { display: flex; flex-direction: column; }
   .gq-ob-row { display: flex; align-items: flex-start; gap: 14px; padding: 16px 0; border-top: 1px solid var(--p-color-border-secondary, #e3e3e3); }
   .gq-ob-row:last-child { border-bottom: 1px solid var(--p-color-border-secondary, #e3e3e3); }
-  .gq-ob-ic { flex: 0 0 34px; height: 34px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--p-color-bg-surface-secondary, #f1f1f1); color: var(--p-color-text-secondary, #616161); font-size: 11px; font-weight: 600; letter-spacing: .02em; margin-top: 1px; }
+  .gq-ob-ic { flex: 0 0 34px; height: 34px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--p-color-bg-surface-secondary, #f1f1f1); color: var(--p-color-text-secondary, #616161); margin-top: 1px; }
   .gq-ob-body { flex: 1; min-width: 0; padding-top: 7px; }
   .gq-ob-row > .Polaris-Button, .gq-ob-row > button { margin-top: 7px; flex: 0 0 auto; }
   .gq-ob-expand { margin-top: 12px; padding: 14px; border-radius: 10px; background: var(--p-color-bg-surface-secondary, #f7f7f7); }

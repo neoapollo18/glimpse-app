@@ -43,11 +43,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 type TabId = "overview" | "funnel" | "answers" | "products" | "leads";
+// Short labels so all five fit side by side on a phone.
 const TABS: Array<{ id: TabId; content: string }> = [
   { id: "overview", content: "Overview" },
   { id: "funnel", content: "Funnel" },
-  { id: "answers", content: "Answers & vibes" },
-  { id: "products", content: "Products & revenue" },
+  { id: "answers", content: "Answers" },
+  { id: "products", content: "Products" },
   { id: "leads", content: "Leads" },
 ];
 
@@ -248,7 +249,7 @@ export default function QuizAnalytics() {
 
   if (!data) {
     return (
-      <Page title="Analytics">
+      <Page>
         <TitleBar title="Analytics" />
         <Banner tone="critical">We couldn&rsquo;t load your quiz analytics. Reload the page to try again.</Banner>
       </Page>
@@ -259,21 +260,25 @@ export default function QuizAnalytics() {
   const prev = d.previous;
 
   return (
-    <Page title="Analytics" subtitle="How shoppers use your quiz" fullWidth>
+    // The admin title bar names the page; no second title under it.
+    <Page fullWidth>
       <TitleBar title="Analytics" />
       <BlockStack gap="400">
-        <InlineStack align="space-between" blockAlign="center" gap="300">
-          <Text as="p" variant="bodySm" tone="subdued">
-            Last {range} days, compared with the {range} days before. A shopper is one cart.
-          </Text>
-          <ButtonGroup variant="segmented">
-            {DASHBOARD_RANGES.map((r) => (
-              <Button key={r} pressed={range === r} onClick={() => setRange(r)}>
-                {`${r} days`}
-              </Button>
-            ))}
-          </ButtonGroup>
-        </InlineStack>
+        {/* Cards run edge to edge on a phone; this line keeps a gutter. */}
+        <Box paddingInline={{ xs: "400", sm: "0" }} paddingBlockStart={{ xs: "400", sm: "0" }}>
+          <InlineStack align="space-between" blockAlign="center" gap="300">
+            <Text as="p" variant="bodySm" tone="subdued">
+              How shoppers use your quiz: last {range} days, compared with the {range} days before. A shopper is one cart.
+            </Text>
+            <ButtonGroup variant="segmented">
+              {DASHBOARD_RANGES.map((r) => (
+                <Button key={r} pressed={range === r} onClick={() => setRange(r)}>
+                  {`${r} days`}
+                </Button>
+              ))}
+            </ButtonGroup>
+          </InlineStack>
+        </Box>
         <Card padding="0">
           <Tabs tabs={TABS} selected={TABS.findIndex((t) => t.id === tab)} onSelect={(i) => setTab(TABS[i].id)} fitted />
         </Card>

@@ -15,6 +15,8 @@ import {
 import type { RecommendationTuning } from "../../lib/supabase.server";
 import type { StudioActionData } from "../../routes/studio";
 import { EditorHeader } from "./SettingsEditors";
+import { usePendingEdits } from "./save-bar";
+import { showAppToast } from "./toast";
 
 // Matching settings (moved here 2026-10-15 from the retired Quiz settings
 // page, /app/assistant): how many matches the quiz shows, which products
@@ -22,7 +24,9 @@ import { EditorHeader } from "./SettingsEditors";
 // These are store-wide recommendation settings outside the quiz_* copy
 // namespace, so they save through their own intent (save-match-settings)
 // with an explicit Save, never keystroke autosave: a scope change alters
-// what every shopper is recommended.
+// what every shopper is recommended. With the Studio admin bars on (per-shop
+// opt-in, lib/studio-admin-bars.server) Save and Discard live in the
+// admin's contextual save bar instead of the in-body button.
 
 export interface MatchSettings {
   numRecommendations: number;
@@ -62,7 +66,8 @@ export function MatchSettingsEditor({
   const [priorityProductIds, setPriorityProductIds] = useState<string[]>(initial.priorityProductIds);
   const [tuning, setTuning] = useState<RecommendationTuning>(initial.tuning);
   const [dirty, setDirty] = useState(false);
-  const [message, setMessage] = useState<{ tone: "success" | "critical"; text: string } | null>(null);
+  // Errors only: a successful save is a toast.
+  const [message, setMessage] = useState<{ tone: "critical"; text: string } | null>(null);
   // What the store has now: a save sends only the fields that differ from
   // it, so a stale or default value elsewhere in the form is never written.
   const [baseline, setBaseline] = useState<MatchSettings>(initial);
@@ -86,7 +91,8 @@ export function MatchSettingsEditor({
       if (pendingRef.current) setBaseline(pendingRef.current);
       pendingRef.current = null;
       setDirty(false);
-      setMessage({ tone: "success", text: fetcher.data.message ?? "Matching settings saved" });
+      setMessage(null);
+      showAppToast(fetcher.data.message ?? "Matching settings saved");
       onPreviewReload();
     } else {
       setMessage({ tone: "critical", text: fetcher.data.error ?? "Saving failed" });
@@ -132,6 +138,30 @@ export function MatchSettingsEditor({
     fd.append("patch", JSON.stringify(patch));
     fetcher.submit(fd, { method: "POST", action: "/studio" });
   };
+
+  // Back to what the store has now.
+  const discard = () => {
+    setNumRecommendations(baseline.numRecommendations);
+    setProductScope(baseline.productScope);
+    setSelectedProductIds(baseline.selectedProductIds);
+    setRecommendationMode(baseline.recommendationMode);
+    setAiGuidance(baseline.aiGuidance);
+    setPriorityProductIds(baseline.priorityProductIds);
+    setTuning(baseline.tuning);
+    setDirty(false);
+    setMessage(null);
+  };
+
+  // Opted-in shops: the Studio's one save bar holds these edits. The editor
+  // reports the outcome itself and stays registered until its save lands.
+  const held = usePendingEdits(dirty, {
+    save: async () => {
+      save();
+      return true;
+    },
+    discard,
+    saving,
+  });
 
   const disabled = chatBusy || saving;
   // Only in-scope products can ever be recommended, so only they can
@@ -312,7 +342,7 @@ export function MatchSettingsEditor({
           {message.text}
         </Banner>
       )}
-      {dirty && (
+      {dirty && !held && (
         <InlineStack align="end">
           <Button variant="primary" loading={saving} disabled={chatBusy} onClick={save}>
             Save matching settings
@@ -324,7 +354,8 @@ export function MatchSettingsEditor({
 }
 
 /** Camera framing hint for the quiz's try-on step: one field, saved on
- * blur through the same intent (it lives outside the quiz_* namespace). */
+ * blur through the same intent (it lives outside the quiz_* namespace).
+ * With the Studio admin bars on it waits for Save like every other field. */
 export function CameraHintField({ initial, disabled }: { initial: string; disabled: boolean }) {
   const fetcher = useFetcher<StudioActionData>();
   const [value, setValue] = useState(initial);
@@ -346,13 +377,21 @@ export function CameraHintField({ initial, disabled }: { initial: string; disabl
     fd.append("patch", JSON.stringify({ photo_frame_hint: next }));
     fetcher.submit(fd, { method: "POST", action: "/studio" });
   };
+  const held = usePendingEdits(value.trim() !== saved, {
+    save: async () => {
+      commit();
+      return true;
+    },
+    discard: () => setValue(saved),
+    saving: fetcher.state !== "idle",
+  });
   const failed = fetcher.state === "idle" && fetcher.data?.intent === "save-match-settings" && !fetcher.data.ok;
   return (
     <TextField
       label="Camera framing hint"
       value={value}
       onChange={setValue}
-      onBlur={commit}
+      onBlur={held ? undefined : commit}
       autoComplete="off"
       disabled={disabled}
       placeholder="Position your face in the frame"

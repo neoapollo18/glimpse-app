@@ -22,7 +22,6 @@ import {
   RadioButton,
   Divider,
   Pagination,
-  Box,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -739,8 +738,23 @@ export default function Products() {
   
   const dismissVideoBanner = () => {
     setShowVideoBanner(false);
-    localStorage.setItem('glimpse-video-banner-dismissed', 'true');
+    try {
+      localStorage.setItem('glimpse-video-banner-dismissed', 'true');
+    } catch {
+      /* session-only dismissal */
+    }
   };
+
+  // The save result banner stays until dismissed; a new result shows again.
+  // Only results that say something: a bare response never shows an empty
+  // red banner.
+  const [dismissedResult, setDismissedResult] = useState<unknown>(null);
+  const resultVisible =
+    fetcher.data != null &&
+    typeof fetcher.data.success === "boolean" &&
+    typeof fetcher.data.message === "string" &&
+    fetcher.data.message.trim() !== "" &&
+    fetcher.data !== dismissedResult;
 
   // Funnel configuration state
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -1338,9 +1352,10 @@ export default function Products() {
           </BlockStack>
         </InlineStack>
       </div>,
+      // No primary buttons inside a table (layout guideline).
       <Button
         key={`${product.id}-action`}
-        variant={configured ? "plain" : "primary"}
+        variant={configured ? "plain" : undefined}
         onClick={() => handleConfigure(product)}
         size="slim"
         disabled={configured}
@@ -1352,75 +1367,26 @@ export default function Products() {
 
   return (
     <Page>
-      <TitleBar title="Product Configuration" />
-      
+      <TitleBar title="Try-on products" />
+
       <BlockStack gap="500">
-        {fetcher.data?.success && (
+        {/* One banner at a time: this page's save result first, then the
+            how-to video. Both close for real. */}
+        {resultVisible && fetcher.data ? (
           <Banner
             title={fetcher.data.message}
-            tone="success"
-            onDismiss={() => {}}
+            tone={fetcher.data.success ? "success" : "critical"}
+            onDismiss={() => setDismissedResult(fetcher.data)}
           />
-        )}
-
-        {fetcher.data?.success === false && (
+        ) : showVideoBanner ? (
           <Banner
-            title={fetcher.data.message}
-            tone="critical"
-            onDismiss={() => {}}
-          />
-        )}
-
-        {/* Video Tutorial Banner */}
-        {showVideoBanner && (
-          <Card>
-            <div style={{ position: 'relative' }}>
-              <button
-                onClick={dismissVideoBanner}
-                style={{
-                  position: 'absolute',
-                  top: '-8px',
-                  right: '-8px',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: '4px',
-                  color: '#6b7280',
-                }}
-                aria-label="Dismiss"
-              >
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
-                </svg>
-              </button>
-              <InlineStack gap="400" align="center" blockAlign="center">
-                <Box
-                  background="bg-surface-secondary"
-                  padding="300"
-                  borderRadius="200"
-                >
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-                    <rect width="24" height="24" rx="6" fill="#FF0000"/>
-                    <path d="M10 8.5L16 12L10 15.5V8.5Z" fill="white"/>
-                  </svg>
-                </Box>
-                <BlockStack gap="100">
-                  <Text as="span" variant="bodyMd" fontWeight="semibold">
-                    New to product configuration?
-                  </Text>
-                  <Text as="span" variant="bodySm" tone="subdued">
-                    Watch our quick guide on setting up AI transformations for your products
-                  </Text>
-                </BlockStack>
-                <div style={{ marginLeft: "auto" }}>
-                  <Button url="https://www.loom.com/share/17ba1224959f48669415782f132535b3" target="_blank">
-                    Watch Video
-                  </Button>
-                </div>
-              </InlineStack>
-            </div>
-          </Card>
-        )}
+            title="New to product configuration?"
+            action={{ content: "Watch video", url: "https://www.loom.com/share/17ba1224959f48669415782f132535b3", external: true }}
+            onDismiss={dismissVideoBanner}
+          >
+            Watch our quick guide on setting up AI try-on for your products.
+          </Banner>
+        ) : null}
 
         {shopifyProductsError && (
           <Banner title="Product loading issue" tone="warning">
@@ -1447,7 +1413,8 @@ export default function Products() {
                   if (selected && selected.length > 0) {
                     const pickedProduct = selected[0];
                     if (isConfigured(pickedProduct.id)) {
-                      (window as any).shopify.toast.show("This product is already configured", { isError: true });
+                      // A note, not an error: nothing went wrong.
+                      (window as any).shopify.toast.show("Already configured");
                       return;
                     }
                     const match = shopifyProducts.find(
@@ -1472,7 +1439,7 @@ export default function Products() {
               <BlockStack gap="400">
                 <BlockStack gap="200">
                   <Text as="h2" variant="headingMd">
-                    Configured Products
+                    Configured products
                   </Text>
                   <Text as="p" variant="bodyMd" tone="subdued">
                     Products that are enabled for AI transformations
@@ -1522,7 +1489,7 @@ export default function Products() {
               <BlockStack gap="400">
                 <BlockStack gap="200">
                   <Text as="h2" variant="headingMd">
-                    All Products
+                    All products
                   </Text>
                   <Text as="p" variant="bodyMd" tone="subdued">
                     Select products shoppers can try on in the quiz
@@ -1558,7 +1525,7 @@ export default function Products() {
             <BlockStack gap="400">
               <Card>
                 <BlockStack gap="300">
-                  <Text as="h3" variant="headingMd">How it Works</Text>
+                  <Text as="h3" variant="headingMd">How it works</Text>
                   <BlockStack gap="200">
                     <Text as="p" variant="bodyMd">
                       1. Click "Configure" on a product

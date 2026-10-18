@@ -16,8 +16,9 @@ import {
   Box,
   Spinner,
   Divider,
+  Tabs,
 } from "@shopify/polaris";
-import { DragHandleIcon, MagicIcon, XSmallIcon } from "@shopify/polaris-icons";
+import { DragHandleIcon, XSmallIcon } from "@shopify/polaris-icons";
 import type { StudioLoaderData, StudioTab, StudioActionData } from "../../routes/studio";
 import { IntroEditor, LeadEditor, PhotoEditor, ResultsEditor, ThemeEditor } from "./SettingsEditors";
 import { BundleEditor, CrossSellEditor, type OfferCatalogItem } from "./OffersEditors";
@@ -33,6 +34,7 @@ import type { StudioFlow, StudioQuestion, StudioOption } from "./types";
 import { answerLabel } from "./types";
 import { slideIdForQuestion } from "./SlideTree";
 import { postStudioAction } from "./studio-data";
+import { saveToolCalls, useStudioSaveBar, usePendingEdits } from "./save-bar";
 import { defaultEmailPlacement } from "../../lib/quiz-templates";
 
 // Right panel: Edit | Build with AI tabs. Edit renders the contextual editor
@@ -80,6 +82,8 @@ export function EditPanel({
   flushEditor,
   onSaveError,
   onOpenGallery,
+  saveError,
+  onDismissSaveError,
   chat,
 }: {
   data: StudioLoaderData;
@@ -95,38 +99,48 @@ export function EditPanel({
   flushEditor?: () => void;
   onSaveError?: (message: string) => void;
   onOpenGallery?: () => void;
+  /** A save the Studio couldn't apply (rail edits, or an editor flush that
+   * outlived its editor): shown at the top of this panel, by the fields. */
+  saveError?: string | null;
+  onDismissSaveError?: () => void;
   chat: React.ReactNode;
 }) {
   const editHidden = step !== "build";
   const [tab, setTab] = useState<"edit" | "chat">("edit");
   const activeTab = editHidden ? "chat" : tab;
 
+  // Polaris tabs, both always in the same place: outside Build the Edit tab
+  // stays visible but disabled, so switching Studio tabs never moves them.
   return (
     <>
       <div className="studio-panel-tabs">
-        {!editHidden && (
-          <button className="studio-panel-tab" data-active={activeTab === "edit"} onClick={() => setTab("edit")}>
-            Edit
-          </button>
-        )}
-        <button
-          className="studio-panel-tab"
-          data-active={activeTab === "chat"}
-          onClick={() => {
-            // Deliver pending debounced edits BEFORE unmounting the editor;
-            // the flush revalidates on success so the save is never reverted
-            // by a later stale autosave.
-            if (activeTab === "edit") flushEditor?.();
-            setTab("chat");
+        <Tabs
+          fitted
+          tabs={[
+            { id: "studio-panel-edit", content: "Edit", disabled: editHidden },
+            { id: "studio-panel-ai", content: "Build with AI" },
+          ]}
+          selected={activeTab === "edit" ? 0 : 1}
+          onSelect={(i) => {
+            if (i === 1) {
+              // Deliver pending debounced edits BEFORE unmounting the editor;
+              // the flush revalidates on success so the save is never
+              // reverted by a later stale autosave.
+              if (activeTab === "edit") flushEditor?.();
+              setTab("chat");
+            } else if (!editHidden) {
+              setTab("edit");
+            }
           }}
-          style={editHidden ? { flex: "unset", width: "100%" } : undefined}
-        >
-          <MagicIcon aria-hidden />
-          Build with AI
-        </button>
+        />
       </div>
-      {/* studio-ai-pane[data-active] lets the shell tint the right panel
-          while Build with AI is showing (StudioShell CSS). */}
+      {saveError && (
+        <div style={{ padding: "12px 16px 0" }}>
+          <Banner tone="critical" onDismiss={onDismissSaveError}>
+            {saveError}
+          </Banner>
+        </div>
+      )}
       <div
         className="studio-ai-pane"
         data-active={activeTab === "chat"}
@@ -349,7 +363,8 @@ function EditBody({
   if (selectedSlide === "offers-crosssell") {
     return (
       <CrossSellEditor
-        key={`crosssell:${data.offers ? "loaded" : "none"}`}
+        // With the save bar on, Discard remounts it (chatEpoch) like the others.
+        key={`crosssell:${data.offers ? "loaded" : "none"}${data.adminBars ? `:${chatEpoch}` : ""}`}
         offers={(data.offers ?? null) as QuizOffers | null}
         catalog={(data.offerCatalog ?? null) as OfferCatalogItem[] | null}
         flow={flow}
@@ -571,16 +586,74 @@ function QuestionEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [registerFlush]);
 
-  const scheduleSave = (kind: "question" | "options") => {
-    dirtyRef.current[kind] = true;
+  // Studio save bar on (per-shop opt-in, ./save-bar): edits are held for
+  // Save and the preview dry-runs them. A failed save keeps them dirty.
+  const saveBar = useStudioSaveBar();
+  const [heldDirty, setHeldDirty] = useState(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  const saveHeld = async (): Promise<boolean> => {
+    const calls = buildCalls();
+    if (calls.length === 0) {
+      setHeldDirty(false);
+      return true;
+    }
+    dirtyRef.current = { question: false, options: false };
     setSaveState("saving");
     setError(null);
+    const body = await saveToolCalls(calls);
+    if (body.ok) {
+      if (body.previewFlow || body.previewConfig) {
+        onPreviewUpdate({ flow: body.previewFlow, config: body.previewConfig });
+      }
+      setSaveState("saved");
+      revalidator.revalidate();
+      if (!dirtyRef.current.question && !dirtyRef.current.options) setHeldDirty(false);
+      return true;
+    }
+    for (const c of calls) dirtyRef.current[c.tool === "update_question" ? "question" : "options"] = true;
+    setSaveState("idle");
+    const message = body.error ?? "Couldn't save your changes. Please try again.";
+    // Saved on the way to Build with AI, the editor may be gone already.
+    if (mountedRef.current) setError(message);
+    else onSaveError?.(message);
+    return false;
+  };
+  const held = usePendingEdits(heldDirty, {
+    calls: buildCalls,
+    save: saveHeld,
+    discard: () => {
+      dirtyRef.current = { question: false, options: false };
+      setHeldDirty(false);
+    },
+    saving: saveState === "saving",
+  });
+  const heldRef = useRef(held);
+  heldRef.current = held;
+
+  const scheduleSave = (kind: "question" | "options") => {
+    dirtyRef.current[kind] = true;
+    setError(null);
+    if (held) {
+      setHeldDirty(true);
+      saveBar.previewChanged();
+      return;
+    }
+    setSaveState("saving");
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(flush, 500);
   };
   useEffect(
     () => () => {
       if (timerRef.current !== null) clearTimeout(timerRef.current);
+      // Held edits never save on their own: leaving was confirmed, or
+      // they were discarded.
+      if (heldRef.current) return;
       // Deliver anything still pending: unmounting inside the debounce
       // window (or with edits queued behind an in-flight submit) must not
       // silently drop edits. The fetcher is gone with the component, so
@@ -1724,7 +1797,7 @@ function VisibilityEditor({
   }));
   const broken = showIf && !earlier.some((q) => q.axisKey === showIf.axis_key);
   if (broken && showIf) {
-    sourceOptions.push({ label: `⚠ ${showIf.axis_key} (unavailable)`, value: showIf.axis_key });
+    sourceOptions.push({ label: `${showIf.axis_key} (unavailable)`, value: showIf.axis_key });
   }
   const sourceQ = earlier.find((q) => q.axisKey === showIf?.axis_key);
   const valueOptions = (sourceQ?.options ?? []).map((o) => ({
@@ -1732,7 +1805,7 @@ function VisibilityEditor({
     value: o.axisValueValue,
   }));
   if (showIf && sourceQ && !sourceQ.options.some((o) => o.axisValueValue === showIf.axis_value)) {
-    valueOptions.push({ label: `⚠ ${showIf.axis_value} (unavailable)`, value: showIf.axis_value });
+    valueOptions.push({ label: `${showIf.axis_value} (unavailable)`, value: showIf.axis_value });
   }
 
   return (

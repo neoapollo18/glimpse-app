@@ -1,18 +1,20 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useFetcher, useRevalidator } from "@remix-run/react";
 import {
-  Badge,
   Banner,
   BlockStack,
   Button,
   Card,
   Checkbox,
+  Divider,
+  Icon,
   InlineStack,
   Modal,
   Text,
   Box,
   InlineGrid,
 } from "@shopify/polaris";
+import { AlertTriangleIcon, CheckCircleIcon, CheckIcon, XIcon } from "@shopify/polaris-icons";
 import type { StudioLoaderData, StudioActionData } from "../../routes/studio";
 import type { DraftProblem } from "./draft-problems";
 import { isQuestionServable } from "../../lib/option-visibility";
@@ -26,11 +28,12 @@ const SCOPE_DECLINED_LINE =
   "Publishing needs permission to add the Find My Match page to your Online Store. Click Publish again to allow it, or add the Gleame Quiz block from the theme editor instead.";
 
 // V2-SPEC Part 7 (Live tab restored 2026-10-16 with the setup guide):
-//   1. PublishSheet — a slide-over reachable from the topbar Publish
+//   1. PublishSheet: a Polaris modal reachable from the title bar Publish
 //      button on ANY tab: pre-publish checklist, placement (dedicated
-//      page default), add-to-menu checkbox (default on), one Publish
-//      action through the existing /app/api/publish-quiz mechanics, then
-//      a success state with the live URL.
+//      page default), add-to-menu checkbox (default on), and Publish in
+//      the modal's primary action slot (Built for Shopify 4.1.6) through
+//      the existing /app/api/publish-quiz mechanics, then a success state
+//      with the live URL.
 //   2. LiveTab: status + on/off, the setup guide (video + four manual
 //      steps, collapsed once live), version history (VersionHistoryModal)
 //      and the placements link; TemplatePendingBanner over the canvas.
@@ -68,7 +71,7 @@ const PREVIEW_ONLY_LINE =
 
 
 // ---------------------------------------------------------------------
-// Publish sheet (slide-over)
+// Publish sheet (modal)
 // ---------------------------------------------------------------------
 
 export function PublishSheet({
@@ -182,158 +185,118 @@ export function PublishSheet({
     }
   };
 
-  if (!open) return null;
+  const live = Boolean(result?.liveUrl);
   return (
-    <>
-      {/* Scrim + sheet: a slide-over, deliberately NOT a modal card. */}
-      <div
-        onClick={onClose}
-        style={{ position: "fixed", inset: "56px 0 0 0", background: "rgba(20,22,26,0.35)", zIndex: 40 }}
-      />
-      <div
-        style={{
-          position: "fixed",
-          top: 56,
-          right: 0,
-          bottom: 0,
-          width: 400,
-          maxWidth: "90vw",
-          background: "#fff",
-          borderLeft: "1px solid #E1E3E5",
-          boxShadow: "-12px 0 32px rgba(20,22,26,0.12)",
-          zIndex: 41,
-          overflowY: "auto",
-          padding: 20,
-          boxSizing: "border-box",
-        }}
-      >
-        <BlockStack gap="400">
-          <InlineStack align="space-between" blockAlign="center">
-            <Text as="h2" variant="headingMd">
-              Publish your quiz
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={live ? "Your quiz is live" : "Publish your quiz"}
+      primaryAction={
+        live
+          ? { content: "Open the live page", url: result!.liveUrl!, external: true }
+          : previewOnly
+            ? undefined
+            : { content: "Publish", onAction: () => void publish(), loading: busy, disabled: questionCount === 0 }
+      }
+      secondaryActions={[{ content: live ? "Done" : "Cancel", onAction: onClose }]}
+    >
+      {live ? (
+        <Modal.Section>
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd">
+              Your quiz is on your store.
             </Text>
-            <Button variant="tertiary" onClick={onClose} accessibilityLabel="Close">
-              ✕
-            </Button>
-          </InlineStack>
-
-          {result?.liveUrl ? (
-            <Card>
-              <BlockStack gap="200">
-                <Badge tone="success">Live</Badge>
-                <Text as="p" variant="bodyMd">
-                  Your quiz is on your store.
-                </Text>
-                <Button url={result.liveUrl} external variant="primary">
-                  Open the live page
-                </Button>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  {result.liveUrl.replace(/^https:\/\//, "")}
-                </Text>
-              </BlockStack>
-            </Card>
-          ) : (
-            <>
-              <Card>
-                <BlockStack gap="200">
-                  <Text as="h3" variant="headingSm">
-                    Before it goes live
-                  </Text>
-                  <ChecklistRow
-                    ok={questionCount > 0}
-                    label={questionCount > 0 ? "Quiz has questions" : "Quiz has no questions yet"}
-                  />
-                  {problems.length === 0 ? (
-                    <ChecklistRow ok label="Every question is complete and showing" />
-                  ) : (
-                    <>
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Incomplete questions are automatically hidden from shoppers until you
-                        finish them ({servableCount} of {questionCount} currently showing):
-                      </Text>
-                      {problems.map((p, i) => (
-                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <span style={{ color: "#B98900" }}>!</span>
-                          <span style={{ flex: 1, fontSize: 13 }}>{p.message}</span>
-                          <Button size="slim" onClick={() => onFix(p.slideId)}>
-                            Fix
-                          </Button>
-                        </div>
-                      ))}
-                    </>
-                  )}
-                  <ChecklistRow
-                    ok={logicReady}
-                    warn={!logicReady}
-                    label={
-                      logicReady
-                        ? "Matching is set up"
-                        : "No matching set up yet. Shoppers still get results, but generic ones."
-                    }
-                  />
-                  <ChecklistRow
-                    ok={data.catalog.syncEnabled}
-                    warn={!data.catalog.syncEnabled}
-                    label={data.catalog.syncEnabled ? "Catalog is synced" : "Catalog isn't synced (top bar)"}
-                  />
-                </BlockStack>
-              </Card>
-
-              <Card>
-                <BlockStack gap="200">
-                  <Text as="h3" variant="headingSm">
-                    Placement
-                  </Text>
-                  <Text as="p" variant="bodySm">
-                    Dedicated page (recommended): Gleame creates a Find My Match page in your
-                    Online Store and turns the quiz on.
-                  </Text>
-                  {data.studio.template && !previewOnly && (
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      {data.studio.templateServed
-                        ? "This template is already live. Publishing again keeps it live."
-                        : data.quizSurfaceEnabled !== false
-                          ? "Publishing puts this template live. Until then, shoppers see your previous quiz layout."
-                          : "Publishing turns your quiz on with this template."}
-                    </Text>
-                  )}
-                  <Checkbox
-                    label="Add to main menu"
-                    checked={addToMenu}
-                    onChange={setAddToMenu}
-                    helpText="Puts a Find My Match link in your store's main navigation."
-                  />
-                </BlockStack>
-              </Card>
-
-              {result?.error && <Banner tone="critical">{result.error}</Banner>}
-
-              {previewOnly ? (
-                <Text as="p" variant="bodySm" tone="subdued">
-                  {PREVIEW_ONLY_LINE}
-                </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              {result!.liveUrl!.replace(/^https:\/\//, "")}
+            </Text>
+          </BlockStack>
+        </Modal.Section>
+      ) : (
+        <>
+          <Modal.Section>
+            <BlockStack gap="200">
+              <Text as="h3" variant="headingSm">
+                Before it goes live
+              </Text>
+              <ChecklistRow
+                ok={questionCount > 0}
+                label={questionCount > 0 ? "Quiz has questions" : "Quiz has no questions yet"}
+              />
+              {problems.length === 0 ? (
+                <ChecklistRow ok label="Every question is complete and showing" />
               ) : (
                 <>
-                  <Button
-                    variant="primary"
-                    size="large"
-                    fullWidth
-                    loading={busy}
-                    disabled={questionCount === 0}
-                    onClick={publish}
-                  >
-                    Publish
-                  </Button>
                   <Text as="p" variant="bodySm" tone="subdued">
-                    Nothing is visible to shoppers until you publish.
+                    Incomplete questions are automatically hidden from shoppers until you
+                    finish them ({servableCount} of {questionCount} currently showing):
                   </Text>
+                  {problems.map((p, i) => (
+                    <InlineStack key={i} gap="200" blockAlign="center" wrap={false}>
+                      <span style={{ flexShrink: 0 }}>
+                        <Icon source={AlertTriangleIcon} tone="caution" />
+                      </span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <Text as="span" variant="bodyMd">
+                          {p.message}
+                        </Text>
+                      </div>
+                      <Button size="slim" onClick={() => onFix(p.slideId)}>
+                        Fix
+                      </Button>
+                    </InlineStack>
+                  ))}
                 </>
               )}
-            </>
-          )}
-        </BlockStack>
-      </div>
-    </>
+              <ChecklistRow
+                ok={logicReady}
+                warn={!logicReady}
+                label={
+                  logicReady
+                    ? "Matching is set up"
+                    : "No matching set up yet. Shoppers still get results, but generic ones."
+                }
+              />
+              <ChecklistRow
+                ok={data.catalog.syncEnabled}
+                warn={!data.catalog.syncEnabled}
+                label={data.catalog.syncEnabled ? "Catalog is synced" : "Catalog isn't synced (top bar)"}
+              />
+            </BlockStack>
+          </Modal.Section>
+          <Modal.Section>
+            <BlockStack gap="200">
+              <Text as="h3" variant="headingSm">
+                Placement
+              </Text>
+              <Text as="p" variant="bodyMd">
+                Dedicated page (recommended): Gleame creates a Find My Match page in your
+                Online Store and turns the quiz on.
+              </Text>
+              {data.studio.template && !previewOnly && (
+                <Text as="p" variant="bodySm" tone="subdued">
+                  {data.studio.templateServed
+                    ? "This template is already live. Publishing again keeps it live."
+                    : data.quizSurfaceEnabled !== false
+                      ? "Publishing puts this template live. Until then, shoppers see your previous quiz layout."
+                      : "Publishing turns your quiz on with this template."}
+                </Text>
+              )}
+              <Checkbox
+                label="Add to main menu"
+                checked={addToMenu}
+                onChange={setAddToMenu}
+                helpText="Puts a Find My Match link in your store's main navigation."
+              />
+              <Divider />
+              {result?.error && <Banner tone="critical">{result.error}</Banner>}
+              <Text as="p" variant="bodySm" tone="subdued">
+                {previewOnly ? PREVIEW_ONLY_LINE : "Nothing is visible to shoppers until you publish."}
+              </Text>
+            </BlockStack>
+          </Modal.Section>
+        </>
+      )}
+    </Modal>
   );
 }
 
@@ -417,7 +380,7 @@ function SetupVideo() {
             >
               <span style={{ width: 0, height: 0, borderTop: "10px solid transparent", borderBottom: "10px solid transparent", borderLeft: "16px solid #fff", marginLeft: 4 }} />
             </span>
-            <span style={{ position: "absolute", left: 12, bottom: 12, background: "rgba(255,255,255,0.92)", color: "#1a1a1a", fontSize: 12.5, fontWeight: 500, padding: "3px 8px", borderRadius: 6 }}>
+            <span style={{ position: "absolute", left: 12, bottom: 12, background: "rgba(255,255,255,0.92)", color: "#1a1a1a", fontSize: 13, fontWeight: 500, padding: "3px 8px", borderRadius: 6 }}>
               Watch the full setup
             </span>
           </button>
@@ -435,7 +398,7 @@ function SetupStep({ n, title, children, action }: { n: number; title: string; c
     <div style={{ display: "grid", gridTemplateColumns: "28px 1fr", gap: 10, padding: "12px 0", borderTop: n > 1 ? "1px solid #E3E3E3" : undefined }}>
       <span
         aria-hidden
-        style={{ width: 24, height: 24, borderRadius: "50%", border: "1px solid #C9CCCF", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12.5, color: "#616161" }}
+        style={{ width: 24, height: 24, borderRadius: "50%", border: "1px solid #C9CCCF", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#616161" }}
       >
         {n}
       </span>
@@ -476,7 +439,7 @@ function SetupGuide({ data, quizName, onViewStore, onOpenPublish, previewOnly }:
           n={1}
           title="Create the quiz template"
           action={
-            <Button variant="primary" url={`${admin}/themes/current/editor?template=page`} external>
+            <Button url={`${admin}/themes/current/editor?template=page`} external>
               Open theme editor
             </Button>
           }
@@ -578,7 +541,7 @@ export function LiveTab({
               </InlineStack>
               <InlineStack gap="200">
                 {!previewOnly && (
-                  <Button variant={surfaceOn ? "primary" : undefined} onClick={onViewStore} loading={viewStoreBusy}>
+                  <Button onClick={onViewStore} loading={viewStoreBusy}>
                     View on my store
                   </Button>
                 )}
@@ -588,7 +551,7 @@ export function LiveTab({
                     Turn off
                   </Button>
                 ) : !previewOnly ? (
-                  <Button variant="primary" loading={toggling} disabled={questionCount === 0 || matrixWithoutRules} onClick={() => setLive(true)}>
+                  <Button loading={toggling} disabled={questionCount === 0 || matrixWithoutRules} onClick={() => setLive(true)}>
                     Turn on
                   </Button>
                 ) : null}
@@ -599,25 +562,18 @@ export function LiveTab({
                 {PREVIEW_ONLY_LINE}
               </Text>
             )}
+            {/* Re-sends Turn on (which stamps the template live), not the
+                full Publish, which would also create a page and a main-menu
+                link. The Studio hides its canvas copy of this banner on the
+                Live tab, so it shows once. */}
             {awaitingPublish && (
-              <Banner tone="warning">
-                <BlockStack gap="200">
-                  <Text as="p" variant="bodySm">
-                    Your store is still showing your previous quiz layout. Put this template live to show it where your quiz already appears.
-                  </Text>
-                  <InlineStack>
-                    {/* Re-sends Turn on (which stamps the template live), not
-                        the full Publish, which would also create a page and a
-                        main-menu link. */}
-                    <Button variant="primary" loading={toggling} onClick={() => setLive(true)}>
-                      Put template live
-                    </Button>
-                  </InlineStack>
-                </BlockStack>
+              <Banner tone="warning" action={{ content: "Put template live", onAction: () => setLive(true), loading: toggling }}>
+                Your store is still showing your previous quiz layout. Put this template live to show it where your quiz already appears.
               </Banner>
             )}
             <Text as="p" variant="bodySm" tone="subdued">
-              Edits save to {data.shopDomain} as you make them; shoppers see the quiz only while it&rsquo;s on. {questionCount}{" "}
+              Edits save to {data.shopDomain} {data.adminBars ? "when you click Save" : "as you make them"}; shoppers see the
+              quiz only while it&rsquo;s on. {questionCount}{" "}
               {questionCount === 1 ? "question" : "questions"}
               {ruleCount > 0 ? ` · ${ruleCount} ${ruleCount === 1 ? "rule" : "rules"}` : ""} · {MODE_LABELS[mode] ?? mode} matching.
             </Text>
@@ -635,8 +591,8 @@ export function LiveTab({
           <div style={{ border: "1px solid #E3E3E3", borderRadius: 12, padding: "12px 16px", background: "#FFFFFF" }}>
             <InlineStack align="space-between" blockAlign="center">
               <InlineStack gap="200" blockAlign="center">
-                <span aria-hidden style={{ width: 18, height: 18, borderRadius: "50%", background: "#29845A", color: "#fff", fontSize: 11, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
-                  ✓
+                <span aria-hidden style={{ display: "inline-flex" }}>
+                  <Icon source={CheckCircleIcon} tone="success" />
                 </span>
                 <Text as="p" variant="bodyMd">
                   Setup complete
@@ -693,31 +649,20 @@ export function LiveTab({
 }
 
 /** Banner over the canvas while a template quiz is on but its template
- * isn't served yet: shoppers still see the previous layout. */
+ * isn't served yet: shoppers still see the previous layout. A failed
+ * attempt turns it critical, with the reason, until the next try. */
 export function TemplatePendingBanner({ data }: { data: StudioLoaderData }) {
   const { setLive, toggling, error } = useSetLive();
   if (!templateAwaitingPublish(data)) return null;
   return (
-    <div style={{ padding: "12px 16px 0" }}>
-      <Banner tone="warning">
-        <BlockStack gap="200">
-          <Text as="p" variant="bodySm">
-            Your store is still showing your previous quiz layout. Put this template live to show it
-            to shoppers where your quiz already appears.
-          </Text>
-          {error && (
-            <Text as="p" variant="bodySm" tone="critical">
-              {error}
-            </Text>
-          )}
-          <InlineStack>
-            <Button variant="primary" loading={toggling} onClick={() => setLive(true)}>
-              Put template live
-            </Button>
-          </InlineStack>
-        </BlockStack>
-      </Banner>
-    </div>
+    <Banner
+      tone={error ? "critical" : "warning"}
+      action={{ content: "Put template live", onAction: () => setLive(true), loading: toggling }}
+    >
+      {error
+        ? `Couldn't put the template live: ${error}`
+        : "Your store is still showing your previous quiz layout. Put this template live to show it to shoppers where your quiz already appears."}
+    </Banner>
   );
 }
 
@@ -832,7 +777,7 @@ export function VersionHistoryModal({
               This version replaces your current quiz configuration, including its template. Your
               current setup is saved first, so a restore is always reversible. If the quiz is on,
               shoppers see the restored version right away (a template that isn't live yet still
-              needs to be put live from the status menu in the top bar).
+              needs to be put live from the Live tab).
             </Text>
             {restoreError && <Banner tone="critical">{restoreError}</Banner>}
           </BlockStack>
@@ -894,11 +839,17 @@ function versionLabel(v: { label: string | null; createdBy: string }): string {
 
 function ChecklistRow({ ok, warn, label }: { ok: boolean; warn?: boolean; label: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <span style={{ color: ok ? "#008060" : warn ? "#B98900" : "#D82C0D" }}>
-        {ok ? "✓" : warn ? "!" : "✕"}
+    <InlineStack gap="200" blockAlign="center" wrap={false}>
+      <span style={{ flexShrink: 0 }}>
+        <Icon
+          source={ok ? CheckIcon : warn ? AlertTriangleIcon : XIcon}
+          tone={ok ? "success" : warn ? "caution" : "critical"}
+          accessibilityLabel={ok ? "Done" : warn ? "Check" : "Missing"}
+        />
       </span>
-      <span style={{ fontSize: 13 }}>{label}</span>
-    </div>
+      <Text as="span" variant="bodyMd">
+        {label}
+      </Text>
+    </InlineStack>
   );
 }

@@ -1,11 +1,20 @@
 import { useEffect, useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { Badge, InlineStack, Text } from "@shopify/polaris";
+import { Badge, Button, InlineStack, Text } from "@shopify/polaris";
 import { quizBlockStatusFrom, templateLabel, type QuizBlockStatus } from "../lib/theme-extension";
 
 // App Bridge's `app` API isn't in @shopify/app-bridge-types 0.1.0 yet; the
 // CDN app-bridge.js the admin loads provides it.
 type AppApi = { extensions?: () => Promise<unknown> };
+
+/** The live theme's editor in a new tab (same link the Studio setup guide
+ * uses), from the shop App Bridge reports. Client-only: the unknown state
+ * renders after the first check. */
+function themeEditorUrl(): string | null {
+  const shop = (window as unknown as { shopify?: { config?: { shop?: string } } }).shopify?.config?.shop;
+  const handle = typeof shop === "string" ? shop.replace(".myshopify.com", "") : "";
+  return handle ? `https://admin.shopify.com/store/${handle}/themes/current/editor` : null;
+}
 
 /**
  * Live status of the quiz app block in the published theme, via
@@ -48,10 +57,28 @@ export function useQuizBlockStatus(): QuizBlockStatus | null {
   return status;
 }
 
-/** One-line badge + note for the dashboard. Renders nothing until known. */
+/** One-line badge + note for the dashboard. Renders nothing while loading;
+ * a check that can't run still says so (Built for Shopify 4.2.3). */
 export function QuizPlacementStatus({ quizLive }: { quizLive: boolean }) {
   const status = useQuizBlockStatus();
-  if (!status || status.state === "unknown") return null;
+  if (!status) return null;
+
+  if (status.state === "unknown") {
+    const editor = themeEditorUrl();
+    return (
+      <InlineStack gap="200" blockAlign="center">
+        <Badge>Theme not checked</Badge>
+        <Text as="span" variant="bodySm" tone="subdued">
+          Couldn&rsquo;t check your theme{editor ? "." : ". Open the theme editor to see whether the quiz section is there."}
+        </Text>
+        {editor && (
+          <Button variant="plain" url={editor} external>
+            Open the theme editor
+          </Button>
+        )}
+      </InlineStack>
+    );
+  }
 
   if (status.state === "active") {
     const where = status.placements.map((p) => templateLabel(p.template)).join(", ");

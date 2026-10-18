@@ -299,7 +299,7 @@ export function FlowMap({
                     </span>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: "#6D7175", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: "#616161", display: "inline-flex", alignItems: "center", gap: 4 }}>
                         {node.questionIndices.length > 1
                           ? `Q${node.questionIndices[0] + 1}-Q${node.questionIndices[node.questionIndices.length - 1] + 1}`
                           : `Q${node.questionIndices[0] + 1}`}
@@ -335,7 +335,7 @@ export function FlowMap({
                                 background: branches ? "#1a1a1a" : "#F1F1F1",
                                 borderRadius: 999,
                                 padding: "1px 8px",
-                                fontSize: 11,
+                                fontSize: 12,
                                 fontWeight: branches ? 600 : 400,
                                 color: branches ? "#fff" : "#202223",
                               }}
@@ -346,7 +346,7 @@ export function FlowMap({
                           );
                         })}
                         {flow.questions[node.questionIndices[0]].options.length > 6 && (
-                          <span style={{ fontSize: 11, color: "#6D7175" }}>
+                          <span style={{ fontSize: 12, color: "#616161" }}>
                             +{flow.questions[node.questionIndices[0]].options.length - 6} more
                           </span>
                         )}

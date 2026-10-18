@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Badge, Button, Popover, Box, BlockStack, Text, ProgressBar, Tooltip } from "@shopify/polaris";
+import { Badge, Button, ButtonGroup, Popover, Box, BlockStack, Text, ProgressBar, Tooltip } from "@shopify/polaris";
 import { useCatalogSync } from "../../lib/use-catalog-sync";
 import type { StudioTab } from "../../routes/studio";
 
@@ -7,6 +7,9 @@ import type { StudioTab } from "../../routes/studio";
 // left; centered segmented tabs Build / Check matches / Live; right side
 // "View on my store" (secondary) + "Publish" (primary, opens the publish
 // sheet). The Live tab is back (2026-10-16) with the setup guide.
+// For shops opted in to the admin bars (lib/studio-admin-bars.server) those
+// two actions live in the app window's title bar instead (hostActions,
+// Built for Shopify 4.1.6); every other shop keeps them here.
 //
 // V3-SPEC 6.4: while the QUIZ_TEMPLATES_LIVE=off emergency kill is set, a
 // template quiz cannot reach the storefront, so "View on my store" is
@@ -42,6 +45,7 @@ export function StudioTopBar({
   previewOnly,
   templatePending,
   live,
+  hostActions,
 }: {
   tab: StudioTab;
   onTabChange: (t: StudioTab) => void;
@@ -60,6 +64,8 @@ export function StudioTopBar({
   templatePending?: boolean;
   /** Storefront surface on (Live badge) or off (Ready badge). */
   live: boolean;
+  /** The host app window's title bar shows Publish / View on my store. */
+  hostActions?: boolean;
 }) {
   const [syncOpen, setSyncOpen] = useState(false);
   const sync = useCatalogSync();
@@ -111,9 +117,9 @@ export function StudioTopBar({
             border: "1px solid transparent",
             borderRadius: 8,
             padding: "5px 8px",
-            fontSize: 13.5,
+            fontSize: 13,
             fontWeight: 600,
-            minWidth: 0,
+            minWidth: 120, // the badges never squeeze the name out of sight
             flex: 1,
             background: "transparent",
             color: "#202223",
@@ -224,43 +230,36 @@ export function StudioTopBar({
       </div>
 
       <div className="studio-topbar-center">
-        <div
-          style={{
-            display: "flex",
-            gap: 4,
-            background: "#F6F6F7",
-            borderRadius: 999,
-            padding: 4,
-          }}
-        >
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              className="studio-step-pill"
-              data-active={tab === t.id}
-              onClick={() => onTabChange(t.id)}
-            >
-              {t.label}
-            </button>
-          ))}
+        {/* Polaris segmented control, like Analytics' range picker: fixed
+            positions, only the pressed state changes. */}
+        <div className="studio-step-tabs" role="group" aria-label="Studio sections">
+          <ButtonGroup variant="segmented">
+            {TABS.map((t) => (
+              <Button key={t.id} pressed={tab === t.id} onClick={() => onTabChange(t.id)}>
+                {t.label}
+              </Button>
+            ))}
+          </ButtonGroup>
         </div>
       </div>
 
-      <div className="studio-topbar-right">
-        {!previewOnly && (
-          <Button onClick={onViewStore} loading={viewStoreBusy} disabled={!hasDraft}>
-            View on my store
-          </Button>
-        )}
-        {/* Spec 6.4: while templates aren't live on storefronts the publish
-            action is hidden for template quizzes (the Preview only chip
-            explains); legacy quizzes keep publishing. */}
-        {!previewOnly && (
-          <Button variant="primary" onClick={onPublishClick}>
-            Publish
-          </Button>
-        )}
-      </div>
+      {!hostActions && (
+        <div className="studio-topbar-right">
+          {!previewOnly && (
+            <Button onClick={onViewStore} loading={viewStoreBusy} disabled={!hasDraft}>
+              View on my store
+            </Button>
+          )}
+          {/* Spec 6.4: while templates aren't live on storefronts the publish
+              action is hidden for template quizzes (the Preview only chip
+              explains); legacy quizzes keep publishing. */}
+          {!previewOnly && (
+            <Button variant="primary" onClick={onPublishClick}>
+              Publish
+            </Button>
+          )}
+        </div>
+      )}
     </>
   );
 }

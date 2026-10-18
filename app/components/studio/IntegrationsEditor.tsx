@@ -146,9 +146,9 @@ export function IntegrationsEditor({
               disabled={!status.encryptionReady || !status.available}
               helpText="In Klaviyo: Settings → Account → API keys → Create Private API Key. Give it Lists, Profiles, Subscriptions and Events access (full access or custom)."
             />
+            {/* Secondary: the title bar's Publish is the Studio's one primary. */}
             <InlineStack align="end">
               <Button
-                variant="primary"
                 loading={busy === "connect"}
                 disabled={!apiKey.trim() || !status.encryptionReady || !status.available}
                 onClick={() =>

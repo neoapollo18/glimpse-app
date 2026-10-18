@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Button, Text } from "@shopify/polaris";
+import { XIcon } from "@shopify/polaris-icons";
 import {
   TEMPLATE_IDS,
   TEMPLATE_STYLES,
@@ -16,7 +17,9 @@ import type { StudioFlow } from "./types";
 // OWN design (TEMPLATE_STYLES), so the gallery is a set of genuinely
 // different styles and the merchant picks the one that looks like their
 // store. Never stock screenshots. Ineligible templates dim with their
-// reason chip and a link into the Images rail.
+// reason chip and a link into the Images rail. It is a full view inside
+// the Studio (each card carries its own choice), so there are no modal
+// action slots to fill; closing is a standard Polaris icon button.
 
 const SCALE = 0.4;
 const MINI_HEIGHT = 236;
@@ -25,29 +28,27 @@ const STRIP_GAP = 8;
 const GALLERY_CSS = `
   .gq-gal { display: flex; flex-direction: column; min-height: 100%; background: #fff; }
   .gq-gal-head { display: flex; align-items: center; gap: 20px; padding: 18px 28px; border-bottom: 1px solid #E1E3E5; position: sticky; top: 0; background: rgba(255,255,255,.96); backdrop-filter: blur(6px); z-index: 2; }
-  .gq-gal-close { margin-left: auto; width: 32px; height: 32px; border-radius: 8px; border: 1px solid #E1E3E5; background: #fff; color: #6D7175; cursor: pointer; font-size: 14px; transition: background 120ms ease; }
-  .gq-gal-close:hover { background: #F6F6F7; }
+  .gq-gal-close { margin-left: auto; flex-shrink: 0; }
   .gq-gal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 24px 28px 40px; max-width: 1240px; margin: 0 auto; width: 100%; box-sizing: border-box; }
   .gq-gcard { position: relative; border: 1px solid #E1E3E5; border-radius: 14px; background: #fff; overflow: hidden; transition: border-color 150ms ease, box-shadow 150ms ease, opacity 150ms ease; }
   .gq-gcard[data-current="true"] { border-color: #1A1C1E; box-shadow: 0 0 0 1px #1A1C1E; }
   .gq-gcard[data-span="true"] { grid-column: 1 / -1; max-width: 610px; }
-  .gq-chip { position: absolute; top: 12px; left: 12px; z-index: 3; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 4px 11px; letter-spacing: .02em; }
+  .gq-chip { position: absolute; top: 12px; left: 12px; z-index: 3; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 4px 11px; }
   .gq-chip[data-kind="current"] { background: #1A1C1E; color: #fff; }
   .gq-chip[data-kind="reason"] { background: #FFF4D6; color: #7A5A00; border: 1px solid #F1D48A; }
   .gq-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: ${STRIP_GAP}px; padding: 12px 12px 0; background: var(--gq-strip-bg, #F6F6F7); border-bottom: 1px solid #E1E3E5; }
   .gq-mini { position: relative; height: ${MINI_HEIGHT + 22}px; }
   .gq-mini-frame { height: ${MINI_HEIGHT}px; overflow: hidden; border-radius: 8px; border: 1px solid #E1E3E5; background: #fff; position: relative; }
   .gq-mini-frame iframe { position: absolute; top: 0; left: 0; border: 0; pointer-events: none; display: block; transform-origin: top left; }
-  .gq-mini-lbl { display: block; text-align: center; font-size: 10px; font-weight: 700; letter-spacing: .12em; color: #8A8F98; padding-top: 6px; }
+  .gq-mini-lbl { display: block; text-align: center; font-size: 12px; font-weight: 600; color: #616161; padding-top: 4px; }
   .gq-meta { display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px 16px; }
   .gq-meta-text { min-width: 0; flex: 1; }
   .gq-meta-name { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .gq-style-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; letter-spacing: .02em; color: #303030; background: #F1F1F1; border-radius: 999px; padding: 3px 9px 3px 4px; }
+  .gq-style-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #303030; background: #F1F1F1; border-radius: 999px; padding: 3px 9px 3px 4px; }
   .gq-style-dot { width: 13px; height: 13px; border-radius: 999px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
-  .gq-meta-tag { font-size: 12.5px; color: #4A4D52; margin: 6px 0 4px; }
+  .gq-meta-tag { font-size: 13px; color: #4A4D52; margin: 6px 0 4px; }
   .gq-meta-q { font-size: 13px; color: #4A4D52; margin: 2px 0 4px; font-style: italic; }
-  .gq-meta-shape { font-size: 12px; color: #6D7175; }
-  .gq-fix { border: 0; background: none; padding: 0; color: #2C6ECB; font-weight: 600; font-size: 12.5px; cursor: pointer; }
+  .gq-meta-shape { font-size: 12px; color: #616161; }
   @media (max-width: 1100px) { .gq-gal-grid { grid-template-columns: 1fr; } .gq-gcard[data-span="true"] { max-width: none; } }
 `;
 
@@ -66,7 +67,7 @@ function MiniScreen({
         {src ? (
           <MiniFrame src={src} title={title} />
         ) : (
-          <div style={{ padding: 12, fontSize: 11, color: "#6D7175" }}>Preview unavailable</div>
+          <div style={{ padding: 12, fontSize: 12, color: "#616161" }}>Preview unavailable</div>
         )}
       </div>
       <span className="gq-mini-lbl">{label}</span>
@@ -153,9 +154,9 @@ export function TemplateGallery({
             content, and your colors can be fine-tuned in Style.
           </Text>
         </div>
-        <button className="gq-gal-close" onClick={onClose} aria-label="Close">
-          ✕
-        </button>
+        <div className="gq-gal-close">
+          <Button icon={XIcon} variant="tertiary" accessibilityLabel="Close templates" onClick={onClose} />
+        </div>
       </div>
 
       <div className="gq-gal-grid">
@@ -185,9 +186,9 @@ export function TemplateGallery({
                 </span>
               )}
               <div className="gq-strip">
-                <MiniScreen src={srcFor(id, "intro")} label="INTRO" title={`${def.name} intro`} />
-                <MiniScreen src={srcFor(id, questionStep)} label="QUESTION" title={`${def.name} question`} />
-                <MiniScreen src={srcFor(id, "results")} label="RESULTS" title={`${def.name} results`} />
+                <MiniScreen src={srcFor(id, "intro")} label="Intro" title={`${def.name} intro`} />
+                <MiniScreen src={srcFor(id, questionStep)} label="Question" title={`${def.name} question`} />
+                <MiniScreen src={srcFor(id, "results")} label="Results" title={`${def.name} results`} />
               </div>
               <div className="gq-meta">
                 <div className="gq-meta-text">
@@ -216,9 +217,10 @@ export function TemplateGallery({
                 ) : (
                   // Image gates are advisory: every template can be used.
                   // A thin-imagery warning (chip above) links to Images.
+                  // Secondary, not primary: a page of cards each with a
+                  // primary button gives no single obvious next step.
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
                     <Button
-                      variant="primary"
                       loading={busy && pending === id}
                       disabled={busy}
                       onClick={() => {
@@ -229,9 +231,9 @@ export function TemplateGallery({
                       Use this template
                     </Button>
                     {!isEligible && (
-                      <button className="gq-fix" onClick={onFixImages}>
-                        Add images →
-                      </button>
+                      <Button variant="plain" onClick={onFixImages}>
+                        Add images
+                      </Button>
                     )}
                   </div>
                 )}

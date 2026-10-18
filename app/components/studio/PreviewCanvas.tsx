@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type MutableRefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from "react";
 
 // V2-SPEC 2.1: the quiz renders FULL-BLEED on the themed canvas. The
 // canvas background is the quiz's own background token and the
@@ -95,6 +95,11 @@ export function PreviewCanvas({
   }
 
   const [device, setDevice] = useState<Device>("desktop");
+  // On a phone the desktop preview would scale to an unreadable 30%; start
+  // on Mobile there (after mount, so the server render stays the same).
+  useEffect(() => {
+    if (window.matchMedia?.("(max-width: 767px)").matches) setDevice("mobile");
+  }, []);
 
   const frameHostRef = useRef<HTMLDivElement | null>(null);
   const [hostSize, setHostSize] = useState<{ w: number; h: number } | null>(null);

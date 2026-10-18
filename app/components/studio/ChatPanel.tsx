@@ -42,10 +42,12 @@ type CopilotEvent =
   | { type: "heartbeat" };
 
 // Scoped to .gai so nothing leaks into other Studio surfaces. Warm off-white
-// canvas, dark warm ink, Gleame plum as the only accent (mark, send, focus).
+// canvas, dark warm ink, and a neutral near-black accent (mark, send,
+// focus): no purple, since Shopify reserves its magic purple and the
+// Sidekick look for its own AI (Built for Shopify 4.3.5).
 // Muted text is #6B635A on #FAF8F4 (5.6:1) and on white (5.9:1), AA.
 const CHAT_CSS = `
-  .gai { --gai-bg: #FAF8F4; --gai-ink: #26211C; --gai-ink-2: #4A433B; --gai-muted: #6B635A; --gai-line: #E8E2D8; --gai-line-2: #D6CEC1; --gai-user: #EFEAE2; --gai-card: #FFFFFF; --gai-accent: #6A2393; --gai-accent-hover: #571B7A; --gai-accent-soft: #F2EAF6;
+  .gai { --gai-bg: #FAF8F4; --gai-ink: #26211C; --gai-ink-2: #4A433B; --gai-muted: #6B635A; --gai-line: #E8E2D8; --gai-line-2: #D6CEC1; --gai-user: #EFEAE2; --gai-card: #FFFFFF; --gai-accent: #303030; --gai-accent-hover: #1A1A1A; --gai-accent-soft: #F1F1F1;
     flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--gai-bg); color: var(--gai-ink); font-size: 14px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
   .gai button { font: inherit; }
   .gai button:focus-visible { outline: 2px solid var(--gai-accent); outline-offset: 2px; }
@@ -56,7 +58,7 @@ const CHAT_CSS = `
   .gai-user + .gai-a { margin-top: 4px; }
   .gai-a { position: relative; padding-left: 32px; min-width: 0; }
   .gai-a > .gai-mark { position: absolute; left: 0; top: 1px; }
-  .gai-mark { width: 22px; height: 22px; border-radius: 999px; background: linear-gradient(140deg, #8E3DBE 0%, #6A2393 48%, #45084F 100%); display: inline-grid; place-items: center; flex-shrink: 0; box-shadow: 0 1px 2px rgba(69, 8, 79, 0.25); }
+  .gai-mark { width: 22px; height: 22px; border-radius: 999px; background: var(--gai-accent); display: inline-grid; place-items: center; flex-shrink: 0; }
   .gai-mark svg { width: 62%; height: 62%; fill: #fff; margin: 1px 0 0 1px; }
   .gai-mark[data-busy="true"] { animation: gai-breathe 1.8s ease-in-out infinite; }
   @keyframes gai-breathe { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(0.86); opacity: 0.7; } }
@@ -73,7 +75,7 @@ const CHAT_CSS = `
   .gai-action-icon { width: 20px; height: 20px; border-radius: 999px; background: var(--gai-accent-soft); color: var(--gai-accent); display: grid; place-items: center; }
   .gai-action-icon svg { width: 16px; height: 16px; fill: currentColor; }
   .gai-action-main { min-width: 0; overflow-wrap: anywhere; }
-  .gai-action-tag { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 6px; background: #F3EFE8; color: var(--gai-ink-2); font-size: 11.5px; font-weight: 600; line-height: 18px; vertical-align: 1px; }
+  .gai-action-tag { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 6px; background: #F3EFE8; color: var(--gai-ink-2); font-size: 12px; font-weight: 600; line-height: 18px; vertical-align: 1px; }
   .gai-action-note { display: block; color: var(--gai-muted); font-size: 12px; line-height: 18px; margin-top: 1px; }
   .gai-undo { display: inline-flex; align-items: center; gap: 3px; border: 0; border-radius: 6px; background: transparent; color: var(--gai-ink-2); font-size: 12px; font-weight: 600; line-height: 20px; padding: 0 8px 0 5px; cursor: pointer; }
   .gai-undo svg { width: 14px; height: 14px; fill: currentColor; }
@@ -88,8 +90,8 @@ const CHAT_CSS = `
   .gai-thinking-text { font-size: 13px; font-weight: 500; background: linear-gradient(90deg, var(--gai-muted) 25%, var(--gai-ink) 50%, var(--gai-muted) 75%); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: gai-shimmer 1.6s linear infinite; }
   @keyframes gai-shimmer { 0% { background-position: 200% 0; } 100% { background-position: 0% 0; } }
   .gai-empty { margin: auto 0; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 4px 0; }
-  .gai-empty .gai-mark { width: 36px; height: 36px; box-shadow: 0 2px 8px rgba(69, 8, 79, 0.22); }
-  .gai-empty-title { margin: 14px 0 6px; font-family: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; font-size: 23px; line-height: 30px; font-weight: 500; letter-spacing: -0.01em; color: var(--gai-ink); }
+  .gai-empty .gai-mark { width: 36px; height: 36px; }
+  .gai-empty-title { margin: 14px 0 6px; font-size: 20px; line-height: 28px; font-weight: 600; color: var(--gai-ink); }
   .gai-empty-lead { margin: 0; max-width: 310px; color: var(--gai-ink-2); font-size: 14px; line-height: 21px; }
   .gai-examples-label { align-self: stretch; text-align: left; margin: 20px 0 8px; color: var(--gai-muted); font-size: 12px; font-weight: 600; line-height: 16px; }
   .gai-examples { list-style: none; margin: 0; padding: 0; align-self: stretch; display: flex; flex-direction: column; gap: 6px; }
@@ -101,7 +103,7 @@ const CHAT_CSS = `
   @media (max-height: 820px) {
     .gai-list { padding-top: 8px; }
     .gai-empty .gai-mark { width: 30px; height: 30px; }
-    .gai-empty-title { margin: 10px 0 4px; font-size: 21px; line-height: 28px; }
+    .gai-empty-title { margin: 10px 0 4px; font-size: 18px; line-height: 24px; }
     .gai-empty-lead { line-height: 20px; }
     .gai-examples-label { margin: 14px 0 6px; }
     .gai-examples { gap: 4px; }
@@ -109,7 +111,7 @@ const CHAT_CSS = `
   }
   .gai-foot { padding: 4px 12px 10px; }
   .gai-composer { display: flex; flex-direction: column; background: var(--gai-card); border: 1px solid var(--gai-line); border-radius: 20px; padding: 12px 10px 10px 16px; box-shadow: 0 1px 2px rgba(38, 33, 28, 0.04), 0 8px 24px -10px rgba(38, 33, 28, 0.16); cursor: text; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
-  .gai-composer:focus-within { border-color: #8A55AE; box-shadow: 0 1px 2px rgba(38, 33, 28, 0.04), 0 8px 24px -10px rgba(38, 33, 28, 0.16), 0 0 0 3px rgba(106, 35, 147, 0.12); }
+  .gai-composer:focus-within { border-color: #8A8A8A; box-shadow: 0 1px 2px rgba(38, 33, 28, 0.04), 0 8px 24px -10px rgba(38, 33, 28, 0.16), 0 0 0 3px rgba(48, 48, 48, 0.10); }
   .gai-input { display: block; width: 100%; margin: 0; padding: 0 6px 0 0; border: 0; outline: 0; resize: none; background: transparent; color: var(--gai-ink); font: inherit; font-size: 14px; line-height: 21px; min-height: 21px; overflow-y: hidden; }
   .gai-input::placeholder { color: #7A7268; opacity: 1; }
   .gai-input:disabled { color: var(--gai-muted); cursor: default; }
@@ -134,7 +136,7 @@ const CHAT_CSS = `
   }
 `;
 
-/** The Gleame "G" in white, sized to sit inside the plum .gai-mark disc.
+/** The Gleame "G" in white, sized to sit inside the dark .gai-mark disc.
  * Paths from public/placeholders/gleametransparent.svg. */
 function GleameMark({ busy }: { busy?: boolean }) {
   return (
@@ -245,8 +247,9 @@ export function ChatPanel({
   onBusyChange: (busy: boolean) => void;
   onChangeApplied: (target: string) => void;
   /** Flush pending debounced editor saves before the turn starts, so the
-   * copilot's server-side draft read includes what was just typed. */
-  onBeforeSend?: () => void;
+   * copilot's server-side draft read includes what was just typed. With the
+   * save bar on it is a Save the turn waits for; false stops the turn. */
+  onBeforeSend?: () => void | boolean | Promise<boolean | void>;
   seedMessage?: string | null;
 }) {
   const revalidator = useRevalidator();
@@ -322,8 +325,13 @@ export function ChatPanel({
   const sendChat = async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || busy) return;
-    onBeforeSend?.();
     setBusy(true);
+    // A save that failed stops the turn (the panel says why) and keeps the
+    // text, so nothing is sent against a quiz missing the merchant's edits.
+    if ((await onBeforeSend?.()) === false) {
+      setBusy(false);
+      return;
+    }
     setInput("");
     // A new message always scrolls into view, even if the merchant had
     // scrolled up to reread an earlier reply.

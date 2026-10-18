@@ -62,7 +62,7 @@ function mount(ui: React.ReactElement) {
 }
 
 describe("Studio top bar and Live tab", () => {
-  const topBar = (live: boolean) => (
+  const topBar = (live: boolean, hostActions = false) => (
     <StudioTopBar
       tab="build"
       onTabChange={() => {}}
@@ -75,6 +75,7 @@ describe("Studio top bar and Live tab", () => {
       viewStoreBusy={false}
       onPublishClick={() => {}}
       live={live}
+      hostActions={hostActions}
     />
   );
   const liveTab = (data: any) => (
@@ -83,13 +84,24 @@ describe("Studio top bar and Live tab", () => {
 
   it("top bar: Build / Check matches / Live tabs, a Live or Ready badge, View and Publish", () => {
     const on = mount(topBar(true));
-    const tabs = Array.from(document.querySelectorAll(".studio-step-pill")).map((b) => b.textContent);
-    expect(tabs).toEqual(["Build", "Check matches", "Live"]);
+    // Polaris segmented buttons: fixed order, only the pressed one changes.
+    const tabs = Array.from(document.querySelectorAll(".studio-step-tabs button"));
+    expect(tabs.map((b) => b.textContent)).toEqual(["Build", "Check matches", "Live"]);
+    expect(tabs.map((b) => b.getAttribute("aria-pressed"))).toEqual(["true", "false", "false"]);
     expect(on.text()).toContain("View on my store");
     expect(on.text()).toContain("Publish");
     expect(on.text()).not.toContain("Ready");
     const off = mount(topBar(false));
     expect(off.text()).toContain("Ready");
+  });
+
+  it("inside the dashboard's app window, Publish and View on my store move to the admin title bar", () => {
+    const hosted = mount(topBar(true, true));
+    expect(hosted.text()).not.toContain("View on my store");
+    expect(hosted.text()).not.toContain("Publish");
+    // The quiz name and status stay in the Studio header.
+    expect((document.querySelector('input[aria-label="Quiz name"]') as HTMLInputElement).value).toBe("Find Your Vibe");
+    expect(hosted.text()).toContain("Live");
   });
 
   it("ready quiz: Turn on, one-click Publish, the video and the four setup steps", () => {

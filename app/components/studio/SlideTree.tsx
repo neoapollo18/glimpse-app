@@ -1,5 +1,5 @@
 import { Fragment, useState } from "react";
-import { Banner, Icon, Tooltip } from "@shopify/polaris";
+import { Icon, Tooltip } from "@shopify/polaris";
 import {
   HomeIcon,
   CameraIcon,
@@ -85,8 +85,8 @@ function NumberChip({
         height: 20,
         borderRadius: 6,
         background: "#F1F1F1",
-        color: "#6D7175",
-        fontSize: 11,
+        color: "#616161",
+        fontSize: 12,
         fontWeight: 600,
         display: "inline-flex",
         alignItems: "center",
@@ -111,11 +111,9 @@ function RailHeader({ children }: { children: string }) {
       className="studio-rail-wide"
       style={{
         padding: "10px 8px 4px",
-        fontSize: 11,
+        fontSize: 12,
         fontWeight: 600,
-        letterSpacing: "0.06em",
-        textTransform: "uppercase",
-        color: "#8A8F98",
+        color: "#616161",
       }}
     >
       {children}
@@ -144,8 +142,6 @@ function AttentionDot({ message }: { message: string }) {
 }
 
 export function SlideTree({
-  error,
-  onDismissError,
   flow,
   selectedSlide,
   onSelect,
@@ -162,8 +158,6 @@ export function SlideTree({
   onOpenGallery,
   imagesAttention,
 }: {
-  error?: string | null;
-  onDismissError?: () => void;
   flow: StudioFlow | null;
   selectedSlide: string;
   onSelect: (slideId: string) => void;
@@ -333,7 +327,7 @@ export function SlideTree({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
-      <div style={{ padding: "0 8px 8px", display: "flex", flexDirection: "column", gap: 2, flex: 1 }}>
+      <div className="studio-rail-list" style={{ padding: "0 8px 8px", display: "flex", flexDirection: "column", gap: 2, flex: 1 }}>
         {/* Rail order (V3-CONTRACTS §7): Design → Style, Templates, Images;
             Screens → Intro, Q1…QN, Email capture, Results, + Add question.
             Style at the top: theming is the first thing a merchant reacts
@@ -427,9 +421,9 @@ export function SlideTree({
             {screen.group && screen.indices.length > 1 && (
               <div
                 className="studio-rail-wide"
-                style={{ padding: "6px 8px 2px", fontSize: 11, fontWeight: 600, color: "#6D7175" }}
+                style={{ padding: "6px 8px 2px", fontSize: 12, fontWeight: 600, color: "#616161" }}
               >
-                ▾ {humanizeGroup(screen.group)}
+                {humanizeGroup(screen.group)}
               </div>
             )}
             {screen.indices.map((qi) => {
@@ -481,7 +475,7 @@ export function SlideTree({
             {questions.length >= 12 && (
               <div
                 className="studio-rail-wide"
-                style={{ padding: "2px 8px", fontSize: 11, color: "#6D7175" }}
+                style={{ padding: "2px 8px", fontSize: 12, color: "#616161" }}
               >
                 12 questions is the limit (long quizzes lose shoppers).
               </div>
@@ -498,13 +492,6 @@ export function SlideTree({
         {row("offers-bundle", "Bundle & discount", { icon: CartDiscountIcon })}
         {row("offers-crosssell", "Upsell & cross-sell", { icon: CartUpIcon })}
         {row("integrations", "Integrations", { icon: ConnectIcon })}
-        {error && (
-          <div style={{ padding: 8 }} className="studio-rail-wide">
-            <Banner tone="critical" onDismiss={onDismissError}>
-              {error}
-            </Banner>
-          </div>
-        )}
       </div>
 
       {!readOnly && (

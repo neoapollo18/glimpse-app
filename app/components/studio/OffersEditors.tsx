@@ -20,6 +20,9 @@ import type { StudioActionData } from "../../routes/studio";
 import type { QuizOffers, CrossSellItem, OffersPatch } from "../../lib/quiz-offers.server";
 import type { StudioFlow } from "./types";
 import { CopyField, EditorHeader, str, useSettingsAutosave } from "./SettingsEditors";
+import { usePendingEdits } from "./save-bar";
+import { postStudioAction } from "./studio-data";
+import { showAppToast } from "./toast";
 
 // Studio "Sell more" editors (migration 086). Offers live in their own
 // table (quiz_offers), saved through the save-offers intent — never the
@@ -59,10 +62,54 @@ function useOffersAutosave(onSaved: (offers: QuizOffers) => void, onPreviewReloa
     return true;
   };
 
-  const schedule = (patch: OffersPatch, immediate = false) => {
-    pending.current = { ...pending.current, ...patch };
+  // Studio admin bars on (per-shop opt-in): edits wait for Save. Offers aren't
+  // quiz tools, so there is no dry run; the preview catches up on Save.
+  const [heldDirty, setHeldDirty] = useState(false);
+  const saveHeld = async (): Promise<boolean> => {
+    const sent = pending.current;
+    if (Object.keys(sent).length === 0) {
+      setHeldDirty(false);
+      return true;
+    }
+    pending.current = {};
     setSaveState("saving");
     setError(null);
+    const fd = new FormData();
+    fd.append("intent", "save-offers");
+    fd.append("patch", JSON.stringify(sent));
+    const body = (await postStudioAction(fd)
+      .then((r) => r.json())
+      .catch(() => null)) as StudioActionData | null;
+    if (body?.offers) onSaved(body.offers);
+    if (body?.ok) {
+      onPreviewReload();
+      setSaveState("saved");
+      if (Object.keys(pending.current).length === 0) setHeldDirty(false);
+      return true;
+    }
+    // Keep the edits (under anything typed since) so Save can retry.
+    pending.current = { ...sent, ...pending.current };
+    setSaveState("idle");
+    setError(body?.error ?? "Saving failed");
+    return false;
+  };
+  const held = usePendingEdits(heldDirty, {
+    save: saveHeld,
+    discard: () => {
+      pending.current = {};
+      setHeldDirty(false);
+    },
+    saving: saveState === "saving",
+  });
+
+  const schedule = (patch: OffersPatch, immediate = false) => {
+    pending.current = { ...pending.current, ...patch };
+    setError(null);
+    if (held) {
+      setHeldDirty(true);
+      return;
+    }
+    setSaveState("saving");
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(submit, immediate ? 0 : 600);
   };
@@ -84,11 +131,14 @@ function useOffersAutosave(onSaved: (offers: QuizOffers) => void, onPreviewReloa
     return () => clearTimeout(t);
   }, [saveState]);
 
-  // Unmount inside the debounce window: deliver, fire-and-forget.
+  // Unmount inside the debounce window: deliver, fire-and-forget. Held
+  // edits never save on their own (leaving was confirmed, or discarded).
+  const heldRef = useRef(held);
+  heldRef.current = held;
   useEffect(
     () => () => {
       if (timer.current) clearTimeout(timer.current);
-      if (Object.keys(pending.current).length > 0) {
+      if (!heldRef.current && Object.keys(pending.current).length > 0) {
         const fd = new FormData();
         fd.append("intent", "save-offers");
         fd.append("patch", JSON.stringify(pending.current));
@@ -152,8 +202,9 @@ export function BundleEditor({
   });
 
   const [offers, setOffers] = useState<QuizOffers | null>(initialOffers);
-  // Discount form: edited locally, saved by the Save button (it can touch
-  // Shopify, so no keystroke autosave).
+  // Discount form: edited locally, saved by the Save button, or the
+  // Studio's save bar for opted-in shops (it can touch Shopify, so no
+  // keystroke autosave).
   const [mode, setMode] = useState(initialOffers?.bundleDiscountMode ?? "off");
   const [type, setType] = useState(initialOffers?.bundleDiscountType ?? "percentage");
   const [value, setValue] = useState(initialOffers?.bundleDiscountValue != null ? String(initialOffers.bundleDiscountValue) : "");
@@ -200,7 +251,8 @@ export function BundleEditor({
     }
   };
 
-  const saveDiscount = async () => {
+  /** Resolves true once the discount is saved (and created in Shopify). */
+  const saveDiscount = async (): Promise<boolean> => {
     setBusy(true);
     setMessage(null);
     try {
@@ -208,7 +260,7 @@ export function BundleEditor({
         const scopeError = await ensureDiscountScope();
         if (scopeError) {
           setMessage({ tone: "warning", text: scopeError });
-          return;
+          return false;
         }
       }
       const patch: OffersPatch = {
@@ -236,7 +288,7 @@ export function BundleEditor({
       adopt(body?.offers);
       if (!body?.ok) {
         setMessage({ tone: "critical", text: body?.error ?? "Saving the discount failed" });
-        return;
+        return false;
       }
       // First managed save: create the discount in Shopify now.
       if (mode === "managed" && !body.offers?.bundleDiscountShopifyId) {
@@ -246,19 +298,41 @@ export function BundleEditor({
         adopt(body?.offers);
         if (!body?.ok) {
           setMessage({ tone: "critical", text: body?.error ?? "Creating the Shopify discount failed" });
-          return;
+          return false;
         }
       }
       setDirty(false);
-      setMessage({ tone: "success", text: body?.message ?? "Discount saved" });
+      setMessage(null);
+      showAppToast(body?.message ?? "Discount saved");
       onPreviewReload();
+      return true;
     } finally {
       setBusy(false);
     }
   };
 
+  // Discard: back to the discount as last saved.
+  const discardDiscount = () => {
+    setMode(offers?.bundleDiscountMode ?? "off");
+    setType(offers?.bundleDiscountType ?? "percentage");
+    setValue(offers?.bundleDiscountValue != null ? String(offers.bundleDiscountValue) : "");
+    setMinQty(offers?.bundleDiscountMinQty != null ? String(offers.bundleDiscountMinQty) : "");
+    setCode(offers?.bundleDiscountMode === "code" ? offers.bundleDiscountCode ?? "" : "");
+    setNote(offers?.bundleDiscountNote ?? "");
+    setOncePerCustomer(offers?.bundleDiscountOncePerCustomer === true);
+    setDirty(false);
+    setMessage(null);
+  };
+
   const disabled = chatBusy;
   const managedLive = offers?.bundleDiscountMode === "managed" && offers.bundleDiscountShopifyId && offers.bundleDiscountCode;
+  // Opted-in shops (lib/studio-admin-bars.server): unsaved discount edits
+  // wait for the Studio's save bar instead of the button below.
+  const held = usePendingEdits(Boolean(bundleEnabled && initialOffers && dirty), {
+    save: saveDiscount,
+    discard: discardDiscount,
+    saving: busy,
+  });
 
   return (
     <BlockStack gap="400">
@@ -340,7 +414,7 @@ export function BundleEditor({
         onChange={touch((v: string) => setMode(v as QuizOffers["bundleDiscountMode"]))}
         helpText={
           mode === "managed"
-            ? "Gleame creates one discount code in your Shopify admin and keeps it in sync with what you set here. It's applied to the cart automatically when shoppers add the bundle. Like any code, Shopify honors it on any cart that meets the minimum."
+            ? `Gleame creates one discount code in your Shopify admin and keeps it in sync with what you set here.${held ? " Clicking Save creates or updates it in Shopify." : ""} It's applied to the cart automatically when shoppers add the bundle. Like any code, Shopify honors it on any cart that meets the minimum.`
             : mode === "code"
               ? "Create the code in Shopify first (Discounts → Amount off products, with a minimum quantity). The quiz applies it when shoppers add the bundle."
               : "The bundle adds at full price."
@@ -428,13 +502,17 @@ export function BundleEditor({
           {message.text}
         </Banner>
       )}
-      {bundleEnabled && initialOffers && (dirty || (mode === "managed" && !managedLive)) && (
-        <InlineStack align="end">
-          <Button variant="primary" loading={busy} disabled={disabled} onClick={() => void saveDiscount()}>
-            {mode === "managed" && !offers?.bundleDiscountShopifyId ? "Create discount in Shopify" : "Save discount"}
-          </Button>
-        </InlineStack>
-      )}
+      {/* With the save bar holding the edits, only a managed discount that
+          was saved but never created in Shopify keeps a button here. */}
+      {bundleEnabled &&
+        initialOffers &&
+        (held ? !dirty && mode === "managed" && !managedLive : dirty || (mode === "managed" && !managedLive)) && (
+          <InlineStack align="end">
+            <Button variant={held ? undefined : "primary"} loading={busy} disabled={disabled} onClick={() => void saveDiscount()}>
+              {mode === "managed" && !offers?.bundleDiscountShopifyId ? "Create discount in Shopify" : "Save discount"}
+            </Button>
+          </InlineStack>
+        )}
     </BlockStack>
   );
 }
