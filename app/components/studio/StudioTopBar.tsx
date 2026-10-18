@@ -81,30 +81,13 @@ export function StudioTopBar({
 
   return (
     <>
+      {/* No logo here: the admin's window title bar already shows the app icon. */}
       <div className="studio-topbar-left">
-        <span
-          aria-hidden
-          style={{
-            width: 22,
-            height: 22,
-            borderRadius: 6,
-            overflow: "hidden",
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flexShrink: 0,
-          }}
-        >
-          <img
-            src="/placeholders/gleametransparent.svg"
-            alt=""
-            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-          />
-        </span>
         {/* One quiz per shop, so the "quiz name" IS the quiz headline the
             storefront shows; there is no separate name column. */}
         <input
           aria-label="Quiz name"
+          title={name}
           value={name}
           disabled={!hasDraft}
           onChange={(e) => setName(e.target.value)}
@@ -121,6 +104,9 @@ export function StudioTopBar({
             fontWeight: 600,
             minWidth: 120, // the badges never squeeze the name out of sight
             flex: 1,
+            textOverflow: "ellipsis", // a long headline ends in "…", full text on hover
+            overflow: "hidden",
+            whiteSpace: "nowrap",
             background: "transparent",
             color: "#202223",
           }}

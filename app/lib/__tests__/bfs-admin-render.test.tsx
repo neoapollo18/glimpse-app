@@ -210,8 +210,15 @@ describe("home page", () => {
     const over = await mount(<Dashboard />, { ...home(), quizStats: { started: 4, finished: 5, added: 1, truncated: false } });
     expect(over()).toContain("100% reached their matches");
     act(() => root?.unmount());
-    const missing = await mount(<Dashboard />, { ...home(), quizStats: null });
+    // The stats card shows once the quiz is live (or has starts).
+    const missing = await mount(<Dashboard />, { ...home({ quizLive: true, assistantMode: "quiz" }, false), quizStats: null });
     expect(missing()).toContain("Couldn’t load your numbers. They’re in Analytics.");
+  });
+
+  it("hides the stats until the quiz is live or has starts", async () => {
+    const text = await mount(<Dashboard />, { ...home(), quizStats: { started: 0, finished: 0, added: 0, truncated: false } });
+    expect(text()).not.toContain("shoppers started");
+    expect(text()).not.toMatch(/\d+ questions?\b/);
   });
 
   it("a live quiz shows its storefront state, not a chooser", async () => {

@@ -6,7 +6,7 @@
 
 import { useState } from "react";
 import { useFetcher } from "@remix-run/react";
-import { Banner, BlockStack, Button, Card, InlineStack, List, Modal, Text, TextField } from "@shopify/polaris";
+import { Banner, BlockStack, Button, Card, InlineStack, Modal, Text, TextField } from "@shopify/polaris";
 import { XSmallIcon } from "@shopify/polaris-icons";
 
 const ACTION = "/app/api/setup-offer";
@@ -97,8 +97,8 @@ function SetupOfferModal({
       <Modal open={open} onClose={onClose} title="You're on the list" primaryAction={{ content: "Done", onAction: onClose }}>
         <Modal.Section>
           <Text as="p" variant="bodyMd">
-            Thanks! We'll reach out at <b>{email}</b> to get your quiz built. Feel free to look around in the
-            meantime.
+            Thanks! Our setup team has your request and will email you at <b>{email}</b>. Feel free to look
+            around in the meantime.
           </Text>
         </Modal.Section>
       </Modal>
@@ -109,26 +109,20 @@ function SetupOfferModal({
     <Modal
       open={open}
       onClose={onClose}
-      title="Want us to set up your quiz for you?"
-      primaryAction={{ content: "Set it up for me", onAction: request, loading: sending, disabled: !email.trim() }}
+      title="Free setup by our team"
+      primaryAction={{ content: "Request free setup", onAction: request, loading: sending, disabled: !email.trim() }}
       secondaryActions={[{ content: "Not now", onAction: onClose, disabled: sending }]}
     >
       <Modal.Section>
         <BlockStack gap="400">
           <Text as="p" variant="bodyMd">
-            Our team will set up Gleame on your store for free, so you don't have to.
-          </Text>
-          <List>
-            <List.Item>We build your quiz questions and product matches from your catalog</List.Item>
-            <List.Item>We style it to fit your brand and theme</List.Item>
-            <List.Item>We put it live on your store and check it works</List.Item>
-          </List>
-          <Text as="p" variant="bodyMd">
-            Tell us where to reach you and we'll take it from there.
+            We build your quiz from your catalog, style it to your brand and put it live on your store. Free, and
+            you can keep editing it after.
           </Text>
           {fetcher.data?.error && <Banner tone="critical">{fetcher.data.error}</Banner>}
           <TextField
-            label="Email"
+            label="Your email"
+            helpText="Your request goes to our setup team, and we'll reply here."
             type="email"
             autoComplete="email"
             value={email}
@@ -145,7 +139,7 @@ function SetupOfferModal({
             multiline={3}
             value={notes}
             onChange={setNotes}
-            placeholder="Which products the quiz should cover, a launch date, your theme…"
+            placeholder="Products to cover, a launch date…"
           />
         </BlockStack>
       </Modal.Section>

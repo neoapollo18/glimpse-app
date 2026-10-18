@@ -527,7 +527,7 @@ export function LiveTab({
           <BlockStack gap="200">
             <InlineStack align="space-between" blockAlign="center" gap="300">
               <InlineStack gap="200" blockAlign="center" wrap={false}>
-                {statusDot(surfaceOn ? (awaitingPublish ? "#B98900" : "#29845A") : "#8C9196")}
+                {surfaceOn && statusDot(awaitingPublish ? "#B98900" : "#29845A")}
                 <BlockStack gap="050">
                   <Text as="p" variant="headingSm" tone={surfaceOn ? "success" : undefined}>
                     {surfaceOn ? "Your quiz is live on your store" : previewOnly ? "Your quiz is in preview" : "Your quiz is ready. Add it to your store."}

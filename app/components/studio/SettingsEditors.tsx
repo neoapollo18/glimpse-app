@@ -388,6 +388,7 @@ function ImageField({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState(false);
+  const [showLink, setShowLink] = useState(false);
   const value = values[fieldKey] ?? "";
 
   const upload = async (file: File) => {
@@ -407,41 +408,59 @@ function ImageField({
     }
   };
 
+  // Merchants upload; the raw URL box stays one click away ("Use a link")
+  // for a CDN image.
   return (
     <BlockStack gap="150">
-      <TextField
-        label={label}
-        value={value}
-        onChange={(v) => setValue(fieldKey, v)}
-        disabled={disabled}
-        placeholder="https://… (empty = hidden)"
-        autoComplete="off"
-      />
+      <Text as="span" variant="bodyMd">
+        {label}
+      </Text>
       <InlineStack gap="200" blockAlign="center">
-        {value && (
+        {value ? (
           <img
             src={value}
             alt=""
-            style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 8, border: "1px solid #E1E3E5" }}
+            style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 8, border: "1px solid #E1E3E5" }}
             onError={(e) => {
-              (e.target as HTMLImageElement).style.display = "none";
+              (e.target as HTMLImageElement).style.visibility = "hidden";
             }}
+          />
+        ) : (
+          <span
+            aria-hidden
+            style={{ width: 56, height: 56, borderRadius: 8, border: "1px dashed #C9CCCF", background: "#FAFAFA" }}
           />
         )}
         <Button size="slim" loading={uploading} disabled={disabled} onClick={() => inputRef.current?.click()}>
-          Upload image
+          {value ? "Replace" : "Upload image"}
         </Button>
         {value && (
           <Button size="slim" variant="plain" tone="critical" disabled={disabled} onClick={() => setValue(fieldKey, "")}>
             Remove
           </Button>
         )}
-        {uploadError && (
-          <Text as="span" variant="bodySm" tone="critical">
-            Upload failed. Try a smaller JPG or PNG.
-          </Text>
+        {!showLink && (
+          <Button size="slim" variant="plain" disabled={disabled} onClick={() => setShowLink(true)}>
+            Use a link
+          </Button>
         )}
       </InlineStack>
+      {uploadError && (
+        <Text as="span" variant="bodySm" tone="critical">
+          Upload failed. Try a smaller JPG or PNG.
+        </Text>
+      )}
+      {showLink && (
+        <TextField
+          label={`${label} link`}
+          labelHidden
+          value={value}
+          onChange={(v) => setValue(fieldKey, v)}
+          disabled={disabled}
+          placeholder="https://…"
+          autoComplete="off"
+        />
+      )}
       <input
         ref={inputRef}
         type="file"
@@ -505,7 +524,7 @@ export function IntroEditor({
           {error}
         </Banner>
       )}
-      <CopyField label="Eyebrow" fieldKey="quiz_eyebrow" values={values} setValue={setValue} disabled={disabled} helpText="Small uppercase label above the headline" />
+      <CopyField label="Eyebrow" fieldKey="quiz_eyebrow" values={values} setValue={setValue} disabled={disabled} />
       <CopyField
         label="Headline"
         fieldKey="quiz_headline"
@@ -553,7 +572,7 @@ export function IntroEditor({
       </BlockStack>
       <ImageField label="Before image" fieldKey="quiz_before_image_url" values={values} setValue={setValue} disabled={disabled} />
       <ImageField label="After image" fieldKey="quiz_after_image_url" values={values} setValue={setValue} disabled={disabled} />
-      <CopyField label="Visual caption" fieldKey="quiz_visual_caption" values={values} setValue={setValue} disabled={disabled} helpText="Small caption under the before/after visual" />
+      <CopyField label="Visual caption" fieldKey="quiz_visual_caption" values={values} setValue={setValue} disabled={disabled} />
       <CopyField
         label="Photo heads-up (optional)"
         fieldKey="quiz_photo_note"
@@ -562,7 +581,7 @@ export function IntroEditor({
         disabled={disabled}
         multiline={2}
         placeholder="You'll add a pic at the end, that's how we show your matches on you."
-        helpText="One line under the first question so the photo step at the end isn't a surprise. Leave blank to hide."
+        helpText="Shown under the first question. Leave blank to hide."
       />
       <InlineStack gap="200">
         <div style={{ flex: 1, minWidth: 130 }}>
@@ -652,7 +671,7 @@ export function PhotoEditor({
           <CopyField label="Skip button" fieldKey="quiz_gate_skip_label" values={values} setValue={setValue} disabled={disabled} />
         </div>
       </InlineStack>
-      <CopyField label="Privacy note" fieldKey="quiz_privacy_note" values={values} setValue={setValue} disabled={disabled} helpText="Small reassurance line under the photo button" />
+      <CopyField label="Privacy note" fieldKey="quiz_privacy_note" values={values} setValue={setValue} disabled={disabled} />
       <Text as="h4" variant="headingSm">
         Shade picker
       </Text>
@@ -1179,10 +1198,10 @@ export function ThemeEditor({
       {/* Page background is a template-only control (migration 085); the
           classic quiz inherits the theme's page. */}
       {hasTemplate && (
-        <ColorField label="Background color" {...colorProps("quiz_bg_color")} helpText="The quiz page behind everything" />
+        <ColorField label="Background color" {...colorProps("quiz_bg_color")} />
       )}
       <ColorField label="Card background" {...colorProps("quiz_card_bg_color")} helpText="Answer cards and panels" />
-      <ColorField label="Border color" {...colorProps("quiz_line_color")} helpText="Card and option borders" />
+      <ColorField label="Border color" {...colorProps("quiz_line_color")} />
       <ColorField label="Button color" {...colorProps("quiz_cta_color")} helpText="Main buttons (text color adjusts for contrast)" />
       <InlineStack gap="200">
         <div style={{ flex: 1, minWidth: 120 }}>

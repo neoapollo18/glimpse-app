@@ -12,7 +12,6 @@ import {
   InlineGrid,
   Banner,
   Badge,
-  Box,
   Select,
 } from "@shopify/polaris";
 import { Modal, SaveBar, TitleBar } from "@shopify/app-bridge-react";
@@ -234,11 +233,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 // (which hosts everything else). Plain Polaris cards and buttons so it
 // reads as part of the admin; the brand shows only as the small logo.
 
-const HOME_MODE_LABELS: Record<string, string> = {
-  matrix: "Rules only",
-  ai: "AI",
-  hybrid: "Rules + AI",
-};
+// App Bridge groups title-bar buttons under a <section label>: React's
+// typings don't know the attribute, so it rides in as a spread.
+const TITLE_BAR_MENU = { label: "More actions" } as unknown as React.HTMLAttributes<HTMLElement>;
 
 // Capped: a shopper who started just before the window can finish inside it.
 const pct = (n: number, of: number) => (of > 0 ? Math.min(100, Math.round((n / of) * 100)) : 0);
@@ -369,6 +366,7 @@ function DashboardView({
   // try-on shops (VTO configured, quiz not live) see the selfie try-on count.
   // Off while the try-on widgets are retired (lib/retired-features.ts).
   const showTryOnStat = !TRYON_WIDGETS_RETIRED && quiz.vtoEnabled && !quiz.quizLive;
+  const showStats = quiz.quizLive || showTryOnStat || (quizStats?.started ?? 0) > 0;
 
   // Storefront surface control. With the chat bubble retired the only
   // surface is the quiz page, so it is one button; shops already on
@@ -396,7 +394,13 @@ function DashboardView({
 
   return (
     <Page>
-      <TitleBar title="Gleame" />
+      <TitleBar title="Gleame">
+        {/* Rarely used tools live in the title bar's menu, off the page body. */}
+        <section {...TITLE_BAR_MENU}>
+          <button onClick={() => navigate("/app/assistant/recommendations")}>Advanced rules editor</button>
+          {quiz.vtoEnabled && <button onClick={() => navigate("/app/products")}>Try-on product settings</button>}
+        </section>
+      </TitleBar>
       <BlockStack gap="500">
         <Card>
           <BlockStack gap="400">
@@ -411,7 +415,7 @@ function DashboardView({
                 ? "Let's build your quiz. Gleame drafts the whole thing from your catalog in about a minute."
                 : quiz.quizLive
                   ? "Your quiz is live and matching shoppers to products."
-                  : "Your quiz isn't live yet. Build it in the Studio, then turn it on below."}
+                  : "Your quiz isn't live yet."}
             </Text>
             <InlineStack gap="200">
               <Button
@@ -434,11 +438,12 @@ function DashboardView({
               <Text as="h2" variant="headingMd">
                 Make it live
               </Text>
-              <Text as="p" variant="bodyMd" tone="subdued">
-                {CHAT_ASSISTANT_RETIRED
-                  ? "Two steps: turn the quiz on, then put it on its own page."
-                  : 'Two steps: set the storefront to "Quiz page" or "Both", then put the quiz on its own page. The setup guide in Studio walks you through it, or publish with one click.'}
-              </Text>
+              {!CHAT_ASSISTANT_RETIRED && (
+                <Text as="p" variant="bodyMd" tone="subdued">
+                  Two steps: set the storefront to &ldquo;Quiz page&rdquo; or &ldquo;Both&rdquo;, then put the quiz on its own
+                  page. The setup guide in Studio walks you through it, or publish with one click.
+                </Text>
+              )}
               {/* The quiz goes on its own page (Studio setup guide or
                   one-click Publish), never the home page: a full-page
                   quiz there would sit on a page Shopify scores for
@@ -460,22 +465,10 @@ function DashboardView({
           </Card>
         )}
 
-        {/* Secondary stats */}
-        <InlineGrid columns={{ xs: 1, sm: quiz.quizLive ? 3 : 2 }} gap="400">
-          <Card>
-            <BlockStack gap="100">
-              <Text as="span" variant="bodySm" tone="subdued">
-                Your quiz
-              </Text>
-              <Text as="p" variant="headingLg" fontWeight="bold">
-                {quiz.questions} {quiz.questions === 1 ? "question" : "questions"}
-              </Text>
-              <Text as="span" variant="bodySm" tone="subdued">
-                {quiz.rules > 0 ? `${quiz.rules} rules · ` : ""}
-                {HOME_MODE_LABELS[quiz.mode] ?? quiz.mode} matching
-              </Text>
-            </BlockStack>
-          </Card>
+        {/* Stats: only once there is something to show (a zero before the
+            quiz is live just reads as bad news). */}
+        {showStats && (
+        <InlineGrid columns={{ xs: 1, sm: quiz.quizLive ? 2 : 1 }} gap="400">
           <Card>
             {showTryOnStat ? (
               <BlockStack gap="100">
@@ -499,11 +492,11 @@ function DashboardView({
                     <Text as="p" variant="headingLg" fontWeight="bold">
                       {quizStats.started.toLocaleString()} {quizStats.started === 1 ? "shopper started" : "shoppers started"}
                     </Text>
-                    <Text as="span" variant="bodySm" tone="subdued">
-                      {quizStats.started > 0
-                        ? `${pct(quizStats.finished, quizStats.started)}% reached their matches · ${quizStats.added.toLocaleString()} added to cart`
-                        : "No quiz starts yet"}
-                    </Text>
+                    {quizStats.started > 0 && (
+                      <Text as="span" variant="bodySm" tone="subdued">
+                        {`${pct(quizStats.finished, quizStats.started)}% reached their matches · ${quizStats.added.toLocaleString()} added to cart`}
+                      </Text>
+                    )}
                   </>
                 ) : (
                   <Text as="p" variant="bodyMd">
@@ -539,20 +532,7 @@ function DashboardView({
             </Card>
           )}
         </InlineGrid>
-
-        {/* Advanced row (cards run edge to edge on a phone; links keep a gutter) */}
-        <Box paddingInline={{ xs: "400", sm: "0" }}>
-          <InlineStack gap="300">
-            <Button variant="plain" onClick={() => navigate("/app/assistant/recommendations")}>
-              Advanced rules editor
-            </Button>
-            {quiz.vtoEnabled && (
-              <Button variant="plain" onClick={() => navigate("/app/products")}>
-                Try-on product settings
-              </Button>
-            )}
-          </InlineStack>
-        </Box>
+        )}
 
         {/* Done-for-you offer: a dismissible card, never a popup. */}
         {setupOffer.show && <SetupOfferCard defaultEmail={setupOffer.email} source="dashboard" />}

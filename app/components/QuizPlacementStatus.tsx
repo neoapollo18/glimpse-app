@@ -92,14 +92,16 @@ export function QuizPlacementStatus({ quizLive }: { quizLive: boolean }) {
     );
   }
 
+  // Before go-live the badge sits under "Set up the quiz page", which says
+  // the rest; once live, the note explains why a missing section is fine.
   return (
     <InlineStack gap="200" blockAlign="center">
       <Badge>Quiz section not added</Badge>
-      <Text as="span" variant="bodySm" tone="subdued">
-        {quizLive
-          ? "Not in your published theme. A quiz page made with one-click Publish works without it."
-          : "Not in your published theme yet. The setup guide in Studio walks you through it, or publish with one click."}
-      </Text>
+      {quizLive && (
+        <Text as="span" variant="bodySm" tone="subdued">
+          Not in your published theme. A quiz page made with one-click Publish works without it.
+        </Text>
+      )}
     </InlineStack>
   );
 }
