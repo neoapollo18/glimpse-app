@@ -4,8 +4,10 @@ import {
   findShopByDomain,
   shopHasValidAccess,
   getRecommendationFlow,
+  getChatAssistantConfig,
 } from "../lib/supabase.server";
 import { storefrontCached } from "../lib/storefront-cache.server";
+import { decorateFlowForColumnar } from "../lib/columnar/engine.server";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -24,6 +26,10 @@ type FlowResult = { status: number; body: unknown; shop?: string };
  * The photo axes are listed by key only — the widget doesn't need to know
  * how the analyzer produces them; it just sends the photo and the server
  * fills in those axis values during /chat-recommend.
+ *
+ * Columnar shops (spec enabled) also get `branching` (which options the
+ * pool can fulfil) and lose any vibe tile the merchant retired; every other
+ * shop's payload is unchanged.
  */
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   if (request.method === "OPTIONS") {
@@ -51,9 +57,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       const hasAccess = await shopHasValidAccess(verifiedShop.shop_domain);
       if (!hasAccess) return { status: 403, body: { error: "Subscription inactive" } };
 
+      const [flow, chatConfig] = await Promise.all([
+        getRecommendationFlow(verifiedShop.id),
+        getChatAssistantConfig(verifiedShop.shop_domain).catch(() => null),
+      ]);
       return {
         status: 200,
-        body: await getRecommendationFlow(verifiedShop.id),
+        body: await decorateFlowForColumnar(verifiedShop.id, flow, chatConfig),
         shop: verifiedShop.shop_domain,
       };
     },

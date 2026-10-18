@@ -36,7 +36,7 @@ import { hexToLab, deltaE2000, type Lab } from './color-science.server';
 // photo-axis-classifier: structured task on the hot path. The merchant's
 // tuning picks the tier ('flash' default; 'lite' is fastest; 'pro' trades
 // latency for accuracy on nuanced guidance).
-const RANKER_MODELS: Record<RecommendationTuning['rankerModel'], string> = {
+export const RANKER_MODELS: Record<RecommendationTuning['rankerModel'], string> = {
   lite: 'gemini-2.5-flash-lite',
   flash: 'gemini-2.5-flash',
   pro: 'gemini-2.5-pro',
@@ -46,7 +46,7 @@ const RANKER_MODELS: Record<RecommendationTuning['rankerModel'], string> = {
 // ~1-2.5s without. Ranking a serialized catalog doesn't need reasoning
 // tokens, so thinking is disabled for flash/lite. Pro cannot disable
 // thinking (minimum budget 128) — that latency is what 'pro' buys.
-const NO_THINKING: Record<RecommendationTuning['rankerModel'], { thinkingBudget: number } | undefined> = {
+export const NO_THINKING: Record<RecommendationTuning['rankerModel'], { thinkingBudget: number } | undefined> = {
   lite: { thinkingBudget: 0 },
   flash: { thinkingBudget: 0 },
   pro: undefined,

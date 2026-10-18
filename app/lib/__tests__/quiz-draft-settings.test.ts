@@ -38,6 +38,7 @@ vi.mock("../supabase.server", () => {
 import { captureLiveConfig, saveLiveQuizConfig, type QuizDraft } from "../quiz-draft.server";
 import { applyTranslations, collectTranslatable } from "../quiz-translate";
 import { applyUpdateCopy, type DraftShape } from "../quiz-copilot-tools.server";
+import { sanitizeColumnarSpec } from "../columnar/spec";
 
 const SHOP = "11111111-1111-4111-8111-111111111111";
 
@@ -73,5 +74,37 @@ describe("restart label in the live settings", () => {
     expect(state.written).toHaveLength(1);
     expect(state.written[0].end_restart_label).toBe("FR Try another look");
     expect(state.written[0]).not.toHaveProperty("end_save_label");
+  });
+});
+
+// Columnar matching keeps a synced product pool in recommendation_tuning.
+// Every save writes the whole tuning blob when it changed, so a restore of
+// a version captured before the spec existed must not delete it.
+describe("columnar spec across saves and restores", () => {
+  const spec = sanitizeColumnarSpec({ enabled: true, pool: { handles: ["pink-pop"], source: "csv" } })!;
+  const versionWith = (tuning: Record<string, unknown>): QuizDraft => ({
+    flow: { axes: [], questions: [], rules: [] } as unknown as QuizDraft["flow"],
+    settings: { recommendation_tuning: tuning } as unknown as QuizDraft["settings"],
+  });
+
+  it("a version from before the spec existed keeps the live spec", async () => {
+    state.live = { recommendation_tuning: { rankerModel: "flash", columnar: spec } };
+    const saved = await saveLiveQuizConfig(SHOP, versionWith({ rankerModel: "lite" }));
+    expect(saved.ok).toBe(true);
+    expect(state.written).toEqual([{ recommendation_tuning: { rankerModel: "lite", columnar: spec } }]);
+  });
+
+  it("a version that has a spec restores it as it was", async () => {
+    state.live = { recommendation_tuning: { rankerModel: "flash", columnar: spec } };
+    const off = { ...spec, enabled: false };
+    const saved = await saveLiveQuizConfig(SHOP, versionWith({ rankerModel: "flash", columnar: off }));
+    expect(saved.ok).toBe(true);
+    expect(state.written).toEqual([{ recommendation_tuning: { rankerModel: "flash", columnar: off } }]);
+  });
+
+  it("a shop without a spec never grows one", async () => {
+    state.live = { recommendation_tuning: { rankerModel: "flash" } };
+    await saveLiveQuizConfig(SHOP, versionWith({ rankerModel: "lite" }));
+    expect(state.written).toEqual([{ recommendation_tuning: { rankerModel: "lite" } }]);
   });
 });

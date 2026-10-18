@@ -161,6 +161,35 @@ export function applyUpdateQuestionOptions(draft: DraftShape, input: any, catalo
   const botResponseByValue = new Map(
     q.options.filter((o) => o.botResponse).map((o) => [o.axisValueValue, o.botResponse!]),
   );
+  // An "Open to anything" answer usually re-uses a sibling's axis value, so
+  // value alone can't tell the two apart: the map above copied whichever
+  // response came last in the array onto both, and a reorder changed which.
+  // Pair each new answer with its own old one instead: same value +
+  // select-all + label first, then same value + select-all in list order.
+  // Value alone only covers answers whose kind has no old counterpart.
+  const oldOptions = q.options;
+  type OldOption = (typeof oldOptions)[number];
+  const sameKind = (o: OldOption, opt: any) =>
+    o.axisValueValue === String(opt.axisValueValue ?? "") && Boolean(o.selectAll) === Boolean(opt.selectAll);
+  const unpaired = new Set(oldOptions);
+  const pairedOld: Array<OldOption | undefined> = [];
+  const pair = (matches: (o: OldOption, opt: any) => boolean) =>
+    input.options.forEach((opt: any, j: number) => {
+      if (pairedOld[j]) return;
+      const hit = oldOptions.find((o) => unpaired.has(o) && matches(o, opt));
+      if (hit) {
+        unpaired.delete(hit);
+        pairedOld[j] = hit;
+      }
+    });
+  pair((o, opt) => sameKind(o, opt) && o.label === String(opt.label ?? ""));
+  pair(sameKind);
+  const botResponseFor = (opt: any, j: number): string | null => {
+    const own = pairedOld[j];
+    if (own) return own.botResponse ?? null;
+    if (oldOptions.some((o) => sameKind(o, opt))) return null;
+    return botResponseByValue.get(String(opt.axisValueValue ?? "")) ?? null;
+  };
   q.options = input.options.map((opt: any, j: number) => {
     // Auto-declare new axis values referenced by the new options.
     if (!axis.values.some((v) => v.value === opt.axisValueValue)) {
@@ -174,7 +203,7 @@ export function applyUpdateQuestionOptions(draft: DraftShape, input: any, catalo
     return {
       label: String(opt.label ?? ""),
       axisValueValue: String(opt.axisValueValue ?? ""),
-      botResponse: botResponseByValue.get(String(opt.axisValueValue ?? "")) ?? null,
+      botResponse: botResponseFor(opt, j),
       reasonText: opt.reasonText ?? null,
       imageUrl:
         "imageUrl" in opt
@@ -652,10 +681,13 @@ export function applyUpdateRecommendationMode(draft: DraftShape, input: any, cat
   const next = clone(draft);
   next.settings.recommendation_mode = input.mode;
   if (input.tuning && typeof input.tuning === "object") {
+    // The columnar spec (pool, axis mapping) is edited only by its own
+    // Studio card: a model-written "columnar" key must never replace it.
+    const { columnar: _columnar, ...tuning } = input.tuning as Record<string, unknown>;
     next.settings.recommendation_tuning = {
       ...((next.settings.recommendation_tuning as object) ?? {}),
-      ...input.tuning,
-    };
+      ...tuning,
+    } as typeof next.settings.recommendation_tuning;
   }
   const error = revalidate(next, catalog, { strictRules: true });
   if (error) return { ok: false, error };
@@ -810,7 +842,7 @@ const optionSchema = {
         swatch2: { type: "string" },
         texture: {
           type: "string",
-          enum: ["creme", "matte", "shimmer", "sparkle", "chrome", "sheer", "rainbow", "french"],
+          enum: ["creme", "matte", "shimmer", "sparkle", "chrome", "sheer", "rainbow", "french", "glossy", "glazed", "velvet"],
           description: "finish preview drawn on the card (nail/lip finishes)",
         },
       },

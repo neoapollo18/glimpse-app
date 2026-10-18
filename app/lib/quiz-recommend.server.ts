@@ -24,6 +24,12 @@ import {
   sentenceTags,
   applyAlways,
 } from "./answer-rules-runtime.server";
+import {
+  computeColumnarRecommendations,
+  enabledColumnarSpec,
+  type ColumnarMeta,
+  type ColumnarResponse,
+} from "./columnar/engine.server";
 
 export type QuizRecommendResult = {
   matches: Array<{
@@ -40,10 +46,15 @@ export type QuizRecommendResult = {
     rank: number;
     quantity: number;
     reasons: string[];
+    /** Columnar shops only: shopper-facing length / shape / finish. */
+    meta?: ColumnarMeta;
   }>;
   matrixApplied: boolean;
   partial: boolean;
   error?: string;
+  /** Columnar shops only (contract 4): ladder rung, header copy, Also
+   * matched, the permalink key and the answers it encodes. */
+  columnar?: ColumnarResponse;
 };
 
 /**
@@ -59,13 +70,32 @@ export async function computeQuizRecommendations({
   chatConfig,
   criteria,
   clientIP,
+  resultKey,
 }: {
   verifiedShop: { id: string };
   verifiedDomain: string;
   chatConfig: Awaited<ReturnType<typeof getChatAssistantConfig>>;
   criteria: MultiCriteria;
   clientIP: string;
+  /** Results permalink (columnar shops; ignored elsewhere). */
+  resultKey?: string | null;
 }): Promise<QuizRecommendResult> {
+  // Columnar matching (Glamnetic logic v3) replaces this whole pipeline
+  // for a shop that switched it on: its own pool, filters and ranker. Every
+  // other shop never gets past this check.
+  const columnarSpec = enabledColumnarSpec(chatConfig);
+  if (columnarSpec) {
+    return computeColumnarRecommendations({
+      verifiedShop,
+      verifiedDomain,
+      chatConfig,
+      spec: columnarSpec,
+      criteria,
+      resultKey,
+      clientIP,
+    });
+  }
+
   const { pool: basePool } = await buildCandidatePool(verifiedDomain, chatConfig);
   if (!basePool) {
     return { matches: [], matrixApplied: false, partial: false, error: "No products available for recommendations" };

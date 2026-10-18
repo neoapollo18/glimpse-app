@@ -28,3 +28,7 @@ data
 
 # Claude Code context files (navigation aids, not source)
 .claude/
+
+# Production row backups from scripts/glamnetic-v3-sync.mts: kept on the
+# machine that ran it, never committed by a stray add.
+/scripts/backups/glamnetic-v3-*.json

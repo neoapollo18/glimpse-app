@@ -9,6 +9,7 @@ import {
   applyUpdateDesignTokens,
   applyUpdateRules,
   applyUpdateGuidance,
+  applyUpdateRecommendationMode,
   applyGetDraftDetails,
   type DraftShape,
 } from "../quiz-copilot-tools.server";
@@ -162,6 +163,94 @@ describe("applyUpdateQuestionOptions", () => {
     }
   });
 
+  it("keeps each bot response on its own answer when a select-all answer shares the value", () => {
+    // "Surprise me" re-uses Bold's axis value (the Glamnetic shape). Value
+    // alone used to copy the last response onto both, and a reorder changed which.
+    const draft = baseDraft();
+    draft.flow.questions[0].options = [
+      { label: "Bold", axisValueValue: "bold", botResponse: "Bold it is!", position: 0 },
+      { label: "Soft", axisValueValue: "soft", botResponse: null, position: 1 },
+      { label: "Surprise me", axisValueValue: "bold", botResponse: "Anything goes!", selectAll: true, position: 2 },
+    ];
+    const reordered = applyUpdateQuestionOptions(
+      draft,
+      {
+        axisKey: "vibe",
+        options: [
+          { label: "Surprise me", axisValueValue: "bold", selectAll: true },
+          { label: "Bold", axisValueValue: "bold" },
+          { label: "Soft", axisValueValue: "soft" },
+        ],
+      },
+      catalog,
+    );
+    expect(reordered.ok).toBe(true);
+    if (!reordered.ok) return;
+    expect(reordered.draft.flow.questions[0].options.map((o) => [o.label, o.botResponse, o.position])).toEqual([
+      ["Surprise me", "Anything goes!", 0],
+      ["Bold", "Bold it is!", 1],
+      ["Soft", null, 2],
+    ]);
+    // A select-all answer with no response stays without one (it used to
+    // inherit its sibling's).
+    draft.flow.questions[0].options[2].botResponse = null;
+    const kept = applyUpdateQuestionOptions(
+      draft,
+      {
+        axisKey: "vibe",
+        options: [
+          { label: "Bold", axisValueValue: "bold" },
+          { label: "Soft", axisValueValue: "soft" },
+          { label: "Surprise me", axisValueValue: "bold", selectAll: true },
+        ],
+      },
+      catalog,
+    );
+    expect(kept.ok && kept.draft.flow.questions[0].options.map((o) => o.botResponse)).toEqual(["Bold it is!", null, null]);
+  });
+
+  it("keeps bot responses with their answers when two plain answers share a value", () => {
+    // Same value and kind: the label tells them apart, so a reorder can't
+    // swap the responses.
+    const draft = baseDraft();
+    draft.flow.questions[0].options = [
+      { label: "Bold", axisValueValue: "bold", botResponse: "Bold it is!", position: 0 },
+      { label: "Soft", axisValueValue: "soft", botResponse: null, position: 1 },
+      { label: "Loud", axisValueValue: "bold", botResponse: "Turn it up!", position: 2 },
+    ];
+    const result = applyUpdateQuestionOptions(
+      draft,
+      {
+        axisKey: "vibe",
+        options: [
+          { label: "Loud", axisValueValue: "bold" },
+          { label: "Soft", axisValueValue: "soft" },
+          { label: "Bold", axisValueValue: "bold" },
+        ],
+      },
+      catalog,
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.draft.flow.questions[0].options.map((o) => [o.label, o.botResponse])).toEqual([
+      ["Loud", "Turn it up!"],
+      ["Soft", null],
+      ["Bold", "Bold it is!"],
+    ]);
+  });
+
+  it("falls back to the value for a bot response when an answer has no old counterpart", () => {
+    // The copilot turning Soft into a select-all answer keeps Soft's response.
+    const draft = baseDraft();
+    draft.flow.questions[0].options[1].botResponse = "Soft and sweet";
+    const result = applyUpdateQuestionOptions(
+      draft,
+      { axisKey: "vibe", options: [{ label: "Bold", axisValueValue: "bold" }, { label: "Anything", axisValueValue: "soft", selectAll: true }] },
+      catalog,
+    );
+    expect(result.ok && result.draft.flow.questions[0].options[1].botResponse).toBe("Soft and sweet");
+  });
+
   it("preserves existing option images by position", () => {
     const draft = baseDraft();
     draft.flow.questions[0].options[0].imageUrl = "https://img.example/bold.jpg";
@@ -241,6 +330,19 @@ describe("settings appliers", () => {
     const result = applyUpdateGuidance(baseDraft(), { aiGuidance: "LAYER RULES:\n1. Always diversify." }, catalog);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.draft.settings.ai_guidance).toMatch(/LAYER RULES/);
+  });
+
+  it("merges ranker tuning but never lets the model replace the columnar spec", () => {
+    const draft = baseDraft();
+    const spec = { enabled: true, version: 1, pool: { handles: ["a-set"] } };
+    draft.settings.recommendation_tuning = { rankerModel: "flash", columnar: spec } as never;
+    const result = applyUpdateRecommendationMode(
+      draft,
+      { mode: "ai", tuning: { rankerModel: "lite", columnar: { enabled: false, pool: { handles: [] } } } },
+      catalog,
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.draft.settings.recommendation_tuning).toEqual({ rankerModel: "lite", columnar: spec });
   });
 });
 

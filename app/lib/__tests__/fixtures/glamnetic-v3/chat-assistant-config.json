@@ -1,0 +1,25 @@
+{
+ "id": "77137c0d-a392-400a-95c2-2704841bb29a",
+ "shop_domain": "glamrco.myshopify.com",
+ "enabled": true,
+ "assistant_mode": "quiz",
+ "recommendation_mode": "ai",
+ "num_recommendations": 6,
+ "product_scope": "selected",
+ "recommendation_tuning": {
+  "llmReasons": true,
+  "colorFilter": "off",
+  "rankerModel": "flash",
+  "mismatchGuard": true,
+  "priorityStyle": "boost",
+  "maxLlmCandidates": 200,
+  "productDiversity": true,
+  "priorityBoostSlots": 2
+ },
+ "quiz_ui_style": "boutique",
+ "quiz_results_layout": "grid",
+ "quiz_bundle_enabled": true,
+ "quiz_bundle_size": 2,
+ "created_at": "2026-09-09T02:01:25.85827+00:00",
+ "updated_at": "2026-10-14T17:55:04.909+00:00"
+}

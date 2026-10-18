@@ -21,11 +21,22 @@ import {
   getConfiguredProducts,
   saveChatAssistantConfig,
   mapRecommendationTuning,
+  withStoredColumnar,
   type ChatAssistantConfig,
 } from "../lib/supabase.server";
 import type { MatchProduct, MatchSettings } from "../components/studio/MatchSettingsEditor";
 import type { WhyProduct } from "../components/studio/ProductWhyEditor";
 import { validateMatchSettingsPatch } from "../lib/match-settings";
+import {
+  decorateFlowForColumnar,
+  getPoolSnapshot,
+  loadColumnarStudioView,
+  maybeRefreshColumnarPool,
+  syncColumnarPool,
+  updateColumnarSpec,
+  type ColumnarStudioView,
+} from "../lib/columnar/engine.server";
+import { applyColumnarPatch, validateColumnarPatch } from "../lib/columnar/spec";
 import {
   captureLiveConfig,
   saveLiveQuizConfig,
@@ -541,12 +552,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       })
     : null;
 
+  // Columnar matching (Glamnetic logic v3): the hourly pool refresh rides
+  // on Studio loads, the one place with an admin client (background, never
+  // awaited). The card's data loads only on the Matching slide.
+  const columnarSpec = liveConfig?.recommendation_tuning.columnar;
+  maybeRefreshColumnarPool(shop.id, shopDomain, columnarSpec, adminGraphqlFor(admin));
+
   // Sell more (Studio Offers + Integrations, migration 086): loaded only
   // while one of those slides is open, like Check matches above.
   const slideParam = url.searchParams.get("slide") ?? "";
   const onOffers = slideParam === "offers-bundle" || slideParam === "offers-crosssell";
   const onIntegrations = slideParam === "integrations";
-  const [offers, offerCatalog, klaviyo, matchProducts, whyProducts] = await Promise.all([
+  const [offers, offerCatalog, klaviyo, matchProducts, whyProducts, columnar] = await Promise.all([
     onOffers ? getQuizOffers(shop.id) : Promise.resolve(null as QuizOffers | null),
     slideParam === "offers-crosssell" ? loadOfferCatalog(shop.id) : Promise.resolve(null),
     onIntegrations
@@ -566,6 +583,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     slideParam === "results" && draft
       ? loadWhyProducts(shop.id, draft.settings as Record<string, unknown>).catch((): WhyProduct[] => [])
       : Promise.resolve(null as WhyProduct[] | null),
+    slideParam === "matching" && columnarSpec
+      ? loadColumnarStudioView(shop.id, columnarSpec).catch((e): ColumnarStudioView | null => {
+          console.error("[studio] columnar view load failed:", e instanceof Error ? e.message : e);
+          return null;
+        })
+      : Promise.resolve(null as ColumnarStudioView | null),
   ]);
 
   return json({
@@ -576,6 +599,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     matchSettings,
     matchProducts,
     whyProducts,
+    columnar,
     apiKey: process.env.SHOPIFY_API_KEY || "",
     intercomAppId: process.env.INTERCOM_APP_ID || "",
     intercomUserJwt,
@@ -623,7 +647,16 @@ export type StudioActionData = {
   /** translate-quiz: lines translated / left as they were. */
   translated?: number;
   untranslated?: number;
+  /** save-columnar / sync-columnar-pool: the card's fresh state. */
+  columnar?: ColumnarStudioView | null;
 };
+
+/** Hot-swap preview flow: a columnar shop keeps the branching block and
+ * vibe toggles the preview document serves (quiz-preview[.]html.ts). The
+ * saved draft's settings are the live row's, spec included. */
+function previewFlowFor(shopId: string, draft: QuizDraft) {
+  return decorateFlowForColumnar(shopId, buildPreviewFlow(draft), draft.settings);
+}
 
 const NOTE_KEY_RE = /^[a-z_][a-z0-9_]*$/;
 const NOTE_MAX_LEN = 4000;
@@ -702,7 +735,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return json({
           ok: true,
           intent,
-          previewFlow: buildPreviewFlow(batchResult.draft),
+          previewFlow: await previewFlowFor(shop.id, batchResult.draft),
           previewConfig: batchConfig,
         });
       }
@@ -742,7 +775,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return json({
           ok: true,
           intent,
-          previewFlow: buildPreviewFlow(result.draft),
+          previewFlow: await previewFlowFor(shop.id, result.draft),
           previewConfig,
         });
       }
@@ -810,7 +843,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           intent,
           translated: result.applied,
           untranslated: result.skipped,
-          previewFlow: buildPreviewFlow(result.draft),
+          previewFlow: await previewFlowFor(shop.id, result.draft),
           previewConfig: translatedConfig,
         });
       }
@@ -1051,12 +1084,76 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           await withShopSaveLock(shop.id, async () => {
             const snap = await snapshotBeforeSettingsSave(shop.id);
             if (!snap.ok) throw new Error(`Save aborted: ${snap.error}`);
+            // The columnar spec is written only by its own card and the
+            // pool sync: keep the stored one, never the form's copy.
+            if (patch.recommendation_tuning) {
+              patch.recommendation_tuning = await withStoredColumnar(shopDomain, patch.recommendation_tuning);
+            }
             await saveChatAssistantConfig(shopDomain, patch);
           });
         } catch (e) {
           return json({ ok: false, error: e instanceof Error ? e.message : "Saving failed", intent });
         }
         return json({ ok: true, intent, message: "Matching settings saved" });
+      }
+      case "save-columnar": {
+        // Columnar matching card: enable, threshold, vibe tiles. Merged into
+        // recommendation_tuning.columnar under the save lock with a restore
+        // point first; every other tuning key is carried over as stored.
+        let raw: unknown;
+        try {
+          raw = JSON.parse(String(formData.get("patch") ?? "{}"));
+        } catch {
+          return json({ ok: false, error: "Malformed settings", intent }, { status: 400 });
+        }
+        const v = validateColumnarPatch(raw);
+        if (!v.ok) return json({ ok: false, error: v.error, intent });
+        try {
+          const next = await withShopSaveLock(shop.id, async () => {
+            const snap = await snapshotBeforeSettingsSave(shop.id);
+            if (!snap.ok) throw new Error(`Save aborted: ${snap.error}`);
+            return updateColumnarSpec(shop.id, shopDomain, async (spec) => {
+              // Turning it on needs sets it can match: with none, branching
+              // would skip every length, shape and finish question and every
+              // shopper would get an empty results page.
+              if (v.patch.enabled && !spec.enabled) {
+                if (spec.pool.handles.length === 0) {
+                  throw new Error("Sync the product pool from your collection before turning this on.");
+                }
+                if ((await getPoolSnapshot(shop.id, spec)).eligible.length === 0) {
+                  throw new Error("No product in the pool can be matched yet, so this stays off.");
+                }
+              }
+              return applyColumnarPatch(spec, v.patch);
+            });
+          });
+          const view = await loadColumnarStudioView(shop.id, next).catch(() => null);
+          return json({ ok: true, intent, columnar: view, message: "Columnar matching saved" });
+        } catch (e) {
+          return json({ ok: false, error: e instanceof Error ? e.message : "Saving failed", intent });
+        }
+      }
+      case "sync-columnar-pool": {
+        // "Sync from collection": the collection's handles replace the pool
+        // list (merged into the spec; an empty collection never writes).
+        const handleRaw = String(formData.get("collectionHandle") ?? "").trim();
+        const synced = await syncColumnarPool(shop.id, shopDomain, adminGraphqlFor(admin), {
+          collectionHandle: handleRaw || null,
+          beforeWrite: async () => {
+            const snap = await snapshotBeforeSettingsSave(shop.id);
+            if (!snap.ok) throw new Error(`Sync aborted: ${snap.error}`);
+          },
+        }).catch((e) => ({ ok: false as const, error: e instanceof Error ? e.message : "Sync failed" }));
+        if (!synced.ok) return json({ ok: false, error: synced.error, intent });
+        const cfg = await getChatAssistantConfig(shopDomain, { throwOnError: true }).catch(() => null);
+        const spec = cfg?.recommendation_tuning.columnar;
+        const view = spec ? await loadColumnarStudioView(shop.id, spec).catch(() => null) : null;
+        return json({
+          ok: true,
+          intent,
+          columnar: view,
+          message: `Synced ${synced.count} products from ${synced.collectionHandle}`,
+        });
       }
       case "save-offers": {
         // Studio Offers (migration 086): a partial patch from the bundle or

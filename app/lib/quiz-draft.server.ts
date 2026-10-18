@@ -38,6 +38,7 @@ import {
   type ChatAssistantConfig,
 } from "./supabase.server";
 import { normalizeFlowOrder } from "./quiz-config-schema.server";
+import { sanitizeColumnarSpec } from "./columnar/spec";
 
 export type SaveRecommendationConfigInput = Parameters<typeof saveRecommendationConfig>[1];
 
@@ -87,6 +88,19 @@ const SETTINGS_KEY_ALLOWLIST = new Set([
   // edited from Text & labels and written by Translate this quiz.
   "end_restart_label",
 ]);
+
+/**
+ * Columnar matching (recommendation_tuning.columnar) holds a synced product
+ * pool and the axis mapping, written by its own Studio card. A save or a
+ * restore whose tuning has no usable spec (a version captured before the
+ * spec existed) keeps the live one rather than deleting it.
+ */
+function keepLiveColumnar(next: unknown, live: unknown): unknown {
+  const liveSpec = sanitizeColumnarSpec((live as { columnar?: unknown } | null | undefined)?.columnar);
+  if (!liveSpec || !next || typeof next !== "object" || Array.isArray(next)) return next;
+  if (sanitizeColumnarSpec((next as { columnar?: unknown }).columnar)) return next;
+  return { ...(next as Record<string, unknown>), columnar: liveSpec };
+}
 
 function filterSettings(settings: Partial<ChatAssistantConfig>): Partial<ChatAssistantConfig> {
   const out: Record<string, unknown> = {};
@@ -400,6 +414,16 @@ export async function snapshotBeforeTemplateSwitch(
   return snap;
 }
 
+/**
+ * Forced, labeled restore point before a write made outside the Studio (a
+ * one-off data script), so the change is one click to undo from version
+ * history. Never prunes: a data script deletes no rows, and the next
+ * Studio save trims history as usual.
+ */
+export async function snapshotLabeled(shopId: string, label: string): Promise<{ ok: boolean; error?: string }> {
+  return snapshotLive(shopId, { label, force: true });
+}
+
 /** One version's stored config, shop-checked (Studio version preview). */
 export async function getVersionConfig(shopId: string, versionId: string): Promise<QuizDraft | null> {
   const { data, error } = await supabase
@@ -498,8 +522,9 @@ export async function saveLiveQuizConfig(
   ) as Record<string, unknown>;
   const settingsToWrite: Record<string, unknown> = {};
   const droppedKeys: string[] = [];
-  for (const [key, value] of Object.entries(filterSettings(config.settings))) {
+  for (const [key, raw] of Object.entries(filterSettings(config.settings))) {
     if (key === "enabled" || key === "assistant_mode") continue;
+    const value = key === "recommendation_tuning" ? keepLiveColumnar(raw, liveSettings[key]) : raw;
     // Only write keys that exist on the live row: a stale quiz_* key (an
     // old restored version predating a column rename, or an AI-invented
     // key) would fail the whole settings upsert AFTER the flow already

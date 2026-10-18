@@ -9,6 +9,8 @@ import {
   buildPreviewSampleRecommend,
   templateOverridesFromUrl,
 } from "../lib/quiz-preview.server";
+import { getChatAssistantConfig } from "../lib/supabase.server";
+import { decorateFlowForColumnar } from "../lib/columnar/engine.server";
 
 // Draft quiz preview document, rendered inside an iframe in the admin Quiz
 // Builder. Lives OUTSIDE the /app layout because embedded-admin iframes
@@ -82,7 +84,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     buildPreviewSampleRecommend(payload.shopId, draft, 6, payload.shopDomain),
   ]);
   const { productJson, ...sampleRecommend } = sample;
-  const flow = buildPreviewFlow(draft);
+  // Columnar shops: the same branching block and vibe toggles the
+  // storefront serves, so the preview hides and skips what shoppers would.
+  // Matching always runs on the live spec (quiz-preview-recommend), so a
+  // version preview reads it; the live capture already carries it.
+  const flow = await decorateFlowForColumnar(
+    payload.shopId,
+    buildPreviewFlow(draft),
+    versionId ? await getChatAssistantConfig(payload.shopDomain).catch(() => null) : draft.settings,
+  );
 
   // v3 screenshot suite: `library=empty` strips every resolved image so
   // each declared slot renders unresolved (Studio placeholder widget /

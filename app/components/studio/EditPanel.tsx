@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useFetcher, useRevalidator } from "@remix-run/react";
 import {
+  ActionList,
   BlockStack,
   InlineStack,
   Text,
@@ -16,7 +17,7 @@ import {
   Spinner,
   Divider,
 } from "@shopify/polaris";
-import { MagicIcon, XSmallIcon } from "@shopify/polaris-icons";
+import { DragHandleIcon, MagicIcon, XSmallIcon } from "@shopify/polaris-icons";
 import type { StudioLoaderData, StudioTab, StudioActionData } from "../../routes/studio";
 import { IntroEditor, LeadEditor, PhotoEditor, ResultsEditor, ThemeEditor } from "./SettingsEditors";
 import { BundleEditor, CrossSellEditor, type OfferCatalogItem } from "./OffersEditors";
@@ -24,6 +25,8 @@ import { IntegrationsEditor } from "./IntegrationsEditor";
 import { TextLabelsEditor } from "./TextLabelsEditor";
 import { ProductWhyEditor, type WhyProduct } from "./ProductWhyEditor";
 import { CameraHintField, MatchSettingsEditor, type MatchProduct, type MatchSettings } from "./MatchSettingsEditor";
+import { ColumnarMatchingCard } from "./ColumnarMatchingCard";
+import type { ColumnarStudioView } from "../../lib/columnar/engine.server";
 import type { QuizOffers } from "../../lib/quiz-offers.server";
 import type { IntegrationStatus } from "../../lib/integrations.server";
 import type { StudioFlow, StudioQuestion, StudioOption } from "./types";
@@ -232,14 +235,26 @@ function EditBody({
         </InlineStack>
       );
     }
+    // Columnar matching card: only for a shop with a columnar spec.
+    const columnar = (data.columnar ?? null) as ColumnarStudioView | null;
     return (
-      <MatchSettingsEditor
-        key={`matching:${chatEpoch}`}
-        initial={match}
-        products={products}
-        chatBusy={chatBusy}
-        onPreviewReload={onPreviewReload}
-      />
+      <BlockStack gap="500">
+        <MatchSettingsEditor
+          key={`matching:${chatEpoch}`}
+          initial={match}
+          products={products}
+          chatBusy={chatBusy}
+          onPreviewReload={onPreviewReload}
+        />
+        {columnar && (
+          <ColumnarMatchingCard
+            key={`columnar:${chatEpoch}`}
+            initial={columnar}
+            chatBusy={chatBusy}
+            onPreviewReload={onPreviewReload}
+          />
+        )}
+      </BlockStack>
     );
   }
   if (selectedSlide === "results") {
@@ -273,11 +288,17 @@ function EditBody({
     );
   }
   if (selectedSlide === "text") {
+    // Pool (columnar) quizzes list their own strings too. Read loosely:
+    // the spec sits in recommendation_tuning.columnar (contract 1).
+    const tuning = ((data.matchSettings ?? null) as MatchSettings | null)?.tuning as unknown as
+      | { columnar?: { enabled?: unknown } | null }
+      | undefined;
     return (
       <TextLabelsEditor
         key={`text:${chatEpoch}:${data.studio.template ?? "classic"}`}
         settings={settings}
         template={data.studio.template}
+        pool={tuning?.columnar?.enabled === true}
         chatBusy={chatBusy}
         onPreviewUpdate={onPreviewUpdate}
       />
@@ -385,7 +406,13 @@ function EditBody({
 // Question editor
 // ---------------------------------------------------------------------
 
-interface LocalOption extends StudioOption {}
+// uid is a client-only row identity: an "Open to anything" answer often
+// shares its axis value with a sibling, so the value can't key the rows
+// (duplicate keys scrambled them on reorder). Never sent: buildCalls lists
+// the saved fields explicitly.
+interface LocalOption extends StudioOption {
+  uid: string;
+}
 
 function QuestionEditor({
   flow,
@@ -418,7 +445,11 @@ function QuestionEditor({
   const [maxPicks, setMaxPicks] = useState(question.maxSelections != null ? String(question.maxSelections) : "");
   const [optionStyle, setOptionStyle] = useState(question.optionStyle ?? "");
   const [screenGroup, setScreenGroup] = useState(question.screenGroup ?? "");
-  const [options, setOptions] = useState<LocalOption[]>(question.options.map((o) => ({ ...o })));
+  const uidRef = useRef(0);
+  const nextUid = () => `answer-${uidRef.current++}`;
+  const [options, setOptions] = useState<LocalOption[]>(() =>
+    question.options.map((o) => ({ ...o, uid: nextUid() })),
+  );
   const [behaviorOpen, setBehaviorOpen] = useState(false);
   const [visibilityOpen, setVisibilityOpen] = useState(Boolean(question.showIf));
   const [showIf, setShowIf] = useState(question.showIf ?? null);
@@ -592,6 +623,21 @@ function QuestionEditor({
     return () => clearTimeout(t);
   }, [saveState]);
 
+  // A reorder is the same full options write as any answer edit: the
+  // applier renumbers positions from array order and keeps every field, so
+  // undo/version history and the preview hot-swap behave like any other
+  // edit. Never delete + re-add (that drops images, branches and reasons).
+  const moveAnswer = (from: number, to: number) => {
+    const current = stateRef.current.options;
+    const next = moveItem(current, from, to);
+    if (next === current) return;
+    setOptions(next);
+    scheduleSave("options");
+  };
+  // The storefront pulls only the FIRST select-all answer out and draws it
+  // last; any later one renders in place.
+  const catchAllIndex = options.findIndex((o) => o.selectAll);
+
   // Delete is handled by the studio route (onDeleteQuestion): the
   // revalidation after a successful delete unmounts this editor, so a
   // local fetcher effect could never reliably run its completion.
@@ -729,7 +775,7 @@ function QuestionEditor({
               options.forEach((o) => taken.add(o.axisValueValue));
               const next = [
                 ...options,
-                { label: "", axisValueValue: slugify(`option ${options.length + 1}`, taken) },
+                { label: "", axisValueValue: slugify(`option ${options.length + 1}`, taken), uid: nextUid() },
               ];
               setOptions(next);
               scheduleSave("options");
@@ -738,38 +784,49 @@ function QuestionEditor({
             + Add answer
           </Button>
         </InlineStack>
-        {options.map((opt, i) => (
-          <AnswerRow
-            key={opt.axisValueValue}
-            flow={flow}
-            question={question}
-            option={opt}
-            optionStyle={optionStyle}
-            index={i}
-            later={later}
-            disabled={disabled}
-            canRemove={options.length > 2}
-            onChange={(patch) => {
-              setOptions((prev) => prev.map((o, j) => (j === i ? { ...o, ...patch } : o)));
-              scheduleSave("options");
-            }}
-            onRemove={() => {
-              setOptions((prev) => prev.filter((_, j) => j !== i));
-              scheduleSave("options");
-            }}
-            onSelectSlide={onSelectSlide}
-            onBranchToggle={(targetAxisKey, on) => {
-              submitTool(branchFetcher, "update_question", {
-                axisKey: targetAxisKey,
-                patch: {
-                  showIf: on
-                    ? { axis_key: question.axisKey, axis_value: opt.axisValueValue }
-                    : null,
-                },
-              });
-            }}
-          />
-        ))}
+        <ReorderList
+          items={options}
+          itemKey={(opt) => opt.uid}
+          itemLabel={(opt, i) => opt.label.trim() || `Answer ${i + 1}`}
+          disabled={disabled}
+          onMove={moveAnswer}
+          renderItem={(opt, i, handle) => (
+            <AnswerRow
+              flow={flow}
+              question={question}
+              option={opt}
+              optionStyle={optionStyle}
+              index={i}
+              catchAllNote={i === catchAllIndex && i !== options.length - 1}
+              dragHandle={handle}
+              later={later}
+              disabled={disabled}
+              canRemove={options.length > 2}
+              // By uid, not index: an image upload finishing after a
+              // reorder (or a delete) still lands on the answer that
+              // started it, not whichever answer now sits at its old index.
+              onChange={(patch) => {
+                setOptions((prev) => prev.map((o) => (o.uid === opt.uid ? { ...o, ...patch } : o)));
+                scheduleSave("options");
+              }}
+              onRemove={() => {
+                setOptions((prev) => prev.filter((o) => o.uid !== opt.uid));
+                scheduleSave("options");
+              }}
+              onSelectSlide={onSelectSlide}
+              onBranchToggle={(targetAxisKey, on) => {
+                submitTool(branchFetcher, "update_question", {
+                  axisKey: targetAxisKey,
+                  patch: {
+                    showIf: on
+                      ? { axis_key: question.axisKey, axis_value: opt.axisValueValue }
+                      : null,
+                  },
+                });
+              }}
+            />
+          )}
+        />
       </BlockStack>
 
       <Divider />
@@ -896,6 +953,8 @@ function AnswerRow({
   option,
   optionStyle,
   index,
+  catchAllNote,
+  dragHandle,
   later,
   disabled,
   canRemove,
@@ -909,6 +968,8 @@ function AnswerRow({
   option: StudioOption;
   optionStyle: string;
   index: number;
+  catchAllNote: boolean;
+  dragHandle: React.ReactNode;
   later: StudioQuestion[];
   disabled?: boolean;
   canRemove: boolean;
@@ -965,6 +1026,7 @@ function AnswerRow({
     <Box background="bg-surface-secondary" borderRadius="200" padding="200">
       <BlockStack gap="150">
         <InlineStack gap="150" blockAlign="center" wrap={false}>
+          {dragHandle}
           <div style={{ flex: 1, minWidth: 0 }}>
             <TextField
               label={`Answer ${index + 1}`}
@@ -994,6 +1056,14 @@ function AnswerRow({
             icon={XSmallIcon}
           />
         </InlineStack>
+
+        {/* Every storefront renderer draws the (first) select-all answer
+            after the others, so say so when the list here puts it elsewhere. */}
+        {catchAllNote && (
+          <Text as="p" variant="bodySm" tone="subdued">
+            Catch-all answer: the quiz shows it last.
+          </Text>
+        )}
 
         {showImageInline && (
           <OptionImageUpload option={option} disabled={disabled} onChange={onChange} />
@@ -1032,6 +1102,9 @@ function AnswerRow({
                   { label: "Sheer / jelly", value: "sheer" },
                   { label: "Rainbow (multicolor)", value: "rainbow" },
                   { label: "French tip", value: "french" },
+                  { label: "Glossy (high shine)", value: "glossy" },
+                  { label: "Glazed (pearl glaze)", value: "glazed" },
+                  { label: "Velvet / cat eye", value: "velvet" },
                 ]}
                 value={texture}
                 onChange={setTexture}
@@ -1118,6 +1191,422 @@ function AnswerRow({
         </InlineStack>
       </BlockStack>
     </Box>
+  );
+}
+
+// ---------------------------------------------------------------------
+// Answer reordering
+// ---------------------------------------------------------------------
+
+/** `list` with the item at `from` moved to index `to` (clamped). Returns the
+ * SAME array when nothing moves, so callers can skip the save. */
+export function moveItem<T>(list: T[], from: number, to: number): T[] {
+  const target = Math.max(0, Math.min(list.length - 1, to));
+  if (from < 0 || from >= list.length || target === from) return list;
+  const next = list.slice();
+  const [moved] = next.splice(from, 1);
+  next.splice(target, 0, moved);
+  return next;
+}
+
+/** Drop gap under the pointer: how many row midpoints sit above `y`. Gap g
+ * is the slot before row g; gap n is after the last row. */
+export function gapAt(midpoints: number[], y: number): number {
+  return midpoints.filter((m) => y > m).length;
+}
+
+/** Final index of the dragged row for a drop into `gap`. Both gaps beside
+ * the row itself leave it where it is. */
+export function indexForGap(from: number, gap: number): number {
+  return gap > from ? gap - 1 : gap;
+}
+
+// Studio is server-rendered: a plain useLayoutEffect warns there.
+const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
+
+const DRAG_THRESHOLD = 4;
+// Ghost card height / 2: keeps the pointer on the ghost's handle.
+const GHOST_GRAB = 18;
+const AUTOSCROLL_EDGE = 48;
+
+const REORDER_CSS = `
+  .studio-reorder-handle { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 32px; margin-left: -4px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--p-color-icon-secondary, #8A8A8A); cursor: grab; touch-action: none; }
+  .studio-reorder-handle svg { width: 20px; height: 20px; fill: currentColor; }
+  .studio-reorder-handle:hover:not(:disabled), .studio-reorder-handle[aria-expanded="true"] { background: var(--p-color-bg-fill-transparent-hover, rgba(0, 0, 0, 0.05)); color: var(--p-color-icon, #4A4A4A); }
+  .studio-reorder-handle:focus-visible { outline: 2px solid var(--p-color-border-focus, #005BD3); outline-offset: 1px; }
+  .studio-reorder-handle:disabled { cursor: default; opacity: 0.4; }
+  .studio-reorder-row[data-dragging="true"] { opacity: 0.4; }
+  .studio-reorder-row[data-dragging="true"] .studio-reorder-handle { cursor: grabbing; }
+  .studio-reorder-line { position: absolute; left: 4px; right: 0; height: 2px; border-radius: 1px; background: var(--p-color-border-focus, #005BD3); pointer-events: none; z-index: 1; }
+  .studio-reorder-line::before { content: ""; position: absolute; left: -4px; top: -3px; width: 8px; height: 8px; box-sizing: border-box; border: 2px solid var(--p-color-border-focus, #005BD3); border-radius: 50%; background: #fff; }
+  .studio-reorder-ghost { position: fixed; top: 0; z-index: 600; display: flex; align-items: center; gap: 6px; height: 36px; box-sizing: border-box; padding: 0 12px 0 4px; border: 1px solid var(--p-color-border, #E3E3E3); border-radius: 8px; background: #fff; box-shadow: var(--p-shadow-400, 0 4px 12px rgba(0, 0, 0, 0.15)); font-size: 13px; font-weight: 550; color: #303030; pointer-events: none; cursor: grabbing; }
+  .studio-reorder-ghost svg { flex: none; width: 20px; height: 20px; fill: #4A4A4A; }
+  .studio-reorder-ghost span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+`;
+
+const SR_ONLY: React.CSSProperties = {
+  position: "absolute",
+  width: 1,
+  height: 1,
+  margin: -1,
+  padding: 0,
+  overflow: "hidden",
+  clip: "rect(0 0 0 0)",
+  whiteSpace: "nowrap",
+  border: 0,
+};
+
+interface DragState {
+  key: string;
+  from: number;
+  gap: number;
+  label: string;
+  left: number;
+  width: number;
+}
+
+// Drag-to-reorder for the answers list. Pointer drags start ONLY from a
+// row's handle (the rows hold text fields, so a draggable row would steal
+// text selection), using pointer events so mouse, pen and touch share one
+// path. Keyboard: Arrow Up/Down (Home/End) on the focused handle move the
+// row; Enter/click opens Move up/down/top/bottom, the single-pointer
+// alternative to dragging. Every outcome is announced to screen readers.
+function ReorderList<T>({
+  items,
+  itemKey,
+  itemLabel,
+  disabled,
+  onMove,
+  renderItem,
+}: {
+  items: T[];
+  itemKey: (item: T) => string;
+  itemLabel: (item: T, index: number) => string;
+  disabled?: boolean;
+  onMove: (from: number, to: number) => void;
+  renderItem: (item: T, index: number, handle: React.ReactNode) => React.ReactNode;
+}) {
+  const count = items.length;
+  const canReorder = !disabled && count > 1;
+  const hintId = useId();
+  const [drag, setDragState] = useState<DragState | null>(null);
+  const [menuKey, setMenuKey] = useState<string | null>(null);
+  const [message, setMessage] = useState("");
+
+  const rowEls = useRef(new Map<string, HTMLDivElement>());
+  const handleEls = useRef(new Map<string, HTMLButtonElement>());
+  const ghostEl = useRef<HTMLDivElement | null>(null);
+  // Drag bookkeeping lives in refs: pointermove fires far more often than
+  // the gap changes, so only a gap change re-renders the list.
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const dragRef = useRef<DragState | null>(null);
+  const pressRef = useRef<{ key: string; from: number; startY: number } | null>(null);
+  const pointerY = useRef(0);
+  const suppressClick = useRef(false);
+  const focusKey = useRef<string | null>(null);
+  const scroller = useRef<{
+    el: HTMLElement | null;
+    raf: number | null;
+    onScroll: (() => void) | null;
+    body: { cursor: string; userSelect: string } | null;
+  }>({ el: null, raf: null, onScroll: null, body: null });
+
+  const setDrag = (next: DragState | null) => {
+    dragRef.current = next;
+    setDragState(next);
+  };
+  // A live region stays quiet when its text doesn't change (Arrow Up twice
+  // while already first), so every other message ends in a no-break space.
+  const flip = useRef(false);
+  const announce = (text: string) => {
+    flip.current = !flip.current;
+    setMessage(flip.current ? text : `${text} `);
+  };
+  const where = (index: number) => `position ${index + 1} of ${count}`;
+
+  // Keyboard and menu moves put focus back on the moved row's handle:
+  // React re-inserts a row moved down, which blurs it.
+  useIsoLayoutEffect(() => {
+    const key = focusKey.current;
+    if (!key) return;
+    focusKey.current = null;
+    const handle = handleEls.current.get(key);
+    if (handle && document.activeElement !== handle) handle.focus();
+  });
+
+  const commit = (from: number, to: number, label: string, opts: { refocus: boolean; unchanged: string }) => {
+    const target = Math.max(0, Math.min(count - 1, to));
+    if (target === from) {
+      announce(opts.unchanged);
+      return;
+    }
+    if (opts.refocus) focusKey.current = itemKey(items[from]);
+    onMove(from, target);
+    announce(`${label} moved to ${where(target)}.`);
+  };
+
+  const measureGap = (y: number) =>
+    gapAt(
+      itemsRef.current.map((item) => {
+        const r = rowEls.current.get(itemKey(item))?.getBoundingClientRect();
+        return r ? r.top + r.height / 2 : 0;
+      }),
+      y,
+    );
+
+  const placeGhost = () => {
+    if (ghostEl.current) ghostEl.current.style.transform = `translateY(${pointerY.current - GHOST_GRAB}px)`;
+  };
+
+  const track = (y: number) => {
+    pointerY.current = y;
+    placeGhost();
+    const d = dragRef.current;
+    if (!d) return;
+    const gap = measureGap(y);
+    if (gap === d.gap) return;
+    setDrag({ ...d, gap });
+    const to = indexForGap(d.from, gap);
+    announce(to === d.from ? `${d.label}, back at ${where(d.from)}.` : `${d.label}, over ${where(to)}.`);
+  };
+
+  // Long lists outgrow the panel: holding the ghost near the scroll area's
+  // top or bottom edge scrolls it, faster the closer the pointer gets.
+  const autoScroll = () => {
+    const s = scroller.current;
+    s.raf = null;
+    if (!dragRef.current || !s.el) return;
+    const r = s.el.getBoundingClientRect();
+    const y = pointerY.current;
+    const over = y < r.top + AUTOSCROLL_EDGE ? y - (r.top + AUTOSCROLL_EDGE) : y > r.bottom - AUTOSCROLL_EDGE ? y - (r.bottom - AUTOSCROLL_EDGE) : 0;
+    if (over !== 0) s.el.scrollTop += Math.max(-16, Math.min(16, Math.round(over / 3) || Math.sign(over)));
+    s.raf = requestAnimationFrame(autoScroll);
+  };
+
+  const startDrag = (press: { key: string; from: number }, y: number) => {
+    const row = rowEls.current.get(press.key);
+    const rect = row?.getBoundingClientRect();
+    const label = itemLabel(items[press.from], press.from);
+    pointerY.current = y;
+    setMenuKey(null);
+    setDrag({ key: press.key, from: press.from, gap: press.from, label, left: rect?.left ?? 0, width: rect?.width ?? 0 });
+    announce(`Picked up ${label}, ${where(press.from)}. Press Escape to cancel.`);
+    const s = scroller.current;
+    s.body = { cursor: document.body.style.cursor, userSelect: document.body.style.userSelect };
+    document.body.style.cursor = "grabbing";
+    document.body.style.userSelect = "none";
+    s.el = null;
+    for (let n = row?.parentElement ?? null; n; n = n.parentElement) {
+      const overflow = getComputedStyle(n).overflowY;
+      if ((overflow === "auto" || overflow === "scroll") && n.scrollHeight > n.clientHeight) {
+        s.el = n;
+        break;
+      }
+    }
+    // Rows move under a still pointer while the panel scrolls (wheel or
+    // auto-scroll); re-measure the gap on every scroll.
+    s.onScroll = () => track(pointerY.current);
+    s.el?.addEventListener("scroll", s.onScroll);
+    if (s.el && typeof requestAnimationFrame === "function") s.raf = requestAnimationFrame(autoScroll);
+  };
+
+  const endDrag = () => {
+    const s = scroller.current;
+    if (s.raf !== null) cancelAnimationFrame(s.raf);
+    s.raf = null;
+    if (s.onScroll) s.el?.removeEventListener("scroll", s.onScroll);
+    s.el = null;
+    s.onScroll = null;
+    if (s.body) {
+      document.body.style.cursor = s.body.cursor;
+      document.body.style.userSelect = s.body.userSelect;
+      s.body = null;
+    }
+    pressRef.current = null;
+    setDrag(null);
+  };
+
+  const cancelDrag = () => {
+    const d = dragRef.current;
+    if (!d) return;
+    // The release that follows still clicks the handle; don't open the menu.
+    suppressClick.current = true;
+    endDrag();
+    announce(`Move cancelled. ${d.label} stays at ${where(d.from)}.`);
+  };
+
+  useEffect(() => {
+    if (!drag) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      cancelDrag();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drag?.key]);
+
+  // Editing locked mid-drag (Build with AI started): a disabled handle may
+  // never see the release, so drop the drag now.
+  useEffect(() => {
+    if (!canReorder && dragRef.current) cancelDrag();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canReorder]);
+
+  // Unmounting mid-drag (slide switch) must not leave the page stuck with a
+  // grabbing cursor and text selection off.
+  useEffect(
+    () => () => {
+      if (dragRef.current) endDrag();
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  const showLine = drag !== null && indexForGap(drag.from, drag.gap) !== drag.from;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <style dangerouslySetInnerHTML={{ __html: REORDER_CSS }} />
+      {items.map((item, i) => {
+        const key = itemKey(item);
+        const label = itemLabel(item, i);
+        const move = (to: number) => {
+          setMenuKey(null);
+          commit(i, to, label, { refocus: true, unchanged: `${label} is already at ${where(i)}.` });
+        };
+        const handle = (
+          <Popover
+            active={menuKey === key}
+            onClose={() => setMenuKey(null)}
+            preferredAlignment="left"
+            activator={
+              <button
+                type="button"
+                ref={(el) => {
+                  if (el) handleEls.current.set(key, el);
+                  else handleEls.current.delete(key);
+                }}
+                className="studio-reorder-handle"
+                aria-label={`Reorder ${label}`}
+                aria-describedby={hintId}
+                aria-haspopup="menu"
+                aria-expanded={menuKey === key}
+                disabled={!canReorder}
+                onPointerDown={(e) => {
+                  if (!canReorder || e.button !== 0) return;
+                  suppressClick.current = false;
+                  pressRef.current = { key, from: i, startY: e.clientY };
+                  try {
+                    e.currentTarget.setPointerCapture?.(e.pointerId);
+                  } catch {
+                    // Pointer already gone; the drag simply won't start.
+                  }
+                }}
+                onPointerMove={(e) => {
+                  const press = pressRef.current;
+                  if (!press) return;
+                  if (!dragRef.current) {
+                    if (Math.abs(e.clientY - press.startY) < DRAG_THRESHOLD) return;
+                    startDrag(press, e.clientY);
+                  }
+                  track(e.clientY);
+                }}
+                onPointerUp={() => {
+                  const d = dragRef.current;
+                  pressRef.current = null;
+                  if (!d) return; // a plain click: onClick opens the menu
+                  suppressClick.current = true;
+                  endDrag();
+                  commit(d.from, indexForGap(d.from, d.gap), d.label, {
+                    refocus: false,
+                    unchanged: `${d.label} returned to ${where(d.from)}.`,
+                  });
+                }}
+                onPointerCancel={() => {
+                  pressRef.current = null;
+                  cancelDrag();
+                }}
+                onClick={() => {
+                  if (suppressClick.current) {
+                    suppressClick.current = false;
+                    return;
+                  }
+                  if (canReorder) setMenuKey((k) => (k === key ? null : key));
+                }}
+                onKeyDown={(e) => {
+                  // A touch drag ends with no click to consume the flag; the
+                  // next Enter/Space must still open the menu.
+                  if (e.key === "Enter" || e.key === " ") suppressClick.current = false;
+                  if (!canReorder || e.altKey || e.ctrlKey || e.metaKey) return;
+                  const to =
+                    e.key === "ArrowUp" ? i - 1
+                    : e.key === "ArrowDown" ? i + 1
+                    : e.key === "Home" ? 0
+                    : e.key === "End" ? count - 1
+                    : null;
+                  if (to === null) return;
+                  e.preventDefault();
+                  const edge = to < i || (to === i && i === 0) ? "first" : "last";
+                  commit(i, to, label, { refocus: true, unchanged: `${label} is already ${edge}.` });
+                }}
+              >
+                <DragHandleIcon aria-hidden focusable="false" />
+              </button>
+            }
+          >
+            <ActionList
+              actionRole="menuitem"
+              items={[
+                { content: "Move up", disabled: i === 0, onAction: () => move(i - 1) },
+                { content: "Move down", disabled: i === count - 1, onAction: () => move(i + 1) },
+                { content: "Move to top", disabled: i === 0, onAction: () => move(0) },
+                { content: "Move to bottom", disabled: i === count - 1, onAction: () => move(count - 1) },
+              ]}
+            />
+          </Popover>
+        );
+        return (
+          <div
+            key={key}
+            ref={(el) => {
+              if (el) rowEls.current.set(key, el);
+              else rowEls.current.delete(key);
+            }}
+            className="studio-reorder-row"
+            data-dragging={drag?.key === key}
+            style={{ position: "relative" }}
+          >
+            {showLine && drag!.gap === i && <div className="studio-reorder-line" style={{ top: -5 }} aria-hidden />}
+            {renderItem(item, i, handle)}
+            {showLine && drag!.gap === count && i === count - 1 && (
+              <div className="studio-reorder-line" style={{ bottom: -5 }} aria-hidden />
+            )}
+          </div>
+        );
+      })}
+      {drag && (
+        <div
+          ref={ghostEl}
+          className="studio-reorder-ghost"
+          aria-hidden
+          style={{ left: drag.left, width: drag.width, transform: `translateY(${pointerY.current - GHOST_GRAB}px)` }}
+        >
+          <DragHandleIcon aria-hidden focusable="false" />
+          <span>{drag.label}</span>
+        </div>
+      )}
+      <span id={hintId} hidden>
+        Press Arrow Up or Arrow Down to move this answer, Home or End to move it to the top or bottom, or Enter for
+        move options.
+      </span>
+      <div role="status" aria-live="assertive" aria-atomic="true" style={SR_ONLY}>
+        {message}
+      </div>
+    </div>
   );
 }
 

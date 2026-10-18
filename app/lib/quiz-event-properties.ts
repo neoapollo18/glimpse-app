@@ -12,6 +12,8 @@ const HANDLE = /^[a-z0-9][a-z0-9_-]{0,254}$/i;
 const NUMERIC_ID = /^\d{1,20}$/;
 const SESSION = /^[A-Za-z0-9_-]{8,40}$/;
 const WORD = /^[a-z_]{1,24}$/;
+// Columnar results permalink key (columnar/pipeline.ts encodeResultKey).
+const RESULT_KEY = /^[a-z0-9.]{1,64}$/;
 const MAX_BYTES = 2048;
 
 type Props = Record<string, unknown>;
@@ -52,12 +54,25 @@ const PER_EVENT: Record<string, (r: Props) => Props> = {
     qi: int(r.qi, 0, 50),
     q: str(r.q, AXIS),
     vals: list(r.vals, 16, (x) => str(x, AXIS)),
+    // Columnar quizzes: the stable answer IDs the matching keys on.
+    ids: list(r.ids, 16, (x) => str(x, AXIS)),
     edit: bool(r.edit),
+    // ...an answer the pool recorded for a skipped step, and the results
+    // zero state's one-tap loosen.
+    auto: bool(r.auto),
+    loosen: bool(r.loosen),
   }),
   quiz_results_shown: (r) => ({
     n: int(r.n, 0, 50),
     recs: list(r.recs, 12, (x) => str(x, HANDLE)),
     partial: bool(r.partial),
+    // Columnar quizzes (brief section 8): the six handles shown, the
+    // relaxation rung used and the permalink key.
+    handles: list(r.handles, 12, (x) => str(x, HANDLE)),
+    rung: int(r.rung, 1, 5),
+    rk: str(r.rk, RESULT_KEY),
+    // ...and whether a results link (?r=) opened them.
+    permalink: bool(r.permalink),
   }),
   quiz_view_product: (r) => ({ h: str(r.h, HANDLE), v: str(r.v, NUMERIC_ID) }),
   quiz_add_to_cart: (r) => ({

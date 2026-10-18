@@ -1,0 +1,465 @@
+{
+ "questions": [
+  {
+   "axisKey": "vibe",
+   "axisLabel": "Vibe",
+   "prompt": "What's the vibe?",
+   "helperText": null,
+   "multiSelect": false,
+   "maxSelections": null,
+   "screenGroup": null,
+   "showIf": null,
+   "optionStyle": "boxed",
+   "options": [
+    {
+     "label": "Clean Girl & Minimalist",
+     "axisValue": "model_off_duty",
+     "botResponse": null,
+     "reasonText": "barely-there",
+     "imageUrl": null,
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": {
+      "sublabel": "quiet luxury, effortless"
+     }
+    },
+    {
+     "label": "Soft & Sweet",
+     "axisValue": "soft_sweet",
+     "botResponse": null,
+     "reasonText": "blush pinks, sweet nothings",
+     "imageUrl": null,
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": {
+      "sublabel": "pastel & pretty"
+     }
+    },
+    {
+     "label": "French Girl Chic",
+     "axisValue": "french_girl",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": null,
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": {
+      "sublabel": "fresh take on the classics"
+     }
+    },
+    {
+     "label": "Main Character Energy",
+     "axisValue": "main_character",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": null,
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": {
+      "sublabel": "gems & maximum sparkle"
+     }
+    },
+    {
+     "label": "Vacay Mode",
+     "axisValue": "vacation",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": null,
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": {
+      "sublabel": "bright, tropical hues"
+     }
+    },
+    {
+     "label": "Surprise me",
+     "axisValue": "model_off_duty",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": null,
+     "showIf": null,
+     "selectAll": true,
+     "displayMeta": {
+      "sublabel": "open to anything"
+     }
+    },
+    {
+     "label": "Alternative & Edgy",
+     "axisValue": "option_7",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": null,
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": {
+      "sublabel": "dark, moody, a little dangerous"
+     }
+    },
+    {
+     "label": "Holiday-ready",
+     "axisValue": "option_8",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": null,
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": {
+      "sublabel": "festive sparkle & glam"
+     }
+    }
+   ]
+  },
+  {
+   "axisKey": "length",
+   "axisLabel": "Length",
+   "prompt": "How long do you like your nails?",
+   "helperText": "Select every length you’d wear — one or all three.",
+   "multiSelect": true,
+   "maxSelections": null,
+   "screenGroup": null,
+   "showIf": null,
+   "optionStyle": "visual",
+   "options": [
+    {
+     "label": "Super Short",
+     "axisValue": "super_short",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": "https://glglqybgabptczqskbcj.supabase.co/storage/v1/object/public/reference-images/glamrco.myshopify.com/avatar-1789664785379.png",
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": null
+    },
+    {
+     "label": "Short",
+     "axisValue": "short",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": "https://glglqybgabptczqskbcj.supabase.co/storage/v1/object/public/reference-images/glamrco.myshopify.com/avatar-1791911824452.png",
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": null
+    },
+    {
+     "label": "Medium",
+     "axisValue": "medium",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": "https://glglqybgabptczqskbcj.supabase.co/storage/v1/object/public/reference-images/glamrco.myshopify.com/avatar-1791911713583.png",
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": null
+    }
+   ]
+  },
+  {
+   "axisKey": "shape",
+   "axisLabel": "Shape",
+   "prompt": "Which shapes are you into?",
+   "helperText": "Select every shape you’d wear. You can pick as many as you'd like.",
+   "multiSelect": true,
+   "maxSelections": null,
+   "screenGroup": null,
+   "showIf": null,
+   "optionStyle": "visual",
+   "options": [
+    {
+     "label": "Almond",
+     "axisValue": "almond",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": "https://glglqybgabptczqskbcj.supabase.co/storage/v1/object/public/reference-images/glamrco.myshopify.com/avatar-1789663763674.png",
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": null
+    },
+    {
+     "label": "Coffin",
+     "axisValue": "coffin",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": "https://glglqybgabptczqskbcj.supabase.co/storage/v1/object/public/reference-images/glamrco.myshopify.com/avatar-1789663766745.png",
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": null
+    },
+    {
+     "label": "Oval",
+     "axisValue": "oval",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": "https://glglqybgabptczqskbcj.supabase.co/storage/v1/object/public/reference-images/glamrco.myshopify.com/avatar-1789663771001.png",
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": null
+    },
+    {
+     "label": "Round",
+     "axisValue": "round",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": "https://glglqybgabptczqskbcj.supabase.co/storage/v1/object/public/reference-images/glamrco.myshopify.com/avatar-1789663775052.png",
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": null
+    },
+    {
+     "label": "Squoval",
+     "axisValue": "squoval",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": "https://glglqybgabptczqskbcj.supabase.co/storage/v1/object/public/reference-images/glamrco.myshopify.com/avatar-1789663780584.png",
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": null
+    },
+    {
+     "label": "Square",
+     "axisValue": "square",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": "https://glglqybgabptczqskbcj.supabase.co/storage/v1/object/public/reference-images/glamrco.myshopify.com/avatar-1789663829515.png",
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": null
+    },
+    {
+     "label": "Open to anything",
+     "axisValue": "almond",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": null,
+     "showIf": null,
+     "selectAll": true,
+     "displayMeta": null
+    }
+   ]
+  },
+  {
+   "axisKey": "color_family",
+   "axisLabel": "Color",
+   "prompt": "Any colors calling your name?",
+   "helperText": "Select up to three — or let us surprise you.",
+   "multiSelect": true,
+   "maxSelections": null,
+   "screenGroup": null,
+   "showIf": null,
+   "optionStyle": "nails",
+   "options": [
+    {
+     "label": "Nudes & neutrals",
+     "axisValue": "nudes_neutrals",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": null,
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": {
+      "swatch": "#F8E6E0",
+      "swatch2": "#D6A899"
+     }
+    },
+    {
+     "label": "Pinks & pastels",
+     "axisValue": "pinks_pastels",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": null,
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": {
+      "swatch": "#FCE7EC",
+      "swatch2": "#E28FAA"
+     }
+    },
+    {
+     "label": "Reds & berries",
+     "axisValue": "reds_berries",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": null,
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": {
+      "swatch": "#E85468",
+      "swatch2": "#601222"
+     }
+    },
+    {
+     "label": "Bold & bright",
+     "axisValue": "bold_bright",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": null,
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": {
+      "swatch": "#FF7A59",
+      "swatch2": "#3E7DE0",
+      "texture": "rainbow"
+     }
+    },
+    {
+     "label": "Dark & moody",
+     "axisValue": "dark_moody",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": null,
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": {
+      "swatch": "#5E3C53",
+      "swatch2": "#121014"
+     }
+    },
+    {
+     "label": "🎨 Surprise me",
+     "axisValue": "nudes_neutrals",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": null,
+     "showIf": null,
+     "selectAll": true,
+     "displayMeta": null
+    }
+   ]
+  },
+  {
+   "axisKey": "question_6",
+   "axisLabel": "Question 6",
+   "prompt": "What's your finish?",
+   "helperText": "Select up to two finishes, or let us surprise you.",
+   "multiSelect": false,
+   "maxSelections": null,
+   "screenGroup": null,
+   "showIf": null,
+   "optionStyle": null,
+   "options": [
+    {
+     "label": "Classic Glossy",
+     "axisValue": "option_1",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": null,
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": null
+    },
+    {
+     "label": "Glazed & Pearlescent",
+     "axisValue": "option_2",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": null,
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": null
+    },
+    {
+     "label": "Velvet & Cateye ",
+     "axisValue": "option_3",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": null,
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": null
+    },
+    {
+     "label": "Bold Chrome",
+     "axisValue": "option_4",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": null,
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": null
+    },
+    {
+     "label": "Matte",
+     "axisValue": "option_5",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": null,
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": null
+    },
+    {
+     "label": "Surprise Me!",
+     "axisValue": "option_6",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": null,
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": null
+    }
+   ]
+  },
+  {
+   "axisKey": "style_tier",
+   "axisLabel": "Style",
+   "prompt": "Last one — how much drama?",
+   "helperText": "Select up to two. Mix a classic with a statement if that’s you.",
+   "multiSelect": true,
+   "maxSelections": 2,
+   "screenGroup": null,
+   "showIf": null,
+   "optionStyle": "visual",
+   "options": [
+    {
+     "label": "Clean & Classic",
+     "axisValue": "clean",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": "https://glglqybgabptczqskbcj.supabase.co/storage/v1/object/public/reference-images/glamrco.myshopify.com/avatar-1789665880585.png",
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": {
+      "sublabel": "solids, french tips, glazed"
+     }
+    },
+    {
+     "label": "A little extra",
+     "axisValue": "extra",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": "https://glglqybgabptczqskbcj.supabase.co/storage/v1/object/public/reference-images/glamrco.myshopify.com/avatar-1789665980384.png",
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": {
+      "sublabel": "pearls, ombre, subtle art"
+     }
+    },
+    {
+     "label": "Statement",
+     "axisValue": "statement",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": "https://glglqybgabptczqskbcj.supabase.co/storage/v1/object/public/reference-images/glamrco.myshopify.com/avatar-1789665973939.png",
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": {
+      "sublabel": "chrome, glitter, cat eye"
+     }
+    },
+    {
+     "label": "Full-on nail art",
+     "axisValue": "art",
+     "botResponse": null,
+     "reasonText": null,
+     "imageUrl": "https://glglqybgabptczqskbcj.supabase.co/storage/v1/object/public/reference-images/glamrco.myshopify.com/avatar-1789665966463.png",
+     "showIf": null,
+     "selectAll": false,
+     "displayMeta": {
+      "sublabel": "3D gems, patterns, abstract"
+     }
+    }
+   ]
+  }
+ ],
+ "photoAxes": [],
+ "photoAxisDetails": [],
+ "configured": true
+}

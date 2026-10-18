@@ -29,8 +29,9 @@ export const UI_TEXT_GROUPS: Array<{ id: UiTextGroupId; title: string; descripti
 ];
 
 /** Where a string can appear. Studio hides entries that don't apply to
- * the current layout; absent = every layout. */
-export type UiTextScope = "classic" | "featured" | "grid" | "boutique" | "template" | TemplateId;
+ * the current layout; absent = every layout. "pool" = a classic quiz on
+ * the pool (columnar) matching engine. */
+export type UiTextScope = "classic" | "featured" | "grid" | "boutique" | "pool" | "template" | TemplateId;
 
 export interface UiTextEntry {
   /** Key in quiz_ui_text, or the column name when `column` is true. */
@@ -115,6 +116,11 @@ export const UI_TEXT_ENTRIES: UiTextEntry[] = [
   { key: "notQuiteRight", label: "Before the retake link", group: "results", default: "Not quite right?", scope: ["grid"] },
   { key: "yourAnswers", label: "Your answers label", group: "results", default: "Your answers", scope: ["grid"] },
   { key: "editAnswers", label: "Edit answers", group: "results", default: "Edit", scope: ["grid"] },
+  // Pool-matched quizzes (columnar spec on, contract 4): no exact match
+  // for the answers. Only those quizzes list these in Studio.
+  { key: "zeroHeadline", label: "No exact match headline", group: "results", default: "We don’t have that combination yet.", scope: ["pool"], help: "When the matching sends no headline of its own." },
+  { key: "zeroLoosen", label: "No exact match, with a loosen button", group: "results", default: "Open up one answer and we’ll show you what we have.", scope: ["pool"] },
+  { key: "zeroEdit", label: "No exact match, nothing to loosen", group: "results", default: "Change an answer above to see what we have.", scope: ["pool"] },
   { key: "answersRailTitle", label: "Answers panel title", group: "results", default: "Your answers · tap to edit", scope: ["featured"] },
   { key: "answersRailEdit", label: "Edit one answer", group: "results", default: "edit", scope: ["featured"] },
   { key: "saveMatches", label: "Email card title", group: "results", default: "Save your matches", scope: ["grid"] },
@@ -225,6 +231,7 @@ export const UI_TEXT_ENTRIES: UiTextEntry[] = [
   { key: "matchingYou", label: "Matching after a photo", group: "loading", default: "Matching you up…" },
   { key: "readingShade", label: "Reading a shade from a photo", group: "loading", default: "Reading your shade…" },
   { key: "updatingMatches", label: "Updating matches", group: "loading", default: "Updating your matches…" },
+  { key: "loadingResults", label: "Opening a results link", group: "loading", default: "Loading your matches…", scope: ["pool"] },
   { key: "pickingMatches", label: "Loading screen live line", group: "loading", default: "Picking your best matches", scope: ["boutique"] },
   { key: "loadingKicker", label: "Loading screen eyebrow", group: "loading", default: "One moment", scope: ["boutique"] },
   { key: "loadingTitle", label: "Loading screen title", group: "loading", default: "Finding your matches", scope: ["boutique"] },
@@ -320,7 +327,7 @@ export function uiTextDefault(entry: UiTextEntry, template: string | null | unde
 /** Studio filter: does this entry show up in the current layout? */
 export function uiTextApplies(
   entry: UiTextEntry,
-  layout: { template: string | null; grid: boolean; boutique: boolean },
+  layout: { template: string | null; grid: boolean; boutique: boolean; pool?: boolean },
 ): boolean {
   if (!entry.scope) return true;
   return entry.scope.some((s) => {
@@ -329,6 +336,7 @@ export function uiTextApplies(
     if (s === "featured") return !layout.template && !layout.grid;
     if (s === "grid") return !layout.template && layout.grid;
     if (s === "boutique") return !layout.template && layout.boutique;
+    if (s === "pool") return !layout.template && Boolean(layout.pool);
     return layout.template === s;
   });
 }

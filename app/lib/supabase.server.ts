@@ -12,6 +12,7 @@ import { ALL_TIERS_FREE } from './pricing-tiers';
 import { sanitizeProductWhy, sanitizeUiText } from './quiz-ui-text';
 import { invalidateStorefrontCache } from './storefront-cache.server';
 import { phoneMatchCandidates } from './gdpr-phone';
+import { sanitizeColumnarSpec, type ColumnarSpec } from './columnar/spec';
 
 if (!process.env.SUPABASE_URL) {
   throw new Error('SUPABASE_URL environment variable is required');
@@ -3763,6 +3764,10 @@ export interface RecommendationTuning {
   llmReasons: boolean;
   // Prompt-size cap on candidates sent to the LLM (50-400).
   maxLlmCandidates: number;
+  // Columnar matching (Glamnetic logic v3, app/lib/columnar). Absent = the
+  // shop never had it; present with enabled:false = set up but off. Never
+  // defaulted in: an empty tuning blob must not grow this key on save.
+  columnar?: ColumnarSpec;
 }
 
 export const RECOMMENDATION_TUNING_DEFAULTS: RecommendationTuning = {
@@ -3795,6 +3800,9 @@ export const oneOf = <T extends string>(v: unknown, allowed: readonly T[], fallb
 export function mapRecommendationTuning(raw: unknown): RecommendationTuning {
   const d = RECOMMENDATION_TUNING_DEFAULTS;
   const t = (raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
+  // Every save path (Studio edits, Matching panel, version restores) writes
+  // the mapped tuning back, so dropping the spec here would wipe it.
+  const columnar = sanitizeColumnarSpec(t.columnar);
   return {
     colorFilter: oneOf(t.colorFilter, ['off', 'loose', 'normal', 'strict'] as const, d.colorFilter),
     mismatchGuard: typeof t.mismatchGuard === 'boolean' ? t.mismatchGuard : d.mismatchGuard,
@@ -3804,7 +3812,33 @@ export function mapRecommendationTuning(raw: unknown): RecommendationTuning {
     productDiversity: typeof t.productDiversity === 'boolean' ? t.productDiversity : d.productDiversity,
     llmReasons: typeof t.llmReasons === 'boolean' ? t.llmReasons : d.llmReasons,
     maxLlmCandidates: clampInt(t.maxLlmCandidates, 50, 400, d.maxLlmCandidates),
+    ...(columnar ? { columnar } : {}),
   };
+}
+
+/**
+ * A tuning blob about to be saved from a form, with the STORED columnar
+ * spec in place of whatever the form carried: the Matching panel and the
+ * legacy settings page send their whole tuning object, and a tab opened
+ * before a columnar change (Studio card, pool sync) would otherwise write
+ * the stale spec back.
+ */
+export async function withStoredColumnar(
+  shopDomain: string,
+  tuning: RecommendationTuning,
+): Promise<RecommendationTuning> {
+  const { data, error } = await supabase
+    .from('chat_assistant_config')
+    .select('recommendation_tuning')
+    .eq('shop_domain', shopDomain)
+    .maybeSingle();
+  if (error) throw new Error(`Failed to read matching settings: ${error.message}`);
+  const stored = sanitizeColumnarSpec(
+    (data?.recommendation_tuning as Record<string, unknown> | null | undefined)?.columnar,
+  );
+  const rest: RecommendationTuning = { ...tuning };
+  delete rest.columnar;
+  return stored ? { ...rest, columnar: stored } : rest;
 }
 
 const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
@@ -4471,7 +4505,9 @@ function emojiOrUndefined(v: unknown): string | undefined {
 // glitter, chrome, sheer jelly, matte). Closed set so a stray string can
 // never become a CSS class.
 // rainbow / french (migration 088): multicolor and french-tip nail swatches.
-export const OPTION_TEXTURES = ['creme', 'matte', 'shimmer', 'sparkle', 'chrome', 'sheer', 'rainbow', 'french'] as const;
+// glossy / glazed / velvet (Glamnetic v3 Finish question): high shine,
+// pearl glaze and a velvet cat-eye band.
+export const OPTION_TEXTURES = ['creme', 'matte', 'shimmer', 'sparkle', 'chrome', 'sheer', 'rainbow', 'french', 'glossy', 'glazed', 'velvet'] as const;
 export type OptionTexture = (typeof OPTION_TEXTURES)[number];
 export function textureOrUndefined(v: unknown): OptionTexture | undefined {
   return typeof v === 'string' && (OPTION_TEXTURES as readonly string[]).includes(v)

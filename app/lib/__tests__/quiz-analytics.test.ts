@@ -22,6 +22,17 @@ describe("sanitizeQuizEventProperties", () => {
     ).toEqual({ items: [{ h: "a", v: "1", qty: 1 }], price: 3000 });
   });
 
+  it("keeps the pool engine's answer IDs, auto / loosen flags, shown handles, rung and result key", () => {
+    expect(
+      sanitizeQuizEventProperties("quiz_question_answered", { qi: 4, q: "question_6", vals: ["option_1"], ids: ["glossy", "Not An Id"], auto: true, loosen: "yes" }),
+    ).toEqual({ qi: 4, q: "question_6", vals: ["option_1"], ids: ["glossy"], auto: true });
+    const handles = ["a", "b", "c", "d", "e", "f"];
+    expect(
+      sanitizeQuizEventProperties("quiz_results_shown", { n: 6, recs: handles, handles, rung: 3, rk: "c1.8.2.1.2.4.4", permalink: true }),
+    ).toEqual({ n: 6, recs: handles, handles, rung: 3, rk: "c1.8.2.1.2.4.4", permalink: true });
+    expect(sanitizeQuizEventProperties("quiz_results_shown", { n: 1, rung: 9, rk: "C1_bad key" })).toEqual({ n: 1 });
+  });
+
   it("drops free text, contact data, unknown keys and oversized payloads", () => {
     expect(sanitizeQuizEventProperties("quiz_lead_submitted", { email: "a@b.com", has_email: true })).toEqual({ has_email: true });
     expect(sanitizeQuizEventProperties("quiz_view", { note: "hello world" })).toBeNull();

@@ -61,6 +61,7 @@
     matches: null,          // quiz-recommend matches (no images — safe to persist)
     matrixApplied: false,
     partial: false,
+    columnar: null,         // pool-engine results extras (contract 4): header, badge, also matched, resultKey
     quizStarted: false,     // quiz_start fired; persisted so a mid-quiz refresh doesn't re-fire it
     leadDone: false,        // lead step submitted OR skipped — never shown twice per session
     leadToken: null,        // signed lead id from quiz-lead (migration 086) — reports results to the lead
@@ -814,6 +815,9 @@
     // only; toggled (not added) so a Studio preview update can turn it off.
     root.classList.toggle('gq-compact', compactActive());
     root.classList.toggle('gq-boutique', boutiqueActive());
+    // Pool-engine shops (a branching block, contract 3) get the v3 layout
+    // rules; every other shop, boutique or not, keeps today's.
+    root.classList.toggle('gq-pool', Boolean(branching()));
     applyTemplateStyleOverrides();
   }
 
@@ -821,6 +825,11 @@
   // layout, so it switches compact on by itself. Classic quiz only.
   function boutiqueActive() {
     return Boolean(config && config.uiStyle === 'boutique' && !config.template);
+  }
+  // Boutique on the pool engine (Glamnetic v3 mockups): "Surprise me"
+  // last with a sparkle. Opt-in through the shop's columnar spec.
+  function poolBoutique() {
+    return boutiqueActive() && Boolean(branching());
   }
   function compactActive() {
     return Boolean(config && !config.template && (config.compactLayout === true || config.uiStyle === 'boutique'));
@@ -965,11 +974,25 @@
   function previewBack() {
     var target = previewStack.pop() || { screen: 'intro', screenIndex: 0 };
     target = clampStep(target);
+    // Back skips a step the pool skipped (pool shops only, so every other
+    // preview navigates as before).
+    if (branching() && target.screen === 'question' && screenFullyHidden(target.screenIndex)) {
+      target = screenBefore(target.screenIndex);
+    }
     state.screen = target.screen;
     state.screenIndex = target.screenIndex || 0;
     if (state.screen === 'results' || state.screen === 'intro') editReturn = false;
     previewHere = { screen: state.screen, screenIndex: state.screenIndex };
     render('back');
+  }
+
+  // The nearest shown step before a hidden screen (the intro when the
+  // first screen lives there, or nothing earlier shows).
+  function screenBefore(screenIdx) {
+    var idx = screenIdx;
+    while (idx >= 0 && screenFullyHidden(idx)) idx--;
+    if (idx < 0 || (idx === 0 && introHostsFirstScreen())) return { screen: 'intro', screenIndex: 0 };
+    return { screen: 'question', screenIndex: idx };
   }
 
   // Rewind answers/criteria for every question from screen `keepScreens` on.
@@ -984,6 +1007,14 @@
     state.answers.length = Math.min(state.answers.length, firstQ);
   }
 
+  // Results to show: matches, or the pool engine's zero state (which
+  // offers the loosen tap instead of a dead end).
+  function hasResults() {
+    if (Array.isArray(state.matches) && state.matches.length > 0) return true;
+    var col = state.columnar;
+    return Boolean(Array.isArray(state.matches) && col && col.header && col.header.kind === 'none');
+  }
+
   // History entries can outlive the state that made them valid: Back pops
   // answers out of criteria but the Forward entry survives, and "Start
   // over" resets state while old gate/question entries remain below. Clamp
@@ -993,8 +1024,7 @@
     var total = screens.length;
     var answered = answeredScreenCount();
 
-    if (target.screen === 'results' &&
-        !(answered >= total && Array.isArray(state.matches) && state.matches.length > 0)) {
+    if (target.screen === 'results' && !(answered >= total && hasResults())) {
       target = { screen: 'gate', screenIndex: 0 };
     }
     // A lead entry that's no longer showable (merchant turned it off, or
@@ -1038,6 +1068,14 @@
     }
     var original = target;
     target = clampStep(target);
+    // Back skips a screen the answers now hide, like forward does, instead
+    // of landing on it and bouncing forward. Pool shops only for now, so
+    // every other shop's history behaves exactly as before.
+    var fromAfter = state.screen === 'gate' || state.screen === 'lead' || state.screen === 'results';
+    if (branching() && target.screen === 'question' && screenFullyHidden(target.screenIndex) &&
+        (fromAfter || (state.screen === 'question' && target.screenIndex < state.screenIndex))) {
+      target = screenBefore(target.screenIndex);
+    }
     state.screen = target.screen;
     state.screenIndex = target.screenIndex || 0;
     // Manual navigation ends an in-flight edit-from-results round trip.
@@ -1078,7 +1116,7 @@
           PREVIEW.productJson = PREVIEW.productJson || {};
           for (var h in d.productJson) PREVIEW.productJson[h] = d.productJson[h];
         }
-        return { matches: d.matches, matrixApplied: Boolean(d.matrixApplied), partial: Boolean(d.partial) };
+        return { matches: d.matches, matrixApplied: Boolean(d.matrixApplied), partial: Boolean(d.partial), columnar: d.columnar || null };
       }).catch(function() { return sample; });
     }
     return fetch(SHOPIFY_APP_URL + '/api/storefront/quiz-recommend', {
@@ -1342,6 +1380,11 @@
   function introQuestionCards(q0) {
     var introVariant = (q0.optionStyle && STYLE_TO_VARIANT[q0.optionStyle]) || 'chip';
     var introOpts = visibleOptions(q0);
+    // v3 boutique: "Surprise me" is always the last tile, with a sparkle.
+    if (poolBoutique()) {
+      introOpts = introOpts.filter(function(o) { return !o.selectAll; })
+        .concat(introOpts.filter(function(o) { return o.selectAll; }));
+    }
     var cards = el('div', VARIANT_CONTAINER[introVariant] + countClass(introOpts.length));
     introOpts.forEach(function(opt, i) {
       var btn = el('button', VARIANT_BTN_CLASS[introVariant], optionButtonHtml(opt, introVariant));
@@ -1444,7 +1487,7 @@
       var askHead = el('div', 'gq-ci-ask-head');
       askHead.appendChild(el('h3', 'gq-intro-question-title', escapeHtml(q0.prompt)));
       if (screens.length > 1 && config.progressStyle !== 'none') {
-        askHead.appendChild(el('span', 'gq-ci-count', TH('stepCount', '{n} of {total}', { n: 1, total: screens.length })));
+        askHead.appendChild(el('span', 'gq-ci-count', TH('stepCount', '{n} of {total}', { n: 1, total: stepProgress(0).total })));
       }
       ask.appendChild(askHead);
       if (q0.helperText) ask.appendChild(el('p', 'gq-intro-question-helper', escapeHtml(q0.helperText)));
@@ -1592,7 +1635,13 @@
     // (pruneDownstreamAnswers) — so a gated question behaves exactly like
     // one whose options are all conditional.
     if (q.showIf && !conditionMet(q.showIf)) return [];
-    return q.options.filter(function(opt) { return conditionMet(opt.showIf); });
+    var opts = q.options.filter(function(opt) { return conditionMet(opt.showIf); });
+    var br = branchState(q);
+    if (!br) return opts;
+    // A question the pool skips shows nothing (same paths as a showIf);
+    // "open to anything" only shows beside two or more real choices.
+    if (br.skip) return [];
+    return opts.filter(function(o) { return o.selectAll || br.ok[o.axisValue] === true; });
   }
 
   // A screen every question of which has no visible options is unanswerable —
@@ -1604,6 +1653,191 @@
       if (visibleOptions(flow.questions[qIdxs[j]]).length > 0) return false;
     }
     return true;
+  }
+
+  // ---- Pool branching (contract 3, brief section 6) ----
+  //
+  // Shops on the pool engine get a `branching` block in
+  // recommendation-config: one [length, shape, finish] row per product the
+  // shop can recommend, in brief answer IDs. An option of a branching
+  // question shows only when at least `threshold` rows match it AND every
+  // earlier specific answer to a branching question (multi-select is a
+  // union), so a shopper is never offered a combination the catalog can't
+  // fill. Fewer than two options left skips the question; exactly one is
+  // recorded for the shopper. No block (every other shop) = no branching.
+  var branchMemo = { flow: null, counts: {} };
+
+  function branching() {
+    var b = flow && flow.branching;
+    if (!b || typeof b !== 'object' || !b.questions || typeof b.questions !== 'object' || !b.pool) return null;
+    return Array.isArray(b.pool.rows) && Array.isArray(b.pool.columns) ? b : null;
+  }
+
+  function own(obj, key) {
+    return Boolean(obj) && Object.prototype.hasOwnProperty.call(obj, key);
+  }
+
+  // A question's branching entry with its pool column index, or null.
+  function branchEntry(q) {
+    var b = branching();
+    var e = b && q && own(b.questions, q.axisKey) ? b.questions[q.axisKey] : null;
+    if (!e || !e.values || typeof e.values !== 'object') return null;
+    var col = b.pool.columns.indexOf(e.column);
+    return col === -1 ? null : { col: col, values: e.values };
+  }
+
+  // Pool IDs of a specific answer as a set; null for "open to anything".
+  function answerPoolIds(entry, a) {
+    if (!a || !a.values || a.values.length === 0 || a.selectAll || a.values.indexOf(ANY_VALUE) !== -1) return null;
+    var ids = {};
+    a.values.forEach(function(v) {
+      if (own(entry.values, v)) ids[entry.values[v]] = true;
+    });
+    return ids;
+  }
+
+  // Pool rows per option ID for question qi under the earlier specific
+  // answers. Memoized per answer prefix: every render asks several times.
+  function branchCounts(qi, entry) {
+    if (branchMemo.flow !== flow) branchMemo = { flow: flow, counts: {} };
+    var filters = [];
+    var sig = String(qi);
+    for (var j = 0; j < qi; j++) {
+      var ej = branchEntry(flow.questions[j]);
+      var ids = ej && answerPoolIds(ej, state.answers[j]);
+      if (!ids) continue;
+      filters.push({ col: ej.col, ids: ids });
+      sig += '|' + ej.col + '=' + Object.keys(ids).sort().join(',');
+    }
+    if (own(branchMemo.counts, sig)) return branchMemo.counts[sig];
+    var counts = {};
+    branching().pool.rows.forEach(function(row) {
+      if (!Array.isArray(row)) return;
+      for (var f = 0; f < filters.length; f++) {
+        if (filters[f].ids[row[filters[f].col]] !== true) return;
+      }
+      var id = String(row[entry.col]);
+      counts[id] = (own(counts, id) ? counts[id] : 0) + 1;
+    });
+    branchMemo.counts[sig] = counts;
+    return counts;
+  }
+
+  // { ok: {axisValue: true}, skip, only } for a branching question, null
+  // for any other. skip = fewer than two specific options left; only =
+  // the single one left, recorded as the shopper's answer.
+  function branchState(q) {
+    var entry = branchEntry(q);
+    var qi = entry ? flow.questions.indexOf(q) : -1;
+    if (qi === -1) return null;
+    var counts = branchCounts(qi, entry);
+    var t = Number(branching().threshold);
+    var min = t >= 1 ? Math.floor(t) : 6;
+    var ok = {};
+    var shown = [];
+    q.options.forEach(function(o) {
+      if (o.selectAll || ok[o.axisValue] === true || !conditionMet(o.showIf) || !own(entry.values, o.axisValue)) return;
+      var id = String(entry.values[o.axisValue]);
+      if ((own(counts, id) ? counts[id] : 0) >= min) {
+        ok[o.axisValue] = true;
+        shown.push(o);
+      }
+    });
+    return { ok: ok, skip: shown.length < 2, only: shown.length === 1 ? shown[0] : null };
+  }
+
+  function clearAnswer(qi) {
+    var a = state.answers[qi];
+    if (a && a.axisKey) delete state.criteria[a.axisKey];
+    state.answers[qi] = undefined;
+  }
+
+  // The pool decides a skipped question's answer: the one option left
+  // (marked auto), or none. A question shown again because an earlier
+  // answer changed drops its auto answer so the shopper picks.
+  function settleBranchAnswer(qi) {
+    var q = flow.questions[qi];
+    var br = branchState(q);
+    if (!br) return;
+    var a = state.answers[qi];
+    // The zero state's loosen tap is the shopper's own "any": it stands.
+    if (a && a.loosened && br.skip) return;
+    if (!br.skip || !br.only) {
+      if (a && (br.skip || a.auto)) clearAnswer(qi);
+      return;
+    }
+    if (a && a.auto && a.values.length === 1 && a.values[0] === br.only.axisValue) return;
+    recordAnswer(qi, { axisKey: q.axisKey, values: [br.only.axisValue], selectAll: false, auto: true });
+  }
+
+  // In question order, since each settled answer narrows the next one.
+  function syncBranchAnswers() {
+    if (!branching()) return;
+    for (var qi = 0; qi < flow.questions.length; qi++) settleBranchAnswer(qi);
+  }
+
+  // Step counter and pips. With pool branching they count only the
+  // screens this shopper will see: a screen the answers skip drops out of
+  // both numbers (so the total can shrink after an answer), and "Step 3
+  // of 5" never promises a step that won't come. Without branching the
+  // count stays fixed, as it always was.
+  function stepProgress(screenIdx) {
+    if (!branching()) return { n: screenIdx + 1, total: screens.length };
+    var n = 0;
+    var total = 0;
+    for (var s = 0; s < screens.length; s++) {
+      if (screenFullyHidden(s)) continue;
+      total++;
+      if (s <= screenIdx) n++;
+    }
+    return { n: Math.max(1, n), total: Math.max(1, total) };
+  }
+
+  // Brief answer IDs for analytics, where the widget knows them: the pool
+  // mapping of a branching question, and "surprise" for "open to
+  // anything". Branching shops only, so other shops' events are unchanged.
+  function answerIds(q, a) {
+    if (!branching() || !q || !a || !a.values) return undefined;
+    if (a.selectAll || a.values.indexOf(ANY_VALUE) !== -1) return ['surprise'];
+    var entry = branchEntry(q);
+    if (!entry) return undefined;
+    var ids = [];
+    a.values.forEach(function(v) {
+      var id = own(entry.values, v) ? entry.values[v] : null;
+      if (typeof id === 'string' && ids.indexOf(id) === -1) ids.push(id);
+    });
+    return ids.length ? ids : undefined;
+  }
+
+  // Auto-recorded answers on a screen the shopper passes over still count
+  // as that step's answer in analytics.
+  function fireAutoAnswers(screenIdx) {
+    (screens[screenIdx] || []).forEach(function(qi) {
+      var a = state.answers[qi];
+      var q = flow.questions[qi];
+      if (!a || !a.auto || !q) return;
+      trackEvent('quiz_question_answered', { qi: qi, q: q.axisKey, vals: a.values.slice(0, 16), ids: answerIds(q, a), auto: true });
+    });
+  }
+
+  // A screen with nothing to show (showIf, or the pool skipped it) reached
+  // via history or a config change: move past it in place instead of
+  // stranding the shopper.
+  function skipDeadScreen(screenIdx) {
+    setTimeout(function() {
+      if (state.screen !== 'question' || state.screenIndex !== screenIdx) return;
+      syncBranchAnswers();
+      var next = screenIdx + 1;
+      while (next < screens.length && screenFullyHidden(next)) next++;
+      if (next < screens.length) {
+        state.screenIndex = next;
+      } else {
+        routeAfterQuestions();
+      }
+      saveState();
+      replaceStep();
+      render('forward');
+    }, 0);
   }
 
   function markSelected(btn) {
@@ -1660,22 +1894,10 @@
       }
     });
 
-    // Dead screen (every option hidden by showIf) reached via history or a
-    // config change: skip past it in place instead of stranding the shopper.
+    // Dead screen (every option hidden by showIf or the pool) reached via
+    // history or a config change: skip past it in place.
     if (screenFullyHidden(screenIdx)) {
-      setTimeout(function() {
-        if (state.screen !== 'question' || state.screenIndex !== screenIdx) return;
-        var next = screenIdx + 1;
-        while (next < screens.length && screenFullyHidden(next)) next++;
-        if (next < screens.length) {
-          state.screenIndex = next;
-        } else {
-          routeAfterQuestions();
-        }
-        saveState();
-        replaceStep();
-        render('forward');
-      }, 0);
+      skipDeadScreen(screenIdx);
       return screen;
     }
 
@@ -1744,8 +1966,10 @@
 
     if (needsContinue) {
       // The last question screen's CTA promises the payoff ("Show my
-      // matches"), not another generic Continue.
-      var isLast = screenIdx === screens.length - 1;
+      // matches"), not another generic Continue. With pool branching the
+      // last screen is the last one this shopper will see.
+      var prog = stepProgress(screenIdx);
+      var isLast = branching() ? prog.n === prog.total : screenIdx === screens.length - 1;
       var ctaLabel = isLast
         ? ((config.results && config.results.showMatchesLabel) || 'Show my matches')
         : T('next', 'Continue');
@@ -1851,7 +2075,9 @@
   // Finish preview on a card (displayMeta.texture, migration 086): a small
   // swatch drawn in CSS (flat creme, pearl shimmer, glitter, chrome, sheer
   // jelly, matte). Closed set; displayMeta.swatch tints the flat ones.
-  var TEXTURES = { creme: 1, matte: 1, shimmer: 1, sparkle: 1, chrome: 1, sheer: 1, rainbow: 1, french: 1 };
+  // glossy / glazed / velvet: Glamnetic's Finish question (v3), high
+  // shine, pearl glaze and a cat-eye band.
+  var TEXTURES = { creme: 1, matte: 1, shimmer: 1, sparkle: 1, chrome: 1, sheer: 1, rainbow: 1, french: 1, glossy: 1, glazed: 1, velvet: 1 };
   var HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
   function textureHtml(meta) {
     if (!meta || !TEXTURES[meta.texture]) return '';
@@ -1912,7 +2138,9 @@
         return (variant === 'dotchip' ? chipDotHtml(meta) : '') + chipText;
       }
       case 'boxed':
-        return textureHtml(meta) + '<span class="gq-option-visual-label">' + label + '</span>' + sub + CHECK_SVG;
+        return textureHtml(meta) + '<span class="gq-option-visual-label">' +
+          (opt.selectAll && poolBoutique() ? '<span class="gq-option-sparkle">' + SPARKLE_SVG + '</span>' : '') +
+          label + '</span>' + sub + CHECK_SVG;
       case 'nails':
         return nailSwatchHtml(meta, opt.selectAll) + '<span class="gq-option-visual-label">' + label + '</span>' + CHECK_SVG;
       default: // list
@@ -1984,7 +2212,18 @@
     // Nail swatches keep "Surprise me" as a tile in the grid (it's a color
     // choice there, not an escape hatch below the tiles).
     var anyInGrid = variant === 'nails' && anyOpt;
-    var list = el('div', VARIANT_CONTAINER[variant] + countClass(specific.length + (anyInGrid ? 1 : 0)));
+    // A question the pool trims keeps the grid of its full option count,
+    // so tiles stay the same size when a few drop out (4 shapes keep the
+    // 6-shape tile), and gq-grid-trimmed centres what's left so a short
+    // row doesn't read as tiles that failed to load.
+    var shownN = specific.length + (anyInGrid ? 1 : 0);
+    var layoutN = shownN;
+    if (branchEntry(q)) {
+      var all = q.options.filter(function(o) { return conditionMet(o.showIf); });
+      var allAny = all.some(function(o) { return o.selectAll; });
+      layoutN = Math.max(layoutN, all.filter(function(o) { return !o.selectAll; }).length + (variant === 'nails' && allAny ? 1 : 0));
+    }
+    var list = el('div', VARIANT_CONTAINER[variant] + countClass(layoutN) + (layoutN > shownN ? ' gq-grid-trimmed' : ''));
 
     specific.forEach(function(opt, idx) {
       var btn = el('button', VARIANT_BTN_CLASS[variant], optionButtonHtml(opt, variant));
@@ -2010,7 +2249,8 @@
     // "Open to anything" renders as a full-width dashed escape hatch,
     // visually distinct from the tiles — selecting it clears them.
     if (anyOpt && !anyInGrid) {
-      var anyBtn = el('button', 'gq-option-any', '<span>' + escapeHtml(anyOpt.label) + '</span>');
+      var anyBtn = el('button', 'gq-option-any',
+        (poolBoutique() ? '<span class="gq-option-sparkle">' + SPARKLE_SVG + '</span>' : '') + '<span>' + escapeHtml(anyOpt.label) + '</span>');
       anyBtn.type = 'button';
       var cur = draft[qi];
       if (cur && cur.options.indexOf(anyOpt) !== -1) anyBtn.classList.add('is-selected');
@@ -2060,6 +2300,7 @@
         qi: qi,
         q: q.axisKey,
         vals: (a.values || []).slice(0, 16),
+        ids: answerIds(q, a),
         edit: Boolean(editReturn) || undefined,
       });
     });
@@ -2070,7 +2311,10 @@
   function advanceFrom(screenIdx) {
     // Skip screens whose every option is hidden by the answers so far.
     var next = screenIdx + 1;
-    while (next < screens.length && screenFullyHidden(next)) next++;
+    while (next < screens.length && screenFullyHidden(next)) {
+      fireAutoAnswers(next);
+      next++;
+    }
     if (next < screens.length) {
       state.screen = 'question';
       state.screenIndex = next;
@@ -2089,6 +2333,9 @@
   // THAT screen returns to results (editReturn persists until then).
   function finishCommit(screenIdx) {
     committing = false; // acknowledge window over; taps commit again
+    // Pool-skipped questions take their answer from the new answers (an
+    // edit settles them in pruneDownstreamAnswers, in order).
+    if (!editReturn) syncBranchAnswers();
     fireAnswerEvents(screenIdx);
     if (editReturn) {
       var broken = pruneDownstreamAnswers();
@@ -2177,17 +2424,21 @@
     // nothing (quiz_progress_style, migration 049).
     var progressStyle = (config && config.progressStyle) || 'pips';
     var right = el('div', 'gq-progress-wrap');
+    // Shown steps only when the pool skips some (stepProgress).
+    var prog = stepProgress(isBonus ? screens.length - 1 : stepNumber - 1);
+    var total = prog.total;
+    if (!isBonus) stepNumber = prog.n;
     if (progressStyle !== 'none') {
       var boutique = boutiqueActive();
       right.appendChild(el('span', 'gq-step-count',
         isBonus
           ? (boutique ? TH('optionalStep', 'Optional') : TH('bonusStep', 'Bonus'))
           : (boutique ? '<span class="gq-step-word">' + TH('stepWord', 'Step') + ' </span>' : '') +
-            TH('stepCount', '{n} of {total}', { n: stepNumber, total: screens.length })));
+            TH('stepCount', '{n} of {total}', { n: stepNumber, total: total })));
     }
     if (progressStyle === 'pips') {
       var pips = el('div', 'gq-pips');
-      for (var i = 0; i < screens.length; i++) {
+      for (var i = 0; i < total; i++) {
         var cls = 'gq-pip';
         if (!isBonus) {
           if (i < stepNumber - 1) cls += ' gq-pip--done';
@@ -2203,7 +2454,7 @@
       // Completed steps only — the current step is in progress, matching
       // the pips' done/current semantics (a 1-question quiz starts at 0%,
       // not 100%).
-      var pct = isBonus ? 100 : Math.round(((stepNumber - 1) / screens.length) * 100);
+      var pct = isBonus ? 100 : Math.round(((stepNumber - 1) / total) * 100);
       var fill = el('span', 'gq-progress-bar-fill');
       fill.style.width = pct + '%';
       bar.appendChild(fill);
@@ -2998,9 +3249,7 @@
             (data.matches.length === 0 && data.error)) {
           throw new Error('quiz-recommend empty');
         }
-        state.matches = (data && data.matches) || [];
-        state.matrixApplied = Boolean(data && data.matrixApplied);
-        state.partial = Boolean(data && data.partial);
+        storeRecommend(data);
         state.screen = 'results';
         // Fresh results arrival re-arms T2's computation screen. Lives on
         // state (persisted) so a reload of already-computed results does
@@ -3008,11 +3257,8 @@
         state.t2ComputeDone = false;
         saveState();
         pushStep();
-        trackEvent('quiz_results_shown', {
-          n: state.matches.length,
-          recs: state.matches.slice(0, 12).map(function(m) { return m.productHandle; }).filter(Boolean),
-          partial: state.partial || undefined,
-        });
+        setResultParam(resultKeyOf(state));
+        trackEvent('quiz_results_shown', resultsShownProps());
         render('forward');
       })
       .catch(function() {
@@ -3034,10 +3280,207 @@
       });
   }
 
-  // Re-run recommend after the shade resolves (photo or manual pick) and
-  // re-render results in place.
+  // A quiz-recommend response onto state. `columnar` (contract 4) comes
+  // only from shops on the pool engine; null keeps every results path on
+  // today's behavior.
+  function storeRecommend(data) {
+    state.matches = data.matches || [];
+    state.matrixApplied = Boolean(data.matrixApplied);
+    state.partial = Boolean(data.partial);
+    state.columnar = columnarFrom(data.columnar);
+  }
+
+  var HEADER_KINDS = { normal: 1, relaxed: 1, fewer: 1, none: 1 };
+  // What quiz-recommend accepts as a key (it ignores anything else), so
+  // ?r= needs no escaping either.
+  var RESULT_KEY_RE = /^[a-z0-9.]{1,64}$/;
+  function columnarFrom(c) {
+    if (!c || typeof c !== 'object') return null;
+    var h = c.header && typeof c.header === 'object' ? c.header : {};
+    var rung = Number(c.rung);
+    return {
+      rung: rung >= 1 && rung <= 5 ? Math.floor(rung) : null,
+      exactCount: Number(c.exactCount) >= 0 ? Number(c.exactCount) : null,
+      header: {
+        kind: own(HEADER_KINDS, h.kind) ? h.kind : 'normal',
+        text: typeof h.text === 'string' && h.text.trim() ? h.text.trim() : null,
+      },
+      bestMatchBadge: c.bestMatchBadge === true,
+      alsoMatched: Array.isArray(c.alsoMatched) ? c.alsoMatched.slice(0, 12) : [],
+      resultKey: typeof c.resultKey === 'string' && RESULT_KEY_RE.test(c.resultKey) ? c.resultKey : null,
+      loosen: c.loosen && typeof c.loosen.axisKey === 'string' && typeof c.loosen.label === 'string' && c.loosen.label.trim()
+        ? { axisKey: c.loosen.axisKey, label: c.loosen.label.trim() }
+        : null,
+      answers: c.answers && typeof c.answers === 'object' && !Array.isArray(c.answers) ? c.answers : null,
+    };
+  }
+
+  function resultKeyOf(s) {
+    return (s && s.columnar && s.columnar.resultKey) || null;
+  }
+
+  // "Best match" on the first card: the pool engine says when (exact on
+  // every answer); otherwise only when the merchant's rules, not a
+  // fallback ordering, put it first.
+  function bestMatchClaim() {
+    return state.columnar ? state.columnar.bestMatchBadge : Boolean(state.matrixApplied);
+  }
+
+  function resultsShownProps(extra) {
+    var matches = Array.isArray(state.matches) ? state.matches : [];
+    var props = {
+      n: matches.length,
+      recs: matches.slice(0, 12).map(function(m) { return m.productHandle; }).filter(Boolean),
+      partial: state.partial || undefined,
+    };
+    // Pool engine (contract 5): the six shown, the ladder rung used and
+    // the result key, which groups events by answer path.
+    if (state.columnar) {
+      props.handles = matches.slice(0, 6).map(function(m) { return m.productHandle; }).filter(Boolean);
+      props.rung = state.columnar.rung || undefined;
+      props.rk = state.columnar.resultKey || undefined;
+    }
+    if (extra) for (var k in extra) props[k] = extra[k];
+    return props;
+  }
+
+  // Results permalink (contract 4): results carry ?r=<resultKey> so the
+  // link re-renders the same picks. Other query params stay; the step
+  // hash is untouched. Shops without the pool engine never get one.
+  // ownResultKey is the r= this widget wrote or opened, and clearing only
+  // ever removes that one: an r= the page came with (a referral code,
+  // say) survives a fresh run.
+  var ownResultKey = null;
+  function setResultParam(key) {
+    if (PREVIEW || !branching()) return;
+    var cur = urlParam('r');
+    if (!key && (cur === null || cur !== ownResultKey)) return;
+    ownResultKey = key || null;
+    try {
+      var params = location.search.replace(/^\?/, '').split('&').filter(function(p) {
+        return p && p.split('=')[0] !== 'r';
+      });
+      if (key) params.push('r=' + encodeURIComponent(key));
+      var search = params.length ? '?' + params.join('&') : '';
+      if (search === location.search) return;
+      history.replaceState(history.state, '', location.pathname + search + location.hash);
+    } catch (e) {}
+  }
+
+  function urlParam(name) {
+    var m = new RegExp('(?:^|[?&])' + name + '=([^&#]*)').exec(location.search);
+    if (!m) return null;
+    try { return decodeURIComponent(m[1].replace(/\+/g, ' ')); } catch (e) { return null; }
+  }
+
+  function resultKeyFromUrl() {
+    var key = urlParam('r');
+    return key !== null && RESULT_KEY_RE.test(key) ? key : null;
+  }
+
+  // Answers back from a result's criteria (permalink boot), so the answers
+  // line and Edit work. "_any" (or "surprise") is "open to anything".
+  function restoreAnswers(map) {
+    state.answers = [];
+    state.criteria = {};
+    if (!map) return;
+    flow.questions.forEach(function(q, qi) {
+      var raw = own(map, q.axisKey) ? map[q.axisKey] : null;
+      var vals = (Array.isArray(raw) ? raw : raw ? [raw] : []).filter(function(v) { return typeof v === 'string'; });
+      if (vals.length === 0) return;
+      var any = vals.indexOf(ANY_VALUE) !== -1 ||
+        (vals.indexOf('surprise') !== -1 && !q.options.some(function(o) { return o.axisValue === 'surprise' && !o.selectAll; }));
+      var values = any ? [ANY_VALUE] : vals.filter(function(v, i) {
+        return vals.indexOf(v) === i && q.options.some(function(o) { return !o.selectAll && o.axisValue === v; });
+      });
+      if (values.length === 0) return;
+      recordAnswer(qi, { axisKey: q.axisKey, values: values, selectAll: any });
+    });
+    syncBranchAnswers();
+  }
+
+  // ?r= boot: show those results straight away. quiz-recommend serves the
+  // cached picks for the key (or re-runs them from the answers it encodes
+  // once the cache expired). It answers ANY key, a dead or foreign one
+  // with generic "no answers" picks, so a result only counts when it
+  // echoes the same key (the engine re-encodes it canonically) and gives
+  // real answers back. Otherwise the shopper gets the quiz this tab would
+  // have shown, the param stays as it was, and this tab won't ask again.
+  function bootFromResultKey(key) {
+    var prev = state;
+    var shell = el('div', 'gq-step gq-step--permalink');
+    showWorking(shell, T('loadingResults', 'Loading your matches…'));
+    swapScreen(shell, 'forward', ++renderSeq);
+    fetch(SHOPIFY_APP_URL + '/api/storefront/quiz-recommend', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      // No criteria: the key alone names the result. The rest is the same
+      // analytics context a quiz run sends (shopper join, store preview).
+      body: JSON.stringify({
+        shopDomain: shopDomain,
+        resultKey: key,
+        cartToken: cartToken || undefined,
+        deviceType: isMobile() ? 'mobile' : 'desktop',
+        storePreview: Boolean(window.GLEAME_QUIZ_FORCE || window.GLEAME_QUIZ_STORE_PREVIEW) || undefined,
+      }),
+    }).then(function(res) {
+      if (!res.ok) throw new Error('quiz-recommend ' + res.status);
+      return res.json();
+    }).then(function(data) {
+      var col = data && Array.isArray(data.matches) ? columnarFrom(data.columnar) : null;
+      if (!col || col.resultKey !== key) throw new Error('quiz-recommend permalink: not this key');
+      state = {
+        screen: 'intro', screenIndex: 0, criteria: {}, answers: [],
+        hasPhoto: false, detectedShade: null, matches: null,
+        matrixApplied: false, partial: false, columnar: null, quizStarted: false,
+        leadDone: prev.leadDone, leadToken: prev.leadToken || null, leadReportedKey: null,
+        gridAdded: null, shopperName: prev.shopperName,
+      };
+      storeRecommend(data);
+      restoreAnswers(state.columnar.answers);
+      if (!state.answers.some(function(a) { return a && a.values && a.values.length > 0; })) {
+        throw new Error('quiz-recommend permalink: no answers');
+      }
+      state.screen = 'results';
+      saveState();
+      replaceStep();
+      setResultParam(key);
+      // No quiz_results_shown: opening a link isn't a finished quiz, and the
+      // event would count a completion in Analytics and fire ad pixels.
+      render('forward');
+    }).catch(function() {
+      state = prev;
+      state.deadResultKey = key;
+      saveState();
+      replaceStep();
+      render('forward');
+    });
+  }
+
+  // "Show me more" from the zero state (contract 4 loosen): the named
+  // answer becomes "open to anything" and the picks re-run. Only that
+  // answer changes; nothing is widened behind the shopper's back.
+  function loosenAnswer(axisKey) {
+    var qi = -1;
+    flow.questions.forEach(function(q, i) { if (q.axisKey === axisKey && qi === -1) qi = i; });
+    var q = qi === -1 ? null : flow.questions[qi];
+    // loosened: a later edit keeps it, even where the pool would record
+    // its single remaining option (settleBranchAnswer).
+    if (q) state.answers[qi] = { axisKey: axisKey, values: [ANY_VALUE], selectAll: true, loosened: true };
+    state.criteria[axisKey] = q && !q.multiSelect ? ANY_VALUE : [ANY_VALUE];
+    trackEvent('quiz_question_answered', {
+      qi: qi === -1 ? undefined : qi, q: axisKey, vals: [ANY_VALUE], ids: ['surprise'], edit: true, loosen: true,
+    });
+    reportPreviewPath();
+    saveState();
+    rerunWithShade(true);
+  }
+
+  // Re-run recommend after the shade resolves (photo or manual pick) or an
+  // answer was loosened, and re-render results in place. `fresh` = a new
+  // answer set, so the results count as shown again.
   var rerunPending = false;
-  function rerunWithShade() {
+  function rerunWithShade(fresh) {
     if (rerunPending) return; // double-tap guard — one recommend in flight
     rerunPending = true;
     // The results screen is live behind this call — show the standard
@@ -3052,11 +3495,11 @@
             (data.matches.length === 0 && data.error)) {
           throw new Error('quiz-recommend empty');
         }
-        state.matches = data.matches;
-        state.matrixApplied = Boolean(data.matrixApplied);
-        state.partial = Boolean(data.partial);
+        storeRecommend(data);
         saveState();
         rerunPending = false;
+        setResultParam(resultKeyOf(state));
+        if (fresh === true) trackEvent('quiz_results_shown', resultsShownProps());
         render('forward');
       })
       .catch(function() {
@@ -3075,7 +3518,7 @@
           retry.type = 'button';
           retry.onclick = function() {
             if (err.parentNode) err.parentNode.removeChild(err);
-            rerunWithShade();
+            rerunWithShade(fresh);
           };
           err.appendChild(retry);
           screenEl.appendChild(err);
@@ -3115,9 +3558,17 @@
     for (var s = 0; s < screens.length; s++) {
       for (var j = 0; j < screens[s].length; j++) {
         var qi = screens[s][j];
+        var q = flow.questions[qi];
+        // Pool-skipped questions are settled, not pruned; an auto answer
+        // dropped because its question shows again leaves that screen open.
+        var br = branchState(q);
+        if (br && (br.skip || (state.answers[qi] && state.answers[qi].auto))) {
+          settleBranchAnswer(qi);
+          if (!br.skip && broken === -1) broken = s;
+          continue;
+        }
         var a = state.answers[qi];
         if (!a || !a.values || a.values.length === 0) continue;
-        var q = flow.questions[qi];
         var vis = visibleOptions(q);
         var visValues = {};
         var visAny = false;
@@ -3139,6 +3590,8 @@
         }
       }
     }
+    // A question the pool skipped before and shows now has no answer yet.
+    if (broken === -1 && branching() && answeredScreenCount() < screens.length) broken = answeredScreenCount();
     return broken;
   }
 
@@ -3203,6 +3656,8 @@
 
     // Empty state stands alone — a personalized headline plus "0 picks
     // made for your answers" above the apology reads as a contradiction.
+    // The pool engine's zero state offers its one-tap loosen instead.
+    if (matches.length === 0 && state.columnar) return buildZeroState(screen);
     if (matches.length === 0) {
       screen.appendChild(el('div', 'gq-results-head'));
       var none = el('div', 'gq-error',
@@ -3219,8 +3674,11 @@
     postPreviewMsg({ type: 'gleame:screen', screen: 'results' });
 
     var head = el('div', 'gq-results-head');
-    head.appendChild(el('h2', 'gq-headline gq-results-headline', renderAccent(renderName(headline))));
-    if (results.subtext) {
+    var note = resultsNote();
+    head.appendChild(note
+      ? el('h2', 'gq-headline gq-results-headline gq-results-headline--note', escapeHtml(note))
+      : el('h2', 'gq-headline gq-results-headline', renderAccent(renderName(headline))));
+    if (results.subtext && !note) {
       // {match_word} pluralizes for brands whose rules return one or two
       // picks (e.g. a lone clip-in) — "{count} {match_word} made for you".
       head.appendChild(el('p', 'gq-results-subtext',
@@ -3341,6 +3799,7 @@
     var screen = el('div', 'gq-results gq-results--grid');
 
     if (matches.length === 0) {
+      if (state.columnar) return buildZeroState(screen);
       var none = el('div', 'gq-error',
         '<p>' + TH('noMatch', 'We couldn’t find a match this time — try adjusting your answers.') + '</p>');
       var restart0 = el('button', 'gq-retry', TH('startOver', 'Start over'));
@@ -3357,8 +3816,13 @@
     var headline = (hasPhotoNow && definitive)
       ? (results.headlinePhoto || "Here's your match — on you")
       : (results.headlineNoPhoto || 'Your matches');
-    head.appendChild(el('h2', 'gq-headline gq-results-headline', renderAccent(renderName(headline))));
-    if (results.subtext) {
+    // Pool engine: a relaxed or short result says so in the header
+    // ("6 sets" copy would be a promise the grid doesn't keep).
+    var note = resultsNote();
+    head.appendChild(note
+      ? el('h2', 'gq-headline gq-results-headline gq-results-headline--note', escapeHtml(note))
+      : el('h2', 'gq-headline gq-results-headline', renderAccent(renderName(headline))));
+    if (results.subtext && !note) {
       head.appendChild(el('p', 'gq-results-subtext',
         escapeHtml(renderName(results.subtext)
           .replace(/\{count\}/g, String(matches.length))
@@ -3393,6 +3857,19 @@
     });
     screen.appendChild(grid);
 
+    // Pool engine: the next six candidates, compact, same add-to-bag.
+    var also = state.columnar && Array.isArray(state.columnar.alsoMatched) ? state.columnar.alsoMatched : [];
+    if (also.length > 0) {
+      var alsoSec = el('section', 'gq-gr-also');
+      alsoSec.appendChild(el('h3', 'gq-gr-also-title', escapeHtml(results.alsoMatchedLabel || 'Also matched for you')));
+      var alsoRow = el('div', 'gq-gr-also-row');
+      also.forEach(function(m, i) {
+        alsoRow.appendChild(buildGridCard(m, matches.length + i, definitive, false, results, bd, refreshAll, null, true));
+      });
+      alsoSec.appendChild(alsoRow);
+      screen.appendChild(alsoSec);
+    }
+
     if (state.partial && shadeActionable) screen.appendChild(buildShadeGate());
     if (definitive) {
       var xsell = buildCrossSellSection(matches, results);
@@ -3414,6 +3891,46 @@
 
     if (definitive) screen.appendChild(buildGridBagBar(bd, refreshers));
     refreshAll();
+    return screen;
+  }
+
+  // The pool engine's header line when it isn't the normal case: colors
+  // or style relaxed, or fewer than six exact matches (contract 4).
+  function resultsNote() {
+    var h = state.columnar && state.columnar.header;
+    return h && h.kind !== 'normal' && h.text ? h.text : null;
+  }
+
+  // Zero exact matches (pool engine): say so plainly and offer one tap
+  // that loosens the most restrictive answer and re-runs. Length, shape
+  // and finish are never widened on the shopper's behalf.
+  function buildZeroState(screen) {
+    var col = state.columnar;
+    screen.classList.add('gq-results--zero');
+    var head = el('div', 'gq-results-head gq-gr-head');
+    head.appendChild(el('p', 'gq-eyebrow gq-gr-eyebrow', TH('yourMatches', 'Your matches')));
+    head.appendChild(el('h2', 'gq-headline gq-results-headline gq-results-headline--note',
+      escapeHtml(resultsNote() || T('zeroHeadline', 'We don’t have that combination yet.'))));
+    screen.appendChild(head);
+    screen.appendChild(buildGridAnswers());
+    var box = el('div', 'gq-gr-zero');
+    box.appendChild(el('p', 'gq-gr-zero-text', col.loosen
+      ? TH('zeroLoosen', 'Open up one answer and we’ll show you what we have.')
+      : TH('zeroEdit', 'Change an answer above to see what we have.')));
+    if (col.loosen) {
+      var loosen = el('button', 'gq-add-btn gq-gr-loosen', escapeHtml(col.loosen.label));
+      loosen.type = 'button';
+      loosen.onclick = function() { loosenAnswer(col.loosen.axisKey); };
+      box.appendChild(loosen);
+    }
+    var restart = el('button', 'gq-link-btn gq-gr-zero-restart', escapeHtml((config.results || {}).restartLabel || 'Try another look'));
+    restart.type = 'button';
+    restart.onclick = function() {
+      trackEvent('quiz_restart', { from: state.screen });
+      restartQuiz();
+    };
+    box.appendChild(restart);
+    screen.appendChild(box);
     return screen;
   }
 
@@ -3549,17 +4066,27 @@
     return bar;
   }
 
-  function buildGridCard(m, idx, definitive, hasPhotoNow, results, bd, refreshAll, pendingKey) {
+  // Pool engine meta line: the match's length, shape and finish labels
+  // (contract 4), or null for any other match.
+  function matchMeta(m) {
+    var meta = m && m.meta;
+    if (!meta || typeof meta !== 'object') return null;
+    var toks = [meta.length, meta.shape, meta.finish].filter(function(t) { return typeof t === 'string' && t.trim(); });
+    return toks.length ? toks : null;
+  }
+
+  // compact: an "Also matched" card (smaller, no why line, no try-on).
+  function buildGridCard(m, idx, definitive, hasPhotoNow, results, bd, refreshAll, pendingKey, compact) {
     var key = matchKey(m);
-    var card = el('div', 'gq-gr-card');
+    var card = el('div', 'gq-gr-card' + (compact ? ' gq-gr-card--compact' : ''));
     var media = el('div', 'gq-media gq-gr-media');
     var img = el('img', 'gq-media-img');
     img.alt = m.title || m.productName || '';
     img.loading = idx < 2 ? 'eager' : 'lazy';
     media.appendChild(img);
     // Same claim rule as the featured layout: "Best match" only when the
-    // merchant's rules (not a fallback ordering) put this set first.
-    if (idx === 0 && state.matrixApplied) {
+    // merchant's rules (or the pool engine's exact rung) put this set first.
+    if (idx === 0 && bestMatchClaim()) {
       media.appendChild(el('span', 'gq-pill gq-pill--top gq-gr-pill', escapeHtml(results.bestMatchPill || 'Best match')));
     }
     card.appendChild(media);
@@ -3587,12 +4114,24 @@
     var price = el('span', 'gq-gr-price', '');
     body.appendChild(price);
     var specBits = [];
-    // Shopify's placeholder name for a single-variant product says nothing.
-    if (m.variantTitle && !/^default title$/i.test(m.variantTitle)) specBits.push(m.variantTitle);
-    if (m.quantity > 1) specBits.push(T('setsCount', '{n} sets', { n: m.quantity }));
-    if (specBits.length) body.appendChild(el('p', 'gq-gr-spec', escapeHtml(specBits.join(' · '))));
-    var why = whyFits(m) || m.tagline || (Array.isArray(m.reasons) && m.reasons[0]) || '';
-    if (why) body.appendChild(el('p', 'gq-gr-why', '<span class="gq-gr-why-mark">✓</span><span>' + escapeHtml(why) + '</span>'));
+    var meta = matchMeta(m);
+    if (meta) {
+      // Pool engine: "Short · Almond · Glossy" (phones keep the first two).
+      body.appendChild(el('p', 'gq-gr-spec gq-gr-meta', meta.map(function(t, i) {
+        var extra = i >= 2 ? ' gq-gr-meta--extra' : '';
+        return (i > 0 ? '<span class="gq-gr-meta-sep' + extra + '"> · </span>' : '') +
+          '<span class="gq-gr-meta-tok' + extra + '">' + escapeHtml(t) + '</span>';
+      }).join('')));
+    } else {
+      // Shopify's placeholder name for a single-variant product says nothing.
+      if (m.variantTitle && !/^default title$/i.test(m.variantTitle)) specBits.push(m.variantTitle);
+      if (m.quantity > 1) specBits.push(T('setsCount', '{n} sets', { n: m.quantity }));
+      if (specBits.length) body.appendChild(el('p', 'gq-gr-spec', escapeHtml(specBits.join(' · '))));
+    }
+    // Pool engine matches carry their own why line (reasons[0]), written
+    // against this shopper's answers; it wins over the static ones.
+    var why = (meta && Array.isArray(m.reasons) && m.reasons[0]) || whyFits(m) || m.tagline || (Array.isArray(m.reasons) && m.reasons[0]) || '';
+    if (why && !compact) body.appendChild(el('p', 'gq-gr-why', '<span class="gq-gr-why-mark">✓</span><span>' + escapeHtml(why) + '</span>'));
 
     // CTA setting (migration 092): View product as the button keeps the
     // grid's add logic behind a small link (or drops it when that's off).
@@ -3604,7 +4143,7 @@
       add.type = 'button';
       body.appendChild(add);
     }
-    if (results.matchFootnote) body.appendChild(buildMatchFootnote(results.matchFootnote));
+    if (results.matchFootnote && !compact) body.appendChild(buildMatchFootnote(results.matchFootnote));
     card.appendChild(body);
 
     var qty = Math.max(1, m.quantity || 1);
@@ -3685,7 +4224,7 @@
         }
       }
 
-      if (config.tryonEnabled === false || cached) return;
+      if (config.tryonEnabled === false || cached || compact) return;
       // One automatic try-on per photo: the card the shopper tapped, else
       // the first card (a photo from the photo step).
       var auto = hasPhotoNow && (pendingKey ? pendingKey === key : idx === 0);
@@ -3893,7 +4432,7 @@
 
     // "Top match" is a curation claim — only make it when the matrix
     // actually matched. AI-fallback picks get neutral position pills.
-    var isCuratedTop = idx === 0 && state.matrixApplied;
+    var isCuratedTop = idx === 0 && bestMatchClaim();
     card.appendChild(el('span', 'gq-pill' + (isCuratedTop ? ' gq-pill--top' : ''),
       escapeHtml(isCuratedTop ? (results.bestMatchPill || T('topMatch', 'Top match')) : T('matchN', 'Match {n}', { n: idx + 1 }))));
 
@@ -4752,7 +5291,7 @@
     state = {
       screen: 'intro', screenIndex: 0, criteria: {}, answers: [],
       hasPhoto: false, detectedShade: null, matches: null,
-      matrixApplied: false, partial: false,
+      matrixApplied: false, partial: false, columnar: null,
       quizStarted: false, // the restarted run gets its own quiz_start event
       // A captured/declined lead survives restarts — never re-ask the same
       // session for the email it already gave (or refused).
@@ -4763,6 +5302,8 @@
       gridAdded: null,
       // v3 Routine: the name given this session survives "Try another look".
       shopperName: state.shopperName,
+      // An ?r= this tab already found dead isn't asked about again.
+      deadResultKey: state.deadResultKey,
     };
     draft = {}; // ghost selections must not leak into intro option visibility
     editReturn = false;
@@ -4772,8 +5313,10 @@
     state.t2ComputeDone = false;
     // leadDone must survive a mid-restart reload too — persist the reset
     // state instead of clearing when there's a lead flag to keep.
-    if (state.leadDone || state.leadToken) saveState();
+    if (state.leadDone || state.leadToken || state.deadResultKey) saveState();
     else clearState();
+    // A fresh run no longer matches the results link.
+    setResultParam(null);
     replaceStep();
     render('back');
   }
@@ -5243,19 +5786,7 @@
     });
 
     if (screenFullyHidden(screenIdx)) {
-      setTimeout(function() {
-        if (state.screen !== 'question' || state.screenIndex !== screenIdx) return;
-        var next = screenIdx + 1;
-        while (next < screens.length && screenFullyHidden(next)) next++;
-        if (next < screens.length) {
-          state.screenIndex = next;
-        } else {
-          routeAfterQuestions();
-        }
-        saveState();
-        replaceStep();
-        render('forward');
-      }, 0);
+      skipDeadScreen(screenIdx);
       return screen;
     }
 
@@ -7439,9 +7970,7 @@
       state.screen = 'gate';
     } else if (step === 'results') {
       var sample = PREVIEW.sampleRecommend || { matches: [], matrixApplied: false, partial: false };
-      state.matches = sample.matches || [];
-      state.matrixApplied = !!sample.matrixApplied;
-      state.partial = !!sample.partial;
+      storeRecommend(sample);
       state.screen = 'results';
       // Editor jumps land on the results themselves; T2's computation
       // interstitial still shows when the preview is played through.
@@ -7641,7 +8170,7 @@
         state.hasPhoto = false; // File is gone — never persisted
         // A results screen restored without matches can't render; rewind
         // to the gate so the shopper takes one step, not five.
-        if (state.screen === 'results' && (!state.matches || state.matches.length === 0)) {
+        if (state.screen === 'results' && !hasResults()) {
           state.screen = 'gate';
         }
         // Guard restored indices against a changed question set — clampStep
@@ -7655,10 +8184,18 @@
 
       replaceStep();
       window.addEventListener('popstate', onPopState);
+      // Results permalink (pool engine only): ?r= renders those results,
+      // unless this tab's own session already holds them (a reload, or a
+      // mid-edit refresh, keeps the session) or already found the key dead.
+      var linkKey = !PREVIEW && branching() ? resultKeyFromUrl() : null;
+      if (linkKey && linkKey === resultKeyOf(state)) ownResultKey = linkKey;
+      if (linkKey && (linkKey === resultKeyOf(state) || linkKey === state.deadResultKey)) linkKey = null;
       // Studio deep link (V3-CONTRACTS §6): PREVIEW.overrides.step boots the
       // widget straight onto that screen (gallery strips, rail jumps).
       if (PREVIEW && PREVIEW.overrides && PREVIEW.overrides.step) {
         previewGoto(PREVIEW.overrides.step);
+      } else if (linkKey) {
+        bootFromResultKey(linkKey);
       } else {
         render('forward');
       }

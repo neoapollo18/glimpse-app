@@ -1,0 +1,49 @@
+{
+ "shop_id": "8121d154-2019-490f-9343-7bddbc1a64be",
+ "cross_sell_enabled": true,
+ "cross_sell_source": "manual",
+ "cross_sell_title": "Finish the look",
+ "cross_sell_subtext": "Everything your sets need to last",
+ "cross_sell_items": [
+  {
+   "when": null,
+   "title": "Brush-On Nail Glue",
+   "handle": "brush-on-nail-glue",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2023_03_brush-on-nail-glue_highres_1_jpg.png?v=1784135931",
+   "productId": "6535189102635"
+  },
+  {
+   "when": null,
+   "title": "Press-On Nail Remover",
+   "handle": "press-on-nail-remover",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/2026_03_PressOnNailRemover_New.webp?v=1774394347",
+   "productId": "7130235797547"
+  },
+  {
+   "when": null,
+   "title": "Adhesive Nail Tabs",
+   "handle": "adhesive-nail-tabs",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/products/2023_03_Brush-On-Nail-Tabs_HighRes.jpg?v=1762199191",
+   "productId": "6894972076075"
+  },
+  {
+   "when": null,
+   "title": "Press-On Nail Remover Pen",
+   "handle": "press-on-nail-remover-pen-nail-accessory",
+   "imageUrl": "https://cdn.shopify.com/s/files/1/0139/2302/4944/files/NailRemoverPen_1.webp?v=1790620776",
+   "productId": "10280685240363"
+  }
+ ],
+ "cross_sell_max": 3,
+ "bundle_discount_mode": "off",
+ "bundle_discount_type": "percentage",
+ "bundle_discount_value": null,
+ "bundle_discount_min_qty": null,
+ "bundle_discount_code": null,
+ "bundle_discount_shopify_id": null,
+ "bundle_discount_synced_at": null,
+ "bundle_discount_note": null,
+ "updated_at": "2026-10-17T19:24:36.527+00:00",
+ "created_at": "2026-10-12T22:49:53.487525+00:00",
+ "bundle_discount_once_per_customer": false
+}

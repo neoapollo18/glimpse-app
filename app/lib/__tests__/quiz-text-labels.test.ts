@@ -65,6 +65,10 @@ describe("UI text registry", () => {
     expect(uiTextApplies(uiTextEntry("nameQuestion")!, t3)).toBe(true);
     expect(uiTextApplies(uiTextEntry("nameQuestion")!, classic)).toBe(false);
     expect(uiTextApplies(uiTextEntry("selectAll")!, classic)).toBe(false);
+    // Pool (columnar) quizzes only: the zero state and the results link.
+    expect(uiTextApplies(uiTextEntry("zeroLoosen")!, grid)).toBe(false);
+    expect(uiTextApplies(uiTextEntry("zeroLoosen")!, { ...grid, pool: true })).toBe(true);
+    expect(uiTextApplies(uiTextEntry("loadingResults")!, { ...t3, pool: true })).toBe(false);
   });
 });
 

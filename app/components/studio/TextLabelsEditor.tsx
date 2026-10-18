@@ -173,12 +173,15 @@ function TranslateQuiz({
 export function TextLabelsEditor({
   settings,
   template,
+  pool = false,
   chatBusy,
   onPreviewUpdate,
 }: {
   settings: Record<string, unknown>;
   /** Loader `studio.template` (single source of truth). */
   template: string | null;
+  /** The shop's pool (columnar) matching engine is on: lists its strings. */
+  pool?: boolean;
   chatBusy: boolean;
   onPreviewUpdate: (p: { flow?: unknown; config?: unknown }) => void;
 }) {
@@ -187,11 +190,12 @@ export function TextLabelsEditor({
     template,
     grid: !template && settings.quiz_results_layout === "grid",
     boutique: !template && settings.quiz_ui_style === "boutique",
+    pool: !template && pool,
   };
   const entries = useMemo(
     () => UI_TEXT_ENTRIES.filter((e) => uiTextApplies(e, layout)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [template, layout.grid, layout.boutique],
+    [template, layout.grid, layout.boutique, layout.pool],
   );
 
   // Pre-filled: the merchant's text where set, else the default.

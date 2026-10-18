@@ -23,8 +23,9 @@ const CORS_HEADERS = {
  * imagery (fetched client-side via /products/{handle}.js) and streams
  * try-on previews in separately via /api/storefront/quiz-tryon.
  *
- * Request:  JSON { shopDomain, criteria: { axis_key: axis_value | [axis_value, ...] } }
- *           (arrays come from multi-select questions)
+ * Request:  JSON { shopDomain, criteria: { axis_key: axis_value | [axis_value, ...] }, resultKey? }
+ *           (arrays come from multi-select questions; resultKey = a columnar
+ *           shop's results permalink, which alone re-serves that result)
  * Response: {
  *   matches: [{ productId, variantId, variantNumericId, productHandle,
  *               productName, variantTitle, title, tagline, whyFits, rank,
@@ -34,6 +35,7 @@ const CORS_HEADERS = {
  *   matrixApplied: boolean,
  *   partial: boolean   // true when matched via containment (e.g. shade
  *                      // still unanswered) — the quiz shows the shade gate
+ *   columnar?: {...}   // columnar shops only, see columnar/engine.server.ts
  * }
  */
 // CORS preflight — Remix routes OPTIONS to the LOADER, not the action (same
@@ -57,13 +59,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     } catch {
       return json({ error: "Invalid JSON body" }, { status: 400, headers: CORS_HEADERS });
     }
-    const { shopDomain, criteria: rawCriteria, cartToken, deviceType, storePreview } = (body ?? {}) as {
+    const { shopDomain, criteria: rawCriteria, cartToken, deviceType, storePreview, resultKey: rawResultKey } = (body ?? {}) as {
       shopDomain?: string;
       criteria?: unknown;
       cartToken?: unknown;
       deviceType?: unknown;
       storePreview?: unknown;
+      resultKey?: unknown;
     };
+    // Shape-checked here; the engine decodes it strictly (pipeline.ts).
+    const resultKey =
+      typeof rawResultKey === "string" && /^[a-z0-9.]{1,64}$/.test(rawResultKey) ? rawResultKey : null;
 
     if (!shopDomain || typeof shopDomain !== "string") {
       return json({ error: "Missing required field: shopDomain" }, { status: 400, headers: CORS_HEADERS });
@@ -130,13 +136,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return json({ error: "Assistant not enabled" }, { status: 403, headers: CORS_HEADERS });
     }
 
-    const result = await computeQuizRecommendations({ verifiedShop, verifiedDomain, chatConfig, criteria, clientIP });
+    const result = await computeQuizRecommendations({ verifiedShop, verifiedDomain, chatConfig, criteria, clientIP, resultKey });
 
     // Analytics (2026-10-15 revamp): what this shopper answered and what the
     // quiz recommended, for every finished quiz (not only email leads).
     // Server-built from validated criteria and our own matches. Merchant
-    // test runs on the on-store preview send storePreview and stay out.
-    if (storePreview !== true && Array.isArray(result.matches) && result.matches.length > 0) {
+    // test runs on the on-store preview send storePreview and stay out, and
+    // so does a results permalink reload (no quiz was finished).
+    const permalinkReload = Object.keys(criteria).length === 0 && resultKey !== null && Boolean(result.columnar);
+    if (storePreview !== true && !permalinkReload && Array.isArray(result.matches) && result.matches.length > 0) {
       const token = typeof cartToken === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(cartToken.trim().split("?")[0])
         ? cartToken.trim().split("?")[0]
         : undefined;
@@ -149,6 +157,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         criteria,
         partial: Boolean(result.partial),
         n: result.matches.length,
+        // Columnar shops (brief section 8): the relaxation rung used and the
+        // permalink key, so results can be grouped by answer path.
+        ...(result.columnar ? { rung: result.columnar.rung, rk: result.columnar.resultKey } : {}),
         recs: result.matches.slice(0, 12).map((m, i) => ({
           h: m.productHandle,
           p: numeric(m.productId),

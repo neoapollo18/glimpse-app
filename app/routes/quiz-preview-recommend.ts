@@ -41,11 +41,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (!limit.allowed) return json({ error: "Too many requests" }, { status: 429 });
 
   let raw: unknown = null;
+  let rawKey: unknown = null;
   try {
-    raw = ((await request.json()) as { criteria?: unknown })?.criteria ?? null;
+    const body = (await request.json()) as { criteria?: unknown; resultKey?: unknown } | null;
+    raw = body?.criteria ?? null;
+    rawKey = body?.resultKey ?? null;
   } catch {
     return json({ error: "Invalid JSON body" }, { status: 400 });
   }
+  // Columnar permalink, same shape check as the storefront endpoint.
+  const resultKey = typeof rawKey === "string" && /^[a-z0-9.]{1,64}$/.test(rawKey) ? rawKey : null;
   // Same criteria validation as the storefront endpoint.
   const criteria: MultiCriteria = Object.create(null);
   if (raw && typeof raw === "object" && !Array.isArray(raw)) {
@@ -71,10 +76,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       chatConfig,
       criteria,
       clientIP: `preview:${shop.id}`,
+      resultKey,
     });
     // /products/<handle>.js lookalikes for the picks (the preview widget
-    // reads product images/prices from this map instead of the storefront).
-    const productJson = await previewProductJson(shop.id, result.matches);
+    // reads product images/prices from this map instead of the storefront),
+    // including a columnar shop's Also matched row.
+    const productJson = await previewProductJson(shop.id, [
+      ...result.matches,
+      ...(result.columnar?.alsoMatched ?? []),
+    ]);
     return json({ ...result, productJson });
   } catch (e) {
     console.error("[quiz-preview-recommend]", e);

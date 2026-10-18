@@ -29,6 +29,7 @@ import {
   getConfiguredProducts,
   mapRecommendationTuning,
   oneOf,
+  withStoredColumnar,
   type ChatAssistantConfig,
   type RecommendationTuning,
 } from "../lib/supabase.server";
@@ -172,6 +173,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       // template quiz turned on here serves classic until published, and
       // migration 081's trigger clears the stamp on any turn-off.
       const before = await getChatAssistantConfig(shopDomain, { throwOnError: true }).catch(() => null);
+      // Columnar matching is edited only in Studio: keep the stored spec.
+      if (config.recommendation_tuning) {
+        config.recommendation_tuning = await withStoredColumnar(shopDomain, config.recommendation_tuning);
+      }
       await saveChatAssistantConfig(shopDomain, {
         ...config,
         ...(before ? templateLivePatchForSave(before, config) : {}),

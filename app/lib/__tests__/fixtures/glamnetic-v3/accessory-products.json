@@ -1,0 +1,56 @@
+[
+ {
+  "id": "0491a112-660b-4da4-97f3-e904e3df5a92",
+  "shopify_id": "gid://shopify/Product/10280685240363",
+  "handle": "press-on-nail-remover-pen-nail-accessory",
+  "product_name": "Press-On Nail Remover Pen",
+  "status": "active",
+  "product_type": "New_Nail Accessories",
+  "price": 9.99
+ },
+ {
+  "id": "c6de35b4-a78b-429a-a728-2cbc23a4bf8f",
+  "shopify_id": "gid://shopify/Product/6535189102635",
+  "handle": "brush-on-nail-glue",
+  "product_name": "Brush-On Nail Glue",
+  "status": "active",
+  "product_type": "Nail_Accessories",
+  "price": 7.99
+ },
+ {
+  "id": "f1bcf2a3-f26c-447c-a3c6-7c5637c0a718",
+  "shopify_id": "gid://shopify/Product/6894972076075",
+  "handle": "adhesive-nail-tabs",
+  "product_name": "Adhesive Nail Tabs",
+  "status": "active",
+  "product_type": "Nail_Accessories",
+  "price": 9.99
+ },
+ {
+  "id": "f2b412dc-31f9-468b-ad7c-0177b8415150",
+  "shopify_id": "gid://shopify/Product/7130235797547",
+  "handle": "press-on-nail-remover",
+  "product_name": "Press-On Nail Remover",
+  "status": "active",
+  "product_type": "Nail_Accessories",
+  "price": 12.99
+ },
+ {
+  "id": "660d70d3-89e0-4da1-ab11-3b2406178780",
+  "shopify_id": "gid://shopify/Product/7341262798891",
+  "handle": "mani-maintenance-kit-accessory-bundle",
+  "product_name": "Mani Maintenance Kit",
+  "status": "active",
+  "product_type": "Accessory_Bundle",
+  "price": 60.7
+ },
+ {
+  "id": "97cd33d2-5c12-42f7-8f84-a865ac3a8533",
+  "shopify_id": "gid://shopify/Product/7521731575851",
+  "handle": "harry-potter-x-glamnetic-2025-polish-and-prep-nail-accessory-bundle",
+  "product_name": "Polish & Prep",
+  "status": "active",
+  "product_type": "Accessory_Bundle",
+  "price": 14.38
+ }
+]
