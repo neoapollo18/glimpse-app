@@ -132,6 +132,7 @@ import {
 import {
   navigateParent,
   onStudioAction,
+  postStudioReady,
   postStudioState,
   type StudioAction,
 } from "../components/studio/navigate-parent";
@@ -2164,6 +2165,9 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
   useEffect(() => {
     if (needsOnboarding && !generationError) navigateParent("/app/onboarding/scope");
   }, [needsOnboarding, generationError]);
+
+  // The dashboard's load watchdog: this frame booted.
+  useEffect(() => postStudioReady(), []);
 
   // Admin bars (opted-in shops, hosted): tell the dashboard which title
   // bar actions to show and whether its save bar is up, and take the

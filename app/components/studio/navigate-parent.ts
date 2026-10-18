@@ -68,6 +68,13 @@ export function postStudioState(state: StudioHostState) {
   if (token) broadcast({ type: "studio-state", token, ...state });
 }
 
+/** Studio to host: this frame booted. The host's load watchdog waits for
+ * it (every shop, not only admin-bars ones). */
+export function postStudioReady() {
+  const token = studioNavToken();
+  if (token) broadcast({ type: "studio-ready", token });
+}
+
 /** Host to Studio: a title bar action was clicked. */
 export function postStudioAction(token: string, action: StudioAction) {
   broadcast({ type: "studio-action", token, action });

@@ -14,9 +14,9 @@ const SHELL_CSS = `
   .studio-topbar { grid-column: 1 / -1; grid-row: 1; display: grid; grid-template-columns: 240px minmax(0, 1fr) 320px; align-items: center; border-bottom: 1px solid #E1E3E5; background: #fff; z-index: 20; }
   .studio-topbar-left { display: flex; align-items: center; gap: 10px; padding: 0 16px; min-width: 0; height: 100%; }
   .studio-topbar-left .Polaris-Badge { display: inline-flex; align-items: center; }
-  /* Opted-in shops: Publish lives in the app window's title bar, so the
-     empty right cell gives the quiz name and badges room. */
-  .studio-topbar:not(:has(> .studio-topbar-right)) { grid-template-columns: minmax(240px, max-content) minmax(0, 1fr) minmax(0, 320px); }
+  /* Same columns as the body (even when Publish lives in the admin title
+     bar and the right cell is empty) so Build / Check matches / Live sits
+     centred over the quiz preview. */
   .studio-topbar-center { display: flex; justify-content: center; align-items: center; min-width: 0; height: 100%; }
   .studio-topbar-right { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 0 16px; height: 100%; }
   .studio-rail { grid-column: 1; grid-row: 2; overflow-y: auto; border-right: 1px solid #E1E3E5; display: flex; flex-direction: column; min-height: 0; }

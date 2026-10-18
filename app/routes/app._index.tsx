@@ -285,7 +285,14 @@ function DashboardView({
   // reports, which only opted-in shops' Studios do
   // (lib/studio-admin-bars.server): everyone else's draws its own.
   const [studioActions, setStudioActions] = useState<StudioHostState | null>(null);
+  // Load watchdog: set once the open Studio says it booted. A frame that
+  // never boots (auth redirect, error page, hung loader) has no App Bridge,
+  // so the admin's spinner never clears and the window's X stops
+  // answering; past the budget we close it from here and say so.
+  const [studioReady, setStudioReady] = useState(false);
+  const [studioStuck, setStudioStuck] = useState(false);
   const openStudio = (step?: string) => {
+    setStudioStuck(false);
     setParams(
       (prev) => {
         prev.set("open", "studio");
@@ -322,6 +329,7 @@ function DashboardView({
       channel.onmessage = (e: MessageEvent) => {
         const data = e.data as ({ url?: string; token?: string; type?: string } & Record<string, unknown>) | null;
         if (!data || data.token !== navToken) return; // another tab's studio
+        if (data.type === "studio-ready" || data.type === "studio-state") setStudioReady(true);
         if (data.type === "studio-state") {
           setStudioActions(readStudioState(data));
           return;
@@ -338,6 +346,40 @@ function DashboardView({
     return () => channel?.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navToken]);
+  useEffect(() => {
+    if (!studioOpen || !navToken) {
+      setStudioReady(false);
+      return;
+    }
+    // No BroadcastChannel = no ready message; never close a working Studio.
+    if (studioReady || typeof BroadcastChannel === "undefined") return;
+    const t = window.setTimeout(() => {
+      setStudioStuck(true);
+      closeStudioRef.current();
+    }, 45_000);
+    return () => window.clearTimeout(t);
+  }, [studioOpen, navToken, studioReady]);
+  // The Studio frame authenticates and boots App Bridge from ITS OWN URL
+  // (shop, host, embedded; the session-token bounce adds id_token), so
+  // pass them. This frame's URL loses them after any client-side
+  // navigation (onboarding's navigate("/app?open=studio"), nav menu
+  // links), and a param-less /studio lands on /auth/login, which has no
+  // App Bridge: the admin's loading spinner never clears.
+  const studioSrc = (() => {
+    const q = new URLSearchParams({ tab: studioStep });
+    if (studioSlide) q.set("slide", studioSlide);
+    if (navToken) q.set("navtoken", navToken);
+    const cfg =
+      typeof window === "undefined"
+        ? undefined
+        : (window as unknown as { shopify?: { config?: { shop?: string; host?: string } } }).shopify?.config;
+    if (cfg?.shop && cfg.host) {
+      q.set("shop", cfg.shop);
+      q.set("host", cfg.host);
+      q.set("embedded", "1");
+    }
+    return `/studio?${q.toString()}`;
+  })();
   const studioAction = (action: StudioAction) => {
     if (navToken) postStudioAction(navToken, action);
   };
@@ -430,6 +472,16 @@ function DashboardView({
         </Card>
 
         {fetcher.data?.error && <Banner tone="critical">{fetcher.data.error}</Banner>}
+        {studioStuck && (
+          <Banner
+            tone="critical"
+            title="The Studio didn't open"
+            action={{ content: "Try again", onAction: () => openStudio() }}
+            onDismiss={() => setStudioStuck(false)}
+          >
+            It took too long to load. Try again, or reload the page if it keeps happening.
+          </Banner>
+        )}
 
         {/* Go-live strip: only while the quiz isn't on the storefront */}
         {!quiz.quizLive && quiz.questions > 0 && (
@@ -549,7 +601,7 @@ function DashboardView({
         <Modal
           variant="max"
           open
-          src={`/studio?tab=${studioStep}${studioSlide ? `&slide=${encodeURIComponent(studioSlide)}` : ""}&navtoken=${navToken}`}
+          src={studioSrc}
           onHide={closeStudio}
         >
           <TitleBar title="Studio">
