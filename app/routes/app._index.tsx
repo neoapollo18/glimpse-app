@@ -503,7 +503,7 @@ function DashboardView({
               <InlineStack gap="300" blockAlign="center" wrap>
                 {CHAT_ASSISTANT_RETIRED ? (
                   <Button onClick={() => submitMode("quiz")} loading={saving}>
-                    Turn on quiz
+                    Show quiz to shoppers
                   </Button>
                 ) : (
                   surfaceChooser(false)
@@ -568,7 +568,7 @@ function DashboardView({
                   <InlineStack gap="200" blockAlign="center">
                     <Badge tone="success">Quiz on</Badge>
                     <Text as="span" variant="bodySm" tone="subdued">
-                      Turn it off from the Live tab in Studio.
+                      Hide it from shoppers on the Live tab in Studio.
                     </Text>
                   </InlineStack>
                 ) : (

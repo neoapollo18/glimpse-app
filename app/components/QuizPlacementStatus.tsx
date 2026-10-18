@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useAppBridge } from "@shopify/app-bridge-react";
 import { Badge, Button, InlineStack, Text } from "@shopify/polaris";
 import { quizBlockStatusFrom, templateLabel, type QuizBlockStatus } from "../lib/theme-extension";
 
@@ -21,15 +20,16 @@ function themeEditorUrl(): string | null {
  * `shopify.app.extensions()` (Built for Shopify 4.2.3: the homepage must
  * report app block status). Re-checks when the merchant comes back to the
  * tab, e.g. after adding the block in the theme editor. null while loading.
+ * Reads the shopify global itself (not useAppBridge, which throws without
+ * it), so a page outside the admin just reports "unknown".
  */
 export function useQuizBlockStatus(): QuizBlockStatus | null {
-  const shopify = useAppBridge();
   const [status, setStatus] = useState<QuizBlockStatus | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     const check = () => {
-      const app = (shopify as unknown as { app?: AppApi }).app;
+      const app = (window as unknown as { shopify?: { app?: AppApi } }).shopify?.app;
       if (!app?.extensions) {
         setStatus({ state: "unknown" });
         return;
@@ -52,7 +52,7 @@ export function useQuizBlockStatus(): QuizBlockStatus | null {
       cancelled = true;
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [shopify]);
+  }, []);
 
   return status;
 }

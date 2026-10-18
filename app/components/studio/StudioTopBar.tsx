@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Badge, Button, ButtonGroup, Popover, Box, BlockStack, Text, ProgressBar, Tooltip } from "@shopify/polaris";
 import { useCatalogSync } from "../../lib/use-catalog-sync";
+import { useQuizBlockStatus } from "../QuizPlacementStatus";
 import type { StudioTab } from "../../routes/studio";
 
 // V2-SPEC 2.1 top bar (56px): inline-editable quiz name + Live/Ready badge
@@ -72,6 +73,11 @@ export function StudioTopBar({
   // Local edit buffer so typing never round-trips through a revalidation;
   // committed on blur/Enter. External changes (chat rename) re-seed it.
   const [name, setName] = useState(quizName);
+  // "Live" only when the quiz is on AND its section is on a page (the
+  // Live tab uses the same check); on alone isn't visible to anyone.
+  const placement = useQuizBlockStatus();
+  const placed = placement?.state === "active";
+  const notPlaced = placement?.state === "inactive";
   useEffect(() => setName(quizName), [quizName]);
   const commit = () => {
     const next = name.trim();
@@ -117,9 +123,19 @@ export function StudioTopBar({
           <button
             onClick={() => onTabChange("live")}
             style={{ border: 0, background: "transparent", padding: 0, cursor: "pointer", flexShrink: 0 }}
-            title={live ? "Your quiz is on your store" : "Not on your store yet. Open the Live tab to set it up."}
+            title={
+              live && placed
+                ? "Your quiz is live on your store"
+                : live && notPlaced
+                  ? "Shown to shoppers, but not on a page yet. Open the Live tab to finish."
+                  : live
+                    ? "Shown to shoppers wherever it's placed"
+                    : "Not on your store yet. Open the Live tab to set it up."
+            }
           >
-            <Badge tone={live ? "success" : undefined}>{live ? "Live" : "Ready"}</Badge>
+            <Badge tone={live && placed ? "success" : live && notPlaced ? "attention" : undefined}>
+              {live && placed ? "Live" : live && notPlaced ? "Not on a page" : live ? "On" : "Ready"}
+            </Badge>
           </button>
         )}
         {previewOnly && (

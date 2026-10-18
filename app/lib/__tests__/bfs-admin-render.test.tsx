@@ -188,11 +188,11 @@ describe("home page", () => {
     expect(document.querySelector(".Polaris-Modal-Dialog__Modal")).toBeNull();
   });
 
-  it("with the chat bubble retired, going live is one Turn on quiz button", async () => {
+  it("with the chat bubble retired, going live is one Show quiz to shoppers button", async () => {
     const text = await mount(<Dashboard />, home());
     expect(text()).not.toContain("Chat bubble");
     expect(document.querySelector("select")).toBeNull();
-    await click(button("Turn on quiz"));
+    await click(button("Show quiz to shoppers"));
     expect(posts).toContainEqual({ intent: "set-mode", assistant_mode: "quiz" });
   });
 
@@ -263,7 +263,7 @@ describe("Studio publish flow", () => {
     await mount(
       <LiveTab data={studioData()} quizName="Find Your Vibe" onOpenPublish={() => {}} onOpenHistory={() => {}} onViewStore={() => {}} viewStoreBusy={false} />,
     );
-    expect(button("Turn on")).toBeTruthy();
+    expect(button("Show to shoppers")).toBeTruthy();
     expect(primaries()).toEqual([]);
   });
 

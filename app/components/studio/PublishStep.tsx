@@ -19,7 +19,8 @@ import type { StudioLoaderData, StudioActionData } from "../../routes/studio";
 import type { DraftProblem } from "./draft-problems";
 import { isQuestionServable } from "../../lib/option-visibility";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { addQuizBlockUrl } from "../../lib/theme-extension";
+import { addQuizBlockUrl, templateLabel } from "../../lib/theme-extension";
+import { useQuizBlockStatus } from "../QuizPlacementStatus";
 
 // Optional scopes for one-click publish (shopify.app.glimpse-app.toml).
 const PAGE_SCOPE = "write_online_store_pages";
@@ -427,7 +428,7 @@ function SetupGuide({ data, quizName, onViewStore, onOpenPublish, previewOnly }:
           <Box paddingBlockEnd="300">
             <InlineStack gap="200" blockAlign="center" wrap>
               <Text as="p" variant="bodySm">
-                Prefer one click? Publish creates the page and adds it to your menu for you (steps 1 to 3).
+                Fastest: Publish creates the page, adds it to your menu and shows it to shoppers in one click (steps 1 to 3).
               </Text>
               <Button size="slim" onClick={onOpenPublish}>
                 Publish
@@ -509,8 +510,46 @@ export function LiveTab({
   const matrixWithoutRules = mode === "matrix" && ruleCount === 0;
   const previewOnly = isPreviewOnly(data);
   const awaitingPublish = templateAwaitingPublish(data);
+  // Two separate facts: the on/off switch (shoppers may see the quiz) and
+  // placement (the quiz section is on a page of the live theme). "Show to
+  // shoppers" never places anything, so the steps stay open until the
+  // theme check confirms a placement.
+  const placement = useQuizBlockStatus();
+  const placementState = placement?.state ?? "loading";
+  const placed = placementState === "active";
+  const placedWhere =
+    placement?.state === "active" ? placement.placements.map((p) => templateLabel(p.template)).join(", ") : "";
   const [showSteps, setShowSteps] = useState(!surfaceOn);
-  useEffect(() => setShowSteps(!surfaceOn), [surfaceOn]);
+  useEffect(() => {
+    if (placementState === "loading") return;
+    setShowSteps(!(surfaceOn && placed));
+  }, [surfaceOn, placed, placementState]);
+  // Live = on AND on a page. On but not placed is the trap this splits out.
+  const notPlaced = surfaceOn && placementState === "inactive";
+  const unchecked = surfaceOn && placementState === "unknown";
+  const tone: "live" | "warn" | "neutral" = surfaceOn && placed ? "live" : notPlaced ? "warn" : "neutral";
+  const headline = previewOnly
+    ? "Your quiz is in preview"
+    : !surfaceOn
+      ? "Not showing to shoppers yet"
+      : placed
+        ? "Live on your store"
+        : notPlaced
+          ? "On, but not on a page yet"
+          : "Showing to shoppers wherever it’s placed";
+  const subline = previewOnly
+    ? null
+    : !surfaceOn
+      ? "Put it on a page with the steps below (or Publish does it in one click), then show it to shoppers."
+      : placed
+        ? placedWhere
+          ? `On the ${placedWhere}.`
+          : null
+        : notPlaced
+          ? "Shoppers can’t see it until it’s on a page. Finish the steps below, or Publish does it in one click."
+          : unchecked
+            ? "We couldn’t check your theme. If the quiz isn’t on a page yet, finish the steps below."
+            : null;
 
   return (
     <div style={{ flex: 1, overflowY: "auto" }}>
@@ -518,8 +557,8 @@ export function LiveTab({
         {/* Status */}
         <div
           style={{
-            border: `1px solid ${surfaceOn ? "#B4E1C3" : "#E3E3E3"}`,
-            background: surfaceOn ? "#ECF8F0" : "#FFFFFF",
+            border: `1px solid ${tone === "live" ? "#B4E1C3" : tone === "warn" ? "#FFD79D" : "#E3E3E3"}`,
+            background: tone === "live" ? "#ECF8F0" : tone === "warn" ? "#FFF8EB" : "#FFFFFF",
             borderRadius: 12,
             padding: "14px 16px",
           }}
@@ -527,14 +566,15 @@ export function LiveTab({
           <BlockStack gap="200">
             <InlineStack align="space-between" blockAlign="center" gap="300">
               <InlineStack gap="200" blockAlign="center" wrap={false}>
-                {surfaceOn && statusDot(awaitingPublish ? "#B98900" : "#29845A")}
+                {tone === "live" && statusDot(awaitingPublish ? "#B98900" : "#29845A")}
+                {tone === "warn" && statusDot("#B98900")}
                 <BlockStack gap="050">
-                  <Text as="p" variant="headingSm" tone={surfaceOn ? "success" : undefined}>
-                    {surfaceOn ? "Your quiz is live on your store" : previewOnly ? "Your quiz is in preview" : "Your quiz is ready. Add it to your store."}
+                  <Text as="p" variant="headingSm" tone={tone === "live" ? "success" : undefined}>
+                    {headline}
                   </Text>
-                  {!surfaceOn && !previewOnly && (
+                  {subline && (
                     <Text as="span" variant="bodySm" tone="subdued">
-                      Four steps, about two minutes, or one click with Publish.
+                      {subline}
                     </Text>
                   )}
                 </BlockStack>
@@ -548,11 +588,11 @@ export function LiveTab({
                 {/* The emergency kill pauses going live, never turning off. */}
                 {surfaceOn ? (
                   <Button loading={toggling} onClick={() => setLive(false)}>
-                    Turn off
+                    Hide from shoppers
                   </Button>
                 ) : !previewOnly ? (
                   <Button loading={toggling} disabled={questionCount === 0 || matrixWithoutRules} onClick={() => setLive(true)}>
-                    Turn on
+                    Show to shoppers
                   </Button>
                 ) : null}
               </InlineStack>
@@ -573,13 +613,13 @@ export function LiveTab({
             )}
             <Text as="p" variant="bodySm" tone="subdued">
               Edits save to {data.shopDomain} {data.adminBars ? "when you click Save" : "as you make them"}; shoppers see the
-              quiz only while it&rsquo;s on. {questionCount}{" "}
+              quiz only while it&rsquo;s showing. {questionCount}{" "}
               {questionCount === 1 ? "question" : "questions"}
               {ruleCount > 0 ? ` · ${ruleCount} ${ruleCount === 1 ? "rule" : "rules"}` : ""} · {MODE_LABELS[mode] ?? mode} matching.
             </Text>
             {matrixWithoutRules && !surfaceOn && !previewOnly && (
               <Text as="p" variant="bodySm" tone="subdued">
-                Pin products to answer paths in Check matches before turning the quiz on.
+                Pin products to answer paths in Check matches before showing the quiz to shoppers.
               </Text>
             )}
             {error && <Banner tone="critical">{error}</Banner>}

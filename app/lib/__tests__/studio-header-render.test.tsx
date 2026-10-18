@@ -5,7 +5,7 @@
 // replaced the Quiz settings page. Studio itself needs an embedded Shopify session, so these mount in
 // a memory data router (useFetcher needs one) inside Polaris' AppProvider.
 
-import { describe, it, expect, beforeAll, vi } from "vitest";
+import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -61,7 +61,27 @@ function mount(ui: React.ReactElement) {
   return { text: () => document.body.textContent ?? "", root };
 }
 
+// App Bridge's shopify.app.extensions(): the quiz block on a page of the
+// live theme ("active"), installed but on no page ("available"), or none.
+function setThemeBlock(status: "active" | "available" | null) {
+  const w = window as unknown as { shopify?: unknown };
+  if (!status) {
+    delete w.shopify;
+    return;
+  }
+  const activations = status === "active" ? [{ target: "template--page.find-my-match/main/block" }] : [];
+  w.shopify = {
+    app: {
+      extensions: async () => [
+        { type: "theme_app_extension", activations: [{ handle: "gleame-quiz", status, activations }] },
+      ],
+    },
+  };
+}
+
 describe("Studio top bar and Live tab", () => {
+  afterEach(() => setThemeBlock(null));
+
   const topBar = (live: boolean, hostActions = false) => (
     <StudioTopBar
       tab="build"
@@ -104,11 +124,11 @@ describe("Studio top bar and Live tab", () => {
     expect(hosted.text()).toContain("Live");
   });
 
-  it("ready quiz: Turn on, one-click Publish, the video and the four setup steps", () => {
+  it("ready quiz: Show to shoppers, one-click Publish, the video and the four setup steps", () => {
     const { text } = mount(liveTab(studioData({ quizSurfaceEnabled: false })));
-    expect(text()).toContain("Your quiz is ready. Add it to your store.");
-    expect(text()).toContain("Turn on");
-    expect(text()).toContain("Prefer one click?");
+    expect(text()).toContain("Not showing to shoppers yet");
+    expect(text()).toContain("Show to shoppers");
+    expect(text()).toContain("Fastest: Publish creates the page");
     for (const step of ["Create the quiz template", "Create the quiz page", "Add it to your menu", "Check it on your store"]) {
       expect(text(), step).toContain(step);
     }
@@ -124,10 +144,13 @@ describe("Studio top bar and Live tab", () => {
     expect(document.querySelector("iframe")!.getAttribute("src")).toContain(`youtube-nocookie.com/embed/${SETUP_VIDEO_ID}`);
   });
 
-  it("live quiz: Turn off, setup collapsed to 'Setup complete' until asked, history and placements", () => {
+  it("live quiz (on and on a page): Hide from shoppers, setup collapsed to 'Setup complete' until asked, history and placements", async () => {
+    setThemeBlock("active");
     const { text } = mount(liveTab(studioData()));
-    expect(text()).toContain("Your quiz is live on your store");
-    expect(text()).toContain("Turn off");
+    await act(async () => {});
+    expect(text()).toContain("Live on your store");
+    expect(text()).toContain('On the page template "find-my-match".');
+    expect(text()).toContain("Hide from shoppers");
     expect(text()).toContain("3 questions");
     expect(text()).toContain("Rules + AI matching");
     expect(text()).toContain("Setup complete");
@@ -277,5 +300,50 @@ describe("Translate this quiz", () => {
     expect(text()).toContain("Also translate headlines, questions, answers and why-this-fits lines");
     const selects = Array.from(document.querySelectorAll("select")) as HTMLSelectElement[];
     expect(selects.map((s) => s.value)).toEqual(["French", "informal"]);
+  });
+});
+
+describe("Live tab: on is not the same as on a page", () => {
+  afterEach(() => setThemeBlock(null));
+  const liveTab = (data: any) => (
+    <LiveTab data={data} quizName="Find Your Vibe" onOpenPublish={() => {}} onOpenHistory={() => {}} onViewStore={() => {}} viewStoreBusy={false} />
+  );
+
+  it("on but on no page: amber status, the steps stay open, nothing claims it's live", async () => {
+    setThemeBlock("available");
+    const { text } = mount(liveTab(studioData()));
+    await act(async () => {});
+    expect(text()).toContain("On, but not on a page yet");
+    expect(text()).toContain("Shoppers can’t see it until it’s on a page.");
+    expect(text()).toContain("Create the quiz template");
+    expect(text()).not.toContain("Setup complete");
+    expect(text()).not.toContain("Live on your store");
+  });
+
+  it("top bar badge: Live only when placed, Not on a page when on but unplaced", async () => {
+    const bar = (live: boolean) => (
+      <StudioTopBar
+        tab="build"
+        onTabChange={() => {}}
+        quizName="Find Your Vibe"
+        onQuizNameChange={() => {}}
+        hasDraft
+        problemCount={0}
+        catalog={{ syncEnabled: true, cursor: null, productCount: 10 }}
+        onViewStore={() => {}}
+        viewStoreBusy={false}
+        onPublishClick={() => {}}
+        live={live}
+      />
+    );
+    setThemeBlock("available");
+    const unplaced = mount(bar(true));
+    await act(async () => {});
+    expect(unplaced.text()).toContain("Not on a page");
+    setThemeBlock("active");
+    const placed = mount(bar(true));
+    await act(async () => {});
+    expect(placed.text()).not.toContain("Not on a page");
+    expect(document.querySelector(".studio-topbar-left .Polaris-Badge")?.textContent).toContain("Live");
   });
 });
