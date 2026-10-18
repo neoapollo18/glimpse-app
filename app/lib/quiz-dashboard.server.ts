@@ -175,3 +175,87 @@ export async function getQuizDashboard(shopDomain: string, range: DashboardRange
     leadAnswers: leadAnswerCounts(leads.leads),
   };
 }
+
+// Home page numbers: the same shoppers the Analytics page counts for its
+// default 30-day window (aggregateWindow, distinct carts), so the two
+// pages agree. Only the events those three numbers need and only the
+// columns that name a shopper, read in parallel pages, so the home page
+// stays quick. Null when a read failed.
+const FUNNEL_EVENTS = ["quiz_start", "quiz_results_shown", "quiz_add_to_cart", "quiz_add_bundle_to_bag", "quiz_cross_sell_add"];
+const FUNNEL_PAGE = 1000;
+const MAX_FUNNEL_PAGES = 30;
+const FUNNEL_PARALLEL = 6;
+
+export interface QuizFunnelSummary {
+  started: number;
+  finished: number;
+  added: number;
+  /** More events than the page cap: the numbers undercount. */
+  truncated: boolean;
+}
+
+// The home page reads this on every load; a busy shop's 30 days is a few
+// paged reads, so keep each shop's summary for 10 minutes.
+const FUNNEL_TTL_MS = 10 * 60_000;
+const funnelCache = new Map<string, { at: number; value: QuizFunnelSummary }>();
+
+export async function getQuizFunnelSummary(shopId: string, range: DashboardRange = 30): Promise<QuizFunnelSummary | null> {
+  const cacheKey = `${shopId}|${range}`;
+  const hit = funnelCache.get(cacheKey);
+  if (hit && Date.now() - hit.at < FUNNEL_TTL_MS) return hit.value;
+  const value = await readQuizFunnelSummary(shopId, range);
+  if (value) funnelCache.set(cacheKey, { at: Date.now(), value });
+  return value;
+}
+
+async function readQuizFunnelSummary(shopId: string, range: DashboardRange): Promise<QuizFunnelSummary | null> {
+  const to = new Date();
+  const from = new Date(to.getTime() - range * 86_400_000);
+  const since = from.toISOString();
+  const { count, error } = await supabase
+    .from("analytics_events")
+    .select("id", { count: "exact", head: true })
+    .eq("shop_id", shopId)
+    .in("event_type", FUNNEL_EVENTS)
+    .gte("created_at", since);
+  if (error) {
+    console.error("[quiz-dashboard] funnel count failed:", error.message);
+    return null;
+  }
+  const total = count ?? 0;
+  const pages = Math.min(Math.ceil(total / FUNNEL_PAGE), MAX_FUNNEL_PAGES);
+  const rows: QuizEventRow[] = [];
+  for (let first = 0; first < pages; first += FUNNEL_PARALLEL) {
+    const batch = await Promise.all(
+      Array.from({ length: Math.min(FUNNEL_PARALLEL, pages - first) }, (_, i) =>
+        supabase
+          .from("analytics_events")
+          .select("event_type, cart_token, created_at, sid:properties->>sid")
+          .eq("shop_id", shopId)
+          .in("event_type", FUNNEL_EVENTS)
+          .gte("created_at", since)
+          // A total order, so parallel pages never overlap or skip a row.
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true })
+          .range((first + i) * FUNNEL_PAGE, (first + i + 1) * FUNNEL_PAGE - 1),
+      ),
+    );
+    for (const res of batch) {
+      if (res.error) {
+        console.error("[quiz-dashboard] funnel read failed:", res.error.message);
+        return null;
+      }
+      for (const r of (res.data ?? []) as unknown as Array<{ event_type: string; cart_token: string | null; created_at: string; sid: string | null }>) {
+        rows.push({
+          event_type: r.event_type,
+          cart_token: r.cart_token,
+          device_type: null,
+          created_at: r.created_at,
+          properties: r.sid ? { sid: r.sid } : null,
+        });
+      }
+    }
+  }
+  const w = aggregateWindow(rows, from, to);
+  return { started: w.started, finished: w.finished, added: w.added, truncated: total > pages * FUNNEL_PAGE };
+}

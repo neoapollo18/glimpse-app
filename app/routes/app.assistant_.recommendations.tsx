@@ -17,8 +17,8 @@ import {
   Box,
   Badge,
 } from "@shopify/polaris";
-import { TitleBar } from "@shopify/app-bridge-react";
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { SaveBar, TitleBar } from "@shopify/app-bridge-react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { authenticate } from "../shopify.server";
 import { invalidateStorefrontCache } from "../lib/storefront-cache.server";
 import {
@@ -192,14 +192,14 @@ type EditorQuestion = {
 // Choices for the per-question "Option style" Select. Values mirror the DB
 // CHECK constraint (QUESTION_OPTION_STYLES server-side); '' = auto.
 const OPTION_STYLE_CHOICES = [
-  { label: "Auto — match the options' content (default)", value: "" },
-  { label: "Pill chips — compact, side by side", value: "chips" },
-  { label: "Boxed cards — full-width grid of big boxes", value: "boxed" },
-  { label: "List rows — full-width, stacked", value: "list" },
-  { label: "Image cards — photo grid", value: "visual" },
-  { label: "Rich cards — tag chip + meter", value: "rich" },
+  { label: "Auto: match the options' content (default)", value: "" },
+  { label: "Pill chips: compact, side by side", value: "chips" },
+  { label: "Boxed cards: full-width grid of big boxes", value: "boxed" },
+  { label: "List rows: full-width, stacked", value: "list" },
+  { label: "Image cards: photo grid", value: "visual" },
+  { label: "Rich cards: tag chip + meter", value: "rich" },
   { label: "Two-tone swatch cards", value: "vibe" },
-  { label: "Nail swatches — color families", value: "nails" },
+  { label: "Nail swatches: color families", value: "nails" },
 ];
 type EditorRule = {
   criteria: Record<string, string>;
@@ -376,6 +376,29 @@ export default function AssistantRecommendations() {
   const [rules, setRules] = useState<EditorRule[]>(initialRules);
   const [multiSetPrompt, setMultiSetPrompt] = useState(initialMultiSetPrompt ?? "");
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Unsaved-changes tracking for the contextual save bar (Built for
+  // Shopify 4.1.5): what was last loaded or saved, compared by value.
+  const [baseline, setBaseline] = useState(() => ({
+    axes: initialAxes,
+    questions: initialQuestions,
+    rules: initialRules,
+    multiSetPrompt: initialMultiSetPrompt ?? "",
+  }));
+  const baselineKey = useMemo(() => JSON.stringify(baseline), [baseline]);
+  const currentKey = useMemo(
+    () => JSON.stringify({ axes, questions, rules, multiSetPrompt }),
+    [axes, questions, rules, multiSetPrompt],
+  );
+  const dirty = currentKey !== baselineKey;
+  const pendingSaveRef = useRef<typeof baseline | null>(null);
+  const discard = () => {
+    setAxes(baseline.axes);
+    setQuestions(baseline.questions);
+    setRules(baseline.rules);
+    setMultiSetPrompt(baseline.multiSetPrompt);
+    setValidationError(null);
+  };
   // Armed when the merchant has been warned that saving will drop rules
   // authored under a different axis set (see the guard in handleSave). The
   // NEXT save click proceeds; any further edit or a successful save disarms.
@@ -388,9 +411,16 @@ export default function AssistantRecommendations() {
   }, [axes, questions, rules]);
 
   // A successful save consumed the confirmation; the next save re-checks.
+  // It also becomes the new "saved" state the save bar compares against.
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data?.success) {
       setConfirmedRuleDrop(false);
+      if (pendingSaveRef.current) {
+        setBaseline(pendingSaveRef.current);
+        pendingSaveRef.current = null;
+        const toast = (window as unknown as { shopify?: { toast?: { show?: (m: string) => void } } }).shopify?.toast;
+        toast?.show?.("Rules saved");
+      }
     }
   }, [fetcher.state, fetcher.data]);
 
@@ -416,7 +446,7 @@ export default function AssistantRecommendations() {
   // -----------------------------------------------------------------
   const variantOptions = useMemo(
     () => [
-      { label: "— Unassigned —", value: "" },
+      { label: "Unassigned", value: "" },
       ...variants.map((v: any) => ({ label: v.label, value: v.value })),
     ],
     [variants],
@@ -847,7 +877,7 @@ const NUM_RANKS = 3;
         return;
       }
       if (seenAxisKeys.has(axis.key)) {
-        setValidationError(`Two axes share the key "${axis.key}" — axis keys must be unique`);
+        setValidationError(`Two axes share the key "${axis.key}". Axis keys must be unique.`);
         return;
       }
       seenAxisKeys.add(axis.key);
@@ -866,7 +896,7 @@ const NUM_RANKS = 3;
           return;
         }
         if (seenValues.has(v.value)) {
-          setValidationError(`Axis "${axis.key}" has the value "${v.value}" twice — values must be unique`);
+          setValidationError(`Axis "${axis.key}" has the value "${v.value}" twice. Values must be unique.`);
           return;
         }
         seenValues.add(v.value);
@@ -893,7 +923,7 @@ const NUM_RANKS = 3;
       if (axis.source !== "user_question") continue;
       const q = questions.find((qq) => qq.axisKey === axis.key);
       if (!q || !q.prompt.trim()) {
-        setValidationError(`Axis "${axis.key}" needs a question prompt — without it the chat can't collect this axis and no matrix rule can match`);
+        setValidationError(`Axis "${axis.key}" needs a question prompt. Without it the quiz can't collect this axis and no matrix rule can match.`);
         return;
       }
       // Screen group is optional; when set it must be a snake_case
@@ -914,7 +944,7 @@ const NUM_RANKS = 3;
       // save fine but permanently hide the question for every shopper).
       if (q.showIfAxisKey || q.showIfAxisValue) {
         if (!q.showIfAxisKey || !q.showIfAxisValue) {
-          setValidationError(`The question for axis "${axis.key}" has an incomplete "Ask only if" condition — pick both an axis and a value, or set it back to Always asked`);
+          setValidationError(`The question for axis "${axis.key}" has an incomplete "Ask only if" condition. Pick both an axis and a value, or set it back to Always asked.`);
           return;
         }
         const condAxis = axes.find((a) => a.key === q.showIfAxisKey);
@@ -929,7 +959,7 @@ const NUM_RANKS = 3;
           condFlowIdx === -1 ||
           condFlowIdx >= qFlowIdx
         ) {
-          setValidationError(`Question ${qFlowIdx + 1} (axis "${axis.key}"): "Ask only if" must reference an earlier question's answer — photo-based traits and later questions aren't known yet when this question would render`);
+          setValidationError(`Question ${qFlowIdx + 1} (axis "${axis.key}"): "Ask only if" must reference an earlier question's answer. Photo-based traits and later questions aren't known yet when this question would render.`);
           return;
         }
       }
@@ -949,7 +979,7 @@ const NUM_RANKS = 3;
         // option in the quiz.
         if (o.showIfAxisKey || o.showIfAxisValue) {
           if (!o.showIfAxisKey || !o.showIfAxisValue) {
-            setValidationError(`Option "${o.label}" for axis "${axis.key}" has an incomplete "Show only if" condition — pick both an axis and a value, or set it back to Always shown`);
+            setValidationError(`Option "${o.label}" for axis "${axis.key}" has an incomplete "Show only if" condition. Pick both an axis and a value, or set it back to Always shown.`);
             return;
           }
           const condAxis = axes.find((a) => a.key === o.showIfAxisKey);
@@ -971,7 +1001,7 @@ const NUM_RANKS = 3;
             condFlowIdx === -1 ||
             condFlowIdx >= qFlowIdx
           ) {
-            setValidationError(`Option "${o.label}" (question ${qFlowIdx + 1}): "Show only if" must reference an earlier question's answer — photo-based traits and later questions aren't known yet when this option renders`);
+            setValidationError(`Option "${o.label}" (question ${qFlowIdx + 1}): "Show only if" must reference an earlier question's answer. Photo-based traits and later questions aren't known yet when this option renders.`);
             return;
           }
         }
@@ -1010,7 +1040,7 @@ const NUM_RANKS = 3;
       if (!group) continue;
       const prev = lastGroupIdx.get(group);
       if (prev !== undefined && prev !== i - 1) {
-        setValidationError(`Screen group "${group}": questions sharing a group must be consecutive — move them next to each other or they'll render as separate quiz screens`);
+        setValidationError(`Screen group "${group}": questions sharing a group must be consecutive. Move them next to each other or they'll render as separate quiz screens.`);
         return;
       }
       lastGroupIdx.set(group, i);
@@ -1151,6 +1181,7 @@ const NUM_RANKS = 3;
     if (multiSetPrompt !== (initialMultiSetPrompt ?? "")) {
       fd.append("multiSetPrompt", multiSetPrompt);
     }
+    pendingSaveRef.current = { axes, questions, rules, multiSetPrompt };
     fetcher.submit(fd, { method: "POST" });
   }, [axes, questions, rules, multiSetPrompt, initialMultiSetPrompt, fetcher, confirmedRuleDrop]);
 
@@ -1158,23 +1189,36 @@ const NUM_RANKS = 3;
   // Render
   // -----------------------------------------------------------------
   return (
-    <Page
-      backAction={{ content: "Studio", url: "/app?open=studio&step=build&slide=matching" }}
-      title="Advanced rules editor"
-    >
-      <TitleBar title="Advanced rules editor" />
+    <Page>
+      {/* The admin title bar carries the page title and the way back; the
+          page doesn't repeat them (content guideline). */}
+      <TitleBar title="Advanced rules editor">
+        <a variant="breadcrumb" href="/app?open=studio&step=build&slide=matching">
+          Studio
+        </a>
+      </TitleBar>
+      {/* Save and Discard live in the contextual save bar, mounted only
+          while there are unsaved changes (see MatchSettingsEditor). */}
+      {dirty && (
+        <SaveBar id="gleame-advanced-rules-save-bar" open>
+          <button variant="primary" loading={isSaving ? "" : undefined} onClick={handleSave}>
+            Save
+          </button>
+          <button disabled={isSaving} onClick={discard}>
+            Discard
+          </button>
+        </SaveBar>
+      )}
       <BlockStack gap="500">
-        {fetcher.data?.success && (
-          <Banner tone="success">Advanced rules saved.</Banner>
-        )}
-        {fetcher.data?.error && (
-          <Banner tone="critical">Save failed: {fetcher.data.error}</Banner>
-        )}
-        {validationError && (
-          <Banner tone="warning" onDismiss={() => setValidationError(null)}>
+        {/* One error at a time: a check that stopped the save comes
+            before a save the server rejected. */}
+        {validationError ? (
+          <Banner tone="critical" onDismiss={() => setValidationError(null)}>
             {validationError}
           </Banner>
-        )}
+        ) : fetcher.data?.error ? (
+          <Banner tone="critical">Save failed: {fetcher.data.error}</Banner>
+        ) : null}
 
         {/* Explainer */}
         <Card>
@@ -1190,7 +1234,7 @@ const NUM_RANKS = 3;
             </Text>
             <Text as="p" variant="bodySm" tone="subdued">
               If you leave a combination blank, the assistant falls back to its existing
-              AI-pick behavior for that combination — so partial configs work too.
+              AI-pick behavior for that combination, so partial configs work too.
             </Text>
           </BlockStack>
         </Card>
@@ -1199,7 +1243,7 @@ const NUM_RANKS = 3;
         <Card>
           <BlockStack gap="400">
             <InlineStack align="space-between" blockAlign="center">
-              <Text as="h2" variant="headingMd">Criteria Axes</Text>
+              <Text as="h2" variant="headingMd">Criteria axes</Text>
               <Button onClick={addAxis} size="slim">Add axis</Button>
             </InlineStack>
             {axes.length === 0 && (
@@ -1264,7 +1308,7 @@ const NUM_RANKS = 3;
                         onChange={(v) => updateAxis(axisIdx, { source: v as any })}
                         helpText={
                           axis.source === "photo"
-                            ? "Classified automatically from the shopper's photo by AI — pick clear, visually distinct values."
+                            ? "Classified automatically from the shopper's photo by AI. Pick clear, visually distinct values."
                             : "A button-choice question in the chat"
                         }
                       />
@@ -1351,11 +1395,11 @@ const NUM_RANKS = 3;
         {userQuestionAxes.length > 0 && (
           <Card>
             <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">Shopper Questions</Text>
+              <Text as="h2" variant="headingMd">Shopper questions</Text>
               <Text as="p" variant="bodySm" tone="subdued">
                 For each "Ask the shopper" axis, define the question and how the answer
                 options map to axis values. The optional "bot response" is the personality
-                line the assistant says after the shopper picks — e.g. "Warm undertones —
+                line the assistant says after the shopper picks, e.g. "Warm undertones,
                 beautiful. You'll pull off some shades cool-toned folks can't."
               </Text>
               {userQuestionAxes.map((axis) => {
@@ -1401,7 +1445,7 @@ const NUM_RANKS = 3;
                         onChange={(v) => updateQuestion(axis.key, { prompt: v })}
                         autoComplete="off"
                         multiline={2}
-                        helpText='e.g. "First — does gold or silver jewelry suit you better?"'
+                        helpText='e.g. "First, does gold or silver jewelry suit you better?"'
                       />
                       <TextField
                         label="Helper text (optional)"
@@ -1470,7 +1514,7 @@ const NUM_RANKS = 3;
                               ...(q.showIfAxisKey &&
                               !showIfAxisOptions.some((a) => a.key === q.showIfAxisKey)
                                 ? [{
-                                    label: `⚠ ${q.showIfAxisKey} (unavailable — switch to Always asked)`,
+                                    label: `${q.showIfAxisKey} (unavailable: switch to Always asked)`,
                                     value: q.showIfAxisKey,
                                   }]
                                 : []),
@@ -1489,7 +1533,7 @@ const NUM_RANKS = 3;
                           <Select
                             label="Required answer"
                             options={[
-                              { label: "— Pick a value —", value: "" },
+                              { label: "Pick a value", value: "" },
                               ...(
                                 axes.find((a) => a.key === q.showIfAxisKey)?.values || []
                               ).map((v) => ({
@@ -1500,7 +1544,7 @@ const NUM_RANKS = 3;
                               !(axes.find((a) => a.key === q.showIfAxisKey)?.values || [])
                                 .some((v) => v.value === q.showIfAxisValue)
                                 ? [{
-                                    label: `⚠ ${q.showIfAxisValue} (unavailable)`,
+                                    label: `${q.showIfAxisValue} (unavailable)`,
                                     value: q.showIfAxisValue,
                                   }]
                                 : []),
@@ -1550,7 +1594,7 @@ const NUM_RANKS = 3;
                                 <Select
                                   label="Mapped value"
                                   options={[
-                                    { label: "— Pick a value —", value: "" },
+                                    { label: "Pick a value", value: "" },
                                     ...axis.values.map((v) => ({
                                       label: v.label || v.value,
                                       value: v.value,
@@ -1573,7 +1617,7 @@ const NUM_RANKS = 3;
                               }
                               autoComplete="off"
                               multiline={2}
-                              placeholder="Warm undertones — beautiful..."
+                              placeholder="Warm undertones, beautiful..."
                               helpText="Personality line shown after the shopper picks this option. Optional."
                             />
                             <TextField
@@ -1625,7 +1669,7 @@ const NUM_RANKS = 3;
                                     ...(opt.showIfAxisKey &&
                                     !showIfAxisOptions.some((a) => a.key === opt.showIfAxisKey)
                                       ? [{
-                                          label: `⚠ ${opt.showIfAxisKey} (unavailable — switch to Always shown)`,
+                                          label: `${opt.showIfAxisKey} (unavailable: switch to Always shown)`,
                                           value: opt.showIfAxisKey,
                                         }]
                                       : []),
@@ -1644,7 +1688,7 @@ const NUM_RANKS = 3;
                                 <Select
                                   label="Required answer"
                                   options={[
-                                    { label: "— Pick a value —", value: "" },
+                                    { label: "Pick a value", value: "" },
                                     ...(
                                       axes.find((a) => a.key === opt.showIfAxisKey)?.values || []
                                     ).map((v) => ({
@@ -1655,7 +1699,7 @@ const NUM_RANKS = 3;
                                     !(axes.find((a) => a.key === opt.showIfAxisKey)?.values || [])
                                       .some((v) => v.value === opt.showIfAxisValue)
                                       ? [{
-                                          label: `⚠ ${opt.showIfAxisValue} (unavailable)`,
+                                          label: `${opt.showIfAxisValue} (unavailable)`,
                                           value: opt.showIfAxisValue,
                                         }]
                                       : []),
@@ -1796,7 +1840,7 @@ const NUM_RANKS = 3;
             <Text as="h2" variant="headingMd">Rules matrix</Text>
             <Text as="p" variant="bodySm" tone="subdued">
               Each row is one combination of axis values. Assign up to {NUM_RANKS}{" "}
-              products or shades per cell in rank order — rank 1 gets the Top Match
+              products or shades per cell in rank order; rank 1 gets the Top Match
               badge in the chat. Leave blank to fall back to AI for that combination.
             </Text>
             {combinations.length === 0 && (
@@ -1820,7 +1864,7 @@ const NUM_RANKS = 3;
               <BlockStack gap="300">
                 <Banner tone="info">
                   This flow has {combinations.length.toLocaleString()} possible
-                  answer combinations — too many to edit cell-by-cell, so the
+                  answer combinations, too many to edit cell-by-cell, so the
                   grid is hidden and your saved rules are listed below instead.
                   Rules covering part of the answers (for example a single
                   question's value) match automatically, with the most
@@ -1926,8 +1970,8 @@ const NUM_RANKS = 3;
                   Add a rule
                 </Text>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  Pick the answers this rule covers — leave an axis on "Any" to
-                  ignore it — then the product it recommends. More specific
+                  Pick the answers this rule covers (leave an axis on "Any" to
+                  ignore it), then the product it recommends. More specific
                   rules beat broader ones for the same shopper.
                 </Text>
                 <InlineStack gap="200" wrap>
@@ -2078,7 +2122,7 @@ const NUM_RANKS = 3;
               Your product and shade prompts describe wearing ONE set. When a
               matched rule has Qty 2 or more, this prompt is used INSTEAD of
               the product's own prompt so the preview renders the multi-set
-              look — write it as a complete try-on instruction, not an
+              look. Write it as a complete try-on instruction, not an
               add-on note. Products with their own multi-set prompt
               configured ignore this and use theirs. Use {"{count}"} for the
               number of sets. Leave empty to render multi-set picks the same
@@ -2091,21 +2135,13 @@ const NUM_RANKS = 3;
               onChange={setMultiSetPrompt}
               multiline={4}
               autoComplete="off"
-              placeholder="Apply {count} full sets of this product at once — a complete instruction for the whole try-on…"
+              placeholder="Apply {count} full sets of this product at once: a complete instruction for the whole try-on…"
             />
             <Text as="p" variant="bodySm" tone="subdued">
-              Saved with "Save advanced rules" below.
+              Saved with the rest of this page.
             </Text>
           </BlockStack>
         </Card>
-
-        {/* Save bar */}
-        <InlineStack align="end" gap="300">
-          <Button url="/app/assistant">Cancel</Button>
-          <Button variant="primary" onClick={handleSave} loading={isSaving}>
-            Save advanced rules
-          </Button>
-        </InlineStack>
       </BlockStack>
     </Page>
   );

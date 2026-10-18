@@ -62,6 +62,7 @@ import { draftQuestionNotes, type NotesDraft } from "../lib/guidance-generator.s
 import { GENERAL_GUIDANCE_KEY } from "../lib/quiz-guidance-shared";
 import { getBrandProfile, templateSignalsFromProfile, type BrandProfile } from "../lib/brand-profile.server";
 import { getLibraryStatus } from "../lib/brand-library.server";
+import { studioAdminBarsEnabled } from "../lib/studio-admin-bars.server";
 import { trackOverhaulEvent } from "../lib/overhaul-events.server";
 import {
   TEMPLATES,
@@ -77,7 +78,7 @@ import {
   type SlotDecl,
   type TemplateId,
 } from "../lib/quiz-templates";
-import { arrivalBannerChips, FALLBACK_HINT, type ArrivalBanner } from "../lib/arrival-banner";
+import { arrivalBannerChips, type ArrivalBanner } from "../lib/arrival-banner";
 import { parseGenerationReport } from "../lib/generation-report.server";
 import { isLiveProduct, type CatalogProduct } from "../lib/quiz-config-schema.server";
 
@@ -128,7 +129,17 @@ import {
   unavailableIntegrationStatus,
   type IntegrationStatus,
 } from "../lib/integrations.server";
-import { navigateParent } from "../components/studio/navigate-parent";
+import {
+  navigateParent,
+  onStudioAction,
+  postStudioReady,
+  postStudioState,
+  type StudioAction,
+} from "../components/studio/navigate-parent";
+import { setAppToastMode, showAppToast } from "../components/studio/toast";
+import { StudioToastHost } from "../components/studio/StudioToastHost";
+import { ArrivalNotice, NoticeSlot } from "../components/studio/StudioNotices";
+import { StudioSaveBarProvider, useStudioSaveBarHost } from "../components/studio/save-bar";
 import { postStudioAction } from "../components/studio/studio-data";
 import {
   STUDIO_COLOR_KEYS,
@@ -607,6 +618,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     draft,
     hasDraft: draft !== null,
     legacyDraftArchived: legacy.archived,
+    // Per-shop opt-in, off by default: the admin title bar and save bar
+    // (lib/studio-admin-bars.server).
+    adminBars: studioAdminBarsEnabled(shopDomain),
     versions,
     notes,
     settings,
@@ -738,6 +752,34 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           previewFlow: await previewFlowFor(shop.id, batchResult.draft),
           previewConfig: batchConfig,
         });
+      }
+      case "preview-tools": {
+        // Admin-bars shops (lib/studio-admin-bars.server): the edits a merchant
+        // hasn't saved yet, applied to the live quiz in memory so the
+        // preview shows them. Read-only: no lock, no write, no snapshot.
+        let calls: Array<{ tool: string; input: unknown }>;
+        try {
+          calls = JSON.parse((formData.get("calls") as string) || "[]");
+        } catch {
+          return json({ ok: false, error: "Malformed edit", intent }, { status: 400 });
+        }
+        if (!Array.isArray(calls) || calls.length === 0 || calls.length > 12) {
+          return json({ ok: false, error: "Malformed edit", intent }, { status: 400 });
+        }
+        for (const c of calls) {
+          if (!c?.tool || !(c.tool in APPLIERS) || c.tool === "get_draft_details") {
+            return json({ ok: false, error: "Unknown edit", intent }, { status: 400 });
+          }
+        }
+        const [live, catalog] = await Promise.all([captureLiveConfig(shop.id), loadCatalogForShop(shop.id)]);
+        let previewDraft = live;
+        for (const c of calls) {
+          const applied = APPLIERS[c.tool](previewDraft as DraftShape, c.input, catalog);
+          if (!applied.ok) return json({ ok: false, error: applied.error, intent });
+          previewDraft = applied.draft as QuizDraft;
+        }
+        const previewConfig = await buildPreviewQuizConfig(shopDomain, previewDraft).catch(() => null);
+        return json({ ok: true, intent, previewFlow: buildPreviewFlow(previewDraft), previewConfig });
       }
       case "apply-tool": {
         const tool = formData.get("tool") as string;
@@ -1359,7 +1401,7 @@ function GenerationFailed({ shopDomain, error }: { shopDomain: string; error: st
         </Text>
         <div
           style={{
-            fontSize: 12.5,
+            fontSize: 12,
             fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
             background: "#FFF4F4",
             border: "1px solid #F5C6C6",
@@ -1424,19 +1466,64 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
     if (t === "live" || t === "publish") return "live";
     return "build";
   })();
+
+  // Admin title bar and save bar, a per-shop opt-in that is OFF by default
+  // (lib/studio-admin-bars.server). Off, nothing below changes anything:
+  // the Studio draws its own Publish, editors save as before, and
+  // confirmLeave runs its callback straight away. On, editors hold their
+  // edits for one Save / Discard, and a switch that would unmount an
+  // editor holding edits asks first.
+  const adminBars = data.adminBars === true;
+  // App Bridge toasts only for opted-in shops; the rest keep the in-page one.
+  setAppToastMode(adminBars);
+  // Opened from the dashboard's app window (navtoken in the src). Read from
+  // the URL so the server render agrees.
+  const hosted = Boolean(params.get("navtoken"));
+  // The dashboard draws Publish / View on my store in the window's title
+  // bar and hangs the save bar on its modal (Built for Shopify 4.1.6).
+  const hostActions = adminBars && hosted;
+  const saveBarHost = useStudioSaveBarHost(adminBars, {
+    hosted,
+    onPreview: (payload) => updatePreview(payload),
+    onDiscarded: () => {
+      setChatEpoch((n) => n + 1);
+      reloadPreview();
+    },
+  });
+  const { confirmLeave, hasPending, saveAll, discardAll } = saveBarHost;
+  // Delivers pending edits before something reads the live quiz: the open
+  // editor's flush, or with the save bar on, a Save of everything it holds
+  // (a Build with AI turn counts as one). Resolves false when that save
+  // failed, so the caller can stop instead of racing it.
+  const flushEdits = useCallback(async (): Promise<boolean> => {
+    if (!adminBars) {
+      editorFlushRef.current?.();
+      return true;
+    }
+    const ok = await saveAll();
+    // The editor may have unmounted before this save answered (Build with
+    // AI tab), so a failure lands in the panel's error banner.
+    if (!ok) setTreeError((prev) => prev ?? "Some changes couldn't be saved. Make them again, then click Save.");
+    return ok;
+  }, [adminBars, saveAll]);
+
   const setTab = useCallback(
     (next: StudioTab) => {
-      editorFlushRef.current?.();
-      setParams(
-        (p) => {
-          p.set("tab", next);
-          p.delete("step");
-          return p;
-        },
-        { replace: true },
-      );
+      const go = () => {
+        editorFlushRef.current?.();
+        setParams(
+          (p) => {
+            p.set("tab", next);
+            p.delete("step");
+            return p;
+          },
+          { replace: true },
+        );
+      };
+      if (next === tab) go();
+      else confirmLeave(go);
     },
-    [setParams],
+    [setParams, confirmLeave, tab],
   );
 
   const overlayOpen = params.get("overlay") === "templates";
@@ -1546,15 +1633,18 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
   // A dashed slot clicked on the canvas (widget `gleame:pick-slot`): the
   // Images rail opens its picker for this key, then clears it.
   const [pendingPickSlot, setPendingPickSlot] = useState<string | null>(null);
-  // One toast slot for template switches and image-slot changes, with an
-  // optional Undo action (spec 2.4 / 4.5).
-  const [undoToast, setUndoToast] = useState<{ message: string; undo?: () => void } | null>(null);
-  const toastTimerRef = useRef<number | null>(null);
+  // Template switches and image-slot changes confirm with a toast carrying
+  // Undo (spec 2.4 / 4.5; see toast.ts). Failures never use a toast: they
+  // stay above the canvas as a critical banner until dismissed (Built for
+  // Shopify 4.2.4).
   const showUndoToast = useCallback((message: string, undo?: () => void) => {
-    setUndoToast({ message, undo });
-    if (toastTimerRef.current != null) window.clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = window.setTimeout(() => setUndoToast(null), 6000);
+    showAppToast(message, undo);
   }, []);
+  const [studioError, setStudioError] = useState<string | null>(null);
+  // "View on my store" from the admin title bar: the click happened in the
+  // admin, so the browser may block our new tab. Then the link is offered
+  // here instead, one click away.
+  const [storeLink, setStoreLink] = useState<string | null>(null);
   // First-run banner (spec 2.2): dismissal persists per quiz. One quiz per
   // shop, so localStorage keyed by shop domain is the quiz key.
   const bannerKey = `gleame-reveal-banner:${data.shopDomain}`;
@@ -1666,11 +1756,15 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
 
   const selectSlide = useCallback(
     (slideId: string) => {
-      editorFlushRef.current?.();
-      setSelectedSlide(slideId);
-      gotoPreviewStep(slideId);
+      const go = () => {
+        editorFlushRef.current?.();
+        setSelectedSlide(slideId);
+        gotoPreviewStep(slideId);
+      };
+      if (slideId === selectedSlideRef.current) go();
+      else confirmLeave(go);
     },
-    [setSelectedSlide, gotoPreviewStep],
+    [setSelectedSlide, gotoPreviewStep, confirmLeave],
   );
 
   // Two-way sync: clicking through the quiz INSIDE the preview advances the
@@ -1695,8 +1789,12 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
       if (d.type === "gleame:pick-slot") {
         const slotKey = String(d.slotKey ?? "");
         if (!/^[a-z0-9:_-]{1,120}$/i.test(slotKey)) return;
-        setPendingPickSlot(slotKey);
-        if (selectedSlideRef.current !== "images") setSelectedSlide("images");
+        const pick = () => {
+          setPendingPickSlot(slotKey);
+          if (selectedSlideRef.current !== "images") setSelectedSlide("images");
+        };
+        if (selectedSlideRef.current === "images") pick();
+        else confirmLeave(pick);
         return;
       }
       if (d.type !== "gleame-preview-at") return;
@@ -1774,11 +1872,14 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
         );
         if (sameScreen) return;
       }
+      // An editor holding unsaved edits (save bar on) keeps the panel:
+      // clicking through the preview shouldn't ask to leave.
+      if (hasPending()) return;
       if (slideId !== selectedSlideRef.current) setSelectedSlide(slideId);
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [questions, setSelectedSlide, data.draft]);
+  }, [questions, setSelectedSlide, data.draft, confirmLeave, hasPending]);
 
   // A freshly (re)loaded iframe boots at the intro — steer it back to the
   // current slide instead of letting its boot echo win.
@@ -1897,15 +1998,54 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
         fireOverhaulEvent("store_preview_opened", {});
       } else {
         w?.close();
-        showUndoToast(body?.error ?? "Couldn't open the store preview");
+        setStudioError(body?.error ?? "Couldn't open the store preview");
       }
     } catch {
       w?.close();
-      showUndoToast("Couldn't open the store preview");
+      setStudioError("Couldn't open the store preview");
     } finally {
       setViewStoreBusy(false);
     }
-  }, [showUndoToast]);
+  }, []);
+
+  // The title bar path. The preview link (a 7-day token) is minted up front
+  // (the server just signs it, nothing is written) and handed to the
+  // dashboard, which opens it inside the admin's click. This runs only
+  // when that didn't open a tab: try here, else offer the link.
+  const storeLinkRef = useRef<string | null>(null);
+  const [mintedStoreUrl, setMintedStoreUrl] = useState<string | null>(null);
+  const mintStoreLink = useCallback(async (): Promise<string | null> => {
+    try {
+      const fd = new FormData();
+      fd.append("intent", "preview-link");
+      fd.append("draftId", "live");
+      const res = await fetch("/app/api/publish-quiz", { method: "POST", body: fd });
+      const body = await res.json().catch(() => null);
+      const url = body?.ok && typeof body.url === "string" ? body.url : null;
+      if (url) {
+        storeLinkRef.current = url;
+        setMintedStoreUrl(url);
+      }
+      return url;
+    } catch {
+      return null;
+    }
+  }, []);
+  useEffect(() => {
+    if (hostActions && data.hasDraft && !previewOnly && !storeLinkRef.current) void mintStoreLink();
+  }, [hostActions, data.hasDraft, previewOnly, mintStoreLink]);
+  const viewStoreFromTitleBar = useCallback(async () => {
+    const ready = storeLinkRef.current;
+    if (ready && window.open(ready, "_blank")) {
+      fireOverhaulEvent("store_preview_opened", {});
+      return;
+    }
+    setViewStoreBusy(true);
+    const url = ready ?? (await mintStoreLink());
+    setViewStoreBusy(false);
+    if (url) setStoreLink(url);
+    else setStudioError("Couldn't open the store preview");
+  }, [mintStoreLink]);
 
   // Template switching (V3-CONTRACTS §7): the ONLY write path for
   // quiz_template from the Studio. After success the loader is
@@ -1944,7 +2084,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
           },
         );
       } else {
-        showUndoToast(r?.error ?? "Switching templates failed");
+        setStudioError(r?.error ?? "Switching templates failed");
       }
     },
     [setTemplateApi, data.studio.template, refreshAfterSwitch, setOverlay, showUndoToast],
@@ -1958,14 +2098,14 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
       const res = await fetch("/app/api/brand-library", { method: "POST", body: fd });
       const body = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
       if (!res.ok || body?.ok === false) {
-        showUndoToast(body?.error ?? "Couldn't restart indexing. Try again in a minute.");
+        setStudioError(body?.error ?? "Couldn't restart indexing. Try again in a minute.");
       }
     } catch {
-      showUndoToast("Couldn't restart indexing. Check your connection and try again.");
+      setStudioError("Couldn't restart indexing. Check your connection and try again.");
     } finally {
       revalidator.revalidate();
     }
-  }, [revalidator, showUndoToast]);
+  }, [revalidator]);
 
   // Image slot changes (spec 4.5): write, re-render, offer Undo.
   const setImageSlot = useCallback(
@@ -1994,7 +2134,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
             });
           });
         } else {
-          showUndoToast(body?.error ?? "Saving the image failed");
+          setStudioError(body?.error ?? "Saving the image failed");
         }
       } finally {
         setSlotBusy(false);
@@ -2026,6 +2166,34 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
     if (needsOnboarding && !generationError) navigateParent("/app/onboarding/scope");
   }, [needsOnboarding, generationError]);
 
+  // The dashboard's load watchdog: this frame booted.
+  useEffect(() => postStudioReady(), []);
+
+  // Admin bars (opted-in shops, hosted): tell the dashboard which title
+  // bar actions to show and whether its save bar is up, and take the
+  // clicks. The store link rides along so the dashboard can open the tab
+  // inside the admin's own click. A ref keeps the subscription stable.
+  useEffect(() => {
+    if (!hostActions) return;
+    postStudioState({
+      showPublish: !previewOnly,
+      showViewStore: !previewOnly,
+      viewStoreDisabled: !data.hasDraft,
+      storeUrl: mintedStoreUrl,
+      dirty: saveBarHost.dirty,
+      saving: saveBarHost.saving,
+    });
+  }, [hostActions, previewOnly, data.hasDraft, mintedStoreUrl, saveBarHost.dirty, saveBarHost.saving]);
+  const titleBarActionRef = useRef<(a: StudioAction) => void>(() => {});
+  titleBarActionRef.current = (a) => {
+    if (a === "publish") confirmLeave(() => setPublishOpen(true));
+    else if (a === "view-store") void viewStoreFromTitleBar();
+    else if (a === "store-opened") fireOverhaulEvent("store_preview_opened", {});
+    else if (a === "save") void saveAll();
+    else if (a === "discard") discardAll();
+  };
+  useEffect(() => (hostActions ? onStudioAction((a) => titleBarActionRef.current(a)) : undefined), [hostActions]);
+
   // Arrival banner (spec 6.5): assembled ONLY from the generation report.
   const banner: ArrivalBanner = arrivalBannerChips(data.studio.report, data.studio.template);
 
@@ -2040,6 +2208,9 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
 
   return (
     <AppProvider isEmbeddedApp apiKey={data.apiKey}>
+      <StudioSaveBarProvider value={saveBarHost.api}>
+      {saveBarHost.bar}
+      {saveBarHost.leaveDialog}
       <StudioShell
         topBar={
           <StudioTopBar
@@ -2052,10 +2223,11 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
             catalog={data.catalog}
             onViewStore={() => void viewStore()}
             viewStoreBusy={viewStoreBusy}
-            onPublishClick={() => setPublishOpen(true)}
+            onPublishClick={() => confirmLeave(() => setPublishOpen(true))}
             previewOnly={previewOnly}
             templatePending={templateAwaitingPublish(data)}
             live={data.quizSurfaceEnabled !== false}
+            hostActions={hostActions}
           />
         }
         rail={
@@ -2085,14 +2257,16 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
             />
           ) : (
             <SlideTree
-              error={treeError}
-              onDismissError={() => setTreeError(null)}
               flow={data.draft?.flow ?? null}
               selectedSlide={selectedSlide}
               onSelect={selectSlide}
-              onAdd={addQuestion}
-              onMove={moveQuestion}
-              onReorder={(axisKeysInOrder) => submitTreeTool("reorder_questions", { axisKeysInOrder })}
+              // Rail edits save at once; with the save bar on they first ask
+              // to leave unsaved panel edits (they rebuild the editor).
+              onAdd={() => confirmLeave(addQuestion)}
+              onMove={(axisKey, direction) => confirmLeave(() => moveQuestion(axisKey, direction))}
+              onReorder={(axisKeysInOrder) =>
+                confirmLeave(() => submitTreeTool("reorder_questions", { axisKeysInOrder }))
+              }
               flowMapOpen={flowMapOpen && tab === "build"}
               onToggleFlowMap={() => setFlowMapOpen((v) => !v)}
               flashSlide={flashSlide}
@@ -2100,16 +2274,92 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
               readOnly={tab !== "build"}
               onReturnToBuild={tab !== "build" ? () => setTab("build") : undefined}
               hasTemplate={Boolean(data.studio.template)}
-              onOpenGallery={tab === "build" ? () => setOverlay(true) : undefined}
+              onOpenGallery={tab === "build" ? () => confirmLeave(() => setOverlay(true)) : undefined}
               imagesAttention={imagesAttention}
             />
           )
         }
         canvas={
           <>
-            {/* Template on but not live yet: shoppers still see the previous
-                layout (was a banner on the Live tab). */}
-            <TemplatePendingBanner data={data} />
+            {/* One banner at a time, most urgent first (StudioNotices). */}
+            <NoticeSlot
+              notices={[
+                studioError && {
+                  key: "error",
+                  node: (
+                    <Banner tone="critical" onDismiss={() => setStudioError(null)}>
+                      {studioError}
+                    </Banner>
+                  ),
+                },
+                storeLink && {
+                  key: "store-link",
+                  node: (
+                    <Banner
+                      tone="info"
+                      title="Your store preview is ready"
+                      action={{
+                        content: "Open store preview",
+                        url: storeLink,
+                        external: true,
+                        onAction: () => {
+                          fireOverhaulEvent("store_preview_opened", {});
+                          setStoreLink(null);
+                        },
+                      }}
+                      onDismiss={() => setStoreLink(null)}
+                    />
+                  ),
+                },
+                // Template on but not live yet: shoppers still see the
+                // previous layout. The Live tab shows its own copy.
+                tab !== "live" &&
+                  templateAwaitingPublish(data) && { key: "template", node: <TemplatePendingBanner data={data} /> },
+                tab === "build" &&
+                  genNotice && {
+                    key: "generator",
+                    node: (
+                      <Banner tone="warning" title="Heads up from the quiz generator" onDismiss={() => setGenNotice(null)}>
+                        {genNotice}
+                      </Banner>
+                    ),
+                  },
+                tab === "build" &&
+                  legacyNotice && {
+                    key: "legacy",
+                    node: (
+                      <Banner tone="info" title="The studio now edits your live quiz directly" onDismiss={() => setLegacyNotice(false)}>
+                        {adminBars ? "Changes save to your store when you click Save" : "Changes save to your store as you make them"} (the quiz still only shows to shoppers
+                        while it&rsquo;s turned on in the Live tab). Your old draft wasn&rsquo;t lost: it&rsquo;s
+                        in version history on the Live tab, one click to restore.
+                      </Banner>
+                    ),
+                  },
+                tab === "build" &&
+                  data.hasDraft &&
+                  bannerVisible && {
+                    key: "arrival",
+                    node: (
+                      <ArrivalNotice
+                        banner={banner}
+                        onPlay={() => {
+                          playModeRef.current = true;
+                          selectSlide("intro");
+                        }}
+                        onStyle={() => selectSlide("theme")}
+                        onDismiss={() => {
+                          setBannerVisible(false);
+                          try {
+                            window.localStorage.setItem(bannerKey, "1");
+                          } catch {
+                            /* session-only dismissal */
+                          }
+                        }}
+                      />
+                    ),
+                  },
+              ]}
+            />
             {tab === "live" ? (
             <LiveTab
               data={data}
@@ -2130,41 +2380,6 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
             />
           ) : (
             <>
-              {genNotice && (
-                <div style={{ padding: "12px 16px 0" }}>
-                  <Banner tone="warning" title="Heads up from the quiz generator" onDismiss={() => setGenNotice(null)}>
-                    {genNotice}
-                  </Banner>
-                </div>
-              )}
-              {legacyNotice && (
-                <div style={{ padding: "12px 16px 0" }}>
-                  <Banner tone="info" title="The studio now edits your live quiz directly" onDismiss={() => setLegacyNotice(false)}>
-                    Changes save to your store as you make them (the quiz still only
-                    shows to shoppers while it's turned on in the status menu at the
-                    top). Your old draft wasn't lost: it's in version history (the
-                    clock button at the top), one click to restore.
-                  </Banner>
-                </div>
-              )}
-              {data.hasDraft && bannerVisible && (
-                <FirstRunBanner
-                  banner={banner}
-                  onPlay={() => {
-                    playModeRef.current = true;
-                    selectSlide("intro");
-                  }}
-                  onStyle={() => selectSlide("theme")}
-                  onDismiss={() => {
-                    setBannerVisible(false);
-                    try {
-                      window.localStorage.setItem(bannerKey, "1");
-                    } catch {
-                      /* session-only dismissal */
-                    }
-                  }}
-                />
-              )}
               {flowMapOpen ? (
                 <FlowMap
                   flow={data.draft?.flow ?? null}
@@ -2198,14 +2413,17 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
             registerFlush={(fn) => {
               editorFlushRef.current = fn;
             }}
-            flushEditor={() => editorFlushRef.current?.()}
+            flushEditor={flushEdits}
             // Flushes fired around a slide/step switch outlive the editor
             // that owned the local error banner; surface their rejections
-            // in the rail banner, which survives the switch.
+            // (and rail edits that fail) at the top of this panel, which
+            // survives the switch and sits beside the fields.
             onSaveError={setTreeError}
+            saveError={treeError}
+            onDismissSaveError={() => setTreeError(null)}
             onSelectSlide={selectSlide}
-            onOpenGallery={() => setOverlay(true)}
-            onDeleteQuestion={(axisKey, fallbackSlide) => {
+            onOpenGallery={() => confirmLeave(() => setOverlay(true))}
+            onDeleteQuestion={(axisKey, fallbackSlide) => confirmLeave(() => {
               // Hoisted here because the revalidation after a delete
               // unmounts the question editor: its own fetcher effect never
               // ran, leaving the preview on the deleted question.
@@ -2226,7 +2444,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
               }
               pendingSelectRef.current = fallbackSlide;
               submitTreeTool("remove_question", { axisKey, removeAxis: true, pruneRules: true });
-            }}
+            })}
             onPreviewUpdate={updatePreview}
             onPreviewReload={reloadPreview}
             chat={
@@ -2236,7 +2454,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
                 selectedSlide={selectedSlide}
                 questions={questions}
                 onBusyChange={setChatBusy}
-                onBeforeSend={() => editorFlushRef.current?.()}
+                onBeforeSend={flushEdits}
                 onChangeApplied={(target) => {
                   // Bump AFTER revalidation lands: an immediate remount would
                   // reinitialize editors from the pre-change loader snapshot.
@@ -2287,8 +2505,13 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
         data={data}
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
-        // Pending keystrokes land BEFORE the restore, never after it.
-        onBeforeRestore={() => editorFlushRef.current?.()}
+        // Pending keystrokes land BEFORE the restore, never after it. Held
+        // edits (save bar on) are dropped instead: the restore replaces
+        // them anyway, and saving first would race it.
+        onBeforeRestore={() => {
+          if (hasPending()) discardAll();
+          else editorFlushRef.current?.();
+        }}
         // Editors hold local state keyed by chatEpoch: remount them from the
         // restored config (else the next edit writes pre-restore values back)
         // and reload the preview, which keeps its pinned token otherwise.
@@ -2308,45 +2531,6 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
           selectSlide(slideId);
         }}
       />
-      {undoToast && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: 16,
-            left: 16,
-            background: "#141519",
-            color: "#fff",
-            borderRadius: 10,
-            padding: "10px 14px",
-            fontSize: 12.5,
-            display: "flex",
-            gap: 14,
-            alignItems: "center",
-            zIndex: 70,
-            boxShadow: "0 8px 24px rgba(20,22,26,.25)",
-          }}
-        >
-          <span>{undoToast.message}</span>
-          {undoToast.undo && (
-            <button
-              onClick={() => {
-                undoToast.undo?.();
-                setUndoToast(null);
-              }}
-              style={{
-                border: 0,
-                background: "transparent",
-                color: "#9AA4FF",
-                fontWeight: 600,
-                cursor: "pointer",
-                fontSize: 12.5,
-              }}
-            >
-              Undo
-            </button>
-          )}
-        </div>
-      )}
       <Modal
         open={pendingDelete !== null}
         onClose={() => setPendingDelete(null)}
@@ -2371,10 +2555,10 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
           <Text as="p">
             {[
               pendingDelete && pendingDelete.ruleCount > 0
-                ? `${pendingDelete.ruleCount} recommendation ${pendingDelete.ruleCount === 1 ? "rule uses" : "rules use"} this question's answers — deleting it removes that condition from ${pendingDelete.ruleCount === 1 ? "the rule" : "those rules"} (rules with no other conditions are deleted).`
+                ? `${pendingDelete.ruleCount} recommendation ${pendingDelete.ruleCount === 1 ? "rule uses" : "rules use"} this question's answers. Deleting it removes that condition from ${pendingDelete.ruleCount === 1 ? "the rule" : "those rules"} (rules with no other conditions are deleted).`
                 : null,
               pendingDelete && pendingDelete.showIfCount > 0
-                ? `${pendingDelete.showIfCount} "only show when" ${pendingDelete.showIfCount === 1 ? "condition points" : "conditions point"} at its answers — ${pendingDelete.showIfCount === 1 ? "it" : "they"} will be cleared, so the affected ${pendingDelete.showIfCount === 1 ? "question or answer" : "questions or answers"} will always show.`
+                ? `${pendingDelete.showIfCount} "only show when" ${pendingDelete.showIfCount === 1 ? "condition points" : "conditions point"} at its answers. ${pendingDelete.showIfCount === 1 ? "It" : "They"} will be cleared, so the affected ${pendingDelete.showIfCount === 1 ? "question or answer" : "questions or answers"} will always show.`
                 : null,
               "A snapshot of your current quiz is saved to version history first.",
             ]
@@ -2383,73 +2567,9 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
           </Text>
         </Modal.Section>
       </Modal>
+      <StudioToastHost />
+      </StudioSaveBarProvider>
     </AppProvider>
-  );
-}
-
-// ---------------------------------------------------------------------
-// Arrival banner (V3-SPEC 6.5): one dismissible row between the top bar
-// and the canvas, assembled ONLY from the generation report via
-// arrivalBannerChips. A chip renders only when its value is real.
-// ---------------------------------------------------------------------
-
-function FirstRunBanner({
-  banner,
-  onPlay,
-  onStyle,
-  onDismiss,
-}: {
-  banner: ArrivalBanner;
-  onPlay: () => void;
-  onStyle: () => void;
-  onDismiss: () => void;
-}) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 14,
-        padding: "11px 16px",
-        background: "#F4F3FF",
-        borderBottom: "1px solid #E2E0F7",
-        fontSize: 13,
-        flexShrink: 0,
-      }}
-    >
-      <span style={{ width: 8, height: 8, borderRadius: 999, background: "#4A3AFF", flexShrink: 0 }} />
-      <div style={{ minWidth: 0 }}>
-        <strong>{banner.lead}</strong>{" "}
-        {banner.fallback ? (
-          <button
-            onClick={onStyle}
-            style={{ border: 0, background: "none", padding: 0, color: "#4A3AFF", fontWeight: 600, cursor: "pointer", fontSize: 13 }}
-          >
-            {FALLBACK_HINT}
-          </button>
-        ) : (
-          <>
-            {banner.chips.length > 0 && <span style={{ color: "#6D7175" }}>{banner.chips.join(" · ")}.</span>}{" "}
-            <span style={{ color: "#6D7175" }}>Nothing is live until you publish.</span>
-          </>
-        )}
-      </div>
-      <div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center", flexShrink: 0 }}>
-        <button
-          onClick={onPlay}
-          style={{ border: 0, background: "none", color: "#4A3AFF", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
-        >
-          Play the quiz
-        </button>
-        <button
-          onClick={onDismiss}
-          aria-label="Dismiss"
-          style={{ border: 0, background: "none", color: "#9A9EAB", fontSize: 15, cursor: "pointer" }}
-        >
-          ✕
-        </button>
-      </div>
-    </div>
   );
 }
 

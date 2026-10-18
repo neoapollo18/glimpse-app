@@ -12,8 +12,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRevalidator } from "@remix-run/react";
-import { Button, Icon, Spinner } from "@shopify/polaris";
-import { MergeIcon, MagicIcon } from "@shopify/polaris-icons";
+import { Banner, Button, Icon, Spinner } from "@shopify/polaris";
+import { AlertTriangleIcon, ChatIcon, CheckIcon, ClipboardChecklistIcon, MergeIcon, XSmallIcon } from "@shopify/polaris-icons";
 import {
   appliesToLine,
   overviewCount,
@@ -26,6 +26,7 @@ import {
   type EmptyCombination,
 } from "../../lib/answer-rules-shared";
 import type { CanvasTheme } from "./PreviewCanvas";
+import { showAppToast } from "./toast";
 
 export interface MatchingData {
   rules: AnswerRule[];
@@ -48,6 +49,10 @@ export interface MatchQuestion {
 export type MatchesSelection = string;
 
 const FOCUS_CHAT_EVENT = "gleame:focus-matches-chat";
+
+const MUTED = "var(--p-color-text-secondary, #616161)";
+// "Needs a look" counts: Polaris caution text, AA on white (was amber).
+const CAUTION = "var(--p-color-text-caution, #4F4700)";
 
 const linkButton: React.CSSProperties = {
   border: 0,
@@ -83,7 +88,9 @@ export function useMatchesState(matching: MatchingData | null, questions: MatchQ
   const [global, setGlobal] = useState<GlobalRules>({ always: [], never: [] });
   const [drafting, setDrafting] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ text: string; undo?: () => Promise<void> } | null>(null);
+  // Errors stay on screen until dismissed (Built for Shopify 4.2.4);
+  // successes and Undo are App Bridge toasts (notify).
+  const [error, setError] = useState<string | null>(null);
   const draftedOnce = useRef(false);
   const refreshedOnce = useRef(false);
 
@@ -115,12 +122,6 @@ export function useMatchesState(matching: MatchingData | null, questions: MatchQ
       if (d?.ok && d.refreshed > 0) revalidator.revalidate();
     });
   }, [matching?.stale, revalidator]);
-
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 7000);
-    return () => clearTimeout(t);
-  }, [toast]);
 
   const saveSentence = useCallback(
     async (axisKey: string, axisValue: string, sentence: string) => {
@@ -154,7 +155,7 @@ export function useMatchesState(matching: MatchingData | null, questions: MatchQ
           else next.delete(k);
           return next;
         });
-        setToast({ text: d?.error ?? "Couldn't save that sentence" });
+        setError(d?.error ?? "Couldn't save that sentence");
       }
     },
     [rules, revalidator],
@@ -167,21 +168,19 @@ export function useMatchesState(matching: MatchingData | null, questions: MatchQ
       const d = await post({ intent: "set-global", global: JSON.stringify(next) });
       if (!d?.ok) {
         setGlobal(before);
-        setToast({ text: d?.error ?? "Couldn't update that rule" });
+        setError(d?.error ?? "Couldn't update that rule");
         return;
       }
+      setError(null);
       revalidator.revalidate();
-      setToast({
-        text: label,
-        undo: async () => {
-          setGlobal(before);
-          const u = await post({ intent: "set-global", global: JSON.stringify(before) });
-          if (!u?.ok) {
-            setGlobal(next);
-            setToast({ text: u?.error ?? "Couldn't undo that change" });
-          }
-          revalidator.revalidate();
-        },
+      notify(label, async () => {
+        setGlobal(before);
+        const u = await post({ intent: "set-global", global: JSON.stringify(before) });
+        if (!u?.ok) {
+          setGlobal(next);
+          setError(u?.error ?? "Couldn't undo that change");
+        }
+        revalidator.revalidate();
       });
     },
     [global, revalidator],
@@ -203,8 +202,9 @@ export function useMatchesState(matching: MatchingData | null, questions: MatchQ
     global,
     drafting,
     draftError,
-    toast,
-    setToast,
+    error,
+    setError,
+    notify,
     saveSentence,
     setGlobalRules,
     ruleFor,
@@ -215,6 +215,11 @@ export function useMatchesState(matching: MatchingData | null, questions: MatchQ
 }
 
 export type MatchesState = ReturnType<typeof useMatchesState>;
+
+/** Success note with an optional Undo, as an App Bridge toast. */
+function notify(text: string, undo?: () => Promise<void>) {
+  showAppToast(text, undo ? () => void undo() : undefined);
+}
 
 // ---------------------------------------------------------------------
 // Rail
@@ -228,7 +233,7 @@ function Dot({ amber }: { amber: boolean }) {
         width: 8,
         height: 8,
         borderRadius: "50%",
-        background: amber ? "#E3A008" : "#1A8A4F",
+        background: amber ? "#B98900" : "#1A8A4F",
         flexShrink: 0,
         marginLeft: "auto",
       }}
@@ -244,8 +249,8 @@ function Chip({ children }: { children: React.ReactNode }) {
         height: 20,
         borderRadius: 6,
         background: "#F1F1F1",
-        color: "#6D7175",
-        fontSize: 11,
+        color: "#616161",
+        fontSize: 12,
         fontWeight: 600,
         display: "inline-flex",
         alignItems: "center",
@@ -260,11 +265,9 @@ function Chip({ children }: { children: React.ReactNode }) {
 
 const railHeader: React.CSSProperties = {
   padding: "10px 8px 4px",
-  fontSize: 11,
+  fontSize: 12,
   fontWeight: 600,
-  letterSpacing: "0.06em",
-  textTransform: "uppercase",
-  color: "#8A8F98",
+  color: MUTED,
 };
 
 export function MatchesRail({
@@ -310,8 +313,16 @@ export function MatchesRail({
   );
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
-      <div style={{ padding: "8px 8px 8px", display: "flex", flexDirection: "column", gap: 2, flex: 1 }}>
-        {item("overview", "Overview", <Chip>◎</Chip>)}
+      <div className="studio-rail-list" style={{ padding: "8px 8px 8px", display: "flex", flexDirection: "column", gap: 2, flex: 1 }}>
+        {item(
+          "overview",
+          "Overview",
+          <Chip>
+            <span style={{ width: 16, height: 16, display: "inline-flex" }}>
+              <Icon source={ClipboardChecklistIcon} tone="subdued" />
+            </span>
+          </Chip>,
+        )}
         <div className="studio-rail-wide" style={railHeader}>
           Screens
         </div>
@@ -414,12 +425,12 @@ function SentenceField({
         border: compact ? "1px solid transparent" : "1px solid #D4D6DA",
         padding: compact ? "6px 10px" : "10px 13px",
         cursor: "text",
-        color: empty ? "#9A9EA5" : neutral ? "#6D7175" : "#1F2328",
+        color: empty ? MUTED : neutral ? "#616161" : "#1F2328",
       }}
       onMouseEnter={(e) => compact && (e.currentTarget.style.borderColor = "#D4D6DA")}
       onMouseLeave={(e) => compact && (e.currentTarget.style.borderColor = "transparent")}
     >
-      {empty ? 'No sentence yet — Gleame will treat this answer as "no preference."' : value}
+      {empty ? 'No sentence yet. Gleame will treat this answer as "no preference."' : value}
     </button>
   );
 }
@@ -427,13 +438,13 @@ function SentenceField({
 function AppliesTo({ rule }: { rule: (AnswerRule & { resolving?: boolean }) | undefined }) {
   if (rule?.resolving) {
     return (
-      <div style={{ fontSize: 11.5, color: "#6D7175", marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
+      <div style={{ fontSize: 12, color: MUTED, marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
         <Spinner size="small" accessibilityLabel="" /> Resolving…
       </div>
     );
   }
   const line = appliesToLine(rule ?? { sentence: "", mode: "none", resolved: null, status: "empty" });
-  return <div style={{ fontSize: 11.5, color: line.amber ? "#B7791F" : "#6D7175", marginTop: 6 }}>{line.text}</div>;
+  return <div style={{ fontSize: 12, color: line.amber ? CAUTION : MUTED, marginTop: 6 }}>{line.text}</div>;
 }
 
 // ---------------------------------------------------------------------
@@ -458,49 +469,20 @@ export function MatchesCenter({
   const q = state.questions.find((x) => x.axisKey === selection) ?? null;
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: "auto", background: "#fff", display: "flex", flexDirection: "column" }}>
-      <div style={{ flex: 1, padding: "36px 32px 60px", display: "flex", justifyContent: "center", alignItems: "flex-start" }}>
+      <div style={{ flex: 1, padding: "36px 32px 60px", display: "flex", flexDirection: "column", alignItems: "center" }}>
+        {state.error && (
+          <div style={{ width: "100%", maxWidth: 720, marginBottom: 16 }}>
+            <Banner tone="critical" onDismiss={() => state.setError(null)}>
+              {state.error}
+            </Banner>
+          </div>
+        )}
         {q ? (
           <RuleCard state={state} question={q} index={state.questions.indexOf(q)} onSelect={onSelect} />
         ) : (
           <Overview state={state} matching={matching} onSelect={onSelect} onPublish={onPublish} />
         )}
       </div>
-      {state.toast && (
-        <div
-          role="status"
-          style={{
-            position: "fixed",
-            left: "50%",
-            bottom: 24,
-            transform: "translateX(-50%)",
-            background: "#1a1a1a",
-            color: "#fff",
-            borderRadius: 10,
-            padding: "10px 14px",
-            fontSize: 13,
-            display: "flex",
-            gap: 14,
-            alignItems: "center",
-            zIndex: 60,
-            boxShadow: "0 8px 24px rgba(0,0,0,.2)",
-          }}
-        >
-          <span>{state.toast.text}</span>
-          {state.toast.undo && (
-            <button
-              type="button"
-              onClick={() => {
-                const u = state.toast?.undo;
-                state.setToast(null);
-                void u?.();
-              }}
-              style={{ background: "none", border: 0, color: "#9AB8FF", fontWeight: 600, cursor: "pointer", fontSize: 13 }}
-            >
-              Undo
-            </button>
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -543,9 +525,9 @@ function Overview({
     title = "One combination returns nothing";
     sub = (
       <>
-        {combo.labels.join(" + ")} — two "only" sentences don't overlap.{" "}
+        {combo.labels.join(" + ")}: two "only" sentences don't overlap.{" "}
         <button type="button" onClick={() => onSelect(combo.culpritAxisKey)} style={linkButton}>
-          Loosen "only" on Q{combo.culpritIndex} →
+          Loosen "only" on Q{combo.culpritIndex}
         </button>{" "}
         You can still publish.
       </>
@@ -556,7 +538,7 @@ function Overview({
       <>
         Gleame couldn't match {needsLook.length === 1 ? "it" : "them"} to your catalog.{" "}
         <button type="button" onClick={() => onSelect(needsLook[0])} style={linkButton}>
-          Take a look →
+          Take a look
         </button>{" "}
         You can still publish.
       </>
@@ -587,40 +569,32 @@ function Overview({
           marginBottom: 22,
         }}
       >
-        <span
-          style={{
-            width: 22,
-            height: 22,
-            borderRadius: 99,
-            background: amber ? "#E3A21A" : state.drafting ? "transparent" : "#1A8A4F",
-            color: "#fff",
-            display: "grid",
-            placeItems: "center",
-            fontSize: 12,
-            flex: "none",
-          }}
-        >
-          {state.drafting ? <Spinner size="small" accessibilityLabel="" /> : amber ? "!" : "✓"}
+        <span style={{ width: 22, height: 22, display: "grid", placeItems: "center", flex: "none" }}>
+          {state.drafting ? (
+            <Spinner size="small" accessibilityLabel="" />
+          ) : (
+            <Icon source={amber ? AlertTriangleIcon : CheckIcon} tone={amber ? "caution" : "success"} />
+          )}
         </span>
         <div style={{ minWidth: 0 }}>
           <b style={{ fontWeight: 600, fontSize: 14, display: "block" }}>{title}</b>
-          <span style={{ fontSize: 12.5, color: "#6D7175" }}>{sub}</span>
+          <span style={{ fontSize: 13, color: "#4A4A4A" }}>{sub}</span>
         </div>
+        {/* The title bar's Publish is the page's one primary action. */}
         <div style={{ marginLeft: "auto", flexShrink: 0 }}>
-          <Button variant="primary" onClick={onPublish}>
-            Publish
-          </Button>
+          <Button onClick={onPublish}>Publish</Button>
         </div>
       </div>
 
-      {state.draftError && (
-        <p style={{ fontSize: 12.5, color: "#B7791F", margin: "-10px 0 16px" }}>{state.draftError}</p>
-      )}
-      {matching?.error && (
-        <p style={{ fontSize: 12.5, color: "#B7791F", margin: "-10px 0 16px" }}>Couldn't load matching: {matching.error}</p>
+      {(state.draftError || matching?.error) && (
+        <div style={{ margin: "-10px 0 16px" }}>
+          <Banner tone="critical">
+            {state.draftError ?? `Couldn't load matching: ${matching?.error}`}
+          </Banner>
+        </div>
       )}
       {matching?.hasDisplayOnly && !state.drafting && (
-        <p style={{ fontSize: 12.5, color: "#6D7175", margin: "-10px 0 16px" }}>
+        <p style={{ fontSize: 13, color: MUTED, margin: "-10px 0 16px" }}>
           Your quiz keeps its existing matching. These sentences describe it; one starts steering results once you edit it.
         </p>
       )}
@@ -639,7 +613,7 @@ function Overview({
             marginBottom: 18,
           }}
         >
-          <span style={{ color: "#6D7175" }}>Every result ·</span>
+          <span style={{ color: MUTED }}>Every result ·</span>
           {state.global.always.length > 0 && <span style={{ fontWeight: 500 }}>Always:</span>}
           {state.global.always.map((a) => (
             <RuleChip key={`a-${a.id}`} label={a.label} onRemove={() => removeGlobal("always", a.id, a.label)} />
@@ -671,18 +645,18 @@ function Overview({
                 background: "#FAFAFA",
                 borderBottom: "1px solid #E6E7EA",
                 fontWeight: 600,
-                fontSize: 13.5,
+                fontSize: 13,
                 cursor: "pointer",
               }}
             >
               <span
                 style={{
-                  width: 18,
-                  height: 18,
+                  minWidth: 20,
+                  height: 20,
                   borderRadius: 99,
                   background: "#EEF0F2",
-                  color: "#6D7175",
-                  fontSize: 10.5,
+                  color: "#4A4A4A",
+                  fontSize: 12,
                   display: "grid",
                   placeItems: "center",
                 }}
@@ -690,7 +664,7 @@ function Overview({
                 {i + 1}
               </span>
               {q.prompt}
-              <span style={{ marginLeft: "auto", fontSize: 12, color: "#2C6ECB", fontWeight: 600 }}>Edit →</span>
+              <span style={{ marginLeft: "auto", fontSize: 12, color: "#2C6ECB", fontWeight: 600 }}>Edit</span>
             </div>
             {q.options.map((o, oi) => {
               const r = state.ruleFor(q.axisKey, o.axisValueValue);
@@ -700,6 +674,7 @@ function Overview({
               return (
                 <div
                   key={o.axisValueValue}
+                  className="studio-stack-sm"
                   style={{
                     display: "grid",
                     gridTemplateColumns: "110px minmax(0,1fr) 120px",
@@ -712,7 +687,7 @@ function Overview({
                 >
                   <span style={{ fontWeight: 500 }}>{o.label}</span>
                   {state.drafting && !r ? (
-                    <span style={{ color: "#9A9EA5", padding: "6px 10px" }}>Writing…</span>
+                    <span style={{ color: MUTED, padding: "6px 10px" }}>Writing…</span>
                   ) : (
                     <SentenceField
                       compact
@@ -721,7 +696,7 @@ function Overview({
                       onCommit={(v) => void state.saveSentence(q.axisKey, o.axisValueValue, v)}
                     />
                   )}
-                  <span style={{ textAlign: "right", fontSize: 11.5, color: count.amber ? "#B7791F" : "#6D7175" }}>
+                  <span style={{ textAlign: "right", fontSize: 12, color: count.amber ? CAUTION : MUTED }}>
                     {count.text}
                   </span>
                 </div>
@@ -749,14 +724,7 @@ function RuleChip({ label, onRemove }: { label: string; onRemove: () => void }) 
       }}
     >
       {label}
-      <button
-        type="button"
-        aria-label={`Remove ${label}`}
-        onClick={onRemove}
-        style={{ border: 0, background: "none", color: "#9A9EA5", cursor: "pointer", fontSize: 13, padding: 0 }}
-      >
-        ✕
-      </button>
+      <Button variant="tertiary" size="micro" icon={XSmallIcon} accessibilityLabel={`Remove ${label}`} onClick={onRemove} />
     </span>
   );
 }
@@ -779,11 +747,11 @@ function RuleCard({
   const next = state.questions[index + 1];
   return (
     <div style={{ width: "100%", maxWidth: 640 }}>
-      <div style={{ fontSize: 12, color: "#6D7175", marginBottom: 6 }}>
+      <div style={{ fontSize: 12, color: MUTED, marginBottom: 6 }}>
         Question {index + 1} of {total}
       </div>
       <h2 style={{ fontSize: 18, fontWeight: 600, letterSpacing: "-.01em", margin: "0 0 6px" }}>{question.prompt}</h2>
-      <div style={{ fontSize: 13.5, color: "#6D7175", marginBottom: 18 }}>
+      <div style={{ fontSize: 13, color: MUTED, marginBottom: 18 }}>
         When a shopper picks an answer, here's what Gleame will do. Click a sentence to change it.
       </div>
       {question.options.map((o, oi) => {
@@ -791,6 +759,7 @@ function RuleCard({
         return (
           <div
             key={o.axisValueValue}
+            className="studio-stack-sm"
             style={{
               display: "grid",
               gridTemplateColumns: "120px minmax(0,1fr)",
@@ -804,7 +773,7 @@ function RuleCard({
             <div style={{ fontWeight: 500, paddingTop: 10, fontSize: 14 }}>{o.label}</div>
             <div>
               {state.drafting && !r ? (
-                <div style={{ fontSize: 14, color: "#9A9EA5", padding: "10px 13px", border: "1px solid #E6E7EA", borderRadius: 8 }}>
+                <div style={{ fontSize: 14, color: MUTED, padding: "10px 13px", border: "1px solid #E6E7EA", borderRadius: 8 }}>
                   Writing…
                 </div>
               ) : (
@@ -819,13 +788,11 @@ function RuleCard({
           </div>
         );
       })}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 22 }}>
-        <Button onClick={() => onSelect("overview")}>← Overview</Button>
-        <Button variant="primary" size="large" onClick={() => onSelect(next ? next.axisKey : "overview")}>
-          Next →
-        </Button>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 22, flexWrap: "wrap" }}>
+        <Button onClick={() => onSelect("overview")}>Overview</Button>
+        <Button onClick={() => onSelect(next ? next.axisKey : "overview")}>{next ? "Next question" : "Done"}</Button>
         <span style={{ marginLeft: "auto" }}>
-          <Button icon={MagicIcon} onClick={() => window.dispatchEvent(new Event(FOCUS_CHAT_EVENT))}>
+          <Button variant="plain" icon={ChatIcon} onClick={() => window.dispatchEvent(new Event(FOCUS_CHAT_EVENT))}>
             Tell Gleame what's wrong
           </Button>
         </span>
@@ -908,7 +875,7 @@ export function MatchesChat({
     push(key, { role: "assistant", text: d.reply, undos });
     if (undos.length) {
       state.revalidate();
-      state.setToast({ text: undos.map((u: { label: string }) => u.label).join(" · ") });
+      showAppToast(undos.length === 1 ? "1 change made" : `${undos.length} changes made`);
     }
   };
 
@@ -920,7 +887,7 @@ export function MatchesChat({
     try {
       for (const u of [...msg.undos].reverse()) await u.run();
     } catch (e) {
-      state.setToast({ text: (e as Error).message });
+      state.setError((e as Error).message);
       state.revalidate();
       return;
     }
@@ -931,7 +898,7 @@ export function MatchesChat({
     state.revalidate();
   };
 
-  const placeholder = scopeQuestion ? "Describe what's wrong with these…" : 'Tell Gleame what to change — e.g. "always show Pasión"';
+  const placeholder = scopeQuestion ? "Describe what's wrong with these…" : 'Tell Gleame what to change, e.g. "always show Pasión"';
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
@@ -940,19 +907,19 @@ export function MatchesChat({
           Chat
         </button>
       </div>
-      <div style={{ padding: "12px 16px", fontSize: 12.5, color: "#6D7175", borderBottom: "1px solid #E1E3E5" }}>
+      <div style={{ padding: "12px 16px", fontSize: 12, color: MUTED, borderBottom: "1px solid #E1E3E5" }}>
         Every change has an Undo. · Talking about{" "}
         <b style={{ color: "#202223", fontWeight: 600 }}>{scopeQuestion ? scopeQuestion.prompt : "the whole quiz"}</b>
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: 12 }}>
         {thread.length === 0 ? (
-          <div style={{ margin: "auto", textAlign: "center", color: "#6D7175", fontSize: 13, lineHeight: 1.5, padding: 16 }}>
+          <div style={{ margin: "auto", textAlign: "center", color: MUTED, fontSize: 13, lineHeight: 1.5, padding: 16 }}>
             <b style={{ display: "block", color: "#202223", fontSize: 14, marginBottom: 4 }}>
               {scopeQuestion ? "Fix a sentence" : "Anything off?"}
             </b>
             {scopeQuestion
               ? "Describe what's wrong and Gleame will rewrite the sentences for this question."
-              : 'Tell Gleame what to change — a sentence, or a rule for every result like "never show gift cards."'}
+              : 'Tell Gleame what to change: a sentence, or a rule for every result like "never show gift cards."'}
           </div>
         ) : (
           thread.map((m, i) => (
@@ -965,16 +932,24 @@ export function MatchesChat({
                 color: m.role === "user" ? "#fff" : "#202223",
                 padding: "10px 13px",
                 borderRadius: 12,
-                fontSize: 13.5,
+                fontSize: 13,
                 lineHeight: 1.5,
                 whiteSpace: "pre-wrap",
               }}
             >
               {m.text}
+              {/* What changed stays in the thread; the toast only counts. */}
+              {m.undos && m.undos.length > 0 && (
+                <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 12, color: "#4A4A4A", whiteSpace: "normal" }}>
+                  {m.undos.map((u, k) => (
+                    <li key={k}>{u.label}</li>
+                  ))}
+                </ul>
+              )}
               {m.undos && m.undos.length > 0 && (
                 <div style={{ marginTop: 8 }}>
                   {m.undone ? (
-                    <span style={{ fontSize: 12, color: "#6D7175" }}>Undone</span>
+                    <span style={{ fontSize: 12, color: "#4A4A4A" }}>Undone</span>
                   ) : (
                     <button
                       type="button"
@@ -1011,7 +986,7 @@ export function MatchesChat({
             border: "1px solid #D4D6DA",
             borderRadius: 10,
             padding: "9px 12px",
-            fontSize: 13.5,
+            fontSize: 13,
             fontFamily: "inherit",
             resize: "none",
           }}

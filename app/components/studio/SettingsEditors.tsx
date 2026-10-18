@@ -14,6 +14,7 @@ import {
 } from "@shopify/polaris";
 import type { StudioActionData } from "../../routes/studio";
 import { postStudioAction } from "./studio-data";
+import { saveToolCalls, useStudioSaveBar, usePendingEdits, type ToolCall } from "./save-bar";
 import {
   EMAIL_PLACEMENTS,
   TEMPLATES,
@@ -80,10 +81,62 @@ export function useSettingsAutosave(onPreviewUpdate: (p: { flow?: unknown; confi
     submitBatch();
   };
 
-  const schedule = (kind: Kind, key: string, value: unknown) => {
-    pending.current[kind][key] = value;
+  // Studio save bar on (per-shop opt-in, ./save-bar): edits are held for
+  // Save, and the preview dry-runs them as the merchant types.
+  const saveBar = useStudioSaveBar();
+  const [heldDirty, setHeldDirty] = useState(false);
+  const heldCalls = (): ToolCall[] =>
+    KIND_ORDER.filter((k) => Object.keys(pending.current[k]).length > 0).map((k) => ({
+      tool: KIND_TOOL[k],
+      input: { fields: { ...pending.current[k] } },
+    }));
+  const saveHeld = async (): Promise<boolean> => {
+    const sent = pending.current;
+    const calls = heldCalls();
+    if (calls.length === 0) {
+      setHeldDirty(false);
+      return true;
+    }
+    // Edits typed while this save is in flight start a new batch.
+    pending.current = { copy: {}, design: {}, uitext: {} };
     setSaveState("saving");
     setError(null);
+    const body = await saveToolCalls(calls);
+    if (body.ok) {
+      if (body.previewFlow || body.previewConfig) {
+        onPreviewUpdate({ flow: body.previewFlow, config: body.previewConfig });
+      }
+      setSaveState("saved");
+      if (heldCalls().length === 0) setHeldDirty(false);
+      return true;
+    }
+    // Keep the edits (under anything typed since) so Save can retry.
+    for (const k of KIND_ORDER) pending.current[k] = { ...sent[k], ...pending.current[k] };
+    setSaveState("idle");
+    setError(body.error ?? "Saving failed");
+    return false;
+  };
+  const held = usePendingEdits(heldDirty, {
+    calls: heldCalls,
+    save: saveHeld,
+    discard: () => {
+      pending.current = { copy: {}, design: {}, uitext: {} };
+      setHeldDirty(false);
+    },
+    saving: saveState === "saving",
+  });
+  const heldRef = useRef(held);
+  heldRef.current = held;
+
+  const schedule = (kind: Kind, key: string, value: unknown) => {
+    pending.current[kind][key] = value;
+    setError(null);
+    if (held) {
+      setHeldDirty(true);
+      saveBar.previewChanged();
+      return;
+    }
+    setSaveState("saving");
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(flush, 500);
   };
@@ -119,7 +172,9 @@ export function useSettingsAutosave(onPreviewUpdate: (p: { flow?: unknown; confi
       // Deliver anything still pending: unmounting inside the debounce
       // window (or with edits queued behind an in-flight submit) must not
       // silently drop copy/theme edits. Fire-and-forget; the next mount
-      // reloads fresh data.
+      // reloads fresh data. Held edits never save on their own: leaving
+      // was confirmed, or they were discarded.
+      if (heldRef.current) return;
       const calls: Array<{ tool: string; input: unknown }> = [];
       for (const k of KIND_ORDER) {
         if (Object.keys(pending.current[k]).length > 0) {
@@ -138,6 +193,7 @@ export function useSettingsAutosave(onPreviewUpdate: (p: { flow?: unknown; confi
   );
 
   const flushNow = () => {
+    if (held) return; // held edits save from the save bar
     if (timer.current !== null) clearTimeout(timer.current);
     flush();
   };
@@ -228,7 +284,7 @@ function SourceChip({ source }: { source: StudioColorSource["source"] }) {
     <span
       style={{
         display: "inline-block",
-        fontSize: 11,
+        fontSize: 12,
         fontWeight: 600,
         lineHeight: "18px",
         padding: "0 8px",
@@ -332,6 +388,7 @@ function ImageField({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState(false);
+  const [showLink, setShowLink] = useState(false);
   const value = values[fieldKey] ?? "";
 
   const upload = async (file: File) => {
@@ -351,41 +408,59 @@ function ImageField({
     }
   };
 
+  // Merchants upload; the raw URL box stays one click away ("Use a link")
+  // for a CDN image.
   return (
     <BlockStack gap="150">
-      <TextField
-        label={label}
-        value={value}
-        onChange={(v) => setValue(fieldKey, v)}
-        disabled={disabled}
-        placeholder="https://… (empty = hidden)"
-        autoComplete="off"
-      />
+      <Text as="span" variant="bodyMd">
+        {label}
+      </Text>
       <InlineStack gap="200" blockAlign="center">
-        {value && (
+        {value ? (
           <img
             src={value}
             alt=""
-            style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 8, border: "1px solid #E1E3E5" }}
+            style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 8, border: "1px solid #E1E3E5" }}
             onError={(e) => {
-              (e.target as HTMLImageElement).style.display = "none";
+              (e.target as HTMLImageElement).style.visibility = "hidden";
             }}
+          />
+        ) : (
+          <span
+            aria-hidden
+            style={{ width: 56, height: 56, borderRadius: 8, border: "1px dashed #C9CCCF", background: "#FAFAFA" }}
           />
         )}
         <Button size="slim" loading={uploading} disabled={disabled} onClick={() => inputRef.current?.click()}>
-          Upload image
+          {value ? "Replace" : "Upload image"}
         </Button>
         {value && (
           <Button size="slim" variant="plain" tone="critical" disabled={disabled} onClick={() => setValue(fieldKey, "")}>
             Remove
           </Button>
         )}
-        {uploadError && (
-          <Text as="span" variant="bodySm" tone="critical">
-            Upload failed. Try a smaller JPG or PNG.
-          </Text>
+        {!showLink && (
+          <Button size="slim" variant="plain" disabled={disabled} onClick={() => setShowLink(true)}>
+            Use a link
+          </Button>
         )}
       </InlineStack>
+      {uploadError && (
+        <Text as="span" variant="bodySm" tone="critical">
+          Upload failed. Try a smaller JPG or PNG.
+        </Text>
+      )}
+      {showLink && (
+        <TextField
+          label={`${label} link`}
+          labelHidden
+          value={value}
+          onChange={(v) => setValue(fieldKey, v)}
+          disabled={disabled}
+          placeholder="https://…"
+          autoComplete="off"
+        />
+      )}
       <input
         ref={inputRef}
         type="file"
@@ -449,7 +524,7 @@ export function IntroEditor({
           {error}
         </Banner>
       )}
-      <CopyField label="Eyebrow" fieldKey="quiz_eyebrow" values={values} setValue={setValue} disabled={disabled} helpText="Small uppercase label above the headline" />
+      <CopyField label="Eyebrow" fieldKey="quiz_eyebrow" values={values} setValue={setValue} disabled={disabled} />
       <CopyField
         label="Headline"
         fieldKey="quiz_headline"
@@ -497,7 +572,7 @@ export function IntroEditor({
       </BlockStack>
       <ImageField label="Before image" fieldKey="quiz_before_image_url" values={values} setValue={setValue} disabled={disabled} />
       <ImageField label="After image" fieldKey="quiz_after_image_url" values={values} setValue={setValue} disabled={disabled} />
-      <CopyField label="Visual caption" fieldKey="quiz_visual_caption" values={values} setValue={setValue} disabled={disabled} helpText="Small caption under the before/after visual" />
+      <CopyField label="Visual caption" fieldKey="quiz_visual_caption" values={values} setValue={setValue} disabled={disabled} />
       <CopyField
         label="Photo heads-up (optional)"
         fieldKey="quiz_photo_note"
@@ -506,7 +581,7 @@ export function IntroEditor({
         disabled={disabled}
         multiline={2}
         placeholder="You'll add a pic at the end, that's how we show your matches on you."
-        helpText="One line under the first question so the photo step at the end isn't a surprise. Leave blank to hide."
+        helpText="Shown under the first question. Leave blank to hide."
       />
       <InlineStack gap="200">
         <div style={{ flex: 1, minWidth: 130 }}>
@@ -584,7 +659,7 @@ export function PhotoEditor({
           setTryonEnabled(v);
           schedule("copy", "quiz_tryon_enabled", v);
         }}
-        helpText="When off, result cards keep the product photos — no AI try-on images anywhere in the quiz. The photo is still used for shade detection."
+        helpText="When off, result cards keep the product photos, with no AI try-on images anywhere in the quiz. The photo is still used for shade detection."
       />
       <CopyField label="Headline" fieldKey="quiz_gate_headline" values={values} setValue={setValue} disabled={disabled} />
       <CopyField label="Helper text" fieldKey="quiz_gate_helper" values={values} setValue={setValue} disabled={disabled} multiline={2} />
@@ -596,7 +671,7 @@ export function PhotoEditor({
           <CopyField label="Skip button" fieldKey="quiz_gate_skip_label" values={values} setValue={setValue} disabled={disabled} />
         </div>
       </InlineStack>
-      <CopyField label="Privacy note" fieldKey="quiz_privacy_note" values={values} setValue={setValue} disabled={disabled} helpText="Small reassurance line under the photo button" />
+      <CopyField label="Privacy note" fieldKey="quiz_privacy_note" values={values} setValue={setValue} disabled={disabled} />
       <Text as="h4" variant="headingSm">
         Shade picker
       </Text>
@@ -777,7 +852,7 @@ export function LeadEditor({
         values={values}
         setValue={setValue}
         disabled={disabled}
-        helpText="An existing Shopify discount code. After a shopper submits their email, the quiz reveals this code and applies it to their checkout automatically. Create the code in Shopify first — Gleame doesn't create discounts."
+        helpText="An existing Shopify discount code. After a shopper submits their email, the quiz reveals this code and applies it to their checkout automatically. Create the code in Shopify first: Gleame doesn't create discounts."
       />
       <CopyField
         label="Discount reveal message"
@@ -1123,10 +1198,10 @@ export function ThemeEditor({
       {/* Page background is a template-only control (migration 085); the
           classic quiz inherits the theme's page. */}
       {hasTemplate && (
-        <ColorField label="Background color" {...colorProps("quiz_bg_color")} helpText="The quiz page behind everything" />
+        <ColorField label="Background color" {...colorProps("quiz_bg_color")} />
       )}
       <ColorField label="Card background" {...colorProps("quiz_card_bg_color")} helpText="Answer cards and panels" />
-      <ColorField label="Border color" {...colorProps("quiz_line_color")} helpText="Card and option borders" />
+      <ColorField label="Border color" {...colorProps("quiz_line_color")} />
       <ColorField label="Button color" {...colorProps("quiz_cta_color")} helpText="Main buttons (text color adjusts for contrast)" />
       <InlineStack gap="200">
         <div style={{ flex: 1, minWidth: 120 }}>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Banner, Button, Spinner, Text, Tooltip } from "@shopify/polaris";
+import { Banner, BlockStack, Button, Icon, InlineStack, Modal, Spinner, Text, TextField, Tooltip } from "@shopify/polaris";
+import { ArrowLeftIcon, CheckIcon } from "@shopify/polaris-icons";
 import { isSlotUnresolved, type StudioLibraryStatus, type StudioSlot } from "./types";
 
 // V3-SPEC 4.4-4.6: the Images rail lists EVERY image slot the current
@@ -82,7 +83,7 @@ function SlotThumb({ slot, theme }: { slot: StudioSlot; theme: SlotTheme }) {
         boxSizing: "border-box",
         background: auto ? "#F1F3F5" : theme.bg,
         border: auto ? "1px solid #E1E3E5" : `1.5px dashed ${theme.border}`,
-        color: auto ? "#9A9EAB" : theme.ink,
+        color: auto ? "#616161" : theme.ink,
         opacity: auto ? 1 : 0.7,
         display: "grid",
         placeItems: "center",
@@ -104,9 +105,9 @@ function SourceChip({ slot }: { slot: StudioSlot }) {
         display: "inline-flex",
         alignItems: "center",
         gap: 5,
-        fontSize: 11,
+        fontSize: 12,
         lineHeight: "16px",
-        color: unresolved ? "#7A5A00" : merchant ? "#0B6B3A" : "#6D7175",
+        color: unresolved ? "#7A5A00" : merchant ? "#0B6B3A" : "#616161",
         overflow: "hidden",
         textOverflow: "ellipsis",
         whiteSpace: "nowrap",
@@ -187,12 +188,11 @@ export function ImagesRail({
 
   return (
     <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 12, flex: 1, minHeight: 0 }}>
-      <button
-        onClick={onBack}
-        style={{ border: 0, background: "transparent", color: "#6D7175", fontSize: 12.5, cursor: "pointer", textAlign: "left", padding: 0 }}
-      >
-        ← Back to screens
-      </button>
+      <div>
+        <Button variant="plain" icon={ArrowLeftIcon} onClick={onBack}>
+          Back to screens
+        </Button>
+      </div>
       <div>
         <Text as="h4" variant="headingSm">
           Images
@@ -207,11 +207,11 @@ export function ImagesRail({
           tone="warning"
           action={{ content: "Retry", onAction: () => void retry(), loading: retrying }}
         >
-          We couldn't read your store's images yet — retrying
+          We couldn't read your store's images yet. Retry to index them again.
         </Banner>
       )}
       {indexing && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#6D7175" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#616161" }}>
           <Spinner size="small" />
           Indexing your store's images…
         </div>
@@ -227,11 +227,9 @@ export function ImagesRail({
           <div key={g.label}>
             <div
               style={{
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight: 600,
-                color: "#8A8F98",
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
+                color: "#616161",
                 padding: "0 0 6px",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
@@ -261,12 +259,12 @@ export function ImagesRail({
                     <SlotThumb slot={s} theme={theme} />
                     <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
                       <div
-                        style={{ fontSize: 12.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                        style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                         title={s.label}
                       >
                         {s.label}
                         {s.optional && (
-                          <span style={{ fontWeight: 400, color: "#9A9EAB" }}> · optional</span>
+                          <span style={{ fontWeight: 400, color: "#616161" }}> · optional</span>
                         )}
                       </div>
                       <SourceChip slot={s} />
@@ -279,7 +277,7 @@ export function ImagesRail({
                           border: 0,
                           background: "transparent",
                           color: "#2C6ECB",
-                          fontSize: 12.5,
+                          fontSize: 13,
                           fontWeight: 600,
                           cursor: busy ? "default" : "pointer",
                           flexShrink: 0,
@@ -362,21 +360,6 @@ export function BrandLibraryPicker({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const seq = useRef(0);
-  const gridRef = useRef<HTMLDivElement | null>(null);
-  const [moreBelow, setMoreBelow] = useState(false);
-
-  // Scroll cue: when a row ends exactly at the grid's bottom edge nothing
-  // peeks into view, so the footer casts a shadow while tiles remain below
-  // (more than the grid's 18 px bottom padding is out of view).
-  const checkMoreBelow = useCallback(() => {
-    const g = gridRef.current;
-    setMoreBelow(!!g && g.scrollHeight - g.scrollTop - g.clientHeight > 18);
-  }, []);
-  useEffect(() => {
-    checkMoreBelow();
-    window.addEventListener("resize", checkMoreBelow);
-    return () => window.removeEventListener("resize", checkMoreBelow);
-  }, [status, images, checkMoreBelow]);
 
   const load = useCallback(async (f: string, s: string) => {
     const my = ++seq.current;
@@ -431,225 +414,168 @@ export function BrandLibraryPicker({
 
   const showingTiles = status === "ok" && images.length > 0;
 
+  // A Polaris modal: Select and Cancel (and Upload) sit in its action slots
+  // and the body scrolls on its own (Built for Shopify 4.1.6).
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(20,22,26,.45)",
-        display: "grid",
-        placeItems: "center",
-        zIndex: 60,
-        padding: 24,
+    <Modal
+      open
+      onClose={onClose}
+      size="large"
+      title="Your brand library"
+      primaryAction={{
+        content: "Select",
+        disabled: !selected,
+        onAction: () => selected && onSelect(selected.url, selected.source === "upload" ? "upload" : "library"),
       }}
-      onClick={onClose}
+      secondaryActions={[
+        // Upload is allowed HERE (post-Reveal) and only when the library
+        // endpoint exists to receive it.
+        ...(status === "ok" || uploading
+          ? [{ content: "Upload image", loading: uploading, onAction: () => fileRef.current?.click() }]
+          : []),
+        { content: "Cancel", onAction: onClose },
+      ]}
     >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          background: "#fff",
-          borderRadius: 14,
-          width: "100%",
-          maxWidth: 820,
-          boxShadow: "0 20px 60px rgba(0,0,0,.25)",
-          overflow: "hidden",
-          display: "flex",
-          flexDirection: "column",
-          maxHeight: "82vh",
-        }}
-      >
-        <div style={{ padding: "16px 20px", borderBottom: "1px solid #E1E3E5", display: "flex", alignItems: "center", gap: 14 }}>
-          <div style={{ minWidth: 0 }}>
-            <Text as="h3" variant="headingSm">
-              Your brand library
-            </Text>
-            <Text as="p" variant="bodySm" tone="subdued">
-              Choosing for: {slotName}
-            </Text>
-          </div>
-          <input
+      <Modal.Section>
+        <BlockStack gap="300">
+          <Text as="p" variant="bodySm" tone="subdued">
+            Choosing for: {slotName}
+          </Text>
+          <TextField
+            label="Search images"
+            labelHidden
+            autoComplete="off"
             placeholder={`Search ${images.length || ""} images…`}
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{
-              marginLeft: "auto",
-              border: "1px solid #E1E3E5",
-              borderRadius: 9,
-              padding: "7px 12px",
-              fontSize: 13,
-              width: 220,
-            }}
+            onChange={setSearch}
+            clearButton
+            onClearButtonClick={() => setSearch("")}
           />
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: "12px 20px", borderBottom: "1px solid #E1E3E5" }}>
-          {FILTERS.map((f) => (
-            <button
-              key={f.id}
-              onClick={() => setFilter(f.id)}
-              style={{
-                fontSize: 12.5,
-                fontWeight: 600,
-                border: "1px solid " + (filter === f.id ? "#1A1C1E" : "#E1E3E5"),
-                borderRadius: 999,
-                padding: "6px 13px",
-                background: filter === f.id ? "#1A1C1E" : "#fff",
-                color: filter === f.id ? "#fff" : "#6D7175",
-                cursor: "pointer",
-                transition: "background 120ms ease, color 120ms ease",
-              }}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-        {/* The grid is the modal's only flexible part: it shrinks to fit
-            82vh and scrolls. Once shrunk, plain auto rows size from each
-            tile's MINIMUM height (0 for an overflow-hidden box) and share
-            out the leftover space, which squashed every tile into a strip;
-            min-content rows take each tile's full height instead. The
-            spinner and empty states keep the old single stretched row in
-            a 180 px floor, so they stay centered as before. The 45% cap
-            on the column minimum keeps two columns on a phone. */}
-        <div
-          ref={gridRef}
-          onScroll={checkMoreBelow}
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(min(160px, 45%), 1fr))",
-            gap: 12,
-            padding: "18px 20px",
-            overflowY: "auto",
-            flex: "1 1 auto",
-            ...(showingTiles
-              ? { gridAutoRows: "min-content", alignContent: "start", minHeight: 0 }
-              : { minHeight: 180 }),
-          }}
-        >
-          {status === "loading" && (
-            <div style={{ gridColumn: "1/-1", display: "grid", placeItems: "center", padding: 30 }}>
-              <Spinner size="small" />
-            </div>
+          <InlineStack gap="200" wrap>
+            {FILTERS.map((f) => (
+              <Button key={f.id} size="slim" pressed={filter === f.id} onClick={() => setFilter(f.id)}>
+                {f.label}
+              </Button>
+            ))}
+          </InlineStack>
+          {uploadError && (
+            <Banner tone="critical" onDismiss={() => setUploadError(null)}>
+              {uploadError}
+            </Banner>
           )}
-          {status === "missing" && (
-            <div style={{ gridColumn: "1/-1", textAlign: "center", padding: 30, color: "#6D7175", fontSize: 13 }}>
-              Your store's images are still being indexed. Check back in a few minutes.
-            </div>
-          )}
-          {status === "error" && (
-            <div style={{ gridColumn: "1/-1" }}>
-              <Banner tone="warning">Couldn't load your brand library. Try again shortly.</Banner>
-            </div>
-          )}
-          {status === "ok" && images.length === 0 && (
-            <div style={{ gridColumn: "1/-1", textAlign: "center", padding: 30, color: "#6D7175", fontSize: 13 }}>
-              No images match this filter.
-            </div>
-          )}
-          {status === "ok" &&
-            images.map((img) => (
-              // The square comes from the tile, not the <img>: a lazy image
-              // has no size until it loads, so the tile must not depend on
-              // it. Contain on a neutral mat shows the whole image, since the
-              // library mixes wide banners, logos, packshots and lifestyle.
-              // The img is squared by aspect-ratio on its own width, not by
-              // a 100% height: Safari resolves that percentage against the
-              // tile's border box, so the image slid down and lost its bottom.
-              <figure
-                key={img.id}
-                onClick={() => setSelected(img)}
-                style={{
-                  margin: 0,
-                  aspectRatio: "1",
-                  boxSizing: "border-box",
-                  padding: 8,
-                  background: img.role === "logo" ? logoMat(14) : TILE_MAT,
-                  borderRadius: 10,
-                  overflow: "hidden",
-                  position: "relative",
-                  cursor: "pointer",
-                  border: selected?.id === img.id ? "2px solid #1A1C1E" : "2px solid transparent",
-                  transition: "border-color 120ms ease",
-                }}
-              >
-                <img
-                  src={tileSrc(img.url)}
-                  alt=""
-                  loading="lazy"
-                  style={{ display: "block", width: "100%", aspectRatio: "1", objectFit: "contain" }}
-                />
-                <span
+          {/* The 45% cap on the column minimum keeps two columns on a
+              phone; min-content rows keep every tile square. */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(min(160px, 45%), 1fr))",
+              gap: 12,
+              ...(showingTiles ? { gridAutoRows: "min-content", alignContent: "start" } : { minHeight: 180 }),
+            }}
+          >
+            {status === "loading" && (
+              <div style={{ gridColumn: "1/-1", display: "grid", placeItems: "center", padding: 30 }}>
+                <Spinner size="small" />
+              </div>
+            )}
+            {status === "missing" && (
+              <div style={{ gridColumn: "1/-1", textAlign: "center", padding: 30 }}>
+                <Text as="p" variant="bodyMd" tone="subdued">
+                  Your store's images are still being indexed. Check back in a few minutes.
+                </Text>
+              </div>
+            )}
+            {status === "error" && (
+              <div style={{ gridColumn: "1/-1" }}>
+                <Banner tone="critical">Couldn't load your brand library. Try again shortly.</Banner>
+              </div>
+            )}
+            {status === "ok" && images.length === 0 && (
+              <div style={{ gridColumn: "1/-1", textAlign: "center", padding: 30 }}>
+                <Text as="p" variant="bodyMd" tone="subdued">
+                  No images match this filter.
+                </Text>
+              </div>
+            )}
+            {status === "ok" &&
+              images.map((img) => (
+                // The square comes from the tile, not the <img>: a lazy image
+                // has no size until it loads, so the tile must not depend on
+                // it. Contain on a neutral mat shows the whole image, since the
+                // library mixes wide banners, logos, packshots and lifestyle.
+                // The img is squared by aspect-ratio on its own width, not by
+                // a 100% height: Safari resolves that percentage against the
+                // tile's border box, so the image slid down and lost its bottom.
+                <figure
+                  key={img.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={selected?.id === img.id}
+                  aria-label={img.role || img.source || "Image"}
+                  onClick={() => setSelected(img)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setSelected(img);
+                    }
+                  }}
                   style={{
-                    position: "absolute",
-                    bottom: 6,
-                    left: 6,
-                    background: "rgba(20,22,26,.75)",
-                    color: "#fff",
-                    fontSize: 10,
-                    borderRadius: 6,
-                    padding: "2px 7px",
-                    textTransform: "capitalize",
+                    margin: 0,
+                    aspectRatio: "1",
+                    boxSizing: "border-box",
+                    padding: 8,
+                    background: img.role === "logo" ? logoMat(14) : TILE_MAT,
+                    borderRadius: 10,
+                    overflow: "hidden",
+                    position: "relative",
+                    cursor: "pointer",
+                    border: selected?.id === img.id ? "2px solid #1A1C1E" : "2px solid transparent",
+                    transition: "border-color 120ms ease",
                   }}
                 >
-                  {img.source === "upload" ? "Upload" : img.role || img.source || "Image"}
-                </span>
-                {selected?.id === img.id && (
+                  <img
+                    src={tileSrc(img.url)}
+                    alt=""
+                    loading="lazy"
+                    style={{ display: "block", width: "100%", aspectRatio: "1", objectFit: "contain" }}
+                  />
                   <span
                     style={{
                       position: "absolute",
-                      top: 6,
-                      right: 6,
-                      width: 20,
-                      height: 20,
-                      borderRadius: 999,
-                      background: "#1A1C1E",
+                      bottom: 6,
+                      left: 6,
+                      background: "rgba(20,22,26,.75)",
                       color: "#fff",
-                      fontSize: 11,
-                      display: "grid",
-                      placeItems: "center",
-                      boxShadow: "0 0 0 2px #fff",
+                      fontSize: 12,
+                      borderRadius: 6,
+                      padding: "1px 7px",
+                      textTransform: "capitalize",
                     }}
                   >
-                    ✓
+                    {img.source === "upload" ? "Upload" : img.role || img.source || "Image"}
                   </span>
-                )}
-              </figure>
-            ))}
-        </div>
-        {/* Positioned so its scroll-cue shadow paints over the tiles,
-            which are positioned too. */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            padding: "14px 20px",
-            borderTop: "1px solid #E1E3E5",
-            position: "relative",
-            boxShadow: moreBelow ? "0 -8px 16px -6px rgba(20,22,26,.2)" : "none",
-            transition: "box-shadow 150ms ease",
-          }}
-        >
-          {/* Upload is allowed HERE (post-Reveal) and only when the library
-              endpoint exists to receive it. */}
-          {status === "ok" && (
-            <Button loading={uploading} onClick={() => fileRef.current?.click()}>
-              Upload image
-            </Button>
-          )}
-          {uploadError && (
-            <Text as="span" variant="bodySm" tone="critical">
-              {uploadError}
-            </Text>
-          )}
-          <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-            <Button onClick={onClose}>Cancel</Button>
-            <Button
-              variant="primary"
-              disabled={!selected}
-              onClick={() => selected && onSelect(selected.url, selected.source === "upload" ? "upload" : "library")}
-            >
-              Select
-            </Button>
+                  {selected?.id === img.id && (
+                    <span
+                      aria-hidden
+                      style={{
+                        position: "absolute",
+                        top: 6,
+                        right: 6,
+                        width: 22,
+                        height: 22,
+                        borderRadius: 999,
+                        background: "#1A1C1E",
+                        color: "#fff",
+                        display: "grid",
+                        placeItems: "center",
+                        boxShadow: "0 0 0 2px #fff",
+                      }}
+                    >
+                      <Icon source={CheckIcon} tone="inherit" />
+                    </span>
+                  )}
+                </figure>
+              ))}
           </div>
           <input
             ref={fileRef}
@@ -662,8 +588,8 @@ export function BrandLibraryPicker({
               e.target.value = "";
             }}
           />
-        </div>
-      </div>
-    </div>
+        </BlockStack>
+      </Modal.Section>
+    </Modal>
   );
 }

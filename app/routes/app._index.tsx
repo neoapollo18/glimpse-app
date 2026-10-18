@@ -1,7 +1,7 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
 import { useLoaderData, useNavigate, useFetcher, useSearchParams, useRevalidator } from "@remix-run/react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Page,
   Text,
@@ -11,9 +11,10 @@ import {
   Button,
   InlineGrid,
   Banner,
+  Badge,
   Select,
 } from "@shopify/polaris";
-import { Modal, TitleBar } from "@shopify/app-bridge-react";
+import { Modal, SaveBar, TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import {
   supabase,
@@ -22,13 +23,20 @@ import {
   findShopByDomain,
   shopHasTryOnConfig,
   getConfiguredProducts,
-  getQuizEngagement,
   getOnboardingState,
 } from "../lib/supabase.server";
+import { getQuizFunnelSummary, type QuizFunnelSummary } from "../lib/quiz-dashboard.server";
 import { shouldOfferSetup } from "../lib/setup-offer.server";
-import { SetupOfferModal } from "../components/SetupOfferModal";
+import { SetupOfferCard } from "../components/SetupOfferModal";
 import { QuizPlacementStatus } from "../components/QuizPlacementStatus";
-import { TRYON_WIDGETS_RETIRED } from "../lib/retired-features";
+import { CHAT_ASSISTANT_RETIRED, TRYON_WIDGETS_RETIRED } from "../lib/retired-features";
+import {
+  STUDIO_NAV_CHANNEL,
+  postStudioAction,
+  readStudioState,
+  type StudioAction,
+  type StudioHostState,
+} from "../components/studio/navigate-parent";
 
 // Z0 (V3-SPEC Part 1): the setup wizard, its step components, the manual
 // catalog-sync button and the OVERHAUL_ONBOARDING gate are gone. A shop
@@ -53,7 +61,9 @@ interface LoaderData {
     vtoEnabled: boolean;
   };
   totalTransformations: number;
-  quizMatches: number;
+  /** Distinct shoppers over the last 30 days, counted exactly as the
+   * Analytics page counts them. Null when it couldn't be read. */
+  quizStats: QuizFunnelSummary | null;
   setupOffer: { show: boolean; email: string };
 }
 
@@ -96,11 +106,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // head-count query instead.
   const transformSince = new Date();
   transformSince.setDate(transformSince.getDate() - 365);
-  const [allProducts, onboarding, chatConfig, quizEngagement, transformCountRes] = await Promise.all([
+  const [allProducts, onboarding, chatConfig, quizStats, transformCountRes] = await Promise.all([
     getConfiguredProducts(shopDomain),
     getOnboardingState(shopDomain),
     getChatAssistantConfig(shopDomain).catch(() => null),
-    getQuizEngagement(shopDomain, 365).catch(() => null),
+    // The Analytics page's default window and shopper counting, so the
+    // two pages show the same numbers.
+    shopRow ? getQuizFunnelSummary(shopRow.id, 30).catch(() => null) : Promise.resolve(null),
     shopRow
       ? supabase
           .from("analytics_events")
@@ -169,7 +181,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ownerName,
     quiz,
     totalTransformations: transformCountRes?.count ?? 0,
-    quizMatches: quizEngagement?.resultsShown ?? 0,
+    quizStats,
     setupOffer: { show: showSetupOffer, email: shopEmail },
   });
 };
@@ -218,38 +230,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 // ============================================================
 
 // Quiz-first home: intro + status + one obvious door into the Studio
-// (which hosts everything else). Replaces both the old try-on dashboard
-// and the standalone quiz hub page.
+// (which hosts everything else). Plain Polaris cards and buttons so it
+// reads as part of the admin; the brand shows only as the small logo.
 
-const GLEAME_HERO_CSS = `
-  .gleame-hero { position: relative; overflow: hidden; border-radius: 20px; background: linear-gradient(135deg, #FFFFFF 0%, #F7F3FF 55%, #FFF1EA 100%); border: 1px solid #ECE8F4; padding: 40px 48px; box-shadow: 0 6px 24px rgba(23, 23, 27, 0.06); }
-  .gleame-hero-glow { position: absolute; width: 420px; height: 420px; border-radius: 50%; top: -240px; right: -100px; background: radial-gradient(circle, rgba(196, 164, 255, 0.18) 0%, rgba(196, 164, 255, 0) 65%); pointer-events: none; }
-  .gleame-hero-glow-2 { top: auto; right: auto; bottom: -280px; left: -120px; background: radial-gradient(circle, rgba(255, 178, 145, 0.14) 0%, rgba(255, 178, 145, 0) 65%); }
-  .gleame-hero-content { position: relative; max-width: 640px; }
-  .gleame-hero-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
-  .gleame-hero-logo { width: 36px; height: 36px; display: block; }
-  .gleame-hero-title { margin: 0 0 8px; color: #1A1A1E; font-weight: 700; font-size: 28px; line-height: 1.2; letter-spacing: -0.01em; }
-  .gleame-hero-sub { margin: 0 0 24px; color: #5C5F66; font-size: 15px; line-height: 1.55; max-width: 520px; }
-  .gleame-hero-actions { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
-  .gleame-hero-cta { border: 0; cursor: pointer; background: #1A1A1E; color: #fff; font-size: 14px; font-weight: 600; padding: 12px 22px; border-radius: 12px; box-shadow: 0 3px 12px rgba(26, 26, 30, 0.22); transition: transform 140ms ease, box-shadow 140ms ease; }
-  .gleame-hero-cta:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(26, 26, 30, 0.28); }
-  .gleame-hero-ghost { border: 0; cursor: pointer; background: transparent; color: #5C5F66; font-size: 13px; font-weight: 600; padding: 8px 4px; }
-  .gleame-hero-ghost:hover { color: #1A1A1E; }
-  @media (max-width: 640px) { .gleame-hero { padding: 28px 24px; } .gleame-hero-title { font-size: 23px; } }
-`;
+// App Bridge groups title-bar buttons under a <section label>: React's
+// typings don't know the attribute, so it rides in as a spread.
+const TITLE_BAR_MENU = { label: "More actions" } as unknown as React.HTMLAttributes<HTMLElement>;
 
-const HOME_MODE_LABELS: Record<string, string> = {
-  matrix: "Rules only",
-  ai: "AI",
-  hybrid: "Rules + AI",
-};
+// Capped: a shopper who started just before the window can finish inside it.
+const pct = (n: number, of: number) => (of > 0 ? Math.min(100, Math.round((n / of) * 100)) : 0);
 
 function DashboardView({
   ownerName,
   shopDomain,
   quiz,
   totalTransformations,
-  quizMatches,
+  quizStats,
   setupOffer,
   navigate,
 }: {
@@ -257,7 +253,7 @@ function DashboardView({
   shopDomain: string;
   quiz: LoaderData["quiz"];
   totalTransformations: number;
-  quizMatches: number;
+  quizStats: LoaderData["quizStats"];
   setupOffer: LoaderData["setupOffer"];
   navigate: ReturnType<typeof useNavigate>;
 }) {
@@ -278,14 +274,25 @@ function DashboardView({
   const studioSlide = params.get("slide");
   // Per-tab token: BroadcastChannel reaches EVERY same-origin admin tab;
   // without this a studio click navigated other dashboards too. Minted
-  // client-side only — a render-time random value hydrates differently
+  // client-side only: a render-time random value hydrates differently
   // than the SSR pass, and the server-rendered iframe src would carry a
   // token the listener never accepts.
   const [navToken, setNavToken] = useState<string | null>(null);
   useEffect(() => {
     setNavToken(Math.random().toString(36).slice(2, 10));
   }, []);
+  // Title bar actions and save bar the open Studio asked for. Null until it
+  // reports, which only opted-in shops' Studios do
+  // (lib/studio-admin-bars.server): everyone else's draws its own.
+  const [studioActions, setStudioActions] = useState<StudioHostState | null>(null);
+  // Load watchdog: set once the open Studio says it booted. A frame that
+  // never boots (auth redirect, error page, hung loader) has no App Bridge,
+  // so the admin's spinner never clears and the window's X stops
+  // answering; past the budget we close it from here and say so.
+  const [studioReady, setStudioReady] = useState(false);
+  const [studioStuck, setStudioStuck] = useState(false);
   const openStudio = (step?: string) => {
+    setStudioStuck(false);
     setParams(
       (prev) => {
         prev.set("open", "studio");
@@ -305,83 +312,176 @@ function DashboardView({
       },
       { replace: true },
     );
+    setStudioActions(null);
     revalidator.revalidate();
   };
+  const closeStudioRef = useRef(closeStudio);
+  closeStudioRef.current = closeStudio;
 
   // The studio (max-modal iframe) can't navigate the app frame itself;
-  // it broadcasts, we close the modal and route.
+  // it broadcasts, we close the modal and route. An opted-in Studio also
+  // reports its title bar actions and save bar; their clicks go back on
+  // the same channel.
   useEffect(() => {
     let channel: BroadcastChannel | null = null;
     try {
-      channel = new BroadcastChannel("gleame-studio-nav");
+      channel = new BroadcastChannel(STUDIO_NAV_CHANNEL);
       channel.onmessage = (e: MessageEvent) => {
-        const data = e.data as { url?: string; token?: string } | null;
+        const data = e.data as ({ url?: string; token?: string; type?: string } & Record<string, unknown>) | null;
+        if (!data || data.token !== navToken) return; // another tab's studio
+        if (data.type === "studio-ready" || data.type === "studio-state") setStudioReady(true);
+        if (data.type === "studio-state") {
+          setStudioActions(readStudioState(data));
+          return;
+        }
         const url = String(data?.url ?? "");
         if (!url.startsWith("/app")) return;
-        if (data?.token !== navToken) return; // another tab's studio
-        closeStudio();
+        closeStudioRef.current();
         navigate(url);
       };
     } catch {
-      // BroadcastChannel unsupported: studio falls back to _top navigation.
+      // BroadcastChannel unsupported: studio falls back to _top navigation
+      // and draws its own Publish / View on my store.
     }
     return () => channel?.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navToken]);
+  useEffect(() => {
+    if (!studioOpen || !navToken) {
+      setStudioReady(false);
+      return;
+    }
+    // No BroadcastChannel = no ready message; never close a working Studio.
+    if (studioReady || typeof BroadcastChannel === "undefined") return;
+    const t = window.setTimeout(() => {
+      setStudioStuck(true);
+      closeStudioRef.current();
+    }, 45_000);
+    return () => window.clearTimeout(t);
+  }, [studioOpen, navToken, studioReady]);
+  // The Studio frame authenticates and boots App Bridge from ITS OWN URL
+  // (shop, host, embedded; the session-token bounce adds id_token), so
+  // pass them. This frame's URL loses them after any client-side
+  // navigation (onboarding's navigate("/app?open=studio"), nav menu
+  // links), and a param-less /studio lands on /auth/login, which has no
+  // App Bridge: the admin's loading spinner never clears.
+  const studioSrc = (() => {
+    const q = new URLSearchParams({ tab: studioStep });
+    if (studioSlide) q.set("slide", studioSlide);
+    if (navToken) q.set("navtoken", navToken);
+    const cfg =
+      typeof window === "undefined"
+        ? undefined
+        : (window as unknown as { shopify?: { config?: { shop?: string; host?: string } } }).shopify?.config;
+    if (cfg?.shop && cfg.host) {
+      q.set("shop", cfg.shop);
+      q.set("host", cfg.host);
+      q.set("embedded", "1");
+    }
+    return `/studio?${q.toString()}`;
+  })();
+  const studioAction = (action: StudioAction) => {
+    if (navToken) postStudioAction(navToken, action);
+  };
+  // Open the store tab here, in the admin's click: relayed into the Studio,
+  // the click has no user activation left and the tab would be blocked.
+  // No link yet (or blocked anyway): the Studio opens it or offers it.
+  const viewStore = () => {
+    const url = studioActions?.storeUrl;
+    if (url && window.open(url, "_blank")) studioAction("store-opened");
+    else studioAction("view-store");
+  };
 
   const [mode, setMode] = useState<string>(quiz.assistantMode);
   useEffect(() => {
     setMode(quiz.assistantMode);
   }, [quiz.assistantMode]);
-  const saveMode = () => {
+  const submitMode = (next: string) => {
     const fd = new FormData();
     fd.append("intent", "set-mode");
-    fd.append("assistant_mode", mode);
+    fd.append("assistant_mode", next);
     fetcher.submit(fd, { method: "POST" });
   };
+  const saving = fetcher.state !== "idle";
 
   // "Shoppers matched" = quiz matches for quiz-first shops; only legacy
   // try-on shops (VTO configured, quiz not live) see the selfie try-on count.
   // Off while the try-on widgets are retired (lib/retired-features.ts).
   const showTryOnStat = !TRYON_WIDGETS_RETIRED && quiz.vtoEnabled && !quiz.quizLive;
+  const showStats = quiz.quizLive || showTryOnStat || (quizStats?.started ?? 0) > 0;
+
+  // Storefront surface control. With the chat bubble retired the only
+  // surface is the quiz page, so it is one button; shops already on
+  // "both" keep their stored mode. The chooser comes back with the flag.
+  const surfaceChooser = (labelHidden: boolean) => (
+    <InlineStack gap="200" blockAlign="end" wrap>
+      <div style={{ minWidth: 200 }}>
+        <Select
+          label="Where Gleame appears"
+          labelHidden={labelHidden}
+          options={[
+            { label: "Chat bubble only", value: "chat" },
+            { label: "Quiz page only", value: "quiz" },
+            { label: "Both", value: "both" },
+          ]}
+          value={mode}
+          onChange={setMode}
+        />
+      </div>
+      <Button onClick={() => submitMode(mode)} loading={saving} disabled={mode === quiz.assistantMode}>
+        Save
+      </Button>
+    </InlineStack>
+  );
 
   return (
     <Page>
-      <TitleBar title="Gleame" />
+      <TitleBar title="Gleame">
+        {/* Rarely used tools live in the title bar's menu, off the page body. */}
+        <section {...TITLE_BAR_MENU}>
+          <button onClick={() => navigate("/app/assistant/recommendations")}>Advanced rules editor</button>
+          {quiz.vtoEnabled && <button onClick={() => navigate("/app/products")}>Try-on product settings</button>}
+        </section>
+      </TitleBar>
       <BlockStack gap="500">
-        {/* Branded hero: one clear door, Gleame's editorial identity. */}
-        <div className="gleame-hero">
-          <style dangerouslySetInnerHTML={{ __html: GLEAME_HERO_CSS }} />
-          <div className="gleame-hero-glow" aria-hidden />
-          <div className="gleame-hero-glow gleame-hero-glow-2" aria-hidden />
-          <div className="gleame-hero-content">
-            <div className="gleame-hero-brand">
-              <img className="gleame-hero-logo" src="/placeholders/gleametransparent.svg" alt="Gleame" />
-            </div>
-            <h1 className="gleame-hero-title">Welcome back, {displayName}</h1>
-            <p className="gleame-hero-sub">
+        <Card>
+          <BlockStack gap="400">
+            <InlineStack gap="300" blockAlign="center" wrap={false}>
+              <img src="/placeholders/gleametransparent.svg" alt="" width={32} height={32} style={{ display: "block" }} />
+              <Text as="h1" variant="headingLg">
+                Welcome back, {displayName}
+              </Text>
+            </InlineStack>
+            <Text as="p" variant="bodyMd" tone="subdued">
               {quiz.questions === 0
-                ? "Let's build your quiz. Gleame drafts the whole thing from your catalog in about a minute."
+                ? "Let's build your quiz. Gleame drafts the whole thing from your catalog in a minute or two."
                 : quiz.quizLive
                   ? "Your quiz is live and matching shoppers to products."
-                  : "Your quiz isn't live yet. Build it in the Studio, then turn it on below."}
-            </p>
-            <div className="gleame-hero-actions">
-              <button
-                className="gleame-hero-cta"
+                  : "Your quiz isn't live yet."}
+            </Text>
+            <InlineStack gap="200">
+              <Button
+                variant="primary"
                 onClick={() => (quiz.questions === 0 ? navigate("/app/onboarding/scope") : openStudio())}
               >
                 {quiz.questions === 0 ? "Build my quiz" : "Open Studio"}
-                <span aria-hidden> →</span>
-              </button>
-              <button className="gleame-hero-ghost" onClick={() => navigate("/app/analytics")}>
-                View analytics
-              </button>
-            </div>
-          </div>
-        </div>
+              </Button>
+              <Button onClick={() => navigate("/app/analytics")}>View analytics</Button>
+            </InlineStack>
+          </BlockStack>
+        </Card>
 
         {fetcher.data?.error && <Banner tone="critical">{fetcher.data.error}</Banner>}
+        {studioStuck && (
+          <Banner
+            tone="critical"
+            title="The Studio didn't open"
+            action={{ content: "Try again", onAction: () => openStudio() }}
+            onDismiss={() => setStudioStuck(false)}
+          >
+            It took too long to load. Try again, or reload the page if it keeps happening.
+          </Banner>
+        )}
 
         {/* Go-live strip: only while the quiz isn't on the storefront */}
         {!quiz.quizLive && quiz.questions > 0 && (
@@ -390,104 +490,92 @@ function DashboardView({
               <Text as="h2" variant="headingMd">
                 Make it live
               </Text>
-              <InlineStack gap="400" blockAlign="end" wrap>
-                <div style={{ minWidth: 220 }}>
-                  <Select
-                    label="Where Gleame appears"
-                    options={[
-                      { label: "Chat bubble only", value: "chat" },
-                      { label: "Quiz page only", value: "quiz" },
-                      { label: "Both", value: "both" },
-                    ]}
-                    value={mode}
-                    onChange={setMode}
-                  />
-                </div>
-                <Button
-                  onClick={saveMode}
-                  loading={fetcher.state !== "idle"}
-                  disabled={mode === quiz.assistantMode}
-                >
-                  Save
-                </Button>
-                {/* The quiz goes on its own page (Studio setup guide or
-                    one-click Publish), never the home page: a full-page
-                    quiz there would sit on a page Shopify scores for
-                    storefront speed. */}
-                <Button onClick={() => openStudio("live")}>
+              {!CHAT_ASSISTANT_RETIRED && (
+                <Text as="p" variant="bodyMd" tone="subdued">
+                  Two steps: set the storefront to &ldquo;Quiz page&rdquo; or &ldquo;Both&rdquo;, then put the quiz on its own
+                  page. The setup guide in Studio walks you through it, or publish with one click.
+                </Text>
+              )}
+              {/* The quiz goes on its own page (Studio setup guide or
+                  one-click Publish), never the home page: a full-page
+                  quiz there would sit on a page Shopify scores for
+                  storefront speed. */}
+              <InlineStack gap="300" blockAlign="center" wrap>
+                {CHAT_ASSISTANT_RETIRED ? (
+                  <Button onClick={() => submitMode("quiz")} loading={saving}>
+                    Show quiz to shoppers
+                  </Button>
+                ) : (
+                  surfaceChooser(false)
+                )}
+                <Button variant="plain" onClick={() => openStudio("live")}>
                   Set up the quiz page
                 </Button>
               </InlineStack>
-              <Text as="p" variant="bodySm" tone="subdued">
-                Two steps: set the storefront to "Quiz page" or "Both", then
-                put the quiz on its own page. The setup guide in Studio walks
-                you through it, or publish with one click.
-              </Text>
               <QuizPlacementStatus quizLive={false} />
             </BlockStack>
           </Card>
         )}
 
-        {/* Secondary stats */}
-        <InlineGrid columns={{ xs: 1, sm: quiz.quizLive ? 3 : 2 }} gap="400">
+        {/* Stats: only once there is something to show (a zero before the
+            quiz is live just reads as bad news). */}
+        {showStats && (
+        <InlineGrid columns={{ xs: 1, sm: quiz.quizLive ? 2 : 1 }} gap="400">
           <Card>
-            <BlockStack gap="100">
-              <Text as="span" variant="bodySm" tone="subdued">
-                Your quiz
-              </Text>
-              <Text as="p" variant="headingLg" fontWeight="bold">
-                {quiz.questions} {quiz.questions === 1 ? "question" : "questions"}
-              </Text>
-              <Text as="span" variant="bodySm" tone="subdued">
-                {quiz.rules > 0 ? `${quiz.rules} rules · ` : ""}
-                {HOME_MODE_LABELS[quiz.mode] ?? quiz.mode} matching
-              </Text>
-            </BlockStack>
-          </Card>
-          <Card>
-            <BlockStack gap="100">
-              <Text as="span" variant="bodySm" tone="subdued">
-                Shoppers matched
-              </Text>
-              <Text as="p" variant="headingLg" fontWeight="bold">
-                {showTryOnStat ? totalTransformations : quizMatches}
-              </Text>
-              <Text as="span" variant="bodySm" tone="subdued">
-                {showTryOnStat
-                  ? "selfie try-ons in the last year"
-                  : "quiz matches in the last year"}
-              </Text>
-            </BlockStack>
+            {showTryOnStat ? (
+              <BlockStack gap="100">
+                <Text as="span" variant="bodySm" tone="subdued">
+                  Shoppers matched
+                </Text>
+                <Text as="p" variant="headingLg" fontWeight="bold">
+                  {totalTransformations}
+                </Text>
+                <Text as="span" variant="bodySm" tone="subdued">
+                  selfie try-ons in the last year
+                </Text>
+              </BlockStack>
+            ) : (
+              <BlockStack gap="100">
+                <Text as="span" variant="bodySm" tone="subdued">
+                  Last 30 days
+                </Text>
+                {quizStats ? (
+                  <>
+                    <Text as="p" variant="headingLg" fontWeight="bold">
+                      {quizStats.started.toLocaleString()} {quizStats.started === 1 ? "shopper started" : "shoppers started"}
+                    </Text>
+                    {quizStats.started > 0 && (
+                      <Text as="span" variant="bodySm" tone="subdued">
+                        {`${pct(quizStats.finished, quizStats.started)}% reached their matches · ${quizStats.added.toLocaleString()} added to cart`}
+                      </Text>
+                    )}
+                  </>
+                ) : (
+                  <Text as="p" variant="bodyMd">
+                    Couldn&rsquo;t load your numbers. They&rsquo;re in Analytics.
+                  </Text>
+                )}
+              </BlockStack>
+            )}
           </Card>
           {quiz.quizLive && (
             <Card>
-              <BlockStack gap="100">
+              <BlockStack gap="200">
                 <Text as="span" variant="bodySm" tone="subdued">
                   Storefront
                 </Text>
-                <div style={{ maxWidth: 200 }}>
-                  <Select
-                    label="Where Gleame appears"
-                    labelHidden
-                    options={[
-                      { label: "Chat bubble only", value: "chat" },
-                      { label: "Quiz page only", value: "quiz" },
-                      { label: "Both", value: "both" },
-                    ]}
-                    value={mode}
-                    onChange={setMode}
-                  />
-                </div>
+                {CHAT_ASSISTANT_RETIRED ? (
+                  <InlineStack gap="200" blockAlign="center">
+                    <Badge tone="success">Quiz on</Badge>
+                    <Text as="span" variant="bodySm" tone="subdued">
+                      Hide it from shoppers on the Live tab in Studio.
+                    </Text>
+                  </InlineStack>
+                ) : (
+                  surfaceChooser(true)
+                )}
                 <InlineStack gap="200">
-                  <Button
-                    size="slim"
-                    onClick={saveMode}
-                    loading={fetcher.state !== "idle"}
-                    disabled={mode === quiz.assistantMode}
-                  >
-                    Save
-                  </Button>
-                  <Button size="slim" variant="plain" onClick={() => openStudio("live")}>
+                  <Button variant="plain" onClick={() => openStudio("live")}>
                     Placement
                   </Button>
                 </InlineStack>
@@ -496,33 +584,48 @@ function DashboardView({
             </Card>
           )}
         </InlineGrid>
+        )}
 
-        {/* Advanced row */}{/* Advanced row */}
-        <InlineStack gap="300">
-          <Button variant="plain" onClick={() => navigate("/app/assistant/recommendations")}>
-            Advanced rules editor
-          </Button>
-          {quiz.vtoEnabled && (
-            <Button variant="plain" onClick={() => navigate("/app/products")}>
-              Try-on product settings
-            </Button>
-          )}
-        </InlineStack>
+        {/* Done-for-you offer: a dismissible card, never a popup. */}
+        {setupOffer.show && <SetupOfferCard defaultEmail={setupOffer.email} source="dashboard" />}
       </BlockStack>
 
       {/* Mounted ONLY while open: rendering the App Bridge Modal closed
           calls .hide() on the not-yet-upgraded ui-modal element and crashes
-          the page. Also gated on the client-minted navToken. */}
-      {setupOffer.show && !studioOpen && <SetupOfferModal defaultEmail={setupOffer.email} source="dashboard" />}
-
+          the page. Also gated on the client-minted navToken. For opted-in
+          shops, Publish and View on my store sit in the app window's title
+          bar and the save bar hangs on the modal (App Bridge reads both
+          from a src modal's children); the Studio says which apply and
+          handles the clicks. The save bar mounts only while shown. */}
       {studioOpen && navToken && (
         <Modal
           variant="max"
           open
-          src={`/studio?tab=${studioStep}${studioSlide ? `&slide=${encodeURIComponent(studioSlide)}` : ""}&navtoken=${navToken}`}
+          src={studioSrc}
           onHide={closeStudio}
         >
-          <TitleBar title="Studio" />
+          <TitleBar title="Studio">
+            {studioActions?.showViewStore && (
+              <button disabled={studioActions.viewStoreDisabled} onClick={viewStore}>
+                View on my store
+              </button>
+            )}
+            {studioActions?.showPublish && (
+              <button variant="primary" onClick={() => studioAction("publish")}>
+                Publish
+              </button>
+            )}
+          </TitleBar>
+          {studioActions?.dirty && (
+            <SaveBar id="gleame-studio-save-bar" open discardConfirmation>
+              <button variant="primary" loading={studioActions.saving ? "" : undefined} onClick={() => studioAction("save")}>
+                Save
+              </button>
+              <button disabled={studioActions.saving} onClick={() => studioAction("discard")}>
+                Discard
+              </button>
+            </SaveBar>
+          )}
         </Modal>
       )}
     </Page>
@@ -534,7 +637,7 @@ function DashboardView({
 // ============================================================
 
 export default function Dashboard() {
-  const { shopDomain, ownerName, quiz, totalTransformations, quizMatches, setupOffer } = useLoaderData<typeof loader>();
+  const { shopDomain, ownerName, quiz, totalTransformations, quizStats, setupOffer } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
 
   return (
@@ -543,7 +646,7 @@ export default function Dashboard() {
       shopDomain={shopDomain}
       quiz={quiz}
       totalTransformations={totalTransformations}
-      quizMatches={quizMatches}
+      quizStats={quizStats}
       setupOffer={setupOffer}
       navigate={navigate}
     />

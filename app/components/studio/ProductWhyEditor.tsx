@@ -4,6 +4,7 @@ import { Banner, BlockStack, Button, Icon, InlineStack, Spinner, Text, TextField
 import { SearchIcon } from "@shopify/polaris-icons";
 import type { StudioActionData } from "../../routes/studio";
 import { postStudioAction } from "./studio-data";
+import { saveToolCalls, useStudioSaveBar, usePendingEdits, type ToolCall } from "./save-bar";
 import { PRODUCT_WHY_MAX_LEN, sanitizeProductWhy } from "../../lib/quiz-ui-text";
 
 // "Why this fits" lines (migration 092, Results slide): one optional line
@@ -56,11 +57,58 @@ export function ProductWhyEditor({
     return true;
   };
 
+  // Studio save bar on (per-shop opt-in, ./save-bar): lines are held for
+  // Save and the preview dry-runs them.
+  const saveBar = useStudioSaveBar();
+  const [heldDirty, setHeldDirty] = useState(false);
+  const heldCalls = (): ToolCall[] => {
+    const lines = Object.entries(pending.current).map(([productId, text]) => ({ productId, text: text.trim() || null }));
+    return lines.length > 0 ? [{ tool: "set_product_why", input: { lines: lines.slice(0, 60) } }] : [];
+  };
+  const saveHeld = async (): Promise<boolean> => {
+    const sent = pending.current;
+    const calls = heldCalls();
+    if (calls.length === 0) {
+      setHeldDirty(false);
+      return true;
+    }
+    pending.current = {};
+    setSaveState("saving");
+    setError(null);
+    const body = await saveToolCalls(calls);
+    if (body.ok) {
+      if (body.previewConfig) onPreviewUpdate({ config: body.previewConfig });
+      setSaveState("saved");
+      if (Object.keys(pending.current).length === 0) setHeldDirty(false);
+      return true;
+    }
+    pending.current = { ...sent, ...pending.current };
+    setSaveState("idle");
+    setError(body.error ?? "Saving failed");
+    return false;
+  };
+  const held = usePendingEdits(heldDirty, {
+    calls: heldCalls,
+    save: saveHeld,
+    discard: () => {
+      pending.current = {};
+      setHeldDirty(false);
+    },
+    saving: saveState === "saving",
+  });
+  const heldRef = useRef(held);
+  heldRef.current = held;
+
   const setLine = (id: string, text: string) => {
     setValues((prev) => ({ ...prev, [id]: text }));
     pending.current[id] = text;
-    setSaveState("saving");
     setError(null);
+    if (held) {
+      setHeldDirty(true);
+      saveBar.previewChanged();
+      return;
+    }
+    setSaveState("saving");
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
       if (fetcher.state === "idle") submit();
@@ -87,9 +135,11 @@ export function ProductWhyEditor({
   }, [saveState]);
 
   // Leaving the slide inside the debounce window must not drop a line.
+  // Held lines never save on their own (leaving was confirmed).
   useEffect(
     () => () => {
       if (timer.current) clearTimeout(timer.current);
+      if (heldRef.current) return;
       const lines = Object.entries(pending.current).map(([productId, text]) => ({ productId, text: text.trim() || null }));
       if (lines.length === 0) return;
       pending.current = {};

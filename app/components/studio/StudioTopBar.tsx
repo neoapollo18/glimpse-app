@@ -1,12 +1,16 @@
 import { useEffect, useState } from "react";
-import { Badge, Button, Popover, Box, BlockStack, Text, ProgressBar, Tooltip } from "@shopify/polaris";
+import { Badge, Button, ButtonGroup, Popover, Box, BlockStack, Text, ProgressBar, Tooltip } from "@shopify/polaris";
 import { useCatalogSync } from "../../lib/use-catalog-sync";
+import { useQuizBlockStatus } from "../QuizPlacementStatus";
 import type { StudioTab } from "../../routes/studio";
 
 // V2-SPEC 2.1 top bar (56px): inline-editable quiz name + Live/Ready badge
 // left; centered segmented tabs Build / Check matches / Live; right side
 // "View on my store" (secondary) + "Publish" (primary, opens the publish
 // sheet). The Live tab is back (2026-10-16) with the setup guide.
+// For shops opted in to the admin bars (lib/studio-admin-bars.server) those
+// two actions live in the app window's title bar instead (hostActions,
+// Built for Shopify 4.1.6); every other shop keeps them here.
 //
 // V3-SPEC 6.4: while the QUIZ_TEMPLATES_LIVE=off emergency kill is set, a
 // template quiz cannot reach the storefront, so "View on my store" is
@@ -42,6 +46,7 @@ export function StudioTopBar({
   previewOnly,
   templatePending,
   live,
+  hostActions,
 }: {
   tab: StudioTab;
   onTabChange: (t: StudioTab) => void;
@@ -60,12 +65,19 @@ export function StudioTopBar({
   templatePending?: boolean;
   /** Storefront surface on (Live badge) or off (Ready badge). */
   live: boolean;
+  /** The host app window's title bar shows Publish / View on my store. */
+  hostActions?: boolean;
 }) {
   const [syncOpen, setSyncOpen] = useState(false);
   const sync = useCatalogSync();
   // Local edit buffer so typing never round-trips through a revalidation;
   // committed on blur/Enter. External changes (chat rename) re-seed it.
   const [name, setName] = useState(quizName);
+  // "Live" only when the quiz is on AND its section is on a page (the
+  // Live tab uses the same check); on alone isn't visible to anyone.
+  const placement = useQuizBlockStatus();
+  const placed = placement?.state === "active";
+  const notPlaced = placement?.state === "inactive";
   useEffect(() => setName(quizName), [quizName]);
   const commit = () => {
     const next = name.trim();
@@ -75,30 +87,13 @@ export function StudioTopBar({
 
   return (
     <>
+      {/* No logo here: the admin's window title bar already shows the app icon. */}
       <div className="studio-topbar-left">
-        <span
-          aria-hidden
-          style={{
-            width: 22,
-            height: 22,
-            borderRadius: 6,
-            overflow: "hidden",
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flexShrink: 0,
-          }}
-        >
-          <img
-            src="/placeholders/gleametransparent.svg"
-            alt=""
-            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-          />
-        </span>
         {/* One quiz per shop, so the "quiz name" IS the quiz headline the
             storefront shows; there is no separate name column. */}
         <input
           aria-label="Quiz name"
+          title={name}
           value={name}
           disabled={!hasDraft}
           onChange={(e) => setName(e.target.value)}
@@ -111,10 +106,13 @@ export function StudioTopBar({
             border: "1px solid transparent",
             borderRadius: 8,
             padding: "5px 8px",
-            fontSize: 13.5,
+            fontSize: 13,
             fontWeight: 600,
-            minWidth: 0,
+            minWidth: 120, // the badges never squeeze the name out of sight
             flex: 1,
+            textOverflow: "ellipsis", // a long headline ends in "…", full text on hover
+            overflow: "hidden",
+            whiteSpace: "nowrap",
             background: "transparent",
             color: "#202223",
           }}
@@ -125,9 +123,19 @@ export function StudioTopBar({
           <button
             onClick={() => onTabChange("live")}
             style={{ border: 0, background: "transparent", padding: 0, cursor: "pointer", flexShrink: 0 }}
-            title={live ? "Your quiz is on your store" : "Not on your store yet. Open the Live tab to set it up."}
+            title={
+              live && placed
+                ? "Your quiz is live on your store"
+                : live && notPlaced
+                  ? "Shown to shoppers, but not on a page yet. Open the Live tab to finish."
+                  : live
+                    ? "Shown to shoppers wherever it's placed"
+                    : "Not on your store yet. Open the Live tab to set it up."
+            }
           >
-            <Badge tone={live ? "success" : undefined}>{live ? "Live" : "Ready"}</Badge>
+            <Badge tone={live && placed ? "success" : live && notPlaced ? "attention" : undefined}>
+              {live && placed ? "Live" : live && notPlaced ? "Not on a page" : live ? "On" : "Ready"}
+            </Badge>
           </button>
         )}
         {previewOnly && (
@@ -224,43 +232,36 @@ export function StudioTopBar({
       </div>
 
       <div className="studio-topbar-center">
-        <div
-          style={{
-            display: "flex",
-            gap: 4,
-            background: "#F6F6F7",
-            borderRadius: 999,
-            padding: 4,
-          }}
-        >
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              className="studio-step-pill"
-              data-active={tab === t.id}
-              onClick={() => onTabChange(t.id)}
-            >
-              {t.label}
-            </button>
-          ))}
+        {/* Polaris segmented control, like Analytics' range picker: fixed
+            positions, only the pressed state changes. */}
+        <div className="studio-step-tabs" role="group" aria-label="Studio sections">
+          <ButtonGroup variant="segmented">
+            {TABS.map((t) => (
+              <Button key={t.id} pressed={tab === t.id} onClick={() => onTabChange(t.id)}>
+                {t.label}
+              </Button>
+            ))}
+          </ButtonGroup>
         </div>
       </div>
 
-      <div className="studio-topbar-right">
-        {!previewOnly && (
-          <Button onClick={onViewStore} loading={viewStoreBusy} disabled={!hasDraft}>
-            View on my store
-          </Button>
-        )}
-        {/* Spec 6.4: while templates aren't live on storefronts the publish
-            action is hidden for template quizzes (the Preview only chip
-            explains); legacy quizzes keep publishing. */}
-        {!previewOnly && (
-          <Button variant="primary" onClick={onPublishClick}>
-            Publish
-          </Button>
-        )}
-      </div>
+      {!hostActions && (
+        <div className="studio-topbar-right">
+          {!previewOnly && (
+            <Button onClick={onViewStore} loading={viewStoreBusy} disabled={!hasDraft}>
+              View on my store
+            </Button>
+          )}
+          {/* Spec 6.4: while templates aren't live on storefronts the publish
+              action is hidden for template quizzes (the Preview only chip
+              explains); legacy quizzes keep publishing. */}
+          {!previewOnly && (
+            <Button variant="primary" onClick={onPublishClick}>
+              Publish
+            </Button>
+          )}
+        </div>
+      )}
     </>
   );
 }

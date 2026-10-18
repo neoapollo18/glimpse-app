@@ -99,6 +99,8 @@ export interface ClaudeUsage {
   output_tokens: number;
   cache_creation_input_tokens?: number | null;
   cache_read_input_tokens?: number | null;
+  /** thinking_tokens = the hidden reasoning share of output_tokens. */
+  output_tokens_details?: { thinking_tokens: number } | null;
 }
 
 /** Rough cost at claude-opus-4-8 pricing ($5/$25 per MTok, cache reads 0.1x, writes 1.25x). */
@@ -113,7 +115,7 @@ export function estimateCostUsd(usage: ClaudeUsage): number {
 export function logClaudeUsage(shopDomain: string, label: string, usage: ClaudeUsage | undefined | null): void {
   if (!usage) return;
   console.log(
-    `[Claude] ${label} shop=${shopDomain} in=${usage.input_tokens} out=${usage.output_tokens} ` +
+    `[Claude] ${label} shop=${shopDomain} in=${usage.input_tokens} out=${usage.output_tokens} think=${usage.output_tokens_details?.thinking_tokens ?? "?"} ` +
       `cacheWrite=${usage.cache_creation_input_tokens ?? 0} cacheRead=${usage.cache_read_input_tokens ?? 0} ` +
       `~$${estimateCostUsd(usage).toFixed(4)}`,
   );

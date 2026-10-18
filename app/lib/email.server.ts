@@ -60,8 +60,9 @@ const escapeHtml = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
 /**
- * A merchant said yes to the free done-for-you setup popup. Goes to the
- * team (SETUP_OFFER_EMAIL, default aaron@gleame.ai). Returns false on
+ * A merchant said yes to the free done-for-you setup popup. Always goes
+ * to tangaaron18@gmail.com, plus the team inbox (SETUP_OFFER_EMAIL,
+ * default aaron@gleame.ai). Returns false on
  * any delivery failure so the caller can log it; the request is also
  * recorded in analytics_events, so a lost email is recoverable.
  */
@@ -84,7 +85,7 @@ export async function sendSetupRequestEmail(req: {
   try {
     const { error } = await resend.emails.send({
       from: EMAIL_FROM,
-      to: process.env.SETUP_OFFER_EMAIL || "aaron@gleame.ai",
+      to: [...new Set(["tangaaron18@gmail.com", process.env.SETUP_OFFER_EMAIL || "aaron@gleame.ai"])],
       replyTo: req.email,
       subject: `Setup request: ${req.shopName || req.shopDomain}`,
       html: `

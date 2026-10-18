@@ -542,6 +542,17 @@ export const DEFAULT_BUDGET_MS = 540_000;
 // adaptive-thinking time (32k let slow generations run multiple minutes
 // longer for no quality gain).
 const GENERATOR_MAX_TOKENS = 20000;
+// Thinking depth for the draft and repair calls. Left unset, Opus runs at
+// "high" and spends most of "Writing questions" in hidden thinking before
+// the first JSON character (~150s on a 47-product store). Correctness is
+// owned by the grounding pass, the validator and the one repair round, so
+// "medium" is enough planning. QUIZ_GENERATE_EFFORT overrides it.
+type GeneratorEffort = NonNullable<Anthropic.OutputConfig["effort"]>;
+const GENERATOR_EFFORTS: readonly GeneratorEffort[] = ["low", "medium", "high", "xhigh", "max"];
+function generatorEffort(): GeneratorEffort {
+  const v = process.env.QUIZ_GENERATE_EFFORT as GeneratorEffort | undefined;
+  return v && GENERATOR_EFFORTS.includes(v) ? v : "medium";
+}
 
 export interface GeneratorCallOpts {
   onToken?: (deltaChars: number) => void;
@@ -563,6 +574,7 @@ export async function callGenerator(
 ): Promise<GeneratorCall> {
   const client = claudeClient();
   const callTimeoutMs = opts.callTimeoutMs ?? envMs("QUIZ_GENERATE_CALL_TIMEOUT_MS", DEFAULT_CALL_TIMEOUT_MS);
+  const effort = generatorEffort();
 
   // NOT structured outputs: this schema blows both API grammar caps (24
   // optional / 16 union parameters), which 400s at request validation. The
@@ -585,6 +597,7 @@ export async function callGenerator(
             model: CLAUDE_MODEL_MAIN,
             max_tokens: GENERATOR_MAX_TOKENS,
             thinking,
+            output_config: { effort },
             system,
             messages,
           },
@@ -595,7 +608,7 @@ export async function callGenerator(
         if (opts.onToken) stream.on("text", (delta) => opts.onToken!(delta.length));
         const message = await stream.finalMessage();
         console.log(
-          `[quiz-generate] ${attemptLabel} shop=${shopDomain} ms=${Date.now() - startedAt} stop=${message.stop_reason} thinking=${thinking.type}`,
+          `[quiz-generate] ${attemptLabel} shop=${shopDomain} ms=${Date.now() - startedAt} stop=${message.stop_reason} thinking=${thinking.type} effort=${effort}`,
         );
         return message;
       } catch (e) {

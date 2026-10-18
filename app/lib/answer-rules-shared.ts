@@ -123,7 +123,7 @@ export function appliesToLine(rule: Pick<AnswerRule, "sentence" | "mode" | "reso
   if (!rule.sentence.trim()) return { text: "Applies to all products · add a sentence or leave it", amber: true };
   if (rule.mode === "none") return { text: "Applies to all products", amber: false };
   if (rule.status === "unresolved" || !rule.resolved || rule.resolved.count === 0) {
-    return { text: "Couldn't match this to any product — try naming a product type or shade", amber: true };
+    return { text: "Couldn't match this to any product. Try naming a product type or shade.", amber: true };
   }
   const labels = rule.resolved.labels.slice(0, 3).join(", ");
   const n = rule.resolved.count;

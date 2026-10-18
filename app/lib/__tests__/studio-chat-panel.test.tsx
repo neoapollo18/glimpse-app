@@ -23,6 +23,9 @@ beforeAll(() => {
   (window as any).ResizeObserver ||= class { observe() {} unobserve() {} disconnect() {} };
   (window as any).requestAnimationFrame ||= (cb: FrameRequestCallback) => setTimeout(() => cb(0), 0);
   (window as any).HTMLElement.prototype.scrollTo ||= function () {};
+  // jsdom has no layout: without a width, Polaris Tabs measures a 0px
+  // panel and folds the unselected tab into its More menu.
+  Object.defineProperty(HTMLElement.prototype, "offsetWidth", { configurable: true, get: () => 320 });
 });
 
 const questions = [
@@ -129,12 +132,40 @@ function pressEnter(shiftKey = false) {
 }
 
 describe("Build with AI panel", () => {
-  it("labels the tab Build with AI", async () => {
+  it("labels the tab Build with AI; outside Build the Edit tab stays put, disabled", async () => {
     mount(<EditPanel data={{} as any} step="live" selectedSlide="intro" chatEpoch={0} chatBusy={false} onSelectSlide={() => {}} onPreviewUpdate={() => {}} onPreviewReload={() => {}} chat={panel()} />);
     await flush();
-    const tabs = [...document.querySelectorAll(".studio-panel-tab")].map((b) => b.textContent?.trim());
-    expect(tabs).toEqual(["Build with AI"]);
+    // Polaris tabs (navigation guideline: fixed positions).
+    const tabs = [...document.querySelectorAll<HTMLButtonElement>('.studio-panel-tabs [role="tab"]')].filter(
+      (b) => !b.closest(".Polaris-Tabs__TabsMeasurer"),
+    );
+    expect(tabs.map((b) => b.textContent?.trim())).toEqual(["Edit", "Build with AI"]);
+    expect(tabs[0].getAttribute("aria-disabled")).toBe("true");
+    expect(tabs[1].getAttribute("aria-selected")).toBe("true");
     expect(document.body.textContent).not.toMatch(/\bChat\b/);
+  });
+
+  it("no AI purple: the tab carries no Magic icon and save errors show above the panel", async () => {
+    mount(
+      <EditPanel
+        data={{} as any}
+        step="live"
+        selectedSlide="intro"
+        chatEpoch={0}
+        chatBusy={false}
+        onSelectSlide={() => {}}
+        onPreviewUpdate={() => {}}
+        onPreviewReload={() => {}}
+        saveError="Couldn't save that change."
+        chat={panel()}
+      />,
+    );
+    await flush();
+    expect(document.querySelector('.studio-panel-tabs [role="tab"] svg')).toBeNull();
+    const banner = document.querySelector(".Polaris-Banner");
+    expect(banner?.textContent).toContain("Couldn't save that change.");
+    // Above the chat, not inside the rail.
+    expect(banner!.compareDocumentPosition(document.querySelector(".studio-ai-pane")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("shows open-ended examples that fill and focus the composer without sending", async () => {
@@ -178,7 +209,9 @@ describe("Build with AI panel", () => {
     const applied: string[] = [];
     const busy: boolean[] = [];
     let flushed = 0;
-    mount(panel({ onChangeApplied: (t) => applied.push(t), onBusyChange: (b) => busy.push(b), onBeforeSend: () => (flushed += 1) }));
+    mount(panel({ onChangeApplied: (t) => applied.push(t), onBusyChange: (b) => busy.push(b), onBeforeSend: () => {
+      flushed += 1;
+    } }));
     await flush();
     typeInto("Make it warmer");
     pressEnter(true);
@@ -280,6 +313,28 @@ describe("Build with AI panel", () => {
     expect(document.querySelector(".gai-thinking")).toBeNull();
     expect(status.textContent).toBe("");
     expect(textarea().disabled).toBe(false);
+  });
+
+  it("waits for unsaved edits to save first; a failed save stops the turn and keeps the text", async () => {
+    let release: (ok: boolean) => void = () => {};
+    mount(panel({ onBeforeSend: () => new Promise<boolean>((r) => (release = r)) }));
+    await flush();
+    typeInto("Make it warmer");
+    pressEnter();
+    await flush();
+    // Still saving: nothing sent yet.
+    expect(calls.filter((c) => c.intent === "message")).toHaveLength(0);
+    await act(async () => release(false));
+    await flush();
+    expect(calls.filter((c) => c.intent === "message")).toHaveLength(0);
+    expect(textarea().value).toBe("Make it warmer");
+    expect(textarea().disabled).toBe(false);
+
+    pressEnter();
+    await flush();
+    await act(async () => release(true));
+    await flush();
+    expect(calls.filter((c) => c.intent === "message")).toHaveLength(1);
   });
 
   it("keeps the not-configured fallback", async () => {
