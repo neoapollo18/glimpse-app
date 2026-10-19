@@ -724,6 +724,62 @@ describe("v3 widget templates", () => {
     }
   });
 
+  // 2026-10-18 Trello (Luna by Khush): with the photo step off, the last
+  // answer showed the step's own spinner ("Bonus" header) and THEN the
+  // Match loading screen. One loading screen, from the first frame.
+  const loadersSeen = async (root: Element, ms: number) => {
+    const seen = new Set<string>();
+    for (let t = 0; t < ms; t += 20) {
+      const child = stageChild(root);
+      // The photo-step-off shell (a real photo step also carries gate-solo
+      // when it has no shade rail, alongside gq-step--gate).
+      if (child.classList.contains("gq-step--gate-solo") && !child.classList.contains("gq-step--gate")) seen.add("gate-shell");
+      if (child.querySelector(".gq-working")) seen.add("step-spinner");
+      if (child.classList.contains("gq-tpl-loading")) seen.add("tpl-loading");
+      if (child.classList.contains("gq-t1r")) seen.add("results");
+      await vi.advanceTimersByTimeAsync(20);
+    }
+    return seen;
+  };
+
+  it("photo step off: the last answer goes straight to the Match loading screen", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
+    try {
+      mount({
+        ...previewFor("t1", "q5", false, { emailPlacement: "after_results", gate: { ...(makeConfig("t1").gate as object), enabled: false } }),
+        recommendUrl: "/preview-recommend",
+      });
+      await vi.advanceTimersByTimeAsync(5);
+      // A real round trip takes time; instant answers hid the old shell.
+      (window as any).fetch = () => new Promise((resolve) => setTimeout(() => resolve({
+        ok: true,
+        json: () => Promise.resolve(makeSampleRecommend()),
+      }), 1200));
+      const root = document.getElementById("gleame-quiz-root")!;
+      (root.querySelector(".gq-t1-row") as HTMLElement).click();
+      const seen = await loadersSeen(root, 4600);
+      expect([...seen]).toEqual(["tpl-loading", "results"]);
+      expect(root.querySelectorAll(".gq-t1r").length).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("skipping the photo step goes straight to the Match loading screen", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
+    try {
+      mount(previewFor("t1", "gate", false, { tryonEnabled: true, emailPlacement: "after_results" }));
+      await vi.advanceTimersByTimeAsync(5);
+      const root = document.getElementById("gleame-quiz-root")!;
+      expect(stageChild(root).classList.contains("gq-step--gate")).toBe(true);
+      (root.querySelector(".gq-skip-link") as HTMLElement).click();
+      const seen = await loadersSeen(root, 4600);
+      expect([...seen]).toEqual(["tpl-loading", "results"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("(8e) merchant / catalog / shopper strings are always escaped", async () => {
     const XSS = '<img src=x onerror=1>';
     const flow = makeFlow();

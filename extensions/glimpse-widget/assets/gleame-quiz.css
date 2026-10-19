@@ -3842,6 +3842,9 @@
   font-family: var(--gq-font-body);
   cursor: pointer;
   transition: transform 140ms var(--gq-tpl-ease);
+  /* A stretched button centres its content, so a one-line label would sit
+     its photo lower than a two-line neighbour's. Top-align instead. */
+  align-self: start;
 }
 #gleame-quiz-root.gq-t1 .gq-t1-tile-slot {
   border-radius: var(--gq-r-12);
@@ -4222,7 +4225,9 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* Top, not centre: cards in a row share a height, and centring would sit
+     a one-line card's icon lower than a two-line neighbour's. */
+  justify-content: flex-start;
   gap: 14px;
   width: 100%;
   min-height: 150px;

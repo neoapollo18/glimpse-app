@@ -2908,6 +2908,13 @@
     // move straight on to results. Back from results never returns here:
     // clampStep resolves a disabled gate to the last question.
     if (!gateActive()) {
+      // Templates go straight to their results loading screen.
+      var offTpl = activeTpl();
+      if (offTpl && tplLoadingApplies(offTpl, config.results || {})) {
+        var held = tplLoadingScreen(offTpl, config.results || {}, true);
+        goToResults(null, held);
+        return held;
+      }
       var shell = el('div', 'gq-step gq-step--gate-solo');
       shell.appendChild(buildStepHeader(0, true));
       var shellBody = el('div', 'gq-step-body');
@@ -3238,8 +3245,23 @@
     return v;
   }
 
-  function goToResults(screenEl) {
-    if (screenEl) showWorking(screenEl, T('findingMatch', 'Finding your match…'));
+  // heldLoader: a template loading screen the caller is mounting itself
+  // (renderGate with the photo step off).
+  function goToResults(screenEl, heldLoader) {
+    // A template whose results open on its loading screen shows that
+    // screen now, for the whole wait, instead of a step spinner and then
+    // the loading screen again (two loaders in a row).
+    var tpl = activeTpl();
+    var tplResults = config.results || {};
+    var held = heldLoader || null;
+    var heldSeq = renderSeq;
+    var startedAt = Date.now();
+    if (!held && tpl && tplLoadingApplies(tpl, tplResults)) {
+      held = tplLoadingScreen(tpl, tplResults, true);
+      heldSeq = ++renderSeq;
+      swapScreen(held, 'forward', heldSeq);
+    }
+    if (!held && screenEl) showWorking(screenEl, T('findingMatch', 'Finding your match…'));
     return quizRecommend()
       .then(function(data) {
         // A resolved response without a usable matches payload (or an empty
@@ -3250,19 +3272,45 @@
             (data.matches.length === 0 && data.error)) {
           throw new Error('quiz-recommend empty');
         }
+        // The shopper left the loading screen (browser back): don't pull
+        // them onto results.
+        if (held && renderSeq !== heldSeq) return;
         storeRecommend(data);
         state.screen = 'results';
-        // Fresh results arrival re-arms T2's computation screen. Lives on
-        // state (persisted) so a reload of already-computed results does
-        // NOT replay the 2.8s interstitial.
-        state.t2ComputeDone = false;
+        // A fresh arrival re-arms the template loading screen, unless it is
+        // already up (held). Lives on state (persisted) so a reload of
+        // already-computed results does NOT replay it.
+        state.t2ComputeDone = Boolean(held);
         saveState();
         pushStep();
         setResultParam(resultKeyOf(state));
         trackEvent('quiz_results_shown', resultsShownProps());
-        render('forward');
+        if (!held) {
+          render('forward');
+          return;
+        }
+        // The held screen keeps its usual 2.5-4s minimum, counted from
+        // when it went up.
+        var wait = Math.max(0, tplLoadingDuration(tplResults) - (Date.now() - startedAt));
+        setTimeout(function() {
+          if (renderSeq !== heldSeq || state.screen !== 'results') return;
+          render('forward');
+        }, wait);
       })
       .catch(function() {
+        if (held) {
+          if (renderSeq !== heldSeq) return;
+          var inner = held.querySelector('.gq-tpl-loading-inner') || held;
+          inner.innerHTML = '';
+          var failed = el('div', 'gq-error',
+            '<p>' + TH('errorFinding', 'Something went wrong finding your match.') + '</p>');
+          var again = el('button', 'gq-retry', TH('tryAgain', 'Try again'));
+          again.type = 'button';
+          again.onclick = function() { goToResults(null); };
+          failed.appendChild(again);
+          inner.appendChild(failed);
+          return;
+        }
         if (!screenEl) return;
         hideWorking(screenEl);
         var err = screenEl.querySelector('.gq-error');
@@ -6298,6 +6346,43 @@
       if (trust) col.appendChild(trust);
     }
     screen.appendChild(col);
+    screen.gqFit = function() { fitIntroHero(screen); };
+  }
+
+  // Desktop fit for the hero intro: the headline and Start button should
+  // be on the shopper's first screen, under the store's header. When the
+  // 16:9 hero pushes them past the fold it gives up height, first as a
+  // wider crop (down to FIT_HERO_WIDEST:1), then as a smaller frame at that
+  // ratio, never under FIT_HERO_FLOOR. Phones keep the designed hero.
+  var FIT_HERO_FLOOR = 180;
+  var FIT_HERO_WIDEST = 2.4;
+  function fitIntroHero(screen) {
+    var slot = screen.querySelector('.gq-intro-hero-slot');
+    var cta = screen.querySelector('.gq-tpl-begin');
+    if (!slot || !cta || !stageEl) return;
+    bindFitRefresh();
+    slot.style.height = '';
+    slot.style.maxWidth = '';
+    if (!fitActive() || !slot.offsetHeight) return;
+    // The intro opens the page: it starts under the store's header on
+    // load, or under a sticky bar when the shopper scrolls to it.
+    var rootRect = root.getBoundingClientRect();
+    var rootTop = rootRect.top + (window.pageYOffset || 0);
+    var top = rootTop < window.innerHeight / 2 ? rootTop : fitTopInset();
+    // Differences of rects, so the entry animation's translate cancels out.
+    var ctaBottom = (stageEl.getBoundingClientRect().top - rootRect.top) +
+      (cta.getBoundingClientRect().bottom - screen.getBoundingClientRect().top);
+    var over = top + ctaBottom + fitMargin() - window.innerHeight;
+    if (over <= 0) return;
+    var w = slot.offsetWidth;
+    var target = slot.offsetHeight - over;
+    if (target >= w / FIT_HERO_WIDEST) {
+      slot.style.height = Math.round(target) + 'px';
+      return;
+    }
+    var h = Math.max(FIT_HERO_FLOOR, target);
+    slot.style.height = Math.round(h) + 'px';
+    slot.style.maxWidth = Math.round(Math.min(w, h * FIT_HERO_WIDEST)) + 'px';
   }
 
   // C · Landing + hook: 2-col. Left = rating chip (ONLY a real object),
@@ -6690,23 +6775,35 @@
   function tplLoadingTitle(tpl) {
     return tpl.id === 't3' ? TH('buildingRoutine', 'Building your routine…') : TH('findingMatch', 'Finding your match…');
   }
-  function tplLoadingWanted(tpl, results) {
+  // Whether this template's results open on the loading screen at all
+  // (tplLoadingWanted adds "and this arrival hasn't played it yet").
+  function tplLoadingApplies(tpl, results) {
     if (tpl.loading === 'absent') return false;
-    if (state.t2ComputeDone) return false;
     if (tpl.loading === 'required') return true;
-    return Array.isArray(results.trustLines) && results.trustLines.some(function(t) { return typeof t === 'string' && t; });
+    return tplLoadingLines(results).length > 0;
+  }
+  function tplLoadingWanted(tpl, results) {
+    return !state.t2ComputeDone && tplLoadingApplies(tpl, results);
+  }
+  function tplLoadingLines(results) {
+    return Array.isArray(results.trustLines)
+      ? results.trustLines.filter(function(t) { return typeof t === 'string' && t; }).slice(0, 3)
+      : [];
+  }
+  function tplLoadingDuration(results) {
+    return Math.min(4000, Math.max(2500, 2500 + tplLoadingLines(results).length * 400));
   }
 
-  function tplLoadingScreen(tpl, results) {
+  // hold: shown while quiz-recommend runs; goToResults moves on from it
+  // instead of the timer below.
+  function tplLoadingScreen(tpl, results, hold) {
     var screen = el('div', 'gq-tpl-loading gq-' + tpl.id + '-loading');
     var inner = el('div', 'gq-tpl-loading-inner');
     inner.appendChild(el('div', 'gq-tpl-ring'));
     inner.appendChild(el('h3', 'gq-tpl-loading-title', tplLoadingTitle(tpl)));
     var brand = (config.landing && config.landing.eyebrow) || '';
     if (brand) inner.appendChild(el('p', 'gq-tpl-loading-brand', escapeHtml(brand)));
-    var lines = Array.isArray(results.trustLines)
-      ? results.trustLines.filter(function(t) { return typeof t === 'string' && t; }).slice(0, 3)
-      : [];
+    var lines = tplLoadingLines(results);
     var rot = null;
     if (lines.length > 0) {
       rot = el('p', 'gq-tpl-loading-rot', escapeHtml(lines[0]));
@@ -6725,7 +6822,7 @@
       requestAnimationFrame(function() { rot.classList.add('is-in'); });
     }, 1200) : null;
 
-    var duration = Math.min(4000, Math.max(2500, 2500 + lines.length * 400));
+    if (hold) return screen;
     setTimeout(function() {
       if (interval) clearInterval(interval);
       // A superseded render (the node never attached, or was replaced)
@@ -6734,7 +6831,7 @@
       if (!connected) return;
       if (state.screen !== 'results') return;
       render('forward');
-    }, duration);
+    }, tplLoadingDuration(results));
     return screen;
   }
 
