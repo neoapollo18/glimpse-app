@@ -154,6 +154,8 @@ export const UI_TEXT_ENTRIES: UiTextEntry[] = [
   { key: "addedSome", label: "Added part of a set", group: "bag", default: "Added {n} of {total} to bag", vars: ["n", "total"], help: "When the store refuses some items of a set (sold out, subscription only)." },
   { key: "addFailedItem", label: "Item couldn’t be added", group: "bag", default: "Couldn’t add {name}.", vars: ["name"], help: "Followed by the store’s reason." },
   { key: "unavailable", label: "Sold out / unavailable", group: "bag", default: "Unavailable" },
+  { key: "soldOut", label: "Sold out", group: "bag", default: "Sold out", help: "On a recommended product with nothing left in stock. Blank keeps your Sold out / unavailable text." },
+  { key: "variantSwapped", label: "Sold-out option swapped", group: "bag", default: "{wanted} is sold out, so we’ll add {variant}.", vars: ["wanted", "variant"], varHints: { wanted: "the recommended option", variant: "the in-stock option added instead" }, help: "When the recommended size or shade is sold out and another is in stock." },
   { key: "viewBag", label: "View bag", group: "bag", default: "View bag" },
   { key: "bundleTitleSet", label: "Bundle title", group: "bag", default: "Get the full set" },
   { key: "bundleTitleSave", label: "Bundle title (discount)", group: "bag", default: "Bundle your matches & save" },

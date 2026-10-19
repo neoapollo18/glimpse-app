@@ -1,0 +1,268 @@
+{
+  "_source": "GET https://s4-61-plus.myshopify.com/products/<handle>.js (Shopify App Review store pqkzt0-gb.myshopify.com), 2026-10-19; the fields the widget reads",
+  "products": {
+    "hydrating-green-tea-toner": {
+      "id": 10595493642296,
+      "title": "Hydrating green tea toner",
+      "handle": "hydrating-green-tea-toner",
+      "vendor": "S4",
+      "type": "",
+      "price": 2000,
+      "price_min": 2000,
+      "price_max": 2000,
+      "available": true,
+      "price_varies": false,
+      "compare_at_price": null,
+      "options": [
+        {
+          "name": "Title",
+          "position": 1,
+          "values": [
+            "Default Title"
+          ]
+        }
+      ],
+      "requires_selling_plan": false,
+      "featured_image": "//cdn.shopify.com/s/files/1/0947/5329/2344/files/hydrating-green-tea-toner.png?v=1776695361",
+      "images": [
+        "//cdn.shopify.com/s/files/1/0947/5329/2344/files/hydrating-green-tea-toner.png?v=1776695361"
+      ],
+      "variants": [
+        {
+          "id": 51646674567224,
+          "title": "Default Title",
+          "option1": "Default Title",
+          "option2": null,
+          "option3": null,
+          "sku": "030-200",
+          "featured_image": null,
+          "available": true,
+          "name": "Hydrating green tea toner",
+          "public_title": null,
+          "options": [
+            "Default Title"
+          ],
+          "price": 2000,
+          "compare_at_price": null,
+          "inventory_management": "shopify",
+          "requires_selling_plan": false,
+          "selling_plan_allocations": [
+            {
+              "price_adjustments": [
+                {
+                  "position": 1,
+                  "price": 1800
+                }
+              ],
+              "price": 1800,
+              "compare_at_price": 2000,
+              "per_delivery_price": 1800,
+              "selling_plan_id": 8576335928,
+              "selling_plan_group_id": "29f14af005b6a36aab0617f0ee0e9027aaa08c7e"
+            }
+          ]
+        }
+      ]
+    },
+    "purifying-clay-mask": {
+      "id": 10595492888632,
+      "title": "Purifying Clay Mask",
+      "handle": "purifying-clay-mask",
+      "vendor": "S4",
+      "type": "",
+      "price": 1500,
+      "price_min": 1500,
+      "price_max": 1500,
+      "available": true,
+      "price_varies": false,
+      "compare_at_price": 2000,
+      "options": [
+        {
+          "name": "Target gender",
+          "position": 1,
+          "values": [
+            "Female",
+            "Male"
+          ]
+        }
+      ],
+      "requires_selling_plan": false,
+      "featured_image": "//cdn.shopify.com/s/files/1/0947/5329/2344/files/purifying-clay-mask.png?v=1776695285",
+      "images": [
+        "//cdn.shopify.com/s/files/1/0947/5329/2344/files/purifying-clay-mask.png?v=1776695285"
+      ],
+      "variants": [
+        {
+          "id": 51779489628216,
+          "title": "Female",
+          "option1": "Female",
+          "option2": null,
+          "option3": null,
+          "sku": "TEST-2",
+          "featured_image": null,
+          "available": true,
+          "name": "Purifying Clay Mask - Female",
+          "public_title": "Female",
+          "options": [
+            "Female"
+          ],
+          "price": 1500,
+          "compare_at_price": 2000,
+          "inventory_management": "shopify",
+          "requires_selling_plan": false,
+          "selling_plan_allocations": [
+            {
+              "price_adjustments": [
+                {
+                  "position": 1,
+                  "price": 1350
+                }
+              ],
+              "price": 1350,
+              "compare_at_price": 1500,
+              "per_delivery_price": 1350,
+              "selling_plan_id": 8576335928,
+              "selling_plan_group_id": "29f14af005b6a36aab0617f0ee0e9027aaa08c7e"
+            }
+          ]
+        },
+        {
+          "id": 51779489660984,
+          "title": "Male",
+          "option1": "Male",
+          "option2": null,
+          "option3": null,
+          "sku": "TEST-3",
+          "featured_image": null,
+          "available": false,
+          "name": "Purifying Clay Mask - Male",
+          "public_title": "Male",
+          "options": [
+            "Male"
+          ],
+          "price": 1500,
+          "compare_at_price": 2000,
+          "inventory_management": "shopify",
+          "requires_selling_plan": false,
+          "selling_plan_allocations": [
+            {
+              "price_adjustments": [
+                {
+                  "position": 1,
+                  "price": 1350
+                }
+              ],
+              "price": 1350,
+              "compare_at_price": 1500,
+              "per_delivery_price": 1350,
+              "selling_plan_id": 8576335928,
+              "selling_plan_group_id": "29f14af005b6a36aab0617f0ee0e9027aaa08c7e"
+            }
+          ]
+        }
+      ]
+    },
+    "wide-leg-yoga-pants": {
+      "id": 10603010293816,
+      "title": "Wide-Leg Yoga Pants",
+      "handle": "wide-leg-yoga-pants",
+      "vendor": "S4",
+      "type": "pants",
+      "price": 10000,
+      "price_min": 10000,
+      "price_max": 10000,
+      "available": true,
+      "price_varies": false,
+      "compare_at_price": null,
+      "options": [
+        {
+          "name": "Color",
+          "position": 1,
+          "values": [
+            "Orange"
+          ]
+        },
+        {
+          "name": "Size",
+          "position": 2,
+          "values": [
+            "S",
+            "M",
+            "L"
+          ]
+        }
+      ],
+      "requires_selling_plan": false,
+      "featured_image": "//cdn.shopify.com/s/files/1/0947/5329/2344/files/3fb44ff1-6fda-44ef-a0f3-748dc598b7b7.jpg?v=1784835677",
+      "images": [
+        "//cdn.shopify.com/s/files/1/0947/5329/2344/files/3fb44ff1-6fda-44ef-a0f3-748dc598b7b7.jpg?v=1784835677",
+        "//cdn.shopify.com/s/files/1/0947/5329/2344/files/cc381c29-73a4-4623-9668-7ff4ca7499f1.jpg?v=1784835677"
+      ],
+      "variants": [
+        {
+          "id": 51775802998840,
+          "title": "Orange / S",
+          "option1": "Orange",
+          "option2": "S",
+          "option3": null,
+          "sku": "SU00367229-Orange-S",
+          "featured_image": null,
+          "available": true,
+          "name": "Wide-Leg Yoga Pants - Orange / S",
+          "public_title": "Orange / S",
+          "options": [
+            "Orange",
+            "S"
+          ],
+          "price": 10000,
+          "compare_at_price": null,
+          "inventory_management": "shopify",
+          "requires_selling_plan": false,
+          "selling_plan_allocations": []
+        },
+        {
+          "id": 51775803031608,
+          "title": "Orange / M",
+          "option1": "Orange",
+          "option2": "M",
+          "option3": null,
+          "sku": "SU00367229-Orange-M",
+          "featured_image": null,
+          "available": true,
+          "name": "Wide-Leg Yoga Pants - Orange / M",
+          "public_title": "Orange / M",
+          "options": [
+            "Orange",
+            "M"
+          ],
+          "price": 10000,
+          "compare_at_price": null,
+          "inventory_management": "shopify",
+          "requires_selling_plan": false,
+          "selling_plan_allocations": []
+        },
+        {
+          "id": 51775803064376,
+          "title": "Orange / L",
+          "option1": "Orange",
+          "option2": "L",
+          "option3": null,
+          "sku": "SU00367229-Orange-L",
+          "featured_image": null,
+          "available": false,
+          "name": "Wide-Leg Yoga Pants - Orange / L",
+          "public_title": "Orange / L",
+          "options": [
+            "Orange",
+            "L"
+          ],
+          "price": 10000,
+          "compare_at_price": null,
+          "inventory_management": "shopify",
+          "requires_selling_plan": false,
+          "selling_plan_allocations": []
+        }
+      ]
+    }
+  }
+}

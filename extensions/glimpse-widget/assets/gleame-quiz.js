@@ -342,23 +342,215 @@
     return null;
   }
 
-  // Resolve a variant id we can add to cart: the matched variant, else the
-  // product's first (default) variant.
-  function variantIdForCart(pj, rec) {
-    if (rec.variantNumericId) return rec.variantNumericId;
-    if (pj && Array.isArray(pj.variants) && pj.variants.length > 0) {
-      // First in-stock variant: a sold-out default makes Shopify reject the
-      // whole multi-item add (the bundle card).
-      for (var i = 0; i < pj.variants.length; i++) {
-        if (pj.variants[i] && pj.variants[i].available !== false) return pj.variants[i].id;
+  // ---- Which variant a match puts in the bag ----
+  //
+  // One decision for every path that shows a price or adds a match (cards,
+  // templates, sticky bar, grid, also matched, Bundle & save, the routine
+  // and kit rows, a restored permalink). Shopify refuses a sold-out
+  // variant, and refuses a whole multi-item add when one line is sold out:
+  // App Review 2026-10-19, the routine's "Wide-Leg Yoga Pants - Orange / L"
+  // was sold out while Orange / S and M were in stock. From the public
+  // product JSON the widget already loads (no extra request):
+  // - the matched variant when it is in stock (unchanged requests);
+  // - else the closest in-stock variant: the most option values in common,
+  //   earlier options first (keep Orange, change the size);
+  // - else the product is sold out: no add, left out of every bundle.
+  // Without usable product JSON (fetch failed, Studio stubs) the matched
+  // variant is used exactly as before: a failed fetch never blocks an add.
+  // A matched variant missing from the JSON is left to Shopify too.
+  function variantOptions(v) {
+    if (v && Array.isArray(v.options) && v.options.length) return v.options.map(String);
+    return [v && v.option1, v && v.option2, v && v.option3]
+      .filter(function(o) { return o != null; })
+      .map(String);
+  }
+  function variantInStock(pj, v) {
+    return Boolean(v) && v.available !== false && !(pj && pj.available === false);
+  }
+  function closestInStock(pj, variants, wanted) {
+    var want = wanted ? variantOptions(wanted) : [];
+    var best = null;
+    var bestScore = -1;
+    for (var i = 0; i < variants.length; i++) {
+      var v = variants[i];
+      if (!variantInStock(pj, v)) continue;
+      var opts = variantOptions(v);
+      var score = 0;
+      for (var k = 0; k < want.length; k++) {
+        if (opts[k] === want[k]) score += 100 + (want.length - k);
       }
-      return pj.variants[0].id;
+      if (score > bestScore) { best = v; bestScore = score; }
     }
-    return null;
+    // A named variant only swaps to one that keeps at least one of its
+    // option values (Orange / L to Orange / S). Nothing in common, e.g. a
+    // different shade of a one-option foundation, reads as sold out
+    // instead: the shopper never gets a shade they weren't matched to.
+    if (wanted && bestScore <= 0) return null;
+    return best;
+  }
+
+  // { id, unit, soldOut, swapped, variant, wanted }: id is what goes in the
+  // cart (null when nothing can), unit the price of that variant in cents.
+  function cartChoice(pj, rec) {
+    rec = rec || {};
+    var recId = rec.variantNumericId || null;
+    var out = { id: recId, unit: priceCentsForRec(pj, rec), soldOut: false, swapped: false, variant: null, wanted: null };
+    // Studio stubs carry variant id 0: not a real variant.
+    var variants = pj && Array.isArray(pj.variants)
+      ? pj.variants.filter(function(v) { return v && v.id; })
+      : [];
+    if (variants.length === 0) return out;
+    var wanted = null;
+    if (recId) {
+      for (var i = 0; i < variants.length; i++) {
+        if (String(variants[i].id) === String(recId)) { wanted = variants[i]; break; }
+      }
+      if (!wanted) return out;
+      if (variantInStock(pj, wanted)) { out.variant = wanted; return out; }
+    }
+    out.wanted = wanted;
+    var pick = closestInStock(pj, variants, wanted);
+    if (!pick) {
+      out.id = null;
+      out.soldOut = true;
+      return out;
+    }
+    out.id = pick.id;
+    out.variant = pick;
+    out.swapped = Boolean(wanted);
+    if (typeof pick.price === 'number') out.unit = pick.price;
+    return out;
+  }
+
+  // The match's cart choice once its product JSON is in (promise-cached).
+  function choiceFor(m) {
+    return fetchProductJson(m && m.productHandle).then(function(pj) { return cartChoice(pj, m); });
+  }
+
+  // For a tap: the choice, or the matched variant when the product JSON
+  // takes longer than a tap should wait (the request is already in flight
+  // from the render, so this is normally instant).
+  function choiceForTap(m) {
+    return new Promise(function(resolve) {
+      var done = false;
+      var timer = setTimeout(function() {
+        if (done) return;
+        done = true;
+        resolve(cartChoice(null, m));
+      }, 2500);
+      choiceFor(m).then(function(c) {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        resolve(c);
+      });
+    });
+  }
+
+  // The image of the variant a swap puts in the bag, else the match's.
+  function imageForChoice(pj, rec, c) {
+    var v = c && c.swapped ? c.variant : null;
+    if (v && v.featured_image && v.featured_image.src) return v.featured_image.src;
+    return imageForRec(pj, rec);
+  }
+
+  // "Sold out" on a product with nothing left. A store that translated the
+  // older "Unavailable" label keeps its own wording until it sets this one.
+  function soldOutLabel() {
+    var map = config && config.uiText;
+    var own = map && typeof map.soldOut === 'string' && map.soldOut.trim();
+    if (!own && map && typeof map.unavailable === 'string' && map.unavailable.trim()) return map.unavailable;
+    return T('soldOut', 'Sold out');
+  }
+
+  function markSoldOut(btn) {
+    if (!btn) return;
+    btn.disabled = true;
+    btn.onclick = null;
+    btn.classList.remove('is-working', 'is-added');
+    btn.classList.add('is-soldout');
+    btn.textContent = soldOutLabel();
+  }
+
+  // "Orange / L is sold out, so we'll add Orange / S." under the add
+  // button of a match whose variant was swapped, so the shopper knows what
+  // goes in the bag. Not in the fixed sticky bar (the card says it).
+  function showSwapNote(btn, m, c) {
+    if (!btn || !c || !c.swapped || !btn.parentNode) return;
+    if (btn.closest && btn.closest('.gq-sticky-bar')) return;
+    if (btn._gqSwapNote && btn._gqSwapNote.parentNode) return;
+    var wanted = (c.wanted && c.wanted.title) || m.variantTitle || '';
+    var now = (c.variant && c.variant.title) || '';
+    if (!wanted || !now) return;
+    var note = el('p', 'gq-swap-note', TH('variantSwapped', '{wanted} is sold out, so we’ll add {variant}.', { wanted: wanted, variant: now }));
+    var host = btn.parentNode;
+    var after = btn;
+    try {
+      var cs = window.getComputedStyle(host);
+      if (/flex/.test(cs.display) && !/column/.test(cs.flexDirection) && host.parentNode) {
+        after = host;
+        host = host.parentNode;
+      }
+    } catch (e) { /* no layout info: right under the button */ }
+    host.insertBefore(note, after.nextSibling);
+    btn._gqSwapNote = note;
+  }
+
+  // Product page link for a match, on the variant that would go in the bag.
+  function productHrefFor(m, variantId) {
+    return '/products/' + encodeURIComponent(m.productHandle) +
+      (variantId ? '?variant=' + encodeURIComponent(variantId) : '');
+  }
+  function followCartChoice(a, m) {
+    if (!a || !m || !m.productHandle) return;
+    choiceFor(m).then(function(c) {
+      if (c.swapped && c.id) a.href = productHrefFor(m, c.id);
+    });
+  }
+
+  // ---- The cart as the widget last saw it ----
+  // Units per variant id from the /cart.js reads the widget already makes
+  // (boot, after each add) plus its own adds since. It is the "before" of
+  // the line-by-line fallback, so a refused set is retried exactly as it
+  // was sent without an extra read on every add. Null until a read lands.
+  var cartSeen = null;
+  var cartSeenEpoch = 0;
+  function cartQuantitiesOf(cart) {
+    if (!cart || !Array.isArray(cart.items)) return null;
+    var q = {};
+    cart.items.forEach(function(line) {
+      if (!line || line.variant_id == null) return;
+      var id = String(line.variant_id);
+      q[id] = (q[id] || 0) + (Number(line.quantity) || 0);
+    });
+    return q;
+  }
+  // A read that started before one of the widget's adds landed may predate
+  // it, so only reads that saw no add land meanwhile are kept.
+  function noteCartRead(cart, epoch) {
+    if (epoch !== cartSeenEpoch) return;
+    var q = cartQuantitiesOf(cart);
+    if (q) cartSeen = q;
+  }
+  function noteCartAdded(items) {
+    cartSeenEpoch++;
+    if (!cartSeen) return;
+    (items || []).forEach(function(it) {
+      var id = String(it.id);
+      cartSeen[id] = (cartSeen[id] || 0) + Math.max(1, Number(it.quantity) || 1);
+    });
+  }
+  function cartSeenCopy() {
+    if (!cartSeen) return null;
+    var copy = {};
+    for (var k in cartSeen) if (Object.prototype.hasOwnProperty.call(cartSeen, k)) copy[k] = cartSeen[k];
+    return copy;
   }
 
   function addToBag(variantId, quantity) {
     if (PREVIEW) return Promise.resolve({ preview: true });
+    var items = [{ id: variantId, quantity: quantity || 1 }];
+    var baseline = cartSeenCopy();
     var formData = new FormData();
     formData.append('id', String(variantId));
     formData.append('quantity', String(quantity || 1));
@@ -375,46 +567,78 @@
       method: 'POST',
       headers: { 'Accept': 'application/json' },
       body: formData,
-    }).then(function(res) { return finishCartAdd(res, bundled); });
+    }).then(function(res) { return finishCartAdd(res, bundled, items, baseline); });
   }
 
   // Shared /cart/add.js response handling: error surfacing, cart events,
   // per-theme drawer sync. Single- and multi-item adds must behave
   // identically after the request or the bundle button would open a
   // different drawer than the card buttons.
-  function finishCartAdd(res, bundled) {
-    return readCartAdd(res).then(function(body) {
+  function finishCartAdd(res, bundled, items, baseline) {
+    return readCartAdd(res, items, baseline).then(function(body) {
+      noteCartAdded(items);
       syncCartAfterAdd(body, bundled);
       return body;
     });
   }
 
-  // Shopify's answer is the source of truth. A 2xx means the lines are in
-  // the cart even when its body can't be read (a script that wraps
-  // window.fetch can consume it first), so that is a success, not "Couldn't
-  // add". A refusal keeps Shopify's own reason ("already sold out", "can
-  // only be purchased with a selling plan", "Cannot find variant").
-  function readCartAdd(res) {
+  // Shopify's answer is the source of truth: success is the cart JSON it
+  // sends back for an add. A refusal keeps Shopify's own reason ("already
+  // sold out", "can only be purchased with a selling plan", "Cannot find
+  // variant"). A 2xx that isn't that JSON:
+  // - an HTML page, or a redirect to one (password page, login wall): the
+  //   add never reached the cart, so it failed;
+  // - a body that can't be read (a script that wraps window.fetch can
+  //   consume it first): the cart itself says whether the lines went in,
+  //   on top of what it held before the tap when that is known.
+  function readCartAdd(res, items, baseline) {
     var parsed;
     try { parsed = res.json(); } catch (e) { parsed = null; }
     return Promise.resolve(parsed).then(null, function() { return null; }).then(function(body) {
       if (!res.ok) throw cartAddError(res.status, body);
       if (body && typeof body.status === 'number' && body.status >= 400) throw cartAddError(body.status, body);
-      return body || {};
+      if (isCartAddBody(body)) return body;
+      if (res.redirected || /html/i.test(responseType(res))) throw cartAddError(res.status, null, true);
+      return cartQuantities(true).then(function(now) {
+        var landed = now && (items || []).length > 0 && items.every(function(it) {
+          var id = String(it.id);
+          return (now[id] || 0) >= ((baseline && baseline[id]) || 0) + Math.max(1, Number(it.quantity) || 1);
+        });
+        if (!landed) throw cartAddError(res.status, null, true);
+        return {};
+      });
     });
   }
 
-  function cartAddError(status, body) {
+  // What /cart/add.js answers on success: the added line ({id, variant_id,
+  // key, quantity, ...}) or the added lines ({items: [...]}), with the
+  // sections the widget asked for.
+  function isCartAddBody(body) {
+    if (!body || typeof body !== 'object') return false;
+    return Array.isArray(body.items) || body.variant_id != null || body.id != null || typeof body.key === 'string';
+  }
+
+  function responseType(res) {
+    try {
+      return (res.headers && typeof res.headers.get === 'function' && res.headers.get('content-type')) || '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  // notAdded: a 2xx that added nothing (see readCartAdd). It is no verdict
+  // on the lines, so a set is not retried line by line over it.
+  function cartAddError(status, body, notAdded) {
     var description = body && typeof body.description === 'string' ? body.description.trim() : '';
     var message = body && typeof body.message === 'string' ? body.message.trim() : '';
-    var err = new Error(description || message || ('cart add failed: ' + status));
+    var err = new Error(description || message || (notAdded ? 'cart add not confirmed: ' : 'cart add failed: ') + status);
     err.status = status;
     // What the shopper can be told: "Cart Error" alone says nothing.
     err.reason = description || (message && message !== 'Cart Error' ? message : '');
     // Shopify answered and refused these lines (sold out, plan-only,
     // unknown or unpublished variant). Rate limits and server errors are
     // not a verdict on the lines themselves.
-    err.refused = status >= 400 && status < 500 && status !== 429;
+    err.refused = !notAdded && status >= 400 && status < 500 && status !== 429;
     return err;
   }
 
@@ -435,6 +659,7 @@
   }
 
   function postCartItems(items, bundled) {
+    var baseline = cartSeenCopy();
     return fetch('/cart/add.js', {
       method: 'POST',
       headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
@@ -443,22 +668,22 @@
         sections: ['cart-icon-bubble', 'cart-drawer'].concat(bundled).slice(0, 5).join(','),
         sections_url: window.location.pathname,
       }),
-    }).then(readCartAdd);
+    }).then(function(res) { return readCartAdd(res, items, baseline); }).then(function(body) {
+      noteCartAdded(items);
+      return body;
+    });
   }
 
   // Units per variant id in the cart now, or null when unreadable.
-  function cartQuantities() {
+  // probe: a check on an add still in flight, which must not become the
+  // widget's picture of the cart before that add is counted.
+  function cartQuantities(probe) {
+    var epoch = cartSeenEpoch;
     return fetch('/cart.js', { credentials: 'same-origin' })
       .then(function(r) { return r.ok ? r.json() : null; })
       .then(function(cart) {
-        if (!cart || !Array.isArray(cart.items)) return null;
-        var q = {};
-        cart.items.forEach(function(line) {
-          if (!line || line.variant_id == null) return;
-          var id = String(line.variant_id);
-          q[id] = (q[id] || 0) + (Number(line.quantity) || 0);
-        });
-        return q;
+        if (!probe) noteCartRead(cart, epoch);
+        return cartQuantitiesOf(cart);
       })
       .catch(function() { return null; });
   }
@@ -473,19 +698,25 @@
   function addAllToBag(items) {
     if (PREVIEW) return Promise.resolve({ preview: true, added: items.slice(), failed: [] });
     var bundled = prestigeBundledSections();
+    var baseline = cartSeenCopy();
     return postCartItems(items, bundled).then(function(body) {
       syncCartAfterAdd(body, bundled);
       return { added: items.slice(), failed: [] };
     }, function(err) {
       if (!(err && err.refused) || items.length < 2) throw err;
-      return addEachToBag(items, bundled, err);
+      return addEachToBag(items, bundled, err, baseline);
     });
   }
 
+  // Each line goes in exactly as the set would have put it: its own
+  // quantity on top of what the cart already held, so a product the
+  // shopper added earlier is added again, like the happy path does.
   // Shopify has been seen answering 422 to a set AFTER adding its good
-  // lines, so a line the cart already holds is not added again, and a line
-  // the cart gained while its own add was refused still counts as added.
-  function addEachToBag(items, bundled, setErr) {
+  // lines: a line the cart gained on top of what it held before the tap
+  // (baseline, the widget's last look at the cart) is already in and is
+  // not added twice; without a baseline every line goes. A line the cart
+  // gained while its own add was refused still counts as added.
+  function addEachToBag(items, bundled, setErr, baseline) {
     var added = [];
     var failed = [];
     var lastBody = null;
@@ -494,7 +725,11 @@
       before = q;
       return items.reduce(function(chain, it) {
         return chain.then(function() {
-          if (before && before[String(it.id)] > 0) { added.push(it); return null; }
+          var id = String(it.id);
+          if (baseline && before && (before[id] || 0) >= (baseline[id] || 0) + Math.max(1, Number(it.quantity) || 1)) {
+            added.push(it);
+            return null;
+          }
           return postCartItems([it], bundled).then(function(body) {
             lastBody = body;
             added.push(it);
@@ -553,6 +788,11 @@
     line.setAttribute('role', 'status');
     host.insertBefore(line, after.nextSibling);
     btn._gqProblem = line;
+    // The fixed phone bar shows it floating above the bar (CSS), over the
+    // page: it goes after a while instead of covering content for good.
+    if (host.classList && host.classList.contains('gq-sticky-bar')) {
+      setTimeout(function() { if (btn._gqProblem === line) clearAddProblem(btn); }, 6000);
+    }
   }
   function clearAddProblem(btn) {
     if (btn && btn._gqProblem && btn._gqProblem.parentNode) btn._gqProblem.parentNode.removeChild(btn._gqProblem);
@@ -700,9 +940,12 @@
   cartToken = acceptToken(root.getAttribute('data-cart-token'));
   function refreshCartToken() {
     if (PREVIEW) return Promise.resolve(null);
+    var epoch = cartSeenEpoch;
     return fetch('/cart.js', { credentials: 'same-origin' })
       .then(function(r) { return r.ok ? r.json() : null; })
       .then(function(cart) {
+        // The widget's look at the cart (cartSeen) rides on this read.
+        noteCartRead(cart, epoch);
         var t = acceptToken(cart && cart.token);
         if (t) { cartToken = t; return null; }
         // No matchable token yet: force-mint via /cart/update.js with a
@@ -4315,16 +4558,15 @@
     }
     card.appendChild(media);
 
-    var href = m.productHandle
-      ? '/products/' + encodeURIComponent(m.productHandle) +
-        (m.variantNumericId ? '?variant=' + encodeURIComponent(m.variantNumericId) : '')
-      : null;
+    var href = m.productHandle ? productHrefFor(m, m.variantNumericId) : null;
+    var links = [];
     function linkTo(node) {
       if (!href) return node;
       var a = el('a', 'gq-gr-link');
       a.href = href;
       a.onclick = function() { trackEvent('quiz_view_product', productProps(m)); saveState(); };
       a.appendChild(node);
+      links.push(a);
       return a;
     }
     if (href) {
@@ -4373,8 +4615,10 @@
     var qty = Math.max(1, m.quantity || 1);
     var unitCents = null; // filled in when the product JSON lands
     // Armed as soon as a variant is known: the matched variant now, else
-    // the product's first variant once its JSON resolves. Never a dead tap.
-    function armAdd(variantId) {
+    // the product's first in-stock variant once its JSON resolves. Never a
+    // dead tap, and never a sold-out variant: a tap before the JSON lands
+    // waits for it (pickVariant resolves the cart choice).
+    function armAdd(pickVariant) {
       if (!add || add.classList.contains('is-added')) return;
       add.disabled = false;
       add.onclick = function() {
@@ -4383,45 +4627,52 @@
         add.classList.add('is-working');
         add.textContent = T('adding', 'Adding\u2026');
         clearAddProblem(add);
-        // Success and failure are separate branches: nothing after a
-        // successful add (tracking, the bundle code) can turn it into
-        // "Couldn't add".
-        addToBag(variantId, qty).then(function() {
-          add.classList.remove('is-working');
-          if (!state.gridAdded || typeof state.gridAdded !== 'object') state.gridAdded = {};
-          state.gridAdded[key] = { c: unitCents != null ? unitCents * qty : 0, q: qty };
-          saveState();
-          showAdded();
-          try {
-            refreshCartToken().then(function() {
-              trackEvent('quiz_add_to_cart', { h: m.productHandle, v: String(variantId), qty: qty, price: unitCents != null ? unitCents * qty : undefined });
-            });
-            var bag = gridBag();
-            if (bd && bag.count >= bd.minQty && state.gridDiscountApplied !== true && state.gridDiscountState !== 'pending') {
-              state.gridDiscountState = 'pending';
-              applyBundleDiscount().then(function(applied) {
-                state.gridDiscountState = applied ? null : 'refused';
-                if (applied) {
-                  state.gridDiscountApplied = true;
-                  trackEvent('quiz_bundle_discount_applied');
-                }
-                saveState();
-                refreshAll();
-              });
-            }
-            refreshAll();
-          } catch (e) { /* the add itself succeeded */ }
-        }, function(err) {
-          add.classList.remove('is-working');
-          add.disabled = false;
-          add.textContent = T('addFailed', 'Couldn\u2019t add \u2014 try again');
-          showAddProblem(add, err && err.reason ? String(err.reason).slice(0, 160) : '');
-          setTimeout(function() { if (!add.classList.contains('is-added')) add.textContent = T('gridAdd', 'Add to bag'); }, 2600);
+        pickVariant().then(function(c) {
+          if (c.soldOut || !c.id) { markSoldOut(add); return; }
+          if (c.unit != null) unitCents = c.unit;
+          addOnce(c.id);
         });
       };
     }
+    function addOnce(variantId) {
+      // Success and failure are separate branches: nothing after a
+      // successful add (tracking, the bundle code) can turn it into
+      // "Couldn't add".
+      addToBag(variantId, qty).then(function() {
+        add.classList.remove('is-working');
+        if (!state.gridAdded || typeof state.gridAdded !== 'object') state.gridAdded = {};
+        state.gridAdded[key] = { c: unitCents != null ? unitCents * qty : 0, q: qty };
+        saveState();
+        showAdded();
+        try {
+          refreshCartToken().then(function() {
+            trackEvent('quiz_add_to_cart', { h: m.productHandle, v: String(variantId), qty: qty, price: unitCents != null ? unitCents * qty : undefined });
+          });
+          var bag = gridBag();
+          if (bd && bag.count >= bd.minQty && state.gridDiscountApplied !== true && state.gridDiscountState !== 'pending') {
+            state.gridDiscountState = 'pending';
+            applyBundleDiscount().then(function(applied) {
+              state.gridDiscountState = applied ? null : 'refused';
+              if (applied) {
+                state.gridDiscountApplied = true;
+                trackEvent('quiz_bundle_discount_applied');
+              }
+              saveState();
+              refreshAll();
+            });
+          }
+          refreshAll();
+        } catch (e) { /* the add itself succeeded */ }
+      }, function(err) {
+        add.classList.remove('is-working');
+        add.disabled = false;
+        add.textContent = T('addFailed', 'Couldn\u2019t add \u2014 try again');
+        showAddProblem(add, err && err.reason ? String(err.reason).slice(0, 160) : '');
+        setTimeout(function() { if (!add.classList.contains('is-added')) add.textContent = T('gridAdd', 'Add to bag'); }, 2600);
+      });
+    }
     if (add && !(state.gridAdded && Object.prototype.hasOwnProperty.call(state.gridAdded, key))) {
-      if (m.variantNumericId) armAdd(m.variantNumericId);
+      if (m.variantNumericId) armAdd(function() { return choiceForTap(m); });
       else add.disabled = true;
     }
 
@@ -4434,7 +4685,8 @@
     if (state.gridAdded && Object.prototype.hasOwnProperty.call(state.gridAdded, key)) showAdded();
 
     fetchProductJson(m.productHandle).then(function(pj) {
-      var src = imageForRec(pj, m);
+      var choice = cartChoice(pj, m);
+      var src = imageForChoice(pj, m, choice);
       var cached = tryonCache[key];
       if (cached) {
         img.src = 'data:image/jpeg;base64,' + cached;
@@ -4443,16 +4695,26 @@
       } else if (src) {
         if (!setImgSrc(img, src, IMG_WIDTH.card)) img.src = src;
       }
-      unitCents = priceCentsForRec(pj, m);
+      // The price of the variant that goes in the bag.
+      unitCents = choice.unit;
       if (unitCents != null) price.textContent = formatMoney(unitCents * qty);
-      if (add && !m.variantNumericId && !add.classList.contains('is-added')) {
-        var variantId = variantIdForCart(pj, m);
-        if (m.productHandle && variantId) {
-          armAdd(variantId);
-        } else {
-          add.disabled = true;
-          add.textContent = T('unavailable', 'Unavailable');
+      if (choice.soldOut) price.classList.add('gq-price--soldout');
+      if (add && !add.classList.contains('is-added')) {
+        if (choice.soldOut) {
+          markSoldOut(add);
+        } else if (!m.variantNumericId) {
+          if (m.productHandle && choice.id) {
+            armAdd(function() { return Promise.resolve(choice); });
+          } else {
+            add.disabled = true;
+            add.textContent = T('unavailable', 'Unavailable');
+          }
         }
+        if (choice.swapped) showSwapNote(add, m, choice);
+      }
+      if (choice.swapped && choice.id && href) {
+        href = productHrefFor(m, choice.id);
+        links.forEach(function(a) { a.href = href; });
       }
 
       if (config.tryonEnabled === false || cached || compact) return;
@@ -4745,7 +5007,8 @@
     card.appendChild(body);
 
     fetchProductJson(m.productHandle).then(function(pj) {
-      var src = imageForRec(pj, m);
+      var choice = cartChoice(pj, m);
+      var src = imageForChoice(pj, m, choice);
       var cached = tryonCache[matchKey(m)];
       if (cached) {
         img.src = 'data:image/jpeg;base64,' + cached;
@@ -4754,9 +5017,10 @@
       } else if (src) {
         if (!setImgSrc(img, src, IMG_WIDTH.card)) img.src = src;
       }
-      var unit = priceCentsForRec(pj, m);
+      var unit = choice.unit;
       var qty = Math.max(1, m.quantity || 1);
       if (unit != null) price.textContent = formatMoney(unit * qty);
+      if (choice.soldOut) price.classList.add('gq-price--soldout');
 
       if (hasPhotoNow && !cached && matchTryonReady(m)) {
         if (idx === 0) {
@@ -4827,7 +5091,10 @@
     return banner;
   }
 
-  function wireAddButton(btn, variantId, quantity, compact) {
+  // variant: the id to add, or a function resolving the match's cart
+  // choice at tap time (wirePricedAddButton), so a tap that beats the
+  // product JSON still never adds a sold-out variant.
+  function wireAddButton(btn, variant, quantity, compact) {
     btn.onclick = function() {
       // Captured at click time: the priced label may have replaced the
       // placeholder after this button was wired.
@@ -4835,40 +5102,48 @@
       btn.disabled = true;
       btn.classList.add('is-working');
       clearAddProblem(btn);
-      // Success and failure are separate branches: nothing that runs after
-      // a successful add (tracking, the bundle code) can turn it into
-      // "Couldn't add".
-      addToBag(variantId, quantity).then(function() {
-        btn.classList.remove('is-working');
-        btn.classList.add('is-added');
-        btn.textContent = compact ? T('addedShort', 'Added \u2713') : T('added', 'Added to bag \u2713');
-        setTimeout(function() {
-          btn.classList.remove('is-added');
-          btn.textContent = original;
-          btn.disabled = false;
-        }, 3200);
-        if (!compact && btn.parentNode && !btn.parentNode.querySelector('.gq-viewbag-link')) {
-          var bagLink = el('a', 'gq-view-link gq-viewbag-link', TH('viewBag', 'View bag') + ' \u2192');
-          bagLink.href = '/cart';
-          btn.parentNode.insertBefore(bagLink, btn.nextSibling);
-        }
-        try {
-          refreshCartToken().then(function() {
-            trackEvent('quiz_add_to_cart', { h: variantHandles[String(variantId)], v: String(variantId), qty: quantity });
-          });
-          noteQuizAdd(variantId, quantity);
-        } catch (e) { /* the add itself succeeded */ }
-      }, function(err) {
-        btn.classList.remove('is-working');
-        btn.textContent = T('addFailed', 'Couldn\u2019t add \u2014 try again');
-        // Shopify's reason ("sold out", "needs a selling plan") beats a
-        // bare retry.
-        showAddProblem(btn, err && err.reason ? String(err.reason).slice(0, 160) : '');
-        setTimeout(function() {
-          btn.textContent = original;
-          btn.disabled = false;
-        }, 2600);
+      if (typeof variant !== 'function') return addNow(variant);
+      variant().then(function(c) {
+        if (c.soldOut || !c.id) { markSoldOut(btn); return; }
+        addNow(c.id);
       });
+
+      function addNow(variantId) {
+        // Success and failure are separate branches: nothing that runs after
+        // a successful add (tracking, the bundle code) can turn it into
+        // "Couldn't add".
+        addToBag(variantId, quantity).then(function() {
+          btn.classList.remove('is-working');
+          btn.classList.add('is-added');
+          btn.textContent = compact ? T('addedShort', 'Added \u2713') : T('added', 'Added to bag \u2713');
+          setTimeout(function() {
+            btn.classList.remove('is-added');
+            btn.textContent = original;
+            btn.disabled = false;
+          }, 3200);
+          if (!compact && btn.parentNode && !btn.parentNode.querySelector('.gq-viewbag-link')) {
+            var bagLink = el('a', 'gq-view-link gq-viewbag-link', TH('viewBag', 'View bag') + ' \u2192');
+            bagLink.href = '/cart';
+            btn.parentNode.insertBefore(bagLink, btn.nextSibling);
+          }
+          try {
+            refreshCartToken().then(function() {
+              trackEvent('quiz_add_to_cart', { h: variantHandles[String(variantId)], v: String(variantId), qty: quantity });
+            });
+            noteQuizAdd(variantId, quantity);
+          } catch (e) { /* the add itself succeeded */ }
+        }, function(err) {
+          btn.classList.remove('is-working');
+          btn.textContent = T('addFailed', 'Couldn\u2019t add \u2014 try again');
+          // Shopify's reason ("sold out", "needs a selling plan") beats a
+          // bare retry.
+          showAddProblem(btn, err && err.reason ? String(err.reason).slice(0, 160) : '');
+          setTimeout(function() {
+            btn.textContent = original;
+            btn.disabled = false;
+          }, 2600);
+        });
+      }
     };
   }
 
@@ -4935,27 +5210,32 @@
   // no extra request).
   function wirePricedAddButton(btn, match, results) {
     var qty = Math.max(1, match.quantity || 1);
-    // Arm immediately when the matched variant is already known — the product
-    // JSON is only needed to put a price in the label. Gating the click on
-    // that fetch left a dead button while it resolved (and forever if it
-    // failed), which reads as add-to-cart lagging or ignoring taps.
+    // Arm immediately when the matched variant is already known: gating the
+    // click on the product JSON left a dead button while it resolved (and
+    // forever if it failed), which reads as add-to-cart lagging or ignoring
+    // taps. The tap itself resolves the cart choice (the JSON request is
+    // already in flight), so a sold-out variant is never sent.
     if (match.variantNumericId) {
-      wireAddButton(btn, match.variantNumericId, qty);
+      wireAddButton(btn, function() { return choiceForTap(match); }, qty);
     } else {
       btn.disabled = true;
     }
-    fetchProductJson(match.productHandle).then(function(pj) {
-      var unit = priceCentsForRec(pj, match);
-      // Don't stomp the transient Adding…/Added ✓ states if the shopper
-      // clicked before the price arrived.
-      if (!btn.classList.contains('is-working') && !btn.classList.contains('is-added')) {
-        btn.textContent = buildAddLabel(results.addButtonTemplate, qty, unit != null ? unit * qty : null);
+    choiceFor(match).then(function(c) {
+      if (c.soldOut) {
+        if (!btn.classList.contains('is-added')) markSoldOut(btn);
+        return;
       }
+      // Don't stomp the transient Adding…/Added ✓ states if the shopper
+      // clicked before the price arrived. The price is the variant's that
+      // goes in the bag.
+      if (!btn.classList.contains('is-working') && !btn.classList.contains('is-added')) {
+        btn.textContent = buildAddLabel(results.addButtonTemplate, qty, c.unit != null ? c.unit * qty : null);
+      }
+      if (c.swapped) showSwapNote(btn, match, c);
       if (match.variantNumericId) return;
-      var cartVariant = variantIdForCart(pj, match);
-      if (!cartVariant) return;
+      if (!c.id) return;
       btn.disabled = false;
-      wireAddButton(btn, cartVariant, qty);
+      wireAddButton(btn, c.id, qty);
     });
   }
 
@@ -5004,10 +5284,16 @@
     matches.forEach(function(m) { units += Math.max(1, m.quantity || 1); });
     var live = results.bundleDiscount || null;
     // A minimum this match set can't reach would promise a saving that
-    // checkout never gives.
-    var bd = live && live.minQty <= units ? live : null;
-    var amount = discountText(bd);
-    var mixable = Boolean(bd) && bd.minQty < units;
+    // checkout never gives. Re-read once the product JSONs say which
+    // matches are sold out (offerTerms).
+    var bd, amount, mixable;
+    function offerTerms(count, unitsNow) {
+      all = count;
+      bd = live && live.minQty <= unitsNow ? live : null;
+      amount = discountText(bd);
+      mixable = Boolean(bd) && bd.minQty < unitsNow;
+    }
+    offerTerms(all, units);
     var size = Number(results.bundleSize) > 0 ? Math.min(Math.floor(Number(results.bundleSize)), all) : all;
     // A merchant label is a button label only when it carries the count or
     // price tokens; older copy-only labels ("Select 3 and save 20%", the
@@ -5017,25 +5303,32 @@
     var picks = matches.map(function(m, i) { return { m: m, on: i < size, line: null, tile: null }; });
     var linesReady = false;
 
-    var card = el('section', 'gq-bundle-offer' + (bd ? ' has-discount' : ''));
+    var card = el('section', 'gq-bundle-offer');
     card.setAttribute('aria-label', T('ariaBundleOffer', 'Bundle offer'));
     var head = el('div', 'gq-bo-head');
-    if (bd) head.appendChild(el('span', 'gq-bo-badge', '%'));
-    var headText = el('div', 'gq-bo-head-text');
-    headText.appendChild(el('h3', 'gq-bo-title', escapeHtml(
-      bd ? (amount
-          ? (mixable
-            ? T('bundleTitleMix', 'Bundle & save {amount}', { amount: amount })
-            : T('bundleTitleSaveAmount', 'Bundle all {count} and save {amount}', { count: all, amount: amount }))
-          : T('bundleTitleSave', 'Bundle your matches & save'))
-        : T('bundleTitleSet', 'Get the full set'))));
-    headText.appendChild(el('p', 'gq-bo-sub', escapeHtml(
-      bd ? (mixable
-          ? T('bundleSubMix', 'Pick any {n} or more of your matches.', { n: bd.minQty })
-          : T('bundleSubAll', 'All {count} of your matches, in one tap.', { count: all }))
-        : T('bundleSubSet', 'Everything we matched you with, in one tap.'))));
-    head.appendChild(headText);
     card.appendChild(head);
+    var fine = null;
+    function paintHead() {
+      card.classList.toggle('has-discount', Boolean(bd));
+      head.innerHTML = '';
+      if (bd) head.appendChild(el('span', 'gq-bo-badge', '%'));
+      var headText = el('div', 'gq-bo-head-text');
+      headText.appendChild(el('h3', 'gq-bo-title', escapeHtml(
+        bd ? (amount
+            ? (mixable
+              ? T('bundleTitleMix', 'Bundle & save {amount}', { amount: amount })
+              : T('bundleTitleSaveAmount', 'Bundle all {count} and save {amount}', { count: all, amount: amount }))
+            : T('bundleTitleSave', 'Bundle your matches & save'))
+          : T('bundleTitleSet', 'Get the full set'))));
+      headText.appendChild(el('p', 'gq-bo-sub', escapeHtml(
+        bd ? (mixable
+            ? T('bundleSubMix', 'Pick any {n} or more of your matches.', { n: bd.minQty })
+            : T('bundleSubAll', 'All {count} of your matches, in one tap.', { count: all }))
+          : T('bundleSubSet', 'Everything we matched you with, in one tap.'))));
+      head.appendChild(headText);
+      if (fine && !bd && fine.parentNode) fine.parentNode.removeChild(fine);
+    }
+    paintHead();
 
     var tiles = el('div', 'gq-bo-items');
     picks.forEach(function(p) {
@@ -5079,7 +5372,10 @@
     var status = el('p', 'gq-bo-status', '');
     status.setAttribute('role', 'status');
     card.appendChild(status);
-    if (bd) card.appendChild(el('p', 'gq-bo-fine', escapeHtml(bd.note || T('bundleFine', 'Bundle savings applied at checkout'))));
+    if (bd) {
+      fine = el('p', 'gq-bo-fine', escapeHtml(bd.note || T('bundleFine', 'Bundle savings applied at checkout')));
+      card.appendChild(fine);
+    }
 
     // The variant the shopper picked on the page (t1 hero) wins over the
     // matched one, for both the cart line and the price.
@@ -5116,7 +5412,7 @@
     function refresh() {
       picks.forEach(function(p) {
         var l = lineFor(p);
-        if (l && l.unit != null) p.price.textContent = formatMoney(l.unit * l.quantity);
+        if (l && l.unit != null && !p.tile.classList.contains('is-soldout')) p.price.textContent = formatMoney(l.unit * l.quantity);
         p.tile.classList.toggle('is-on', p.on);
         p.tile.setAttribute('aria-pressed', p.on ? 'true' : 'false');
         p.tile.setAttribute('aria-label', (p.on ? 'Remove ' : 'Add ') + (p.m.productName || 'item') + (p.on ? ' from' : ' to') + ' the bundle');
@@ -5171,14 +5467,19 @@
     Promise.all(picks.map(function(p) {
       return p.m.productHandle ? fetchProductJson(p.m.productHandle) : Promise.resolve(null);
     })).then(function(pjs) {
+      var soldOut = 0;
+      var unitsLeft = 0;
       pjs.forEach(function(pj, i) {
         var p = picks[i];
+        // The shared cart choice: an in-stock variant (the matched one, or
+        // the closest when it sold out) at that variant's price.
+        var c = cartChoice(pj, p.m);
         p.line = {
-          id: variantIdForCart(pj, p.m),
+          id: c.id,
           quantity: Math.max(1, p.m.quantity || 1),
-          unit: priceCentsForRec(pj, p.m),
+          unit: c.unit,
         };
-        var img = httpsImage(imageForRec(pj, p.m));
+        var img = httpsImage(imageForChoice(pj, p.m, c));
         if (img) {
           var im = document.createElement('img');
           setImgSrc(im, img, IMG_WIDTH.thumb);
@@ -5188,11 +5489,26 @@
         }
         if (p.line.unit != null) p.price.textContent = formatMoney(p.line.unit * p.line.quantity);
         // Nothing to add, or sold out: it can't be in the bundle.
-        if (!p.line.id || (pj && pj.available === false)) {
+        if (!p.line.id || c.soldOut) {
           p.on = false;
           p.tile.disabled = true;
+          if (c.soldOut) {
+            soldOut++;
+            p.tile.classList.add('is-soldout');
+            p.price.textContent = soldOutLabel();
+          }
+        } else {
+          unitsLeft += p.line.quantity;
         }
       });
+      // Sold-out matches leave the offer: its count and its discount
+      // promise follow what can still be added.
+      if (soldOut > 0) {
+        offerTerms(all - soldOut, unitsLeft);
+        paintHead();
+        // One match left is no bundle: its own Add to bag is the offer.
+        if (all < 2) card.style.display = 'none';
+      }
       linesReady = true;
       refresh();
     });
@@ -5298,19 +5614,23 @@
     btn.disabled = true;
     row.appendChild(btn);
 
-    var lines = null; // per-match {id, quantity, unit} once JSONs resolve
+    var lines = null; // per-match {id, quantity, unit, soldOut} once JSONs resolve
+    // A sold-out match is left out of the set, its count and its total:
+    // the button adds (and prices) what can actually go in the bag.
     function selectedItems() {
       var items = [];
       var total = 0;
       var totalKnown = true;
+      var soldOut = 0;
       bp.sel.forEach(function(idx) {
         var line = lines && lines[idx];
+        if (line && line.soldOut) { soldOut++; return; }
         if (!line || !line.id) { totalKnown = false; return; }
         items.push({ id: line.id, quantity: line.quantity });
         if (line.unit != null) total += line.unit * line.quantity;
         else totalKnown = false;
       });
-      return { items: items, total: totalKnown ? total : null };
+      return { items: items, total: totalKnown && items.length ? total : null, soldOut: soldOut };
     }
     // Bundle discount (migration 086): the saving shows on the button
     // ({total} becomes the discounted price, {was} the full one) and in a
@@ -5345,11 +5665,16 @@
       }
       var s = selectedItems();
       btn.disabled = lines === null || s.items.length === 0;
+      if (lines !== null && s.items.length === 0 && s.soldOut > 0) {
+        btn.textContent = soldOutLabel();
+        refreshNote(false);
+        return;
+      }
       var qualifies = Boolean(bd) && itemCount(s.items) >= bd.minQty;
       var discount = qualifies
         ? { text: discountText(bd), wasCents: s.total }
         : null;
-      btn.textContent = buildAddLabel(template, bp.size, qualifies ? discountedCents(s.total, bd) : s.total, discount);
+      btn.textContent = buildAddLabel(template, bp.size - s.soldOut, qualifies ? discountedCents(s.total, bd) : s.total, discount);
       refreshNote(qualifies);
     }
     bp.onChange = refreshButton;
@@ -5358,10 +5683,12 @@
       return m.productHandle ? fetchProductJson(m.productHandle) : Promise.resolve(null);
     })).then(function(pjs) {
       lines = matches.map(function(m, i) {
+        var c = cartChoice(pjs[i], m);
         return {
-          id: variantIdForCart(pjs[i], m),
+          id: c.id,
           quantity: Math.max(1, m.quantity || 1),
-          unit: priceCentsForRec(pjs[i], m),
+          unit: c.unit,
+          soldOut: c.soldOut,
         };
       });
       refreshButton();
@@ -5466,10 +5793,12 @@
       .catch(function() { return []; });
   }
 
+  // Same stock rule as the matches (cartChoice): the first in-stock
+  // variant, or none.
   function firstAvailableVariant(pj) {
     if (!pj || !Array.isArray(pj.variants)) return null;
     for (var i = 0; i < pj.variants.length; i++) {
-      if (pj.variants[i].available !== false) return pj.variants[i];
+      if (variantInStock(pj, pj.variants[i])) return pj.variants[i];
     }
     return null;
   }
@@ -5500,7 +5829,7 @@
     // One tap only when there's nothing to choose; otherwise the product
     // page owns variant selection.
     var availableCount = pj && Array.isArray(pj.variants)
-      ? pj.variants.filter(function(v) { return v.available !== false; }).length
+      ? pj.variants.filter(function(v) { return variantInStock(pj, v); }).length
       : 0;
     if (variant && availableCount === 1) {
       var add = el('button', 'gq-xsell-add', TH('xsellAdd', '+ Add'));
@@ -5915,7 +6244,7 @@
         slot.appendChild(img);
         return;
       }
-      slotSetUrl(slot, safeImgUrl(imageForRec(pj, m)));
+      slotSetUrl(slot, safeImgUrl(imageForChoice(pj, m, cartChoice(pj, m))));
     });
     return slot;
   }
@@ -7160,14 +7489,14 @@
     return !(config && config.results && config.results.secondaryLink === false);
   }
   function productHref(m) {
-    return '/products/' + encodeURIComponent(m.productHandle) +
-      (m.variantNumericId ? '?variant=' + encodeURIComponent(m.variantNumericId) : '');
+    return productHrefFor(m, m.variantNumericId);
   }
   function viewLinkEl(m, results, label, cls) {
     if (!m.productHandle) return null;
     var view = el('a', cls, escapeHtml(label || results.viewProductLabel || 'View full product') + ' \u2192');
     view.href = productHref(m);
     view.onclick = function() { trackEvent('quiz_view_product', productProps(m)); saveState(); };
+    followCartChoice(view, m);
     return view;
   }
   // "View product" as the card's main button: a link dressed as the add
@@ -7182,6 +7511,7 @@
     var a = el('a', 'gq-add-btn gq-cta-view ' + cls, escapeHtml(label || results.viewProductLabel || 'View full product'));
     a.href = productHref(m);
     a.onclick = function() { trackEvent('quiz_view_product', productProps(m)); saveState(); };
+    followCartChoice(a, m);
     return a;
   }
   // "Add to cart" as the small link: a button dressed as the view link.
@@ -7226,13 +7556,15 @@
   }
   var TPL_LINK = 'gq-view-link gq-tpl-view';
 
-  // Price text element that fills in when the product JSON resolves.
+  // Price text element that fills in when the product JSON resolves: the
+  // price of the variant that goes in the bag (struck through when the
+  // product is sold out).
   function tplPrice(m, cls) {
     var price = el('p', cls, '');
-    fetchProductJson(m.productHandle).then(function(pj) {
-      var unit = priceCentsForRec(pj, m);
+    choiceFor(m).then(function(c) {
       var qty = Math.max(1, m.quantity || 1);
-      if (unit != null) price.textContent = formatMoney(unit * qty);
+      if (c.unit != null) price.textContent = formatMoney(c.unit * qty);
+      if (c.soldOut) price.classList.add('gq-price--soldout');
     });
     return price;
   }
@@ -7293,7 +7625,12 @@
     Promise.all(matches.map(function(m) {
       return m.productHandle ? fetchProductJson(m.productHandle) : Promise.resolve(null);
     })).then(function(pjs) {
-      var allPriced = pjs.every(function(pj, i) { return priceCentsForRec(pj, matches[i]) != null; });
+      // Priced from the variants that go in the bag; a sold-out match is
+      // not in the set, so it doesn't need a price.
+      var allPriced = pjs.every(function(pj, i) {
+        var c = cartChoice(pj, matches[i]);
+        return c.soldOut || c.unit != null;
+      });
       var label = labelTemplate || results.bundleLabel || null;
       if (label && !allPriced) label = label.replace(/\s*[—·-]?\s*\{total\}/g, '');
       bundlePicker = {
@@ -7520,7 +7857,10 @@
       option: String((pj.options && pj.options[0] && (pj.options[0].name || pj.options[0])) || 'option').toLowerCase(),
     })));
     var row = el('div', 'gq-t1r-variant-row');
-    var currentId = String(m.variantNumericId || pj.variants[0].id);
+    // Preselect what the add button adds: the matched variant, or the
+    // in-stock one standing in for it. A sold-out product has none.
+    var choice = cartChoice(pj, m);
+    var currentId = choice.soldOut ? null : String(choice.id || pj.variants[0].id);
     pj.variants.slice(0, 8).forEach(function(v) {
       var pill = el('button', 'gq-t1r-variant' + (String(v.id) === currentId ? ' is-selected' : ''));
       pill.type = 'button';
@@ -7540,6 +7880,8 @@
           parts.viewLink.href = '/products/' + encodeURIComponent(m.productHandle) + '?variant=' + encodeURIComponent(v.id);
         }
         if (addBtn) {
+          // The shopper chose: the "sold out, so we'll add" note is moot.
+          if (addBtn._gqSwapNote && addBtn._gqSwapNote.parentNode) addBtn._gqSwapNote.parentNode.removeChild(addBtn._gqSwapNote);
           // Re-arm for the picked variant; an in-flight/just-added button
           // keeps its transient label (wireAddButton restores it itself).
           wireAddButton(addBtn, v.id, qty);
@@ -7846,10 +8188,10 @@
         tbody.appendChild(tr);
       }
       addRow(T('rowPrice', 'Price'), function(td, m) {
-        fetchProductJson(m.productHandle).then(function(pj) {
-          var unit = priceCentsForRec(pj, m);
+        choiceFor(m).then(function(c) {
           var qty = Math.max(1, m.quantity || 1);
-          if (unit != null) td.textContent = formatMoney(unit * qty);
+          if (c.soldOut) td.textContent = soldOutLabel();
+          else if (c.unit != null) td.textContent = formatMoney(c.unit * qty);
         });
       });
       if (cols.some(function(m) { return m.variantTitle; })) {
@@ -8017,13 +8359,17 @@
     var stepNo = 0;
     var totals = {};
     var totalEls = [headTotal];
+    // The total is what "Add routine to cart" adds: a sold-out step counts
+    // as nothing (totals[i] === 0 with soldOutSteps[i]).
+    var soldOutSteps = {};
     function refreshTotal() {
-      var sum = 0, known = true;
+      var sum = 0, known = true, any = false;
       matches.forEach(function(m, i) {
         if (totals[i] == null) { known = false; return; }
         sum += totals[i];
+        if (!soldOutSteps[i]) any = true;
       });
-      var txt = known ? formatMoney(sum) : '';
+      var txt = known && any ? formatMoney(sum) : '';
       totalEls.forEach(function(e) { e.textContent = txt; });
     }
     routineGroups(matches).forEach(function(g) {
@@ -8048,10 +8394,17 @@
         var price = el('span', 'gq-t3r-step-price', '');
         step.appendChild(price);
         regimen.appendChild(step);
-        fetchProductJson(m.productHandle).then(function(pj) {
-          var unit = priceCentsForRec(pj, m);
+        choiceFor(m).then(function(c) {
+          var unit = c.unit;
           var qty = Math.max(1, m.quantity || 1);
-          if (unit != null) { price.textContent = formatMoney(unit * qty); totals[idx] = unit * qty; }
+          if (unit != null) price.textContent = formatMoney(unit * qty);
+          if (c.soldOut) {
+            price.classList.add('gq-price--soldout');
+            soldOutSteps[idx] = true;
+            totals[idx] = 0;
+          } else if (unit != null) {
+            totals[idx] = unit * qty;
+          }
           refreshTotal();
         });
       });
@@ -8173,11 +8526,12 @@
     hi.appendChild(el('h3', 'gq-t4r-name', escapeHtml(hero.productName)));
     var priceLine = el('p', 'gq-t4r-price', '');
     var why = tplWhyText(hero);
-    fetchProductJson(hero.productHandle).then(function(pj) {
-      var unit = priceCentsForRec(pj, hero);
+    choiceFor(hero).then(function(c) {
+      var unit = c.unit;
       var qty = Math.max(1, hero.quantity || 1);
       var bits = [];
-      if (unit != null) bits.push(formatMoney(unit * qty));
+      if (c.soldOut) bits.push(soldOutLabel());
+      else if (unit != null) bits.push(formatMoney(unit * qty));
       if (why) bits.push(why);
       priceLine.textContent = bits.join(' · ');
     });

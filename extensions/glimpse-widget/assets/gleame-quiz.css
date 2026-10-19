@@ -1714,6 +1714,33 @@
 #gleame-quiz-root .gq-add-problem:empty { display: none; }
 #gleame-quiz-root .gq-add-problem--bundle { text-align: center; }
 #gleame-quiz-root.gq-t3 .gq-t3r-addall .gq-add-problem { max-width: 320px; margin-left: auto; margin-right: auto; }
+/* The fixed phone bar keeps its height (the results reserve 96px for it):
+   the reason floats just above the bar instead of growing it. */
+#gleame-quiz-root .gq-sticky-bar .gq-add-problem {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  margin: 0;
+  padding: var(--gq-space-2) var(--gq-space-4);
+  background: rgba(255, 255, 255, 0.96);
+  border-top: 1px solid var(--gq-line);
+  text-align: center;
+}
+
+/* A sold-out match: the add button reads "Sold out" (disabled) and the
+   price is struck through, so it never counts toward a set. */
+#gleame-quiz-root .gq-price--soldout { text-decoration: line-through; opacity: 0.6; }
+/* "Orange / L is sold out, so we'll add Orange / S." under the button. */
+#gleame-quiz-root .gq-swap-note {
+  margin: var(--gq-space-2) 0 0;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--gq-ink);
+  opacity: 0.8;
+  overflow-wrap: anywhere;
+  grid-column: 1 / -1;
+}
 
 /* =======================================================================
  * UPSELL / CROSS-SELL — "complete the look" (Studio Offers, migration 086)

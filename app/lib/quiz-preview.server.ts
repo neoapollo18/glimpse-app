@@ -28,6 +28,8 @@ import { getBrandProfile, servedTemplateFor } from "./brand-profile.server";
 import { defaultEmailPlacement, isTemplateId, resolveQuizTokens } from "./quiz-templates";
 import { getQuizOffers, numericShopifyId, publicOffersPayload, OFFERS_DEFAULTS } from "./quiz-offers.server";
 import { quizTextPayload, resultsCtaPayload, sanitizeProductWhy } from "./quiz-ui-text";
+import { shopHasTryonProducts } from "./tryon-availability.server";
+import { tryonReady } from "./tryon-readiness";
 
 const SWATCH_HEX_RE = /^#[0-9a-fA-F]{3,8}$/;
 const hexOrNull = (v: unknown): string | null =>
@@ -265,7 +267,20 @@ export async function buildPreviewQuizConfig(
     bundleEnabled: config.quiz_bundle_enabled,
     bundleSize: config.quiz_bundle_size,
   });
+  // Same rule as the storefront quiz-config: try-on is offered only when the
+  // toggle is on AND a product the quiz can recommend is set up for it, so
+  // the canvas doesn't show a photo step or "Try them on me" a shopper
+  // would never get. A failed read keeps the toggle (storefront parity).
+  // Started before the "why" read so the two overlap.
+  const tryonAvailable: Promise<boolean> =
+    config.quiz_tryon_enabled === true && shopRow
+      ? shopHasTryonProducts(shopRow.id, config).catch((err) => {
+          console.error("[quiz-preview] try-on availability check failed:", err);
+          return true;
+        })
+      : Promise.resolve(config.quiz_tryon_enabled === true);
   const productWhy = shopRow ? await productWhyByHandle(shopRow.id, config.quiz_product_why) : {};
+  const tryonEnabled = await tryonAvailable;
 
   return {
     enabled: true,
@@ -311,9 +326,11 @@ export async function buildPreviewQuizConfig(
         }
       : {}),
     numRecommendations: config.num_recommendations,
-    // Migration 069. Previews never generate try-ons anyway (requestTryon
-    // short-circuits in PREVIEW mode); carried for payload-shape parity.
-    tryonEnabled: config.quiz_tryon_enabled,
+    // Migration 069 AND at least one try-on-ready product (see above).
+    // Previews never generate try-ons (requestTryon short-circuits in
+    // PREVIEW mode), but the photo step, the try-on headline and the "Try
+    // them on me" banner follow this flag.
+    tryonEnabled,
     photoFrameHint: config.photo_frame_hint,
     landing: {
       eyebrow: renderTokens(config.quiz_eyebrow),
@@ -411,6 +428,12 @@ export async function buildPreviewQuizConfig(
  * ai mode), resolved to names via the synced catalog.
  */
 export async function buildPreviewSampleRecommend(shopId: string, draft: QuizDraft, count = 6, shopDomain?: string) {
+  // Live config under the draft's settings: the sample pool's product scope
+  // and the shop-wide multi-set prompt for the per-match try-on flag.
+  const liveConfig = shopDomain ? await getChatAssistantConfig(shopDomain).catch(() => null) : null;
+  const scopeConfig = liveConfig
+    ? ({ ...liveConfig, ...(draft.settings as Partial<ChatAssistantConfig>) } as ChatAssistantConfig)
+    : null;
   const targets: Array<{ productId: string | null; variantId: string | null; quantity: number; rank: number }> = [];
   const seen = new Set<string>();
   for (const rule of [...draft.flow.rules].sort((a, b) => a.rank - b.rank)) {
@@ -453,10 +476,8 @@ export async function buildPreviewSampleRecommend(shopId: string, draft: QuizDra
     // which put Glamnetic's Nail Strengthener / nail glue / lash kits on the
     // Studio results screen of a press-on-only quiz.
     let poolIds: string[] = [];
-    if (shopDomain) {
+    if (shopDomain && scopeConfig) {
       try {
-        const live = await getChatAssistantConfig(shopDomain);
-        const scopeConfig = { ...live, ...(draft.settings as Partial<ChatAssistantConfig>) };
         const { pool } = await buildCandidatePool(shopDomain, scopeConfig);
         poolIds = [...new Set((pool?.candidates ?? []).map((c) => c.product.id))].slice(0, count);
       } catch (e) {
@@ -488,6 +509,10 @@ export async function buildPreviewSampleRecommend(shopId: string, draft: QuizDra
     typeof price === "number" && Number.isFinite(price) ? Math.round(price * 100) : null;
 
   const whyLines = sanitizeProductWhy((draft.settings as Record<string, unknown>)?.quiz_product_why);
+  const multiSetFallbackPrompt =
+    ((draft.settings as Record<string, unknown>)?.quiz_multi_set_prompt as string | null | undefined) ??
+    scopeConfig?.quiz_multi_set_prompt ??
+    null;
   const matches = targets
     .map((t, idx) => {
       const variant = t.variantId ? variantById.get(t.variantId) : null;
@@ -506,6 +531,16 @@ export async function buildPreviewSampleRecommend(shopId: string, draft: QuizDra
         rank: idx + 1,
         quantity: t.quantity,
         reasons: [],
+        // Per match, as quiz-recommend serves it: whether this product has
+        // a try-on to render (the widget also needs the shop toggle). The
+        // canvas then offers "See on me" / the hero try-on only where a
+        // shopper would get one.
+        tryon: tryonReady({
+          product: product as any,
+          variant: (variant as any) ?? null,
+          quantity: t.quantity,
+          multiSetFallbackPrompt,
+        }),
       };
     })
     .filter(Boolean);

@@ -268,6 +268,16 @@ export async function computeQuizRecommendations({
   // matches, walk the merchant's nearest-shade adjacency list and re-match.
   // Every failure path keeps the UNFILTERED outcome — an availability
   // hiccup or a fully out-of-stock family must never blank the results.
+  //
+  // Deliberately NOT on by default (App Review 2026-10-19, sold-out
+  // "Orange / L"): it is an awaited Admin GraphQL call on this hot path
+  // (6s timeout, 2-minute cache, ~50 query-cost points per product node
+  // against the shop's shared Admin bucket), it fails open anyway, and it
+  // works per VARIANT for definitive picks, so it would drop a product the
+  // shopper can still buy in another size. Every shop is covered in the
+  // widget instead: gleame-quiz.js (cartChoice) reads each match's public
+  // product JSON, which it loads anyway, and adds an in-stock variant or
+  // shows the product as sold out.
   if (chatConfig.quiz_availability_filter && outcome.matrixApplied) {
     const filterByStock = async (o: typeof outcome) => {
       const segment = o.ordered.slice(0, o.matrixCount);
