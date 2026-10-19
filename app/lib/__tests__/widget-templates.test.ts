@@ -545,7 +545,9 @@ describe("v3 widget templates", () => {
     const input = root.querySelector(".gq-t3-name-input") as HTMLInputElement;
     input.value = "Maya";
     input.dispatchEvent(new Event("input"));
-    (root.querySelector(".gq-t3-name-form") as HTMLFormElement).dispatchEvent(new Event("submit", { cancelable: true }));
+    // Click the real button: a synthetic submit on the form skipped it and
+    // hid a Continue that could not submit (2026-10-19 App Review).
+    (root.querySelector(".gq-t3-name-continue") as HTMLButtonElement).click();
     await new Promise((r) => setTimeout(r, 220));
     expect(root.querySelector(".gq-t3-q")!.textContent).toBe("Nice to meet you, Maya.");
     expect(root.querySelector(".gq-t3-sub")!.textContent).toBe("What's your skin type?");

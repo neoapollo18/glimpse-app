@@ -16,6 +16,7 @@ import {
   type Candidate,
 } from "./recommendation-engine.server";
 import { llmOrderCandidates, guardAndPrioritize, applyPriorityOrdering } from "./llm-recommender.server";
+import { tryonReady } from "./tryon-readiness";
 import { checkRateLimit, checkRateLimits, RATE_LIMITS } from "./rate-limiter.server";
 import {
   loadAnswerLayer,
@@ -46,6 +47,12 @@ export type QuizRecommendResult = {
     rank: number;
     quantity: number;
     reasons: string[];
+    /** Whether quiz-tryon can render this match on the shopper: try-on is
+     * on for the shop AND this product/variant has a try-on prompt. The
+     * widget offers try-on ("Try them on me", "See on me", the hero
+     * transform) only for matches where this is true. Columnar matches
+     * don't carry it (the widget reads absent as the pre-flag behavior). */
+    tryon?: boolean;
     /** Columnar shops only: shopper-facing length / shape / finish. */
     meta?: ColumnarMeta;
   }>;
@@ -494,6 +501,14 @@ export async function computeQuizRecommendations({
       // Matrix picks keep the merchant-authored answer reasons; LLM picks
       // get the ranker's per-candidate reason. Same wire shape either way.
       reasons: matrixApplied ? reasons : llmReason ? [llmReason] : [],
+      // Resolved exactly as quiz-tryon will: a partial match goes out without
+      // its variant, so quiz-tryon renders it at product level.
+      tryon: chatConfig.quiz_tryon_enabled === true && tryonReady({
+        product,
+        variant,
+        quantity: Math.max(1, candidate.quantity ?? 1),
+        multiSetFallbackPrompt: chatConfig.quiz_multi_set_prompt,
+      }),
     };
   });
 

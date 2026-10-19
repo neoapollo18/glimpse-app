@@ -3910,7 +3910,7 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   quiz_retake_label: 'Retake photo',
   quiz_results_subtext: '{count} picks made for your answers.',
   quiz_show_matches_label: 'Show my matches',
-  quiz_upsell_title: 'See these on you ✨',
+  quiz_upsell_title: 'See these on you',
   quiz_upsell_body: "One quick photo — we'll re-render your matches on you.",
   quiz_upsell_cta: 'Try them on me',
   quiz_shade_headline: "Now let's nail your shade",

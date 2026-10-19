@@ -151,6 +151,8 @@ export const UI_TEXT_ENTRIES: UiTextEntry[] = [
   { key: "added", label: "Added", group: "bag", default: "Added to bag ✓" },
   { key: "addedShort", label: "Added (small buttons)", group: "bag", default: "Added ✓" },
   { key: "addFailed", label: "Add failed", group: "bag", default: "Couldn’t add — try again" },
+  { key: "addedSome", label: "Added part of a set", group: "bag", default: "Added {n} of {total} to bag", vars: ["n", "total"], help: "When the store refuses some items of a set (sold out, subscription only)." },
+  { key: "addFailedItem", label: "Item couldn’t be added", group: "bag", default: "Couldn’t add {name}.", vars: ["name"], help: "Followed by the store’s reason." },
   { key: "unavailable", label: "Sold out / unavailable", group: "bag", default: "Unavailable" },
   { key: "viewBag", label: "View bag", group: "bag", default: "View bag" },
   { key: "bundleTitleSet", label: "Bundle title", group: "bag", default: "Get the full set" },

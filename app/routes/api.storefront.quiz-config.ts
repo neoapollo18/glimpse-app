@@ -17,6 +17,7 @@ import { getQuizOffers, publicOffersPayload } from "../lib/quiz-offers.server";
 import { verifyStorePreviewToken } from "../lib/app-proxy.server";
 import { storefrontCached } from "../lib/storefront-cache.server";
 import { quizTextPayload, resultsCtaPayload } from "../lib/quiz-ui-text";
+import { shopHasTryonProducts } from "../lib/tryon-availability.server";
 
 /** Template contract the widget must declare (`&tpl=`) to receive template
  * payloads. Mirrors TEMPLATE_PROTOCOL in gleame-quiz.js. */
@@ -113,6 +114,18 @@ async function buildQuizConfig(shopDomain: string, url: URL, storePreview: boole
     bundleEnabled: config.quiz_bundle_enabled,
     bundleSize: config.quiz_bundle_size,
   });
+  // Try-on is offered only when it can render something: the merchant
+  // toggle (migration 069, default on) AND at least one product the quiz
+  // can recommend set up for try-on. A store that never configured a
+  // product used to get the photo step and a "Try them on me" banner that
+  // led nowhere. A failed read keeps the merchant's toggle. Started here so
+  // it overlaps the brand profile read below.
+  const tryonAvailable: Promise<boolean> = config.quiz_tryon_enabled
+    ? shopHasTryonProducts(verifiedShop.id, config).catch((err) => {
+        console.error("[quiz-config] try-on availability check failed:", err);
+        return true;
+      })
+    : Promise.resolve(false);
 
   // Overhaul template system (migration 072): quiz_template NULL = legacy
   // rendering, brandTokens absent, nothing changes.
@@ -185,6 +198,7 @@ async function buildQuizConfig(shopDomain: string, url: URL, storePreview: boole
 
   const quizActive = config.enabled &&
     (config.assistant_mode === "quiz" || config.assistant_mode === "both");
+  const tryonEnabled = await tryonAvailable;
 
   return {
     status: 200,
@@ -255,8 +269,9 @@ async function buildQuizConfig(shopDomain: string, url: URL, storePreview: boole
       // Migration 069: false = never generate try-on images (hero
       // transform, "See on me", post-results upsell); the photo step and
       // shade detection are unaffected. Older cached configs omit it —
-      // widget treats absent as enabled.
-      tryonEnabled: config.quiz_tryon_enabled,
+      // widget treats absent as enabled. False also when no product is set
+      // up for try-on (see tryonEnabled above).
+      tryonEnabled,
       // Framing hint reused by the camera modal on the try-on gate.
       photoFrameHint: config.photo_frame_hint,
       landing: {

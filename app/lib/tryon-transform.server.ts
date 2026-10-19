@@ -12,7 +12,7 @@ import {
   isOpenAIModel,
   type ReferenceImagePart,
 } from "./ai.server";
-import { parseReferenceImageUrls, coerceReferenceImageUrlList } from "./reference-images";
+import { resolveTryonPrompt } from "./tryon-readiness";
 import { safeFetch } from "./safe-fetch.server";
 import { trackTransformationEvent } from "./supabase.server";
 import type { EngineProduct, EngineVariant } from "./recommendation-engine.server";
@@ -51,46 +51,26 @@ export async function transformCandidateImage(args: {
 }): Promise<TransformOutcome> {
   const { product, variant, base64Image, mimeType, shopDomain, widgetType } = args;
   const logTag = args.logTag ?? "tryon-transform";
-  const source = variant || product;
   try {
-    const quantity = Math.max(1, Math.round(args.quantity ?? 1));
-    const firstNonEmpty = (...lists: string[][]) => lists.find((l) => l.length > 0) ?? [];
-
-    // Product/variant multi-set prompts are written against their multi-set
-    // reference photos (the finished N-set look) — firing one with single-set
-    // refs would tell the model to read two-set density off a one-set photo.
-    // No multi-set refs = drop back to single-set config for that level. The
-    // shop-wide fallback prompt is generic text and needs no refs.
-    let multiSetPrompt = quantity >= 2
-      ? (variant?.multi_set_prompt || product.multi_set_prompt || null)
-      : null;
-    let multiSetRefs: string[] = [];
-    if (multiSetPrompt) {
-      multiSetRefs = firstNonEmpty(
-        coerceReferenceImageUrlList(variant?.multi_set_reference_urls),
-        coerceReferenceImageUrlList(product.multi_set_reference_urls),
+    // Prompt + reference resolution is shared with quiz-recommend's per-match
+    // `tryon` flag (tryon-readiness.ts), so the results only offer a try-on
+    // this pipeline can run.
+    const resolved = resolveTryonPrompt({
+      product,
+      variant,
+      quantity: args.quantity,
+      multiSetFallbackPrompt: args.multiSetFallbackPrompt,
+    });
+    // Typed as before the extraction (the row columns are typed string).
+    const prompt = resolved.prompt as string;
+    const { referenceUrls, multiSetWithoutRefs } = resolved;
+    if (multiSetWithoutRefs) {
+      console.warn(
+        `[${logTag}] multi_set_prompt configured without multi_set_reference_urls for ` +
+        `${product.id}${variant ? `/${variant.id}` : ""}; falling back to the shop-wide ` +
+        `multi-set prompt if set, else single-set config`
       );
-      if (multiSetRefs.length === 0) {
-        console.warn(
-          `[${logTag}] multi_set_prompt configured without multi_set_reference_urls for ` +
-          `${product.id}${variant ? `/${variant.id}` : ""} — falling back to the shop-wide ` +
-          `multi-set prompt if set, else single-set config`
-        );
-        multiSetPrompt = null;
-      }
     }
-    if (!multiSetPrompt && quantity >= 2 && args.multiSetFallbackPrompt) {
-      multiSetPrompt = args.multiSetFallbackPrompt;
-    }
-
-    const prompt = multiSetPrompt
-      ? multiSetPrompt.replace(/\{count\}/g, String(quantity))
-      : (source.transformation_prompt || product.transformation_prompt);
-    const referenceUrls = multiSetRefs.length > 0
-      ? multiSetRefs
-      : variant
-        ? firstNonEmpty(parseReferenceImageUrls(variant), parseReferenceImageUrls(product))
-        : parseReferenceImageUrls(product);
 
     const referenceImages: ReferenceImagePart[] = [];
     for (const refUrl of referenceUrls) {

@@ -383,33 +383,58 @@
   // identically after the request or the bundle button would open a
   // different drawer than the card buttons.
   function finishCartAdd(res, bundled) {
-    return res.json().then(function(body) {
-      if (!res.ok) {
-        var msg = (body && (body.description || body.message)) || ('cart add failed: ' + res.status);
-        throw new Error(msg);
-      }
-      if (body && typeof body.status === 'number' && body.status >= 400) {
-        throw new Error(body.description || body.message || ('cart add soft-failure: ' + body.status));
-      }
-      try {
-        document.dispatchEvent(new CustomEvent('cart:updated', { detail: { source: 'gleame-quiz' } }));
-        document.dispatchEvent(new CustomEvent('cart:refresh', { detail: { source: 'gleame-quiz' } }));
-      } catch (e) { /* old browsers — ignore */ }
-      var handled = false;
-      try {
-        handled = Boolean(dawnDrawerSync(body) || prestigeCartSync(body, bundled) || fluorescentCartSync());
-      } catch (e) { handled = false; }
-      if (!handled) refreshCartUi(body);
+    return readCartAdd(res).then(function(body) {
+      syncCartAfterAdd(body, bundled);
       return body;
     });
   }
 
-  // Add several variants in one call (the results bundle button). JSON
-  // body because FormData can't carry an items array; same section
-  // rendering + theme sync as addToBag.
-  function addAllToBag(items) {
-    if (PREVIEW) return Promise.resolve({ preview: true });
-    var bundled = prestigeBundledSections();
+  // Shopify's answer is the source of truth. A 2xx means the lines are in
+  // the cart even when its body can't be read (a script that wraps
+  // window.fetch can consume it first), so that is a success, not "Couldn't
+  // add". A refusal keeps Shopify's own reason ("already sold out", "can
+  // only be purchased with a selling plan", "Cannot find variant").
+  function readCartAdd(res) {
+    var parsed;
+    try { parsed = res.json(); } catch (e) { parsed = null; }
+    return Promise.resolve(parsed).then(null, function() { return null; }).then(function(body) {
+      if (!res.ok) throw cartAddError(res.status, body);
+      if (body && typeof body.status === 'number' && body.status >= 400) throw cartAddError(body.status, body);
+      return body || {};
+    });
+  }
+
+  function cartAddError(status, body) {
+    var description = body && typeof body.description === 'string' ? body.description.trim() : '';
+    var message = body && typeof body.message === 'string' ? body.message.trim() : '';
+    var err = new Error(description || message || ('cart add failed: ' + status));
+    err.status = status;
+    // What the shopper can be told: "Cart Error" alone says nothing.
+    err.reason = description || (message && message !== 'Cart Error' ? message : '');
+    // Shopify answered and refused these lines (sold out, plan-only,
+    // unknown or unpublished variant). Rate limits and server errors are
+    // not a verdict on the lines themselves.
+    err.refused = status >= 400 && status < 500 && status !== 429;
+    return err;
+  }
+
+  // Theme cart UI after an add. Never throws: the lines are already in
+  // the cart, so a theme hiccup here can't make the add read as failed.
+  function syncCartAfterAdd(body, bundled) {
+    try {
+      document.dispatchEvent(new CustomEvent('cart:updated', { detail: { source: 'gleame-quiz' } }));
+      document.dispatchEvent(new CustomEvent('cart:refresh', { detail: { source: 'gleame-quiz' } }));
+    } catch (e) { /* old browsers: ignore */ }
+    var handled = false;
+    try {
+      handled = Boolean(dawnDrawerSync(body) || prestigeCartSync(body, bundled) || fluorescentCartSync());
+    } catch (e) { handled = false; }
+    try {
+      if (!handled) refreshCartUi(body);
+    } catch (e) { /* the header count catches up on the next page */ }
+  }
+
+  function postCartItems(items, bundled) {
     return fetch('/cart/add.js', {
       method: 'POST',
       headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
@@ -418,7 +443,120 @@
         sections: ['cart-icon-bubble', 'cart-drawer'].concat(bundled).slice(0, 5).join(','),
         sections_url: window.location.pathname,
       }),
-    }).then(function(res) { return finishCartAdd(res, bundled); });
+    }).then(readCartAdd);
+  }
+
+  // Units per variant id in the cart now, or null when unreadable.
+  function cartQuantities() {
+    return fetch('/cart.js', { credentials: 'same-origin' })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(cart) {
+        if (!cart || !Array.isArray(cart.items)) return null;
+        var q = {};
+        cart.items.forEach(function(line) {
+          if (!line || line.variant_id == null) return;
+          var id = String(line.variant_id);
+          q[id] = (q[id] || 0) + (Number(line.quantity) || 0);
+        });
+        return q;
+      })
+      .catch(function() { return null; });
+  }
+
+  // Add several variants (bundle, routine, kit). JSON body because
+  // FormData can't carry an items array; same section rendering + theme
+  // sync as addToBag. Shopify refuses the whole set when one line can't be
+  // added (sold out, plan-only, unknown variant), so a refused set goes
+  // again one line at a time: one bad line never sinks the others.
+  // Resolves { added: [items], failed: [{ item, reason }] }; rejects only
+  // when nothing could be added.
+  function addAllToBag(items) {
+    if (PREVIEW) return Promise.resolve({ preview: true, added: items.slice(), failed: [] });
+    var bundled = prestigeBundledSections();
+    return postCartItems(items, bundled).then(function(body) {
+      syncCartAfterAdd(body, bundled);
+      return { added: items.slice(), failed: [] };
+    }, function(err) {
+      if (!(err && err.refused) || items.length < 2) throw err;
+      return addEachToBag(items, bundled, err);
+    });
+  }
+
+  // Shopify has been seen answering 422 to a set AFTER adding its good
+  // lines, so a line the cart already holds is not added again, and a line
+  // the cart gained while its own add was refused still counts as added.
+  function addEachToBag(items, bundled, setErr) {
+    var added = [];
+    var failed = [];
+    var lastBody = null;
+    var before = null;
+    return cartQuantities().then(function(q) {
+      before = q;
+      return items.reduce(function(chain, it) {
+        return chain.then(function() {
+          if (before && before[String(it.id)] > 0) { added.push(it); return null; }
+          return postCartItems([it], bundled).then(function(body) {
+            lastBody = body;
+            added.push(it);
+          }, function(err) {
+            failed.push({ item: it, reason: (err && err.reason) || '', error: err });
+          });
+        });
+      }, Promise.resolve());
+    }).then(function() {
+      if (!failed.length || !before) return null;
+      return cartQuantities().then(function(after) {
+        if (!after) return;
+        failed = failed.filter(function(f) {
+          var id = String(f.item.id);
+          if ((after[id] || 0) > (before[id] || 0)) { added.push(f.item); return false; }
+          return true;
+        });
+      });
+    }).then(function() {
+      if (!added.length) throw (failed[0] && failed[0].error) || setErr;
+      syncCartAfterAdd(lastBody, bundled);
+      return {
+        added: items.filter(function(it) { return added.indexOf(it) !== -1; }),
+        failed: failed.map(function(f) { return { item: f.item, reason: f.reason }; }),
+      };
+    });
+  }
+
+  // What to tell the shopper about lines Shopify wouldn't take:
+  // "Couldn't add Wide-Leg Yoga Pants. The product '...' is already sold
+  // out." nameFor maps a variant id to the product name.
+  function addProblemText(failed, nameFor) {
+    return (failed || []).map(function(f) {
+      var name = f.item && nameFor ? nameFor(String(f.item.id)) : '';
+      var reason = String(f.reason || '').slice(0, 160);
+      if (!name) return reason || T('addFailed', 'Couldn’t add — try again');
+      return T('addFailedItem', 'Couldn’t add {name}.', { name: name }) + (reason ? ' ' + reason : '');
+    }).join(' ');
+  }
+
+  // A one-line status under an add button: Shopify's reason a line could
+  // not be added. Inside a row of buttons it goes under the row.
+  function showAddProblem(btn, text) {
+    clearAddProblem(btn);
+    if (!text || !btn || !btn.parentNode) return;
+    var host = btn.parentNode;
+    var after = btn;
+    try {
+      var cs = window.getComputedStyle(host);
+      if (/flex/.test(cs.display) && !/column/.test(cs.flexDirection) && host.parentNode) {
+        after = host;
+        host = host.parentNode;
+      }
+    } catch (e) { /* no layout info: right under the button */ }
+    var line = el('p', 'gq-add-problem', escapeHtml(text));
+    line.setAttribute('role', 'status');
+    host.insertBefore(line, after.nextSibling);
+    btn._gqProblem = line;
+  }
+  function clearAddProblem(btn) {
+    if (btn && btn._gqProblem && btn._gqProblem.parentNode) btn._gqProblem.parentNode.removeChild(btn._gqProblem);
+    if (btn) btn._gqProblem = null;
   }
 
   // Prestige-family themes (Glamnetic) bundle their cart sections into cart
@@ -1158,11 +1296,46 @@
       '|' + String(Math.max(1, match.quantity || 1));
   }
 
+  // Whether a try-on can be rendered for this match: try-on is on for the
+  // shop AND quiz-recommend marked the product as set up for it (m.tryon).
+  // A product with no try-on prompt has nothing to render, so it gets no
+  // "See on me", no hero transform and doesn't count toward "Try them on
+  // me". Absent flag (a session saved before the flag existed, pool-engine
+  // matches, Studio sample cards) keeps the previous behavior.
+  function matchTryonReady(m) {
+    if (!config || config.tryonEnabled === false) return false;
+    return !(m && m.tryon === false);
+  }
+
+  function anyTryonReady(list) {
+    for (var i = 0; i < (list || []).length; i++) {
+      if (matchTryonReady(list[i])) return true;
+    }
+    return false;
+  }
+
+  // Whether this browser can hand the quiz a photo. Every capture path ends
+  // in a file input (the camera modal's own fallback included) and the
+  // photo is posted as FormData, so a CTA that asks for a photo is only
+  // shown where both work.
+  function photoCaptureAvailable() {
+    if (typeof FormData === 'undefined') return false;
+    try {
+      var probe = document.createElement('input');
+      probe.type = 'file';
+      return probe.type === 'file' && !probe.disabled;
+    } catch (e) {
+      return false;
+    }
+  }
+
   function requestTryon(match) {
     if (PREVIEW) return Promise.resolve(null);
     // Shop opted out of try-on generation (shade detection only) — the
     // server rejects these anyway; don't burn the session cap on them.
     if (config && config.tryonEnabled === false) return Promise.resolve(null);
+    // Product not set up for try-on: the server has no prompt to render.
+    if (!matchTryonReady(match)) return Promise.resolve(null);
     var key = matchKey(match);
     if (!photoFile) return Promise.resolve(null);
     if (tryonCache[key]) return Promise.resolve(tryonCache[key]);
@@ -3686,7 +3859,9 @@
     // Try-on generation off (migration 069): cards keep product images, no
     // hero transform / "See on me" / upsell, and the headline must not
     // claim "on you". The photo itself (shade detection) is unaffected.
-    var tryonOn = config.tryonEnabled !== false;
+    // Same when none of these matches is set up for try-on: there is
+    // nothing to render on the shopper.
+    var tryonOn = config.tryonEnabled !== false && anyTryonReady(matches);
     var hasPhotoNow = state.hasPhoto && Boolean(photoFile) && tryonOn;
     // Server-side 'partial' means "some rule axis unanswered" — not
     // necessarily the shade. The shade gate can only clear a partial when
@@ -3776,7 +3951,7 @@
     if (state.partial && shadeActionable) {
       main.appendChild(buildShadeGate());
     }
-    if (definitive && tryonOn && !hasPhotoNow && config.upsell && config.upsell.cta) {
+    if (definitive && tryonOn && !hasPhotoNow && config.upsell && config.upsell.cta && photoCaptureAvailable()) {
       main.appendChild(buildUpsellBanner());
     }
     layout.appendChild(main);
@@ -3839,7 +4014,7 @@
   function renderResultsGrid() {
     var results = config.results || {};
     var matches = Array.isArray(state.matches) ? state.matches : [];
-    var tryonOn = config.tryonEnabled !== false;
+    var tryonOn = config.tryonEnabled !== false && anyTryonReady(matches);
     var hasPhotoNow = state.hasPhoto && Boolean(photoFile) && tryonOn;
     var sAxis = shadeAxis();
     var shadeActionable = Boolean(sAxis && !state.criteria[sAxis.key]);
@@ -4207,33 +4382,40 @@
         add.disabled = true;
         add.classList.add('is-working');
         add.textContent = T('adding', 'Adding\u2026');
+        clearAddProblem(add);
+        // Success and failure are separate branches: nothing after a
+        // successful add (tracking, the bundle code) can turn it into
+        // "Couldn't add".
         addToBag(variantId, qty).then(function() {
           add.classList.remove('is-working');
           if (!state.gridAdded || typeof state.gridAdded !== 'object') state.gridAdded = {};
           state.gridAdded[key] = { c: unitCents != null ? unitCents * qty : 0, q: qty };
           saveState();
           showAdded();
-          refreshCartToken().then(function() {
-            trackEvent('quiz_add_to_cart', { h: m.productHandle, v: String(variantId), qty: qty, price: unitCents != null ? unitCents * qty : undefined });
-          });
-          var bag = gridBag();
-          if (bd && bag.count >= bd.minQty && state.gridDiscountApplied !== true && state.gridDiscountState !== 'pending') {
-            state.gridDiscountState = 'pending';
-            applyBundleDiscount().then(function(applied) {
-              state.gridDiscountState = applied ? null : 'refused';
-              if (applied) {
-                state.gridDiscountApplied = true;
-                trackEvent('quiz_bundle_discount_applied');
-              }
-              saveState();
-              refreshAll();
+          try {
+            refreshCartToken().then(function() {
+              trackEvent('quiz_add_to_cart', { h: m.productHandle, v: String(variantId), qty: qty, price: unitCents != null ? unitCents * qty : undefined });
             });
-          }
-          refreshAll();
-        }).catch(function() {
+            var bag = gridBag();
+            if (bd && bag.count >= bd.minQty && state.gridDiscountApplied !== true && state.gridDiscountState !== 'pending') {
+              state.gridDiscountState = 'pending';
+              applyBundleDiscount().then(function(applied) {
+                state.gridDiscountState = applied ? null : 'refused';
+                if (applied) {
+                  state.gridDiscountApplied = true;
+                  trackEvent('quiz_bundle_discount_applied');
+                }
+                saveState();
+                refreshAll();
+              });
+            }
+            refreshAll();
+          } catch (e) { /* the add itself succeeded */ }
+        }, function(err) {
           add.classList.remove('is-working');
           add.disabled = false;
           add.textContent = T('addFailed', 'Couldn\u2019t add \u2014 try again');
+          showAddProblem(add, err && err.reason ? String(err.reason).slice(0, 160) : '');
           setTimeout(function() { if (!add.classList.contains('is-added')) add.textContent = T('gridAdd', 'Add to bag'); }, 2600);
         });
       };
@@ -4274,6 +4456,8 @@
       }
 
       if (config.tryonEnabled === false || cached || compact) return;
+      // Product not set up for try-on: no "See on me", no transform.
+      if (!matchTryonReady(m)) return;
       // One automatic try-on per photo: the card the shopper tapped, else
       // the first card (a photo from the photo step).
       var auto = hasPhotoNow && (pendingKey ? pendingKey === key : idx === 0);
@@ -4284,6 +4468,7 @@
       }
       // "See on me" on every card: with a photo it renders here; without
       // one it asks for the photo, then renders this card first.
+      if (!(state.hasPhoto && photoFile) && !photoCaptureAvailable()) return;
       var see = el('button', 'gq-gr-see', EYE_SVG + '<span>' + TH('seeOnMe', 'See on me') + '</span>');
       see.type = 'button';
       see.onclick = function(e) {
@@ -4573,7 +4758,7 @@
       var qty = Math.max(1, m.quantity || 1);
       if (unit != null) price.textContent = formatMoney(unit * qty);
 
-      if (hasPhotoNow && !cached) {
+      if (hasPhotoNow && !cached && matchTryonReady(m)) {
         if (idx === 0) {
           media.classList.add('gq-media--working');
           applyTryonToMedia(media, img, m, true, function() { media.classList.remove('gq-media--working'); });
@@ -4649,34 +4834,41 @@
       var original = btn.textContent;
       btn.disabled = true;
       btn.classList.add('is-working');
-      addToBag(variantId, quantity)
-        .then(function() {
-          btn.classList.remove('is-working');
-          btn.classList.add('is-added');
-          btn.textContent = compact ? T('addedShort', 'Added \u2713') : T('added', 'Added to bag \u2713');
-          if (!compact && btn.parentNode && !btn.parentNode.querySelector('.gq-viewbag-link')) {
-            var bagLink = el('a', 'gq-view-link gq-viewbag-link', TH('viewBag', 'View bag') + ' \u2192');
-            bagLink.href = '/cart';
-            btn.parentNode.insertBefore(bagLink, btn.nextSibling);
-          }
+      clearAddProblem(btn);
+      // Success and failure are separate branches: nothing that runs after
+      // a successful add (tracking, the bundle code) can turn it into
+      // "Couldn't add".
+      addToBag(variantId, quantity).then(function() {
+        btn.classList.remove('is-working');
+        btn.classList.add('is-added');
+        btn.textContent = compact ? T('addedShort', 'Added \u2713') : T('added', 'Added to bag \u2713');
+        setTimeout(function() {
+          btn.classList.remove('is-added');
+          btn.textContent = original;
+          btn.disabled = false;
+        }, 3200);
+        if (!compact && btn.parentNode && !btn.parentNode.querySelector('.gq-viewbag-link')) {
+          var bagLink = el('a', 'gq-view-link gq-viewbag-link', TH('viewBag', 'View bag') + ' \u2192');
+          bagLink.href = '/cart';
+          btn.parentNode.insertBefore(bagLink, btn.nextSibling);
+        }
+        try {
           refreshCartToken().then(function() {
             trackEvent('quiz_add_to_cart', { h: variantHandles[String(variantId)], v: String(variantId), qty: quantity });
           });
           noteQuizAdd(variantId, quantity);
-          setTimeout(function() {
-            btn.classList.remove('is-added');
-            btn.textContent = original;
-            btn.disabled = false;
-          }, 3200);
-        })
-        .catch(function() {
-          btn.classList.remove('is-working');
-          btn.textContent = T('addFailed', 'Couldn\u2019t add \u2014 try again');
-          setTimeout(function() {
-            btn.textContent = original;
-            btn.disabled = false;
-          }, 2600);
-        });
+        } catch (e) { /* the add itself succeeded */ }
+      }, function(err) {
+        btn.classList.remove('is-working');
+        btn.textContent = T('addFailed', 'Couldn\u2019t add \u2014 try again');
+        // Shopify's reason ("sold out", "needs a selling plan") beats a
+        // bare retry.
+        showAddProblem(btn, err && err.reason ? String(err.reason).slice(0, 160) : '');
+        setTimeout(function() {
+          btn.textContent = original;
+          btn.disabled = false;
+        }, 2600);
+      });
     };
   }
 
@@ -4863,6 +5055,7 @@
         p.on = !p.on;
         // A new selection is a new offer: the "Added" state ends here.
         btn.classList.remove('is-added');
+        problem.textContent = '';
         refresh();
       };
       tiles.appendChild(tile);
@@ -4879,6 +5072,10 @@
     card.appendChild(foot);
     var hint = el('p', 'gq-bo-hint', '');
     card.appendChild(hint);
+    // Why a line couldn't be added (Shopify's reason), until the next tap.
+    var problem = el('p', 'gq-add-problem gq-add-problem--offer', '');
+    problem.setAttribute('role', 'status');
+    card.appendChild(problem);
     var status = el('p', 'gq-bo-status', '');
     status.setAttribute('role', 'status');
     card.appendChild(status);
@@ -5008,19 +5205,35 @@
       btn.classList.add('is-working');
       btn.textContent = T('adding', 'Adding…');
       hint.textContent = '';
-      addAllToBag(s.items)
-        .then(function() {
-          btn.classList.remove('is-working');
-          btn.classList.add('is-added');
-          btn.textContent = T('added', 'Added to bag ✓');
-          if (!foot.querySelector('.gq-viewbag-link')) {
-            var bagLink = el('a', 'gq-view-link gq-viewbag-link', TH('viewBag', 'View bag') + ' →');
-            bagLink.href = '/cart';
-            foot.appendChild(bagLink);
-          }
-          refreshCartToken().then(function() { trackEvent('quiz_add_bundle_to_bag', bundleProps(s)); });
-          s.items.forEach(function(it) { quizAdds[String(it.id)] = (quizAdds[String(it.id)] || 0) + it.quantity; });
-          if (qualifies && bundleCodeState !== 'applied') {
+      problem.textContent = '';
+      // Success and failure are separate branches: nothing after a
+      // successful add (tracking, the bundle code) can turn it into
+      // "Couldn't add".
+      addAllToBag(s.items).then(function(outcome) {
+        var failed = (outcome && outcome.failed) || [];
+        var added = (outcome && outcome.added) || s.items;
+        var addedUnits = unitsOf(added);
+        btn.classList.remove('is-working');
+        btn.classList.add('is-added');
+        btn.textContent = failed.length
+          ? T('addedSome', 'Added {n} of {total} to bag', { n: addedUnits, total: s.count })
+          : T('added', 'Added to bag ✓');
+        // "Added to bag ✓" stays until the shopper changes the selection,
+        // so a second tap can't silently add the whole set again.
+        btn.disabled = true;
+        if (!foot.querySelector('.gq-viewbag-link')) {
+          var bagLink = el('a', 'gq-view-link gq-viewbag-link', TH('viewBag', 'View bag') + ' →');
+          bagLink.href = '/cart';
+          foot.appendChild(bagLink);
+        }
+        // Lines Shopify wouldn't take (one sold out, one plan-only): say
+        // which, and why, under the button.
+        if (failed.length) problem.textContent = addProblemText(failed, nameForVariant);
+        try {
+          var sent = failed.length ? { items: added, total: totalOf(added) } : s;
+          refreshCartToken().then(function() { trackEvent('quiz_add_bundle_to_bag', bundleProps(sent)); });
+          added.forEach(function(it) { quizAdds[String(it.id)] = (quizAdds[String(it.id)] || 0) + it.quantity; });
+          if (qualifies && addedUnits >= bd.minQty && bundleCodeState !== 'applied') {
             bundleCodeState = 'pending';
             showCodeState();
             applyBundleDiscount().then(function(applied) {
@@ -5029,19 +5242,43 @@
               showCodeState();
             });
           }
-          // "Added to bag ✓" stays until the shopper changes the selection,
-          // so a second tap can't silently add the whole set again.
-          btn.disabled = true;
-        })
-        .catch(function(err) {
-          btn.classList.remove('is-working');
-          btn.textContent = T('addFailed', 'Couldn’t add — try again');
-          // Shopify's reason ("sold out", "only 2 left") beats a bare retry.
-          var why = err && err.message && !/^cart add/.test(err.message) ? String(err.message).slice(0, 140) : '';
-          if (why) hint.textContent = why;
-          setTimeout(refresh, 2600);
-        });
+        } catch (e) { /* the add itself succeeded */ }
+      }, function(err) {
+        btn.classList.remove('is-working');
+        btn.textContent = T('addFailed', 'Couldn’t add — try again');
+        // Shopify's reason ("sold out", "only 2 left") beats a bare retry.
+        problem.textContent = err && err.reason ? String(err.reason).slice(0, 160) : '';
+        setTimeout(refresh, 2600);
+      });
     };
+
+    function unitsOf(items) {
+      var n = 0;
+      items.forEach(function(it) { n += it.quantity; });
+      return n;
+    }
+    function totalOf(items) {
+      var total = 0;
+      var known = true;
+      items.forEach(function(it) {
+        var p = pickForVariant(String(it.id));
+        var l = p && lineFor(p);
+        if (l && l.unit != null) total += l.unit * it.quantity;
+        else known = false;
+      });
+      return known ? total : null;
+    }
+    function pickForVariant(id) {
+      for (var i = 0; i < picks.length; i++) {
+        var l = lineFor(picks[i]);
+        if (l && String(l.id) === id) return picks[i];
+      }
+      return null;
+    }
+    function nameForVariant(id) {
+      var p = pickForVariant(id);
+      return p ? (p.m.productName || '') : '';
+    }
 
     bundleOfferRefresh = refresh;
     refresh();
@@ -5130,39 +5367,77 @@
       refreshButton();
     });
 
+    // Why a line couldn't be added (Shopify's reason), until the next tap.
+    var problem = el('p', 'gq-add-problem gq-add-problem--bundle', '');
+    problem.setAttribute('role', 'status');
+    row.appendChild(problem);
+    function lineForVariant(id) {
+      for (var i = 0; lines && i < lines.length; i++) {
+        if (lines[i] && String(lines[i].id) === id) return { line: lines[i], match: matches[i] };
+      }
+      return null;
+    }
+    function nameForVariant(id) {
+      var hit = lineForVariant(id);
+      return hit ? (hit.match.productName || '') : '';
+    }
+    function totalOf(items) {
+      var total = 0;
+      for (var i = 0; i < items.length; i++) {
+        var hit = lineForVariant(String(items[i].id));
+        if (!hit || hit.line.unit == null) return null;
+        total += hit.line.unit * items[i].quantity;
+      }
+      return total;
+    }
+
     btn.onclick = function() {
       var s = selectedItems();
       if (s.items.length === 0) return;
       btn.disabled = true;
       btn.classList.add('is-working');
-      addAllToBag(s.items)
-        .then(function() {
-          btn.classList.remove('is-working');
-          btn.classList.add('is-added');
-          btn.textContent = T('added', 'Added to bag \u2713');
-          if (btn.parentNode && !btn.parentNode.querySelector('.gq-viewbag-link')) {
-            var bagLink = el('a', 'gq-view-link gq-viewbag-link', TH('viewBag', 'View bag') + ' \u2192');
-            bagLink.href = '/cart';
-            btn.parentNode.insertBefore(bagLink, btn.nextSibling);
-          }
-          refreshCartToken().then(function() { trackEvent('quiz_add_bundle_to_bag', bundleProps(s)); });
-          if (bd && itemCount(s.items) >= bd.minQty) {
+      problem.textContent = '';
+      // Success and failure are separate branches: nothing after a
+      // successful add (tracking, the bundle code) can turn it into
+      // "Couldn't add".
+      addAllToBag(s.items).then(function(outcome) {
+        var failed = (outcome && outcome.failed) || [];
+        var added = (outcome && outcome.added) || s.items;
+        btn.classList.remove('is-working');
+        btn.classList.add('is-added');
+        btn.textContent = failed.length
+          ? T('addedSome', 'Added {n} of {total} to bag', { n: itemCount(added), total: itemCount(s.items) })
+          : T('added', 'Added to bag \u2713');
+        setTimeout(function() {
+          btn.classList.remove('is-added');
+          refreshButton();
+        }, 3200);
+        if (btn.parentNode && !btn.parentNode.querySelector('.gq-viewbag-link')) {
+          var bagLink = el('a', 'gq-view-link gq-viewbag-link', TH('viewBag', 'View bag') + ' \u2192');
+          bagLink.href = '/cart';
+          btn.parentNode.insertBefore(bagLink, btn.nextSibling);
+        }
+        // Lines Shopify wouldn't take (one sold out, one plan-only): say
+        // which, and why, under the button.
+        if (failed.length) problem.textContent = addProblemText(failed, nameForVariant);
+        try {
+          var sent = failed.length ? { items: added, total: totalOf(added) } : s;
+          refreshCartToken().then(function() { trackEvent('quiz_add_bundle_to_bag', bundleProps(sent)); });
+          if (bd && itemCount(added) >= bd.minQty) {
             applyBundleDiscount().then(function(applied) {
               if (!applied || !note) return;
               note.classList.add('is-applied');
               trackEvent('quiz_bundle_discount_applied');
             });
           }
-          setTimeout(function() {
-            btn.classList.remove('is-added');
-            refreshButton();
-          }, 3200);
-        })
-        .catch(function() {
-          btn.classList.remove('is-working');
-          btn.textContent = T('addFailed', 'Couldn\u2019t add \u2014 try again');
-          setTimeout(refreshButton, 2600);
-        });
+        } catch (e) { /* the add itself succeeded */ }
+      }, function(err) {
+        btn.classList.remove('is-working');
+        btn.textContent = T('addFailed', 'Couldn\u2019t add \u2014 try again');
+        // Shopify's reason ("sold out", "only 2 left") beats a bare retry.
+        problem.textContent = err && err.reason ? String(err.reason).slice(0, 160) : '';
+        setTimeout(refreshButton, 2600);
+      });
     };
     refreshButton();
     return row;
@@ -5235,13 +5510,21 @@
         if (add.disabled) return;
         add.disabled = true;
         add.textContent = T('adding', 'Adding\u2026');
+        clearAddProblem(add);
         addToBag(variant.id, 1).then(function() {
           add.textContent = T('addedShort', 'Added \u2713');
           add.classList.add('is-added');
-          refreshCartToken().then(function() { trackEvent('quiz_cross_sell_add', { h: entry.handle, v: String(variant.id) }); });
-        }).catch(function() {
-          add.disabled = false;
-          add.textContent = T('xsellAdd', '+ Add');
+          try {
+            refreshCartToken().then(function() { trackEvent('quiz_cross_sell_add', { h: entry.handle, v: String(variant.id) }); });
+          } catch (e) { /* the add itself succeeded */ }
+        }, function(err) {
+          // Say so (and why) instead of silently resetting the button.
+          add.textContent = T('addFailed', 'Couldn\u2019t add \u2014 try again');
+          showAddProblem(add, err && err.reason ? String(err.reason).slice(0, 160) : '');
+          setTimeout(function() {
+            add.disabled = false;
+            add.textContent = T('xsellAdd', '+ Add');
+          }, 2600);
         });
       };
       card.appendChild(add);
@@ -5640,7 +5923,7 @@
   // Try-on on a slot (hero cards): the slot doubles as the legacy media
   // element so applyTryonToMedia's blur-up + badge work unchanged.
   function slotTryon(slot, m, hasPhotoNow) {
-    if (!hasPhotoNow) return;
+    if (!hasPhotoNow || !matchTryonReady(m)) return;
     fetchProductJson(m.productHandle).then(function() {
       var img = slot.querySelector('.gq-slot-img');
       if (!img) {
@@ -6552,6 +6835,11 @@
     if (state.shopperName) input.value = state.shopperName;
     form.appendChild(input);
     var cont = tplCta(T('next', 'Continue'), 'gq-t3-name-continue');
+    // tplCta makes a type="button" CTA, which never submits its form, so
+    // Continue did nothing on click and only Enter in the field advanced.
+    // Continue is this form's submit button: a click, keyboard activation
+    // and Enter in the field all reach onsubmit (like the lead forms).
+    cont.type = 'submit';
     cont.disabled = !input.value.trim();
     form.appendChild(cont);
     input.oninput = function() { cont.disabled = !input.value.trim(); };
@@ -7029,7 +7317,9 @@
   function tplResultsScreen(tpl) {
     var results = config.results || {};
     var matches = Array.isArray(state.matches) ? state.matches : [];
-    var tryonOn = config.tryonEnabled !== false;
+    // Every template renders the try-on on its lead match only (slotTryon
+    // on matches[0]), so that match decides whether a try-on can be offered.
+    var tryonOn = config.tryonEnabled !== false && matches.length > 0 && matchTryonReady(matches[0]);
     var hasPhotoNow = state.hasPhoto && Boolean(photoFile) && tryonOn;
     var sAxis = shadeAxis();
     var shadeActionable = Boolean(sAxis && !state.criteria[sAxis.key]);
@@ -7084,7 +7374,7 @@
     if (state.partial && shadeActionable) screen.appendChild(buildShadeGate());
     // Match renders its VTO module inside the results body; the other
     // templates keep the shipped upsell banner as the try-on entry point.
-    if (tpl.id !== 't1' && definitive && tryonOn && !hasPhotoNow && config.upsell && config.upsell.cta) {
+    if (tpl.id !== 't1' && definitive && tryonOn && !hasPhotoNow && config.upsell && config.upsell.cta && photoCaptureAvailable()) {
       screen.appendChild(buildUpsellBanner());
     }
 
@@ -7409,7 +7699,7 @@
     }
 
     // VTO module where configured (try-on on, no photo yet, upsell copy).
-    if (ctx.definitive && ctx.tryonOn && !ctx.hasPhotoNow && config.upsell && config.upsell.cta) {
+    if (ctx.definitive && ctx.tryonOn && !ctx.hasPhotoNow && config.upsell && config.upsell.cta && photoCaptureAvailable()) {
       var vto = buildUpsellBanner();
       vto.classList.add('gq-t1r-vto');
       wrap.appendChild(vto);
