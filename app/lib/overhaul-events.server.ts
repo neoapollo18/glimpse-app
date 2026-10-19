@@ -41,14 +41,29 @@ export type OverhaulEvent =
   | "rule_viewed"
   | "rule_edited"
   | "global_rule_added"
-  | "rule_unresolved";
+  | "rule_unresolved"
+  // Welcome intro (lib/onboarding-intro.server.ts): viewed {}, step {step},
+  // completed {path: ai|expert|skip, step?, goals?}.
+  | "onboarding_intro_viewed"
+  | "onboarding_intro_step"
+  | "onboarding_intro_completed";
 
 export function trackOverhaulEvent(
   shopDomain: string,
   event: OverhaulEvent,
   properties: Record<string, unknown> = {}
 ): void {
-  void (async () => {
+  void recordOverhaulEvent(shopDomain, event, properties);
+}
+
+/** Same write, awaitable, for events the next request reads back (the
+ * welcome intro's completion gates the screen after it). Never throws. */
+export async function recordOverhaulEvent(
+  shopDomain: string,
+  event: OverhaulEvent,
+  properties: Record<string, unknown> = {}
+): Promise<void> {
+  await (async () => {
     try {
       const shop = await supabase
         .from("shops")

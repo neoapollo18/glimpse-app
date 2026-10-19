@@ -43,6 +43,10 @@ export function useCatalogSync(options: { onComplete?: () => void; onError?: (er
   const onErrorRef = useRef(options.onError);
   onErrorRef.current = options.onError;
 
+  // pause(): finish the page in flight, then stop chaining. The cursor the
+  // server stored lets the next screen resume exactly there (the welcome
+  // intro reads the store in the background, then hands off to scope).
+  const paused = useRef(false);
   const submitPage = (cursor?: string) => {
     const fd = new FormData();
     fd.append("intent", "sync-catalog");
@@ -51,6 +55,7 @@ export function useCatalogSync(options: { onComplete?: () => void; onError?: (er
   };
 
   const start = (resumeCursor?: string) => {
+    paused.current = false;
     doneSoFar.current = 0;
     setSyncError(null);
     setSyncWarnings([]);
@@ -80,6 +85,10 @@ export function useCatalogSync(options: { onComplete?: () => void; onError?: (er
     doneSoFar.current += data.synced ?? 0;
     setProgress({ done: doneSoFar.current, total: data.total ?? null });
     if (data.nextCursor) {
+      if (paused.current) {
+        setProgress(null);
+        return;
+      }
       submitPage(data.nextCursor);
     } else {
       setProgress(null);
@@ -99,5 +108,10 @@ export function useCatalogSync(options: { onComplete?: () => void; onError?: (er
     library,
     syncedCount: doneSoFar.current,
     busy: fetcher.state !== "idle" || progress !== null,
+    /** A page request is on the wire right now. */
+    pageInFlight: fetcher.state !== "idle",
+    pause: () => {
+      paused.current = true;
+    },
   };
 }

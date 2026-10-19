@@ -39,6 +39,7 @@ import { useCatalogSync } from "../lib/use-catalog-sync";
 import { writeScopeHandoff, type ScopeChip } from "../lib/onboarding-scope";
 import { getSetupOfferContact, shouldOfferSetup } from "../lib/setup-offer.server";
 import { SetupOfferCard } from "../components/SetupOfferModal";
+import { introDone, introPathChosen } from "../lib/onboarding-intro.server";
 
 /** `/app?open=studio` with the embedded-admin params (host/shop/embedded)
  * carried over, so App Bridge doesn't re-bootstrap the frame. */
@@ -72,6 +73,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Existing quiz (real, non-blank content) = never onboard again. Every
   // live merchant exits here.
   if (await shopHasRealQuiz(shop.data.id).catch(() => false)) return redirect(studioUrl(request));
+  // New installs see the welcome intro first (it sends them back here).
+  if (!(await introDone(shop.data.id))) return redirect(`/app/onboarding/welcome${new URL(request.url).search}`);
 
   const syncEnabled = shop.data.catalog_sync_enabled === true;
   const syncCursor = (shop.data.catalog_sync_cursor as string | null) ?? null;
@@ -79,7 +82,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const productCount = Number(shop.data.catalog_product_count ?? 0) || 0;
   // New installs land here first: the done-for-you setup offer sits as a
   // dismissible card under the screen until the merchant answers it.
-  const showSetupOffer = await shouldOfferSetup(shop.data.id).catch(() => false);
+  // Not again for a merchant who just chose a path on the intro's last slide.
+  const pathChosen = await introPathChosen(shop.data.id).catch(() => null);
+  const showSetupOffer =
+    (pathChosen === null || pathChosen === "skip") && (await shouldOfferSetup(shop.data.id).catch(() => false));
   const setupEmail = showSetupOffer ? (await getSetupOfferContact(admin)).email : "";
   return json({
     shopDomain: session.shop,

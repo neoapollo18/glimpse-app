@@ -42,6 +42,24 @@ import type { BrandProfile } from "./brand-profile.server";
 import { captureLiveConfig, saveLiveQuizConfig, type QuizDraft } from "./quiz-draft.server";
 import { withShopSaveLock } from "./shop-save-lock.server";
 import { supabase, getVariantsForProducts, saveChatAssistantConfig } from "./supabase.server";
+import { cleanGoals, type IntroGoal } from "./onboarding-intro.server";
+
+/** Settings the welcome intro's goals turn on in a freshly generated quiz.
+ * "Grow my email list": the quiz asks for an email (the template decides
+ * where). Editable in the Studio like any other setting. */
+export function applyGoalSettings(settings: Record<string, unknown>, goals: IntroGoal[] | undefined): void {
+  if (goals?.includes("emails")) settings.quiz_lead_enabled = true;
+}
+
+/** The welcome intro's goals for this shop ([] when unset or unreadable). */
+async function loadIntroGoals(shopDomain: string): Promise<IntroGoal[]> {
+  try {
+    const { data } = await supabase.from("shops").select("onboarding_goals").eq("shop_domain", shopDomain).maybeSingle();
+    return cleanGoals(data?.onboarding_goals);
+  } catch {
+    return [];
+  }
+}
 import {
   buildGenerationReport,
   countImageSlots,
@@ -69,6 +87,10 @@ export interface BrandBrief {
    * productIds null/absent = whole catalog. label is merchant-facing
    * ("Lip products"). */
   scope?: { kind: "all" | "collection" | "type" | "tag" | "freetext"; label: string; productIds: string[] | null };
+  /** What the merchant picked on the welcome intro (a fixed set, never free
+   * text; read server-side from shops.onboarding_goals). "returns" asks for
+   * a fit question; "emails" turns on email capture in the saved settings. */
+  goals?: IntroGoal[];
 }
 
 // ---------------------------------------------------------------------
@@ -181,7 +203,7 @@ export function buildSystemBlocks(catalogText: string): Anthropic.TextBlockParam
   ];
 }
 
-function briefToPrompt(brief: BrandBrief, questionRange: [number, number], template: TemplateId | null): string {
+export function briefToPrompt(brief: BrandBrief, questionRange: [number, number], template: TemplateId | null): string {
   const [qMin, qMax] = questionRange;
   return [
     `Design a complete quiz for this store.`,
@@ -193,6 +215,9 @@ function briefToPrompt(brief: BrandBrief, questionRange: [number, number], templ
     `INTRO SCREEN: the quiz always opens with its own intro screen - provide copy.quiz_headline (a headline in the store's voice) AND copy.quiz_subtext (one support line). Both required; the intro is never stacked with question 1.`,
     `EVERY ANSWER MUST BE GROUNDED: each option maps to a real catalog facet (product type, shade family, tag, price band...). Generic vibe answers with nothing behind them are rejected by validation.`,
     `Recommendation mode preference: ${brief.modePreference === "auto" ? "you decide based on the catalog" : brief.modePreference}`,
+    brief.goals?.includes("returns")
+      ? `FIT FIRST: the merchant wants fewer returns. Include at least one question that pins down fit for this catalog (shade family, size, skin or hair type, sensitivities, whichever the products vary on), and let each match's reasonText say why it fits.`
+      : "",
     brief.priorityProductIds?.length
       ? `Priority products (feature these prominently): ${brief.priorityProductIds.map((id) => `p:${id}`).join(", ")}`
       : "",
@@ -764,6 +789,7 @@ export async function generateQuizConfig(args: {
   const profile = await loadBrandProfileSafe(shopDomain);
   const resolvedBrief: BrandBrief = {
     ...brief,
+    goals: brief.goals ?? (await loadIntroGoals(shopDomain)),
     category: (profile?.category ?? "").trim() || brief.category || "beauty products",
     brandVoice:
       (profile?.tone ? TONE_VOICE[profile.tone] : null) ?? (brief.brandVoice || "warm and confident"),
@@ -1121,6 +1147,7 @@ export async function generateQuizConfig(args: {
   if (accentColor && /^#[0-9a-fA-F]{6}$/.test(accentColor)) {
     (draft.settings as Record<string, unknown>).quiz_accent_color = accentColor;
   }
+  applyGoalSettings(draft.settings as Record<string, unknown>, resolvedBrief.goals);
   // The v3 jsonb columns (quiz_phases, quiz_generation_report; migration
   // 080) are written in their OWN call after the save, never inside this
   // settings upsert: an unrun migration must degrade to a missing banner,

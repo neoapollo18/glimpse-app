@@ -41,7 +41,7 @@ import {
 // Z0 (V3-SPEC Part 1): the setup wizard, its step components, the manual
 // catalog-sync button and the OVERHAUL_ONBOARDING gate are gone. A shop
 // with no quiz that would previously have seen the wizard is sent to
-// /app/onboarding/scope by the loader; everyone else gets the dashboard.
+// /app/onboarding/welcome (then scope) by the loader; everyone else gets the dashboard.
 // shops.overhaul_enabled stays as a column, unread.
 
 // ============================================================
@@ -167,7 +167,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // Carry the embedded-admin params (host/shop/embedded) so App Bridge
     // doesn't re-bootstrap the frame on the redirect.
     const search = new URL(request.url).search;
-    throw redirect(`/app/onboarding/scope${search}`);
+    // The welcome intro forwards to the scope screen once it's done.
+    throw redirect(`/app/onboarding/welcome${search}`);
   }
 
   // Done-for-you setup offer: only while the quiz isn't live, and (once a
