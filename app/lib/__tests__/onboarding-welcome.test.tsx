@@ -131,8 +131,7 @@ describe("Welcome intro", () => {
   it("renders every slide, with the store read running in the background", async () => {
     for (let i = 0; i < INTRO_STEPS.length; i++) {
       const text = await mount(i);
-      expect(document.querySelectorAll(".gw-dot")).toHaveLength(INTRO_STEPS.length);
-      expect(document.querySelector(".gw-dot.is-on")).toBe(document.querySelectorAll(".gw-dot")[i]);
+      expect(text()).toContain(`Step ${i + 1} of ${INTRO_STEPS.length}`);
       expect(text()).toContain("Reading your store in the background · 120 products so far");
       dump(`slide-${i + 1}-${INTRO_STEPS[i]}`);
       act(() => root?.unmount());
@@ -140,9 +139,8 @@ describe("Welcome intro", () => {
     expect(syncCalls.filter((c) => c.startsWith("start"))).toHaveLength(INTRO_STEPS.length);
   });
 
-  it("welcome greets the owner and moves through the slides", async () => {
+  it("welcome explains the quiz and moves through the slides", async () => {
     const text = await mount(0);
-    expect(text()).toContain("Welcome, Khush");
     expect(text()).toContain("Help every shopper find their match");
     expect(text()).toContain("AI writes your quiz");
     await click(button("Get started"));

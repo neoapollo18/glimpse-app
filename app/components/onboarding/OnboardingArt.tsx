@@ -1,12 +1,13 @@
 // Shared pieces of the onboarding screens (welcome intro and scope): the
-// Gleame lockup, the merchant's product imagery with a designed fallback,
-// and a small specimen of each quiz template's own style.
+// Gleame lockup, the merchant's product imagery with a drawn fallback, and
+// a small specimen of each quiz template's own style.
 //
 // Built for Shopify: brand shows as the logo only, in black; nothing here
 // uses AI purple or the sparkle glyph (both are Shopify's own AI). Every
 // drawing is decorative (aria-hidden): the copy beside it says the same.
 
 import { useId, type CSSProperties } from "react";
+import { InlineStack, Text } from "@shopify/polaris";
 import { TEMPLATE_STYLES, type TemplateId } from "../../lib/quiz-templates";
 
 export const GLEAME_LOGO_SRC = "/brand/gleame-logo.svg";
@@ -18,10 +19,12 @@ export interface PreviewProduct {
 
 export function BrandLockup({ size = 28 }: { size?: number }) {
   return (
-    <span className="oa-lockup">
+    <InlineStack gap="200" blockAlign="center" wrap={false}>
       <img className="oa-logo" src={GLEAME_LOGO_SRC} alt="" width={size} height={size} />
-      <span>Gleame</span>
-    </span>
+      <Text as="span" variant="headingMd">
+        Gleame
+      </Text>
+    </InlineStack>
   );
 }
 
@@ -137,21 +140,6 @@ function FallbackForm({ kind }: { kind: number }) {
   );
 }
 
-/** Up to four of the store's products as one square tile (the scope
- * screen's catalog row). With no photos synced it shows the same four
- * drawn products as the welcome slide, so both fallbacks match. */
-export function ProductMosaic({ products, size = 64 }: { products: PreviewProduct[]; size?: number }) {
-  const cells: Array<PreviewProduct | null> =
-    products.length >= 4 ? products.slice(0, 4) : products.length > 0 ? products.slice(0, 1) : [null, null, null, null];
-  return (
-    <span className={`oa-mosaic${cells.length === 1 ? " is-one" : ""}`} style={{ width: size, height: size }} aria-hidden>
-      {cells.map((p, i) => (
-        <ProductArt key={p?.imageUrl ?? i} product={p} index={i} width={cells.length === 1 ? size : size / 2} />
-      ))}
-    </span>
-  );
-}
-
 /** A specimen of a template's own design: its paper, its type, and its
  * answer treatment with one answer picked. Sized by `size` (px). */
 export function TemplateMini({ id, size = 64 }: { id: TemplateId; size?: number }) {
@@ -187,20 +175,15 @@ export function CheckGlyph() {
 }
 
 export const ART_CSS = `
-  .oa-lockup { display: inline-flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 650; letter-spacing: -0.01em; color: #141414; }
-  .oa-logo { display: block; flex: none; border-radius: 24%; }
+  .oa-logo { display: block; flex: none; border-radius: var(--p-border-radius-200, 8px); }
 
   .oa-art { position: relative; display: block; width: 100%; height: 100%; overflow: hidden; }
   .oa-art img { display: block; width: 100%; height: 100%; object-fit: cover; }
   .oa-art svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 
-  .oa-mosaic { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 2px; flex: none; border-radius: 12px; overflow: hidden;
-    box-shadow: 0 0 0 1px rgba(20, 16, 10, .06); }
-  .oa-mosaic.is-one { grid-template-columns: 1fr; grid-template-rows: 1fr; }
-
   /* Template specimens: everything in em so one font-size scales the tile. */
   .oa-tpl { position: relative; display: flex; flex-direction: column; justify-content: space-between; flex: none; box-sizing: border-box;
-    width: 10em; height: 10em; padding: 1.2em 1.2em 1.3em; border-radius: 1.8em; overflow: hidden; box-shadow: inset 0 0 0 1px rgba(20, 16, 10, .08); }
+    width: 10em; height: 10em; padding: 1.2em 1.2em 1.3em; border-radius: 1.8em; overflow: hidden; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08); }
   .oa-tpl-aa { font-size: 2.7em; line-height: 1; font-weight: 700; letter-spacing: -0.03em; }
   .oa-tpl-ans { display: grid; gap: .55em; }
   .oa-tpl-ans i { display: block; height: 1.45em; box-sizing: border-box; background: var(--oa-surface); border: .12em solid var(--oa-line); }

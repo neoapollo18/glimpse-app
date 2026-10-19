@@ -3,8 +3,9 @@
 // quiz should do for the store (goals that change the generated quiz), and
 // "How do you want to get started?" (free setup by our team, or build it
 // with AI now). Built for Shopify 4.2.2: concise, guides to completion,
-// every question says what it's used for; the expert half is the slide's
-// one primary action and promises no outcomes (4.3.1).
+// every question says what it's used for; the expert card is the slide's
+// one primary action and promises no outcomes (4.3.1). Every surface is a
+// Polaris component; only the drawings are custom.
 //
 // The drawings show the merchant's own products when we can read a few
 // (lib/onboarding-preview.server.ts), and drawn product forms otherwise.
@@ -21,7 +22,22 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
 import { useFetcher, useLoaderData, useNavigate } from "@remix-run/react";
-import { Banner, BlockStack, Button, InlineStack, Page, Text, TextField } from "@shopify/polaris";
+import {
+  Banner,
+  BlockStack,
+  Box,
+  Button,
+  Card,
+  Divider,
+  Icon,
+  InlineGrid,
+  InlineStack,
+  List,
+  Page,
+  Text,
+  TextField,
+} from "@shopify/polaris";
+import { CheckCircleIcon, CheckIcon } from "@shopify/polaris-icons";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { ensureShopExists, supabase } from "../lib/supabase.server";
@@ -36,7 +52,6 @@ import {
   BrandLockup,
   CheckGlyph,
   FALLBACK_PRODUCTS,
-  GLEAME_LOGO_SRC,
   ProductArt,
   type PreviewProduct,
 } from "../components/onboarding/OnboardingArt";
@@ -244,80 +259,71 @@ export function WelcomeIntro({ data, initialStep = 0 }: { data: WelcomeData; ini
       <TitleBar title="Welcome to Gleame" />
       <style>{ART_CSS + WELCOME_CSS}</style>
       <div className="gw">
-        <div className="gw-card">
-          <div className="gw-top">
-            <BrandLockup size={28} />
-            <div className="gw-top-end">
-              <div className="gw-steps">
-                <span className="gw-steps-label" aria-hidden>
+        <Card padding={{ xs: "400", sm: "600" }} roundedAbove="xs">
+          <BlockStack gap="600">
+            <InlineStack align="space-between" blockAlign="center" gap="300" wrap={false}>
+              <BrandLockup size={28} />
+              <InlineStack gap="300" blockAlign="center" wrap={false}>
+                <Text as="p" variant="bodySm" tone="subdued">
                   Step {step + 1} of {INTRO_STEPS.length}
-                </span>
-                <div className="gw-dots" role="list" aria-label={`Step ${step + 1} of ${INTRO_STEPS.length}`}>
-                  {INTRO_STEPS.map((s, i) => (
-                    <span
-                      key={s}
-                      role="listitem"
-                      className={`gw-dot${i === step ? " is-on" : ""}${i < step ? " is-done" : ""}`}
-                      aria-current={i === step ? "step" : undefined}
-                    />
-                  ))}
-                </div>
-              </div>
-              {!last && (
-                <span className="gw-skip">
+                </Text>
+                {!last && (
                   <Button variant="tertiary" onClick={() => void leave("skip")} disabled={leaving}>
                     Skip intro
                   </Button>
-                </span>
+                )}
+              </InlineStack>
+            </InlineStack>
+
+            <div className="gw-stage" ref={stageRef} key={step}>
+              {step === 0 && <SlideWelcome shopName={data.shopName} products={products} onNext={() => go(1)} />}
+              {step === 1 && (
+                <SlideGoals goals={goals} products={products} disabled={leaving} onToggle={toggleGoal} />
+              )}
+              {step === 2 && (
+                <SlidePath
+                  email={data.email}
+                  offer={offer}
+                  leaving={leaving}
+                  onBuild={() => void leave("ai")}
+                  onExpertDone={() => void leave("expert")}
+                />
               )}
             </div>
-          </div>
 
-          <div className="gw-stage" ref={stageRef} key={step}>
-            {step === 0 && (
-              <SlideWelcome
-                firstName={data.firstName}
-                shopName={data.shopName}
-                products={products}
-                onNext={() => go(1)}
-              />
-            )}
-            {step === 1 && <SlideGoals goals={goals} products={products} onToggle={toggleGoal} />}
-            {step === 2 && (
-              <SlidePath
-                products={products}
-                email={data.email}
-                offer={offer}
-                leaving={leaving}
-                onBuild={() => void leave("ai")}
-                onExpertDone={() => void leave("expert")}
-              />
-            )}
-          </div>
-
-          {step > 0 && (
-            <div className="gw-foot">
-              <span className="gw-back">
-                <Button variant="tertiary" onClick={() => go(step - 1)} disabled={leaving}>
-                  Back
-                </Button>
-              </span>
-              <div className="gw-foot-end">
-                {footNote && <span className="gw-foot-note">{footNote}</span>}
-                {!last && (
-                  <Button variant="primary" size="large" onClick={() => go(step + 1)}>
-                    Continue
+            {step > 0 && (
+              <BlockStack gap="400">
+                <Divider />
+                <InlineStack align="space-between" blockAlign="center" gap="300" wrap={false}>
+                  <Button variant="tertiary" onClick={() => go(step - 1)} disabled={leaving}>
+                    Back
                   </Button>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
+                  <InlineStack gap="400" blockAlign="center" wrap={false}>
+                    {footNote && (
+                      <span className="gw-foot-note">
+                        <Text as="span" variant="bodySm" tone="subdued">
+                          {footNote}
+                        </Text>
+                      </span>
+                    )}
+                    {!last && (
+                      <Button variant="primary" size="large" onClick={() => go(step + 1)}>
+                        Continue
+                      </Button>
+                    )}
+                  </InlineStack>
+                </InlineStack>
+              </BlockStack>
+            )}
+          </BlockStack>
+        </Card>
         {storeLine && (
-          <p className="gw-store" aria-live="polite">
-            <span className={`gw-store-dot${storeReady ? " is-ready" : ""}`} aria-hidden />
-            {storeLine}
-          </p>
+          <div className="gw-store" aria-live="polite">
+            <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+              <span className={`gw-store-dot${storeReady ? " is-ready" : ""}`} aria-hidden />
+              {storeLine}
+            </Text>
+          </div>
         )}
       </div>
     </Page>
@@ -327,53 +333,55 @@ export function WelcomeIntro({ data, initialStep = 0 }: { data: WelcomeData; ini
 // --- Slide 1: welcome -------------------------------------------------
 
 function SlideWelcome({
-  firstName,
   shopName,
   products,
   onNext,
 }: {
-  firstName: string;
   shopName: string;
   products: PreviewProduct[];
   onNext: () => void;
 }) {
   return (
-    <div className="gw-hero">
-      <div className="gw-copy">
-        <span className="gw-eyebrow">{firstName ? `Welcome, ${firstName}` : "Welcome to Gleame"}</span>
-        <h1 className="gw-h1" tabIndex={-1}>
-          Help every shopper find their match.
-        </h1>
-        <p className="gw-lede">
-          Gleame turns your catalog into a short quiz. Shoppers answer a few questions, see the products made for
-          them, and add them to cart.
-        </p>
-        <ol className="gw-how" aria-label="How it works">
-          {HOW_STEPS.map((h, i) => (
-            <li key={h.title}>
-              <span className="gw-how-n" aria-hidden>
-                {String(i + 1).padStart(2, "0")}
-              </span>
-              <span className="gw-how-text">
-                <span className="gw-how-t">{h.title}</span>
-                <span className="gw-how-b">{h.body}</span>
-              </span>
-            </li>
-          ))}
-        </ol>
-        <div className="gw-cta">
+    <InlineGrid columns={{ xs: 1, md: 2 }} gap={{ xs: "600", md: "800" }} alignItems="center">
+      <BlockStack gap="600">
+        <BlockStack gap="300">
+          <h1 className="gw-title" tabIndex={-1}>
+            <Text as="span" variant="heading2xl">
+              Help every shopper find their match
+            </Text>
+          </h1>
+          <Text as="p" variant="bodyLg" tone="subdued">
+            Gleame turns your catalog into a short quiz. Shoppers answer a few questions, see the products made for
+            them, and add them to cart.
+          </Text>
+        </BlockStack>
+        <BlockStack gap="300">
+          <Text as="h2" variant="headingSm">
+            How it works
+          </Text>
+          <List type="number" gap="loose">
+            {HOW_STEPS.map((h) => (
+              <List.Item key={h.title}>
+                <BlockStack gap="050">
+                  <Text as="span" fontWeight="semibold">
+                    {h.title}
+                  </Text>
+                  <Text as="span" tone="subdued">
+                    {h.body}
+                  </Text>
+                </BlockStack>
+              </List.Item>
+            ))}
+          </List>
+        </BlockStack>
+        <InlineStack>
           <Button variant="primary" size="large" onClick={onNext}>
             Get started
           </Button>
-          <span className="gw-meta">
-            About 2 minutes
-            <i aria-hidden />
-            Nothing goes live until you publish
-          </span>
-        </div>
-      </div>
+        </InlineStack>
+      </BlockStack>
       <QuizScene shopName={shopName} products={products} />
-    </div>
+    </InlineGrid>
   );
 }
 
@@ -440,9 +448,6 @@ function QuizScene({ shopName, products }: { shopName: string; products: Preview
           <div className="gw-q-top">
             <span>Question 2 of 4</span>
             <span className="gw-q-prog">
-              <i className="is-on" />
-              <i className="is-on" />
-              <i />
               <i />
             </span>
           </div>
@@ -471,20 +476,26 @@ function QuizScene({ shopName, products }: { shopName: string; products: Preview
 function SlideGoals({
   goals,
   products,
+  disabled,
   onToggle,
 }: {
   goals: IntroGoal[];
   products: PreviewProduct[];
+  disabled: boolean;
   onToggle: (g: IntroGoal) => void;
 }) {
   return (
-    <div className="gw-goals-slide">
-      <div className="gw-head">
-        <h2 className="gw-h2" tabIndex={-1}>
-          What should your quiz do for you?
+    <BlockStack gap="600">
+      <BlockStack gap="200">
+        <h2 className="gw-title" tabIndex={-1}>
+          <Text as="span" variant="headingXl">
+            What should your quiz do for you?
+          </Text>
         </h2>
-        <p className="gw-lede">Pick any that apply, or none. We use your picks to shape the quiz we write for you.</p>
-      </div>
+        <Text as="p" variant="bodyLg" tone="subdued">
+          Pick any that apply, or none. We use your picks to shape the quiz we write for you.
+        </Text>
+      </BlockStack>
       <div className="gw-goals" role="group" aria-label="Goals">
         {GOAL_CHOICES.map((g) => {
           const on = goals.includes(g.id);
@@ -494,15 +505,21 @@ function SlideGoals({
               type="button"
               className={`gw-goal${on ? " is-on" : ""}`}
               aria-pressed={on}
+              disabled={disabled}
               onClick={() => onToggle(g.id)}
             >
               <span className="gw-goal-art" aria-hidden>
                 <GoalVignette id={g.id} products={products} />
               </span>
               <span className="gw-goal-text">
-                <span className="gw-goal-t">{g.title}</span>
-                <span className="gw-goal-b">{g.body}</span>
+                <Text as="span" variant="headingMd">
+                  {g.title}
+                </Text>
+                <Text as="span" tone="subdued">
+                  {g.body}
+                </Text>
               </span>
+              {/* Drawn like a Polaris checkbox: a button can't hold an input. */}
               <span className="gw-goal-check" aria-hidden>
                 {on && <CheckGlyph />}
               </span>
@@ -510,7 +527,7 @@ function SlideGoals({
           );
         })}
       </div>
-    </div>
+    </BlockStack>
   );
 }
 
@@ -598,71 +615,41 @@ function GoalVignette({ id, products }: { id: IntroGoal; products: PreviewProduc
   );
 }
 
-// The AI path: a draft quiz outline where every question already leads to
-// products (the store's own when we have them).
-const DRAFT_QUESTIONS = ["Which look feels most like you?", "How bold do you like it?", "What's the occasion?"];
-
-function DraftVignette({ products }: { products: PreviewProduct[] }) {
-  return (
-    <span className="vg-card vp-draft">
-      <span className="vg-fit-row vp-head">
-        <span className="vg-chart-t">Your quiz</span>
-        <span className="vg-k">Draft</span>
-      </span>
-      {DRAFT_QUESTIONS.map((q, i) => (
-        <span key={q} className="vp-q">
-          <span className="vp-q-n">{String(i + 1).padStart(2, "0")}</span>
-          <span className="vp-q-t">{q}</span>
-          <span className="vp-q-m">
-            {[i, i + 1].map((k) => (
-              <span key={k} className="vp-q-img">
-                <ProductArt product={products.length >= 4 ? products[k] : null} index={k} width={20} />
-              </span>
-            ))}
-          </span>
-        </span>
-      ))}
-    </span>
-  );
-}
-
-// The expert path: who does it, and the four things the setup offer covers
-// (components/SetupOfferModal: questions, product matches, styling, launch).
-const TEAM_COVERS = ["Questions", "Product matches", "Styling", "Launch"];
-
-function TeamVignette() {
-  return (
-    <span className="vg-card vp-team">
-      <span className="vp-team-who">
-        <img className="vp-team-av" src={GLEAME_LOGO_SRC} alt="" width={28} height={28} />
-        <span className="vp-team-id">
-          <span className="vg-chart-t">Gleame setup team</span>
-          <span className="vp-team-s">Works with you by email</span>
-        </span>
-      </span>
-      <span className="vp-team-covers">
-        {TEAM_COVERS.map((c) => (
-          <span key={c}>
-            <CheckGlyph />
-            {c}
-          </span>
-        ))}
-      </span>
-    </span>
-  );
-}
-
 // --- Slide 3: choose a path ----------------------------------------------
 
+const AI_POINTS = [
+  "A complete quiz written from your catalog",
+  "Edit every question, answer and match in the Studio",
+  "Publish whenever you're ready",
+];
+const EXPERT_POINTS = [
+  "We build, style and launch the quiz on your store",
+  "A person tunes which products each answer leads to",
+  "You can keep editing it after",
+];
+
+function CheckList({ items }: { items: string[] }) {
+  return (
+    <BlockStack as="ul" gap="200">
+      {items.map((t) => (
+        <InlineStack as="li" key={t} gap="200" blockAlign="start" wrap={false}>
+          <span className="gw-tick">
+            <Icon source={CheckIcon} tone="base" />
+          </span>
+          <Text as="span">{t}</Text>
+        </InlineStack>
+      ))}
+    </BlockStack>
+  );
+}
+
 function SlidePath({
-  products,
   email,
   offer,
   leaving,
   onBuild,
   onExpertDone,
 }: {
-  products: PreviewProduct[];
   email: string;
   offer: ReturnType<typeof useFetcher<{ ok: boolean; error?: string; requested?: boolean }>>;
   leaving: boolean;
@@ -689,192 +676,167 @@ function SlidePath({
   };
 
   let expertBody: ReactNode;
+  let expertCta: ReactNode;
   if (requested) {
     expertBody = (
-      <>
-        <div className="gw-done">
-          <span className="gw-ok">
-            <CheckGlyph />
+      <BlockStack gap="200">
+        <InlineStack gap="200" blockAlign="center" wrap={false}>
+          <span className="gw-tick">
+            <Icon source={CheckCircleIcon} tone="success" />
           </span>
           <Text as="h4" variant="headingMd">
             You're on the list
           </Text>
-        </div>
-        <p className="gw-opt-p">
-          Our setup team will email you at <b>{mail}</b>. Build a draft with AI in the meantime and we'll pick up from
-          there.
-        </p>
-        <div className="gw-opt-cta">
-          <Button variant="primary" size="large" fullWidth onClick={onExpertDone} loading={leaving}>
-            Build a draft while I wait
-          </Button>
-        </div>
-      </>
+        </InlineStack>
+        <Text as="p" tone="subdued">
+          Our setup team will email you at{" "}
+          <Text as="span" fontWeight="semibold" tone="base">
+            {mail}
+          </Text>
+          . Build a draft with AI in the meantime and we'll pick up from there.
+        </Text>
+      </BlockStack>
+    );
+    expertCta = (
+      <Button variant="primary" size="large" fullWidth onClick={onExpertDone} loading={leaving}>
+        Build a draft while I wait
+      </Button>
     );
   } else if (formOpen) {
     expertBody = (
-      <>
+      <BlockStack gap="300">
         {offer.data?.error && <Banner tone="critical">{offer.data.error}</Banner>}
-        <BlockStack gap="300">
-          <TextField
-            label="Your email"
-            type="email"
-            autoComplete="email"
-            value={mail}
-            onChange={(v) => {
-              setMail(v);
-              setMailError(null);
-            }}
-            error={mailError ?? undefined}
-          />
-          <TextField label="Phone (optional)" type="tel" autoComplete="tel" value={phone} onChange={setPhone} />
-          <TextField
-            label="Anything we should know? (optional)"
-            autoComplete="off"
-            multiline={2}
-            value={notes}
-            onChange={setNotes}
-            placeholder="Products to cover, a launch date…"
-          />
-        </BlockStack>
-        <div className="gw-opt-cta">
-          <InlineStack gap="200" blockAlign="center">
-            <Button variant="primary" size="large" onClick={request} loading={sending} disabled={!mail.trim()}>
-              Request free setup
-            </Button>
-            <Button variant="tertiary" onClick={() => setFormOpen(false)} disabled={sending}>
-              Cancel
-            </Button>
-          </InlineStack>
-        </div>
-      </>
+        <TextField
+          label="Your email"
+          type="email"
+          autoComplete="email"
+          value={mail}
+          onChange={(v) => {
+            setMail(v);
+            setMailError(null);
+          }}
+          error={mailError ?? undefined}
+        />
+        <TextField label="Phone (optional)" type="tel" autoComplete="tel" value={phone} onChange={setPhone} />
+        <TextField
+          label="Anything we should know? (optional)"
+          autoComplete="off"
+          multiline={2}
+          value={notes}
+          onChange={setNotes}
+          placeholder="Products to cover, a launch date…"
+        />
+      </BlockStack>
+    );
+    expertCta = (
+      <InlineStack gap="200" blockAlign="center">
+        <Button variant="primary" size="large" onClick={request} loading={sending} disabled={!mail.trim()}>
+          Request free setup
+        </Button>
+        <Button variant="tertiary" onClick={() => setFormOpen(false)} disabled={sending}>
+          Cancel
+        </Button>
+      </InlineStack>
     );
   } else {
-    expertBody = (
-      <>
-        <ul className="gw-spec">
-          <li>We build, style and launch the quiz on your store</li>
-          <li>A person tunes which products each answer leads to</li>
-          <li>You can keep editing it after</li>
-        </ul>
-        <div className="gw-opt-cta">
-          <Button variant="primary" size="large" fullWidth onClick={() => setFormOpen(true)}>
-            Get free expert setup
-          </Button>
-        </div>
-      </>
+    expertBody = <CheckList items={EXPERT_POINTS} />;
+    expertCta = (
+      <Button variant="primary" size="large" fullWidth onClick={() => setFormOpen(true)}>
+        Get free expert setup
+      </Button>
     );
   }
 
   return (
-    <div className="gw-path-slide">
-      <div className="gw-head gw-head--center">
-        <h2 className="gw-h2" tabIndex={-1}>
-          How do you want to get started?
+    <BlockStack gap="600">
+      <BlockStack gap="200" inlineAlign="center">
+        <h2 className="gw-title" tabIndex={-1}>
+          <Text as="span" variant="headingXl" alignment="center">
+            How do you want to get started?
+          </Text>
         </h2>
-        <p className="gw-lede">Either way, you can change everything later.</p>
-      </div>
-      <div className="gw-fork">
-        <section className="gw-opt" aria-labelledby="gw-opt-ai">
-          <span className="gw-opt-art" aria-hidden>
-            <DraftVignette products={products} />
-          </span>
-          <span className="gw-opt-k">On your own</span>
-          <h3 className="gw-opt-h" id="gw-opt-ai">
-            Build it myself with AI
-          </h3>
-          <p className="gw-opt-sub">Ready in about 2 minutes.</p>
-          <ul className="gw-spec">
-            <li>A complete quiz written from your catalog</li>
-            <li>Edit every question, answer and match in the Studio</li>
-            <li>Publish whenever you're ready</li>
-          </ul>
-          <div className="gw-opt-cta">
-            <Button size="large" fullWidth onClick={onBuild} loading={leaving && !requested}>
-              Build my quiz
-            </Button>
+        <Text as="p" variant="bodyLg" tone="subdued" alignment="center">
+          Either way, you can change everything later.
+        </Text>
+      </BlockStack>
+      <div className="gw-paths">
+        <section className="gw-path" aria-labelledby="gw-path-ai">
+          <div className="gw-path-body">
+            <BlockStack gap="400">
+              <BlockStack gap="100">
+                <Text as="h3" variant="headingLg" id="gw-path-ai">
+                  Build it myself with AI
+                </Text>
+                <Text as="p" tone="subdued">
+                  Ready in about 2 minutes.
+                </Text>
+              </BlockStack>
+              <CheckList items={AI_POINTS} />
+            </BlockStack>
+            <div className="gw-path-cta">
+              <Button size="large" fullWidth onClick={onBuild} loading={leaving && !requested}>
+                Build my quiz
+              </Button>
+            </div>
           </div>
         </section>
-        <div className="gw-or" aria-hidden>
-          <span>or</span>
-        </div>
-        <section className="gw-opt gw-opt--feature" aria-labelledby="gw-opt-expert">
-          <span className="gw-opt-art" aria-hidden>
-            <TeamVignette />
-          </span>
-          <span className="gw-opt-k">Free · done for you</span>
-          <h3 className="gw-opt-h" id="gw-opt-expert">
-            Set it up with an expert
-          </h3>
-          <p className="gw-opt-sub">Our team does it with you.</p>
-          {expertBody}
+        {/* The recommended option: black border and label, the slide's one primary. */}
+        <section className="gw-path gw-path--feature" aria-labelledby="gw-path-expert">
+          <Box background="bg-fill-brand" paddingBlock="150" paddingInline="400">
+            <Text as="p" variant="bodySm" fontWeight="semibold" tone="text-inverse" alignment="center">
+              Free · done for you
+            </Text>
+          </Box>
+          <div className="gw-path-body">
+            <BlockStack gap="400">
+              <BlockStack gap="100">
+                <Text as="h3" variant="headingLg" id="gw-path-expert">
+                  Set it up with an expert
+                </Text>
+                <Text as="p" tone="subdued">
+                  Our team does it with you.
+                </Text>
+              </BlockStack>
+              {expertBody}
+            </BlockStack>
+            <div className="gw-path-cta">{expertCta}</div>
+          </div>
         </section>
       </div>
-    </div>
+    </BlockStack>
   );
 }
 
-// Admin surfaces stay Polaris (Page, Buttons, form controls; Built for
-// Shopify 4.1.1). The brand is the black logo only: black, white and warm
-// greys, no AI purple, no sparkle glyphs. No looping motion (4.3.3): one
-// fade as a slide enters. Text colors hold WCAG AA on white and on sand.
+// Polaris components and tokens throughout (Built for Shopify 4.1.1).
+// Custom CSS covers only what Polaris has no component for: the phone
+// scene, the goal vignettes, and the selectable goal cards (drawn like
+// Polaris choices). Black, white and Polaris greys; no AI purple, no
+// sparkle glyphs. No looping motion (4.3.3): one fade as a slide enters.
 const WELCOME_CSS = `
-  .gw { --gw-ink: #141414; --gw-text: #303030; --gw-muted: #6B6862; --gw-line: #E8E6E1; --gw-line-2: #D6D3CC;
-    --gw-sand: #F5F4F1; --gw-sand-2: #ECE9E3;
-    max-width: 1080px; margin: 0 auto; padding: var(--p-space-400, 16px) 0 var(--p-space-1200, 48px); }
-  .gw-card { background: var(--p-color-bg-surface, #fff); border-radius: var(--p-border-radius-300, 12px);
-    box-shadow: var(--p-shadow-100, 0 1px 0 rgba(26,26,26,.07)), inset 0 -1px 0 rgba(0,0,0,.08), inset 0 0 0 1px rgba(0,0,0,.04);
-    padding: 22px 40px 28px; }
-
-  /* Top bar: lockup, progress, skip */
-  .gw-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 36px; }
-  .gw-top-end { display: flex; align-items: center; gap: 12px; }
-  .gw-steps { display: inline-flex; align-items: center; gap: 12px; }
-  .gw-steps-label { font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--gw-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .gw-dots { display: inline-flex; gap: 4px; }
-  .gw-dot { width: 20px; height: 3px; border-radius: 2px; background: var(--gw-line-2); transition: background 180ms ease; }
-  .gw-dot.is-done, .gw-dot.is-on { background: var(--gw-ink); }
-  .gw-skip { display: inline-flex; padding-left: 8px; margin-right: -12px; border-left: 1px solid var(--gw-line); }
-  .gw-back { display: inline-flex; margin-left: -12px; }
-
-  .gw-stage { min-height: 440px; padding: 36px 0 4px; animation: gw-in 220ms ease-out; }
+  .gw { max-width: 1080px; margin: 0 auto; padding: var(--p-space-400) 0 var(--p-space-1200); }
+  .gw-title { margin: 0; outline: none; text-wrap: balance; }
+  .gw-stage { animation: gw-in 220ms ease-out; }
   @keyframes gw-in { from { opacity: 0; } to { opacity: 1; } }
 
-  /* Type */
-  .gw-eyebrow { display: flex; align-items: center; gap: 12px; font-size: 11px; font-weight: 600; letter-spacing: .2em; text-transform: uppercase; color: var(--gw-muted); }
-  .gw-eyebrow::before { content: ""; width: 24px; height: 1.5px; background: var(--gw-ink); flex: none; }
-  .gw-h1 { margin: 16px 0 0; font-size: clamp(34px, 4.4vw, 50px); line-height: 1.03; letter-spacing: -0.035em; font-weight: 700; color: var(--gw-ink); outline: none; text-wrap: balance; }
-  .gw-h2 { margin: 0; font-size: clamp(26px, 3vw, 34px); line-height: 1.1; letter-spacing: -0.028em; font-weight: 700; color: var(--gw-ink); outline: none; text-wrap: balance; }
-  .gw-lede { margin: 14px 0 0; font-size: 16px; line-height: 1.55; color: #4D4A45; max-width: 31em; text-wrap: pretty; }
-  .gw-head .gw-lede { margin-top: 10px; max-width: 40em; }
-  .gw-head--center { text-align: center; display: grid; justify-items: center; }
-  .gw-meta { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; font-size: 12.5px; color: var(--gw-muted); }
-  .gw-meta i { width: 3px; height: 3px; border-radius: 50%; background: var(--gw-line-2); }
+  /* Store read status, under the card */
+  .gw-store { margin-top: var(--p-space-400); padding: 0 var(--p-space-200); }
+  .gw-store-dot { display: inline-block; width: 7px; height: 7px; margin-right: var(--p-space-200); border-radius: 50%; vertical-align: 1px;
+    box-shadow: inset 0 0 0 1.5px var(--p-color-icon); }
+  .gw-store-dot.is-ready { background: var(--p-color-bg-fill-success); box-shadow: none; }
 
-  /* Slide 1: copy beside the quiz scene */
-  .gw-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr); gap: 40px; align-items: stretch; }
-  .gw-copy { max-width: 470px; align-self: center; }
-  .gw-how { list-style: none; margin: 28px 0 0; padding: 0; border-top: 1px solid var(--gw-line); }
-  .gw-how li { display: grid; grid-template-columns: 40px minmax(0, 1fr); padding: 13px 0; border-bottom: 1px solid var(--gw-line); }
-  .gw-how-n { font-size: 12px; line-height: 20px; font-weight: 600; letter-spacing: .04em; color: var(--gw-ink); font-variant-numeric: tabular-nums; }
-  .gw-how-text { display: grid; gap: 2px; }
-  .gw-how-t { font-size: 14px; line-height: 20px; font-weight: 650; color: var(--gw-ink); }
-  .gw-how-b { font-size: 13px; line-height: 18px; color: var(--gw-muted); text-wrap: pretty; }
-  .gw-cta { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 18px; margin-top: 28px; }
-
-  /* The scene: a sand panel with a centered arch, the phone, and a question
+  /* The scene: a grey panel with a centered arch, the phone, and a question
      card in front. The stage is drawn once at 420x580 and scaled (--gw-s)
      by the panel's own width, so it keeps the same margins at any size. */
   .gw-scene { container: gw-scene / inline-size; position: relative; display: flex; align-items: center; justify-content: center; min-height: 560px;
-    border-radius: 14px; background: var(--gw-sand); overflow: hidden; }
+    border-radius: var(--p-border-radius-300); background: var(--p-color-bg-surface-secondary); overflow: hidden; }
   .gw-stagebox, .gw-arch { --gw-s: 1; }
   .gw-stagebox { position: relative; flex: none; width: 420px; height: 580px; transform: scale(var(--gw-s)); }
   /* Flat, symmetric, bottom flush; its crown clears the phone by 34px. The
      999px radius resolves to half the width: a true semicircle. */
   .gw-arch { position: absolute; left: 50%; bottom: 0; width: min(72%, calc(336px * var(--gw-s))); top: calc(50% - 277px * var(--gw-s));
-    transform: translateX(-50%); border-radius: 999px 999px 0 0; background: var(--gw-sand-2); }
+    transform: translateX(-50%); border-radius: 999px 999px 0 0; background: var(--p-color-bg); }
   .gw-phone { position: absolute; left: 18px; top: calc(50% - 243px); width: 236px; height: 486px; padding: 8px; box-sizing: border-box; border-radius: 42px; background: #111;
-    box-shadow: inset 0 0 0 1.5px #3a3a3a, 0 44px 60px -36px rgba(30, 22, 12, .55), 0 18px 30px -18px rgba(30, 22, 12, .3); }
+    box-shadow: inset 0 0 0 1.5px #3a3a3a, 0 44px 60px -36px rgba(0, 0, 0, .5), 0 18px 30px -18px rgba(0, 0, 0, .25); }
   .gw-screen { position: relative; height: 100%; border-radius: 34px; background: #fff; overflow: hidden; display: flex; flex-direction: column; }
   .gw-status { display: flex; justify-content: space-between; align-items: center; height: 38px; padding: 4px 22px 0 26px; font-size: 11px; font-weight: 650; color: #111; flex: none; }
   .gw-status-r { display: inline-flex; align-items: center; gap: 3px; }
@@ -882,13 +844,12 @@ const WELCOME_CSS = `
   .gw-status-r i:first-child { height: 5px; }
   .gw-status-r b { width: 18px; height: 8px; margin-left: 3px; border-radius: 2.5px; box-shadow: inset 0 0 0 1px #111; background: linear-gradient(90deg, #111 70%, transparent 70%); background-clip: content-box; padding: 1.5px; box-sizing: border-box; }
   .gw-island { position: absolute; top: 10px; left: 50%; width: 70px; height: 20px; margin-left: -35px; border-radius: 999px; background: #111; }
-  .gw-sbar { display: grid; grid-template-columns: 16px 1fr 16px; align-items: center; gap: 8px; height: 36px; padding: 0 16px; border-bottom: 1px solid #EEECE8; flex: none; }
+  .gw-sbar { display: grid; grid-template-columns: 16px 1fr 16px; align-items: center; gap: 8px; height: 36px; padding: 0 16px; border-bottom: 1px solid #EBEBEB; flex: none; }
   .gw-sbar svg { width: 14px; height: 14px; fill: none; stroke: #111; stroke-width: 1.4; }
   .gw-sbar-name { text-align: center; font-size: 10.5px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #111; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .gw-res { display: flex; flex-direction: column; flex: 1; padding: 16px 14px 14px; min-height: 0; }
-  .gw-res-k { display: flex; align-items: center; gap: 7px; font-size: 8px; font-weight: 600; letter-spacing: .22em; text-transform: uppercase; color: #6B6862; }
-  .gw-res-k::before { content: ""; width: 12px; height: 1px; background: #111; }
-  .gw-res-h { margin: 6px 0 12px; font-size: 19px; line-height: 1.1; font-weight: 700; letter-spacing: -0.03em; color: #111; }
+  .gw-res-k { font-size: 9.5px; font-weight: 600; color: #616161; }
+  .gw-res-h { margin: 3px 0 12px; font-size: 19px; line-height: 1.1; font-weight: 700; letter-spacing: -0.02em; color: #111; }
   .gw-res-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 8px; }
   .gw-res-tile { display: grid; gap: 5px; min-width: 0; }
   .gw-res-img { position: relative; display: block; aspect-ratio: 1 / 1.08; border-radius: 8px; overflow: hidden; }
@@ -896,130 +857,90 @@ const WELCOME_CSS = `
   .gw-res-name { font-size: 10px; font-weight: 600; color: #111; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .gw-res-cta { margin-top: auto; display: block; text-align: center; padding: 10px; border-radius: 999px; background: #111; color: #fff; font-size: 11px; font-weight: 600; }
   .gw-q { position: absolute; right: 18px; top: calc(50% - 92px); width: 206px; padding: 14px; box-sizing: border-box; border-radius: 14px; background: #fff;
-    box-shadow: 0 0 0 1px rgba(20, 16, 10, .05), 0 28px 50px -22px rgba(30, 22, 12, .42), 0 6px 14px -8px rgba(30, 22, 12, .16); }
-  .gw-q-top { display: flex; align-items: center; justify-content: space-between; font-size: 8px; font-weight: 600; letter-spacing: .18em; text-transform: uppercase; color: #6B6862; }
-  .gw-q-prog { display: inline-flex; gap: 3px; }
-  .gw-q-prog i { width: 12px; height: 2.5px; border-radius: 2px; background: #DDD9D2; }
-  .gw-q-prog i.is-on { background: #111; }
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, .05), 0 28px 50px -22px rgba(0, 0, 0, .38), 0 6px 14px -8px rgba(0, 0, 0, .14); }
+  .gw-q-top { display: grid; gap: 7px; font-size: 9.5px; font-weight: 600; color: #616161; }
+  .gw-q-prog { display: block; height: 3px; border-radius: 2px; background: #E3E3E3; overflow: hidden; }
+  .gw-q-prog i { display: block; width: 50%; height: 100%; border-radius: 2px; background: #111; }
   .gw-q-h { margin: 10px 0 12px; font-size: 14px; line-height: 1.25; font-weight: 700; letter-spacing: -0.015em; color: #111; text-wrap: balance; }
   .gw-q-opts { display: grid; gap: 6px; }
-  .gw-q-opt { position: relative; display: flex; align-items: center; gap: 9px; height: 32px; padding: 0 10px; border-radius: 9px; border: 1px solid #E8E6E1; font-size: 11.5px; font-weight: 550; color: #222; }
+  .gw-q-opt { position: relative; display: flex; align-items: center; gap: 9px; height: 32px; padding: 0 10px; border-radius: 9px; border: 1px solid #E3E3E3; font-size: 11.5px; font-weight: 550; color: #222; }
   .gw-q-opt i { width: 16px; height: 16px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08); flex: none; }
   .gw-q-opt.is-on { border-color: #111; box-shadow: inset 0 0 0 .5px #111; }
   .gw-q-opt b { margin-left: auto; width: 15px; height: 15px; border-radius: 50%; background: #111; color: #fff; display: inline-flex; }
   .gw-q-opt b svg { width: 15px; height: 15px; }
 
-  /* Slide 2: goals */
-  .gw-goals { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 32px; }
-  .gw-goal { appearance: none; font: inherit; position: relative; display: flex; flex-direction: column; text-align: left; cursor: pointer;
-    padding: 6px 6px 18px; border-radius: 16px; background: #fff; border: 1px solid var(--gw-line); color: inherit;
-    transition: border-color 140ms ease, box-shadow 140ms ease; }
-  .gw-goal:hover { border-color: var(--gw-line-2); }
-  .gw-goal:focus-visible { outline: 2px solid var(--p-color-border-focus, #005bd3); outline-offset: 2px; }
-  .gw-goal.is-on { border-color: var(--gw-ink); box-shadow: inset 0 0 0 1px var(--gw-ink); }
-  .gw-goal-art { display: flex; align-items: flex-end; justify-content: center; height: 156px; padding-bottom: 18px; box-sizing: border-box; border-radius: 11px; background: var(--gw-sand); overflow: hidden; transition: background 140ms ease; }
-  .gw-goal.is-on .gw-goal-art { background: var(--gw-sand-2); }
-  .gw-goal-text { display: grid; gap: 5px; padding: 16px 12px 0; }
-  .gw-goal-t { font-size: 15px; line-height: 20px; font-weight: 650; letter-spacing: -0.01em; color: var(--gw-ink); }
-  .gw-goal-b { font-size: 13px; line-height: 18px; color: var(--gw-muted); }
-  .gw-goal-check { position: absolute; top: 13px; right: 13px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: inset 0 0 0 1.5px var(--gw-line-2); color: #fff; display: inline-flex; }
-  .gw-goal.is-on .gw-goal-check { background: var(--gw-ink); box-shadow: none; }
-  .gw-goal-check svg { width: 20px; height: 20px; }
+  /* Slide 2: selectable goal cards with Polaris states: hover, pressed,
+     selected (black, like a checked Polaris checkbox), focus ring, disabled. */
+  .gw-goals { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--p-space-300); }
+  .gw-goal { appearance: none; font: inherit; color: inherit; position: relative; display: flex; flex-direction: column; text-align: left; cursor: pointer;
+    padding: var(--p-space-150) var(--p-space-150) var(--p-space-400); border-radius: var(--p-border-radius-300); background: var(--p-color-bg-surface);
+    border: var(--p-border-width-025) solid var(--p-color-border);
+    transition: border-color var(--p-motion-duration-100) var(--p-motion-ease), box-shadow var(--p-motion-duration-100) var(--p-motion-ease), background-color var(--p-motion-duration-100) var(--p-motion-ease); }
+  .gw-goal:not(:disabled):hover { border-color: var(--p-color-border-hover); background: var(--p-color-bg-surface-hover); }
+  .gw-goal:not(:disabled):active { background: var(--p-color-bg-surface-active); }
+  .gw-goal:focus-visible { outline: var(--p-border-width-050) solid var(--p-color-border-focus); outline-offset: var(--p-space-025); }
+  .gw-goal.is-on, .gw-goal.is-on:not(:disabled):hover { border-color: var(--p-color-bg-fill-brand); box-shadow: inset 0 0 0 var(--p-border-width-025) var(--p-color-bg-fill-brand); }
+  .gw-goal:disabled { cursor: default; border-color: var(--p-color-border-disabled); }
+  .gw-goal:disabled > * { opacity: .5; }
+  .gw-goal-art { display: flex; align-items: flex-end; justify-content: center; height: 156px; padding-bottom: 18px; box-sizing: border-box;
+    border-radius: var(--p-border-radius-200); background: var(--p-color-bg-surface-secondary); overflow: hidden; transition: background-color var(--p-motion-duration-100) var(--p-motion-ease); }
+  .gw-goal:not(:disabled):hover .gw-goal-art, .gw-goal.is-on .gw-goal-art { background: var(--p-color-bg-surface-secondary-hover); }
+  .gw-goal-text { display: grid; gap: var(--p-space-100); padding: var(--p-space-400) var(--p-space-300) 0; }
+  .gw-goal-check { position: absolute; top: var(--p-space-300); right: var(--p-space-300); display: inline-flex; width: 18px; height: 18px;
+    border-radius: var(--p-border-radius-100); background: var(--p-color-bg-surface); color: var(--p-color-text-brand-on-bg-fill);
+    box-shadow: inset 0 0 0 var(--p-border-width-0165) var(--p-color-input-border); }
+  .gw-goal:not(:disabled):hover .gw-goal-check { box-shadow: inset 0 0 0 var(--p-border-width-0165) var(--p-color-input-border-hover); }
+  .gw-goal.is-on .gw-goal-check { background: var(--p-color-bg-fill-brand-selected); box-shadow: none; }
+  .gw-goal-check svg { width: 18px; height: 18px; }
 
   /* Goal vignettes: small, exact UI */
   .vg-card { display: grid; gap: 8px; width: 150px; padding: 11px; box-sizing: border-box; border-radius: 10px; background: #fff; line-height: 1.25;
-    box-shadow: 0 0 0 1px rgba(20, 16, 10, .05), 0 10px 22px -12px rgba(30, 22, 12, .3); }
-  .vg-k { font-size: 8.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: #6B6862; }
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, .05), 0 10px 22px -12px rgba(0, 0, 0, .28); }
+  .vg-k { font-size: 8.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: #616161; }
   .vg-v { font-size: 10.5px; font-weight: 650; color: #111; }
   .vg-prods { display: flex; gap: 8px; align-items: stretch; }
   .vg-pc { display: grid; gap: 5px; width: 70px; line-height: 1.25; padding: 5px 5px 7px; box-sizing: border-box; border-radius: 9px; background: #fff;
-    box-shadow: 0 0 0 1px rgba(20, 16, 10, .05), 0 10px 22px -12px rgba(30, 22, 12, .3); }
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, .05), 0 10px 22px -12px rgba(0, 0, 0, .28); }
   .vg-pc-img { position: relative; display: block; height: 54px; border-radius: 6px; overflow: hidden; }
   .vg-pc-tag { position: absolute; left: 4px; top: 4px; padding: 2px 4px; border-radius: 999px; background: #111; color: #fff; font-size: 5.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
   .vg-pc-n { font-size: 9px; font-weight: 600; color: #111; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 1px; }
   .vg-pc-add { display: block; text-align: center; padding: 4px 0; border-radius: 999px; background: #111; color: #fff; font-size: 7px; font-weight: 600; }
-  .vg-pc + .vg-pc .vg-pc-add { background: #fff; color: #111; box-shadow: inset 0 0 0 1px #D6D3CC; }
+  .vg-pc + .vg-pc .vg-pc-add { background: #fff; color: #111; box-shadow: inset 0 0 0 1px #CCCCCC; }
   .vg-mail-t { font-size: 11px; line-height: 1.25; font-weight: 700; letter-spacing: -0.01em; color: #111; }
   .vg-mail-row { display: flex; gap: 5px; }
-  .vg-mail-in { flex: 1; display: flex; align-items: center; height: 26px; padding: 0 8px; border-radius: 6px; box-shadow: inset 0 0 0 1px #D6D3CC; font-size: 9.5px; color: #8A867F; }
+  .vg-mail-in { flex: 1; display: flex; align-items: center; height: 26px; padding: 0 8px; border-radius: 6px; box-shadow: inset 0 0 0 1px #CCCCCC; font-size: 9.5px; color: #8A8A8A; }
   .vg-mail-go { width: 26px; height: 26px; border-radius: 6px; background: #111; display: inline-flex; align-items: center; justify-content: center; }
   .vg-mail-go svg { width: 13px; height: 13px; fill: none; stroke: #fff; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-  .vg-mail-fine { font-size: 8px; color: #8A867F; }
+  .vg-mail-fine { font-size: 8px; color: #8A8A8A; }
   .vg-fit-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .vg-fit-row--rule { padding-top: 8px; border-top: 1px solid #EEECE8; }
+  .vg-fit-row--rule { padding-top: 8px; border-top: 1px solid #EBEBEB; }
   .vg-swatches { display: flex; justify-content: space-between; }
   .vg-swatches i { width: 18px; height: 18px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .06); }
   .vg-swatches i.is-on { box-shadow: 0 0 0 2px #fff, 0 0 0 3.25px #111; }
   .vg-sizes { display: inline-flex; gap: 3px; }
-  .vg-sizes i { font-style: normal; display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 18px; padding: 0 3px; box-sizing: border-box; border-radius: 4px; box-shadow: inset 0 0 0 1px #D6D3CC; font-size: 8.5px; font-weight: 600; color: #303030; }
+  .vg-sizes i { font-style: normal; display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 18px; padding: 0 3px; box-sizing: border-box; border-radius: 4px; box-shadow: inset 0 0 0 1px #CCCCCC; font-size: 8.5px; font-weight: 600; color: #303030; }
   .vg-sizes i.is-on { background: #111; color: #fff; box-shadow: none; }
   .vg-chart-t { font-size: 11px; font-weight: 700; letter-spacing: -0.01em; color: #111; }
   .vg-chart { gap: 8px; }
   .vg-bar { display: grid; grid-template-columns: 38px 1fr 22px; align-items: center; gap: 6px; }
   .vg-bar-l { font-size: 9px; color: #303030; }
-  .vg-bar-track { height: 6px; border-radius: 3px; background: #F0EEEA; overflow: hidden; }
+  .vg-bar-track { height: 6px; border-radius: 3px; background: #F1F1F1; overflow: hidden; }
   .vg-bar-track i { display: block; height: 100%; border-radius: 3px; background: #111; }
-  .vg-bar-track i.is-1 { background: #77726A; }
-  .vg-bar-track i.is-2 { background: #B5B0A7; }
+  .vg-bar-track i.is-1 { background: #616161; }
+  .vg-bar-track i.is-2 { background: #B5B5B5; }
   .vg-bar-v { font-size: 9px; font-weight: 600; color: #111; text-align: right; font-variant-numeric: tabular-nums; }
-  .vp-draft, .vp-team { width: 244px; }
-  .vp-draft { gap: 0; padding: 11px 12px 5px; }
-  .vp-head { padding-bottom: 8px; }
-  .vp-q { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 6px; height: 27px; border-top: 1px solid #EEECE8; }
-  .vp-q-n { font-size: 8.5px; font-weight: 600; letter-spacing: .04em; color: #6B6862; font-variant-numeric: tabular-nums; }
-  .vp-q-t { font-size: 10px; font-weight: 600; color: #111; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .vp-q-m { display: inline-flex; }
-  .vp-q-img { display: block; width: 18px; height: 18px; border-radius: 50%; overflow: hidden; box-shadow: 0 0 0 1.5px #fff; }
-  .vp-q-img + .vp-q-img { margin-left: -4px; }
-  .vp-team { gap: 11px; padding: 12px; }
-  .vp-team-who { display: flex; align-items: center; gap: 9px; }
-  .vp-team-av { display: block; width: 28px; height: 28px; border-radius: 50%; flex: none; }
-  .vp-team-id { display: grid; gap: 1px; }
-  .vp-team-s { font-size: 9px; color: #6B6862; }
-  .vp-team-covers { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px; padding-top: 10px; border-top: 1px solid #EEECE8; }
-  .vp-team-covers span { display: flex; align-items: center; gap: 4px; font-size: 9.5px; font-weight: 600; color: #303030; white-space: nowrap; }
-  .vp-team-covers svg { width: 12px; height: 12px; flex: none; color: #111; }
 
-  /* Slide 3: one decision, two halves */
-  .gw-fork { display: grid; grid-template-columns: minmax(0, 1fr) 1px minmax(0, 1fr); max-width: 880px; margin: 32px auto 0;
-    border: 1px solid var(--gw-line); border-radius: 18px; overflow: hidden; }
-  .gw-opt { display: flex; flex-direction: column; padding: 28px 30px 30px; min-width: 0; }
-  .gw-opt--feature { background: var(--gw-sand); --gw-line: #E3E0DA; }
-  .gw-opt-art { display: flex; align-items: center; justify-content: center; height: 136px; margin: -18px -20px 24px; border-radius: 10px; background: var(--gw-sand); }
-  .gw-opt--feature .gw-opt-art { background: var(--gw-sand-2); }
-  .gw-opt-k { font-size: 11px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--gw-muted); }
-  .gw-opt-sub { margin: 4px 0 22px; font-size: 14px; line-height: 20px; color: var(--gw-muted); }
-  .gw-opt-h { margin: 10px 0 0; font-size: 22px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em; color: var(--gw-ink); }
-  .gw-opt-p { margin: 10px 0 0; font-size: 14px; line-height: 1.5; color: var(--gw-text); }
-  .gw-spec { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--gw-line); }
-  .gw-spec li { position: relative; padding: 10px 0 10px 28px; border-bottom: 1px solid var(--gw-line); font-size: 13.5px; line-height: 20px; color: var(--gw-text); }
-  .gw-spec li::before { content: ""; position: absolute; left: 1px; top: 12px; width: 16px; height: 16px;
-    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.4 6.6 11.3 12.5 4.9' fill='none' stroke='%23141414' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/16px no-repeat; }
-  .gw-opt-cta { margin-top: auto; padding-top: 28px; }
-  .gw-or { position: relative; background: var(--gw-line); }
-  .gw-or span { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 34px; height: 34px; border-radius: 50%;
-    background: #fff; box-shadow: 0 0 0 1px var(--gw-line); display: flex; align-items: center; justify-content: center;
-    font-size: 11px; font-weight: 600; letter-spacing: .06em; color: var(--gw-muted); }
-  .gw-done { display: flex; align-items: center; gap: 10px; }
-  .gw-ok { width: 24px; height: 24px; border-radius: 50%; background: var(--gw-ink); color: #fff; display: inline-flex; flex: none; }
-  .gw-ok svg { width: 24px; height: 24px; }
+  /* Slide 3: two option cards; the recommended one has a black border and
+     label. Equal heights so both buttons line up at the bottom. */
+  .gw-paths { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--p-space-400); max-width: 860px; width: 100%; margin: 0 auto; }
+  .gw-path { display: flex; flex-direction: column; min-width: 0; overflow: hidden; border-radius: var(--p-border-radius-300);
+    border: var(--p-border-width-025) solid var(--p-color-border); background: var(--p-color-bg-surface); }
+  .gw-path--feature { border: var(--p-border-width-050) solid var(--p-color-bg-fill-brand); }
+  .gw-path-body { flex: 1; display: flex; flex-direction: column; gap: var(--p-space-600); padding: var(--p-space-500); }
+  .gw-path-cta { margin-top: auto; }
+  /* Polaris Icon centers itself with auto margins; pin it to the first line. */
+  .gw-tick { display: inline-flex; flex: none; }
 
-  /* Footer: back, then a note and the slide's one primary */
-  .gw-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--gw-line); }
-  .gw-foot-end { display: flex; align-items: center; gap: 18px; min-width: 0; }
-  .gw-foot-note { font-size: 12.5px; color: var(--gw-muted); text-align: right; }
-
-  /* Store read status */
-  .gw-store { display: flex; align-items: center; justify-content: center; gap: 8px; width: max-content; max-width: 100%; box-sizing: border-box;
-    margin: 18px auto 0; padding: 6px 14px; border-radius: 999px; background: var(--p-color-bg-surface, #fff);
-    box-shadow: 0 0 0 1px rgba(0, 0, 0, .06); font-size: 12.5px; color: var(--gw-muted); text-align: center; }
-  .gw-store-dot { width: 7px; height: 7px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--gw-ink); flex: none; }
-  .gw-store-dot.is-ready { background: var(--p-color-bg-fill-success, #29845a); box-shadow: none; }
-
-  @media (max-width: 1040px) {
-    .gw-card { padding: 22px 28px 24px; }
-    .gw-hero { gap: 32px; }
-  }
   @media (max-width: 900px) {
     .gw-goals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
@@ -1030,42 +951,25 @@ const WELCOME_CSS = `
   @container gw-scene (max-width: 359px) { .gw-stagebox, .gw-arch { --gw-s: .72; } }
   @container gw-scene (max-width: 329px) { .gw-stagebox, .gw-arch { --gw-s: .66; } }
   @container gw-scene (max-width: 299px) { .gw-stagebox, .gw-arch { --gw-s: .6; } }
-  @media (max-width: 860px) {
-    .gw-hero { grid-template-columns: 1fr; gap: 28px; }
-    .gw-copy { max-width: none; }
-    .gw-stage { min-height: 0; }
+  /* Below Polaris md the grid stacks (InlineGrid xs: 1). */
+  @media (max-width: 47.9975em) {
     /* Stacked, the panel's height follows its width (the stage scales
        with the width, so its margins stay even). */
     .gw-scene { min-height: 0; aspect-ratio: 4 / 5; max-height: 620px; }
+    .gw-paths { grid-template-columns: 1fr; }
+    .gw-path--feature { order: -1; }
   }
   @media (max-width: 489px) {
-    .gw { padding-left: 16px; padding-right: 16px; }
+    .gw { padding-left: var(--p-space-400); padding-right: var(--p-space-400); }
   }
   @media (max-width: 640px) {
-    .gw-card { padding: 16px 16px 20px; }
-    .gw-steps-label { display: none; }
-    .gw-skip { padding-left: 8px; }
-    .gw-stage { padding-top: 24px; }
-    .gw-h1 { font-size: 34px; }
-    .gw-h2 { font-size: 26px; }
-    .gw-lede { font-size: 15px; }
-    .gw-goals { grid-template-columns: 1fr; gap: 12px; margin-top: 24px; }
+    .gw-goals { grid-template-columns: 1fr; }
     .gw-goal-art { height: 132px; padding-bottom: 14px; }
     .gw-goal-art > * { transform: scale(.9); transform-origin: bottom center; }
-    .gw-fork { grid-template-columns: 1fr; grid-template-rows: auto 1px auto; margin-top: 24px; }
-    .gw-opt { padding: 22px 20px 24px; }
-    .gw-opt-art { height: 124px; margin: -12px -10px 20px; }
-    .gw-opt--feature { order: -1; }
-    .gw-or { order: 0; }
-    .gw-opt:not(.gw-opt--feature) { order: 1; padding-top: 34px; }
-    .gw-foot { margin-top: 24px; padding-top: 16px; }
     .gw-foot-note { display: none; }
-    /* Too long for a one-line pill here: a plain centered status line. */
-    .gw-store { display: block; width: auto; padding: 0 8px; background: none; box-shadow: none; text-wrap: balance; }
-    .gw-store-dot { display: inline-block; margin-right: 8px; vertical-align: 1px; }
   }
   @media (prefers-reduced-motion: reduce) {
     .gw-stage { animation: none; }
-    .gw-dot, .gw-goal { transition: none; }
+    .gw-goal, .gw-goal-art { transition: none; }
   }
 `;
