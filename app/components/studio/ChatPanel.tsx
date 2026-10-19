@@ -14,6 +14,7 @@ import {
   UndoIcon,
 } from "@shopify/polaris-icons";
 import { readSseStream } from "../../lib/sse-client";
+import { GLEAME_LOGO_SRC } from "../onboarding/OnboardingArt";
 import type { StudioQuestion } from "./types";
 
 // "Build with AI": the Gleame copilot as an assistant-style chat. Replies
@@ -58,8 +59,9 @@ const CHAT_CSS = `
   .gai-user + .gai-a { margin-top: 4px; }
   .gai-a { position: relative; padding-left: 32px; min-width: 0; }
   .gai-a > .gai-mark { position: absolute; left: 0; top: 1px; }
-  .gai-mark { width: 22px; height: 22px; border-radius: 999px; background: var(--gai-accent); display: inline-grid; place-items: center; flex-shrink: 0; }
-  .gai-mark svg { width: 62%; height: 62%; fill: #fff; }
+  /* The black Gleame logo, cut like the onboarding lockup (24% radius). */
+  .gai-mark { width: 22px; height: 22px; border-radius: 24%; background: #000; display: inline-block; overflow: hidden; flex-shrink: 0; }
+  .gai-mark img { display: block; width: 100%; height: 100%; }
   .gai-mark[data-busy="true"] { animation: gai-breathe 1.8s ease-in-out infinite; }
   @keyframes gai-breathe { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(0.86); opacity: 0.7; } }
   .gai-md { display: flex; flex-direction: column; gap: 10px; overflow-wrap: anywhere; }
@@ -136,15 +138,12 @@ const CHAT_CSS = `
   }
 `;
 
-/** The Gleame "G" in white, sized to sit inside the dark .gai-mark disc.
- * Paths from public/placeholders/gleametransparent.svg. */
+/** The Gleame logo (public/brand/gleame-logo.svg), the same black mark as
+ * onboarding and the home card. */
 function GleameMark({ busy }: { busy?: boolean }) {
   return (
     <span className="gai-mark" data-busy={busy ? "true" : undefined} aria-hidden>
-      <svg viewBox="15 21 508 508">
-        <path d="M270.314 21.0001V21.3223C132.622 21.3223 21 134.639 21 274.421C21 373.976 63.8516 451.773 146.184 493.102C136.046 487.808 140.348 490.009 131.677 483.036C95.6525 454.069 73.3975 410.683 73.3975 353.101C73.3975 238.649 161.317 145.689 270.222 144.641V144.632H365.396C432.655 144.632 487.18 89.2798 487.18 21.0001H270.314Z" />
-        <path d="M143.264 490.907C161.826 494.411 179.736 492.577 197.451 489.147C227.389 483.351 254.31 469.192 279.928 450.049C322.499 418.236 353.942 370.527 362.189 319.712L245.748 320.816C245.34 320.82 244.969 320.658 244.696 320.392C244.156 319.976 243.945 319.226 244.23 318.568L260.097 281.892L260.103 281.878L260.113 281.851C260.132 281.805 260.161 281.735 260.196 281.648C260.269 281.47 260.374 281.206 260.514 280.868C260.792 280.19 261.2 279.207 261.716 277.988C262.748 275.548 264.217 272.153 265.964 268.333C269.449 260.715 274.077 251.33 278.575 244.466C279.888 242.463 281.471 240.299 283.21 238.07C298.966 217.878 324.122 208.61 349.256 208.61C349.323 208.61 349.396 208.602 349.461 208.61L517.133 208.625V278.334C517.133 321.827 506.415 364.629 485.955 402.843L484.308 405.919C473.542 426.026 459.96 444.444 443.988 460.594C397.154 507.947 332.574 533.89 266.751 526.843C245.836 524.604 226.787 521.983 215.711 519.085C197.963 514.44 159.247 497.551 142.338 490.907C140.985 490.488 141.95 490.659 143.264 490.907Z" />
-      </svg>
+      <img src={GLEAME_LOGO_SRC} alt="" />
     </span>
   );
 }

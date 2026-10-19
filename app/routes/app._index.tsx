@@ -29,6 +29,7 @@ import { getQuizFunnelSummary, type QuizFunnelSummary } from "../lib/quiz-dashbo
 import { shouldOfferSetup } from "../lib/setup-offer.server";
 import { SetupOfferCard } from "../components/SetupOfferModal";
 import { QuizPlacementStatus } from "../components/QuizPlacementStatus";
+import { GLEAME_LOGO_SRC } from "../components/onboarding/OnboardingArt";
 import { CHAT_ASSISTANT_RETIRED, TRYON_WIDGETS_RETIRED } from "../lib/retired-features";
 import {
   STUDIO_NAV_CHANNEL,
@@ -448,7 +449,7 @@ function DashboardView({
         <Card>
           <BlockStack gap="400">
             <InlineStack gap="300" blockAlign="center" wrap={false}>
-              <img src="/placeholders/gleametransparent.svg" alt="" width={32} height={32} style={{ display: "block" }} />
+              <img src={GLEAME_LOGO_SRC} alt="" width={32} height={32} style={{ display: "block", borderRadius: 8 }} />
               <Text as="h1" variant="headingLg">
                 Welcome back, {displayName}
               </Text>

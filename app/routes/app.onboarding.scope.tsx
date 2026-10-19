@@ -23,14 +23,12 @@ import {
   Button,
   Card,
   ChoiceList,
-  Icon,
   InlineStack,
   Page,
   Spinner,
   Text,
   TextField,
 } from "@shopify/polaris";
-import { ProductIcon, ThemeTemplateIcon } from "@shopify/polaris-icons";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { ensureShopExists, supabase } from "../lib/supabase.server";
@@ -40,6 +38,9 @@ import { writeScopeHandoff, type ScopeChip } from "../lib/onboarding-scope";
 import { getSetupOfferContact, shouldOfferSetup } from "../lib/setup-offer.server";
 import { SetupOfferCard } from "../components/SetupOfferModal";
 import { introDone, introPathChosen } from "../lib/onboarding-intro.server";
+import { loadPreviewProducts } from "../lib/onboarding-preview.server";
+import { isTemplateId } from "../lib/quiz-templates";
+import { ART_CSS, BrandLockup, ProductMosaic, TemplateMini } from "../components/onboarding/OnboardingArt";
 
 /** `/app?open=studio` with the embedded-admin params (host/shop/embedded)
  * carried over, so App Bridge doesn't re-bootstrap the frame. */
@@ -86,10 +87,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const pathChosen = await introPathChosen(shop.data.id).catch(() => null);
   const showSetupOffer =
     (pathChosen === null || pathChosen === "skip") && (await shouldOfferSetup(shop.data.id).catch(() => false));
-  const setupEmail = showSetupOffer ? (await getSetupOfferContact(admin)).email : "";
+  const [setupEmail, preview] = await Promise.all([
+    showSetupOffer ? getSetupOfferContact(admin).then((c) => c.email) : Promise.resolve(""),
+    // The catalog row shows a few of the store's own products.
+    loadPreviewProducts(shop.data.id, admin, 4),
+  ]);
   return json({
     shopDomain: session.shop,
     setupOffer: { show: showSetupOffer, email: setupEmail },
+    preview,
     // Never synced, a sync stopped mid-catalog, or sync is "enabled" but no
     // page ever landed (a first page that failed used to leave exactly that
     // state): start (resume) it.
@@ -187,7 +193,7 @@ export default function OnboardingScope() {
 }
 
 function OnboardingScopeScreen({ footer }: { footer: ReactNode }) {
-  const { shopDomain, syncNeeded, syncCursor } = useLoaderData<typeof loader>();
+  const { shopDomain, syncNeeded, syncCursor, preview } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   // Every state of the screen: admin title, the content, then the setup
   // offer card (never a popup) at the bottom.
@@ -483,6 +489,12 @@ function OnboardingScopeScreen({ footer }: { footer: ReactNode }) {
 
   const tplDef = options.templates.find((t) => t.id === template) ?? options.templates[options.templates.length - 1];
   const scopeIsAll = !currentChip || currentChip.kind === "all";
+  // Proof of the read: a few of the store's own product names.
+  const names = preview.map((p) => p.name).slice(0, 3);
+  const catalogDetail =
+    scopeIsAll && names.length > 0
+      ? `${names.join(", ")}${options.productCount > names.length ? ` and ${options.productCount - names.length} more` : ""}`
+      : null;
 
   // One banner at a time (Built for Shopify 4.3.4), most urgent first: a
   // failed template save, then a partial sync, then the thin-catalog note.
@@ -499,153 +511,171 @@ function OnboardingScopeScreen({ footer }: { footer: ReactNode }) {
 
   return page(
     <>
-      <style>{SCOPE_CSS}</style>
-      <div className="gq-ob">
-        <Card padding="600">
-          <BlockStack gap="600">
-            <BlockStack gap="200">
-              <Text as="h1" variant="headingXl">
-                Ready to build your quiz
-              </Text>
-              <Text as="p" tone="subdued">
-                We read your store. Check this looks right, then we'll write the whole quiz from your catalog.
-              </Text>
-            </BlockStack>
+      <style>{ART_CSS + SCOPE_CSS}</style>
+      <div className="gs">
+        {/* Rounded at every width, like the intro's card: one piece. */}
+        <Card padding="0" roundedAbove="xs">
+          <div className="gs-main">
+            <div className="gs-top">
+              <BrandLockup size={26} />
+              <span className="gs-shop">{shopDomain}</span>
+            </div>
+            <span className="gs-eyebrow">One last check</span>
+            <h1 className="gs-h1">Ready to build your quiz</h1>
+            <p className="gs-lede">
+              We read your store. Check this looks right, then we'll write the whole quiz from your catalog.
+            </p>
 
-            <div className="gq-ob-rows">
-              {/* Row 1: scope */}
-              <div className="gq-ob-row">
-                <span className="gq-ob-ic" aria-hidden>
-                  <Icon source={ProductIcon} tone="subdued" />
-                </span>
-                <div className="gq-ob-body">
-                  <Text as="p">
+            <div className="gs-rows">
+              {/* Row 1: scope, shown with the store's own products */}
+              <div className="gs-row">
+                <ProductMosaic products={preview} size={64} />
+                <div className="gs-body">
+                  <span className="gs-k">Products</span>
+                  <p className="gs-v">
                     {scopeIsAll ? (
                       <>
-                        <strong>{plural(options.productCount, "product")}</strong>
+                        {plural(options.productCount, "product")}
                         {options.collectionCount > 0 && (
-                          <>
+                          <span className="gs-v-soft">
                             {" in "}
-                            <strong>{plural(options.collectionCount, "collection")}</strong>
-                          </>
+                            {plural(options.collectionCount, "collection")}
+                          </span>
                         )}
                       </>
                     ) : (
                       <>
-                        <strong>{plural(currentChip!.count, "product")}</strong>
-                        {" of "}
-                        {options.productCount} · {currentChip!.label}
+                        {plural(currentChip!.count, "product")}
+                        <span className="gs-v-soft">
+                          {" of "}
+                          {options.productCount} · {currentChip!.label}
+                        </span>
                       </>
                     )}
-                  </Text>
-                  {scopeOpen && (
-                    <div className="gq-ob-expand">
-                      <InlineStack gap="200" wrap>
-                        {options.chips.map((c, i) => (
-                          <Button
-                            key={`${c.kind}-${c.label}`}
-                            size="slim"
-                            pressed={selected === i}
-                            onClick={() => setSelected(i)}
-                          >
-                            {`${c.label} · ${c.count}`}
-                          </Button>
-                        ))}
-                        <Button size="slim" pressed={selected === -1} onClick={() => setSelected(-1)}>
-                          Something else…
+                  </p>
+                  {catalogDetail && <p className="gs-d">{catalogDetail}</p>}
+                </div>
+                <div className="gs-act">
+                  <Button variant="plain" onClick={() => setScopeOpen((v) => !v)}>
+                    {scopeOpen ? "Done" : "Change scope"}
+                  </Button>
+                </div>
+                {scopeOpen && (
+                  <div className="gs-expand">
+                    <InlineStack gap="200" wrap>
+                      {options.chips.map((c, i) => (
+                        <Button
+                          key={`${c.kind}-${c.label}`}
+                          size="slim"
+                          pressed={selected === i}
+                          onClick={() => setSelected(i)}
+                        >
+                          {`${c.label} · ${c.count}`}
                         </Button>
-                      </InlineStack>
-                      {selected === -1 && (
-                        <div style={{ marginTop: 12 }}>
-                          <TextField
-                            label="Describe the products"
-                            labelHidden
-                            autoComplete="off"
-                            placeholder="e.g. only lip products"
-                            value={freeText}
-                            onChange={setFreeText}
-                            onBlur={resolveFreeText}
-                            connectedRight={
-                              <Button onClick={resolveFreeText} loading={freeState.resolving}>
-                                Find
-                              </Button>
-                            }
-                          />
-                          {freeState.result && (
-                            <div style={{ marginTop: 8 }}>
-                              <Text as="p" variant="bodySm" tone="subdued">
-                                {freeState.result.count < 5
-                                  ? `Only ${plural(freeState.result.count, "product")} match. A quiz needs more to choose from. `
-                                  : `${plural(freeState.result.count, "product")} matched.`}
-                                {freeState.result.count < 5 && (
-                                  <Button variant="plain" onClick={() => setSelected(0)}>
-                                    Use everything instead
-                                  </Button>
-                                )}
-                              </Text>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <Button variant="plain" onClick={() => setScopeOpen((v) => !v)}>
-                  {scopeOpen ? "Done" : "Change scope"}
-                </Button>
-              </div>
-
-              {/* Row 2: store type to template */}
-              <div className="gq-ob-row">
-                <span className="gq-ob-ic" aria-hidden>
-                  <Icon source={ThemeTemplateIcon} tone="subdued" />
-                </span>
-                <div className="gq-ob-body">
-                  <Text as="p">
-                    {options.storeType ? (
-                      <>
-                        Looks like a <strong>{options.storeType}</strong> → <strong>{tplDef.name}</strong> template,{" "}
-                        {tplDef.styleName} style
-                      </>
-                    ) : (
-                      <>
-                        We'll use the <strong>{tplDef.name}</strong> template, {tplDef.styleName} style
-                      </>
+                      ))}
+                      <Button size="slim" pressed={selected === -1} onClick={() => setSelected(-1)}>
+                        Something else…
+                      </Button>
+                    </InlineStack>
+                    {selected === -1 && (
+                      <div style={{ marginTop: 12 }}>
+                        <TextField
+                          label="Describe the products"
+                          labelHidden
+                          autoComplete="off"
+                          placeholder="e.g. only lip products"
+                          value={freeText}
+                          onChange={setFreeText}
+                          onBlur={resolveFreeText}
+                          connectedRight={
+                            <Button onClick={resolveFreeText} loading={freeState.resolving}>
+                              Find
+                            </Button>
+                          }
+                        />
+                        {freeState.result && (
+                          <div style={{ marginTop: 8 }}>
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              {freeState.result.count < 5
+                                ? `Only ${plural(freeState.result.count, "product")} match. A quiz needs more to choose from. `
+                                : `${plural(freeState.result.count, "product")} matched.`}
+                              {freeState.result.count < 5 && (
+                                <Button variant="plain" onClick={() => setSelected(0)}>
+                                  Use everything instead
+                                </Button>
+                              )}
+                            </Text>
+                          </div>
+                        )}
+                      </div>
                     )}
-                  </Text>
-                  {templateOpen && (
-                    <div className="gq-ob-expand">
-                      <ChoiceList
-                        title="Template"
-                        titleHidden
-                        selected={[template]}
-                        onChange={(v) => v[0] && v[0] !== template && persistChoice({ template: v[0] })}
-                        disabled={saving}
-                        choices={options.templates.map((t) => {
-                          const ok = options.eligible.includes(t.id);
-                          return {
-                            value: t.id,
-                            label: `${t.name} · ${t.shopperQuestion}`,
-                            helpText: ok
-                              ? `${t.styleTagline} · ${t.questionRangeLabel}`
-                              : t.ineligibleReason || "Not available for this store",
-                            disabled: !ok,
-                          };
-                        })}
-                      />
-                    </div>
-                  )}
-                </div>
-                <Button variant="plain" onClick={() => setTemplateOpen((v) => !v)}>
-                  {templateOpen ? "Done" : "Change"}
-                </Button>
+                  </div>
+                )}
               </div>
 
+              {/* Row 2: store type to template, shown as the template's own style */}
+              <div className="gs-row">
+                <TemplateMini id={isTemplateId(tplDef.id) ? tplDef.id : "t5"} size={64} />
+                <div className="gs-body">
+                  <span className="gs-k">Template</span>
+                  <p className="gs-v">
+                    {tplDef.name}
+                    <span className="gs-v-soft"> · {tplDef.styleName} style</span>
+                  </p>
+                  <p className="gs-d">
+                    {options.storeType ? `Picked for: ${options.storeType}` : tplDef.questionRangeLabel}
+                  </p>
+                </div>
+                <div className="gs-act">
+                  <Button variant="plain" onClick={() => setTemplateOpen((v) => !v)}>
+                    {templateOpen ? "Done" : "Change"}
+                  </Button>
+                </div>
+                {templateOpen && (
+                  <div className="gs-expand gs-expand--tpl">
+                    <ChoiceList
+                      title="Template"
+                      titleHidden
+                      selected={[template]}
+                      onChange={(v) => v[0] && v[0] !== template && persistChoice({ template: v[0] })}
+                      disabled={saving}
+                      choices={options.templates.map((t) => {
+                        const ok = options.eligible.includes(t.id);
+                        // The description lives in the label so it lines up
+                        // with the title, not under the thumbnail.
+                        return {
+                          value: t.id,
+                          label: (
+                            <span className={`gs-tpl-opt${ok ? "" : " is-off"}`}>
+                              <TemplateMini id={isTemplateId(t.id) ? t.id : "t5"} size={40} />
+                              <span className="gs-tpl-text">
+                                <span className="gs-tpl-t">
+                                  <b>{t.name}</b> · {t.shopperQuestion}
+                                </span>
+                                <span className="gs-tpl-d">
+                                  {ok
+                                    ? `${t.styleTagline} · ${t.questionRangeLabel}`
+                                    : t.ineligibleReason || "Not available for this store"}
+                                </span>
+                              </span>
+                            </span>
+                          ),
+                          disabled: !ok,
+                        };
+                      })}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
 
-            {notice && <Banner tone={notice.tone}>{notice.text}</Banner>}
+            {notice && (
+              <div className="gs-notice">
+                <Banner tone={notice.tone}>{notice.text}</Banner>
+              </div>
+            )}
 
-            <InlineStack gap="400" blockAlign="center">
+            <div className="gs-cta">
               <Button
                 variant="primary"
                 size="large"
@@ -654,35 +684,95 @@ function OnboardingScopeScreen({ footer }: { footer: ReactNode }) {
               >
                 Build my quiz
               </Button>
-              <Text as="span" variant="bodySm" tone="subdued">
-                About a minute or two · nothing goes live
-              </Text>
-            </InlineStack>
-            <InlineStack gap="200" blockAlign="center">
-              <Button variant="plain" onClick={() => void startManual()} loading={manualBusy} disabled={saving}>
-                Skip and set it up myself
-              </Button>
-              <Text as="span" variant="bodySm" tone="subdued">
-                Start from one simple question and edit everything in the Studio.
-              </Text>
-            </InlineStack>
-            {manualError && <Banner tone="critical">{manualError}</Banner>}
-          </BlockStack>
+              <span className="gs-meta">
+                About a minute or two
+                <i aria-hidden />
+                Nothing goes live
+              </span>
+            </div>
+          </div>
+
+          {/* The quieter way in: a one-question starter, edited by hand */}
+          <div className="gs-alt">
+            <Button variant="plain" onClick={() => void startManual()} loading={manualBusy} disabled={saving}>
+              Skip and set it up myself
+            </Button>
+            <span className="gs-alt-d">Start from one simple question and edit everything in the Studio.</span>
+          </div>
         </Card>
-        <p className="gq-ob-foot">{shopDomain}</p>
+        {manualError && (
+          <div className="gs-notice">
+            <Banner tone="critical">{manualError}</Banner>
+          </div>
+        )}
       </div>
     </>,
   );
 }
 
+// Polaris Card and controls; type and spacing match the welcome intro.
+// Black, white and warm greys only (no AI purple); text holds WCAG AA.
 const SCOPE_CSS = `
   .gq-ob { padding-top: 48px; padding-bottom: 48px; }
-  .gq-ob-rows { display: flex; flex-direction: column; }
-  .gq-ob-row { display: flex; align-items: flex-start; gap: 14px; padding: 16px 0; border-top: 1px solid var(--p-color-border-secondary, #e3e3e3); }
-  .gq-ob-row:last-child { border-bottom: 1px solid var(--p-color-border-secondary, #e3e3e3); }
-  .gq-ob-ic { flex: 0 0 34px; height: 34px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--p-color-bg-surface-secondary, #f1f1f1); color: var(--p-color-text-secondary, #616161); margin-top: 1px; }
-  .gq-ob-body { flex: 1; min-width: 0; padding-top: 7px; }
-  .gq-ob-row > .Polaris-Button, .gq-ob-row > button { margin-top: 7px; flex: 0 0 auto; }
-  .gq-ob-expand { margin-top: 12px; padding: 14px; border-radius: 10px; background: var(--p-color-bg-surface-secondary, #f7f7f7); }
   .gq-ob-foot { text-align: center; margin: 20px 0 0; font-size: 12px; color: var(--p-color-text-secondary, #8a8a8a); }
+
+  .gs { --gs-ink: #141414; --gs-muted: #6B6862; --gs-line: #E8E6E1; --gs-sand: #F5F4F1; padding: 40px 0 48px; }
+  .gs-main { padding: 24px 32px 28px; }
+  .gs-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 32px; }
+  .gs-shop { min-width: 0; font-size: 12px; color: var(--gs-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gs-eyebrow { display: flex; align-items: center; gap: 12px; font-size: 11px; font-weight: 600; letter-spacing: .2em; text-transform: uppercase; color: var(--gs-muted); }
+  .gs-eyebrow::before { content: ""; width: 24px; height: 1.5px; background: var(--gs-ink); flex: none; }
+  .gs-h1 { margin: 14px 0 0; font-size: 32px; line-height: 1.08; letter-spacing: -0.03em; font-weight: 700; color: var(--gs-ink); }
+  .gs-lede { margin: 10px 0 0; font-size: 15px; line-height: 1.55; color: #4D4A45; max-width: 34em; text-wrap: pretty; }
+
+  .gs-rows { margin-top: 28px; border-top: 1px solid var(--gs-line); }
+  .gs-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; column-gap: 18px; align-items: center; padding: 18px 0; border-bottom: 1px solid var(--gs-line); }
+  .gs-body { min-width: 0; }
+  .gs-k { display: block; font-size: 10.5px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--gs-muted); }
+  .gs-v { margin: 4px 0 0; font-size: 15px; line-height: 20px; font-weight: 650; letter-spacing: -0.01em; color: var(--gs-ink); }
+  .gs-v-soft { font-weight: 450; color: #4D4A45; }
+  .gs-d { margin: 2px 0 0; font-size: 13px; line-height: 18px; color: var(--gs-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gs-act { align-self: center; }
+  .gs-expand { grid-column: 2 / -1; margin-top: 16px; padding: 14px; border-radius: 10px; background: var(--gs-sand); }
+  .gs-expand--tpl { padding: 14px 16px; }
+  .gs-expand--tpl fieldset > ul { row-gap: 14px; }
+  /* Each radio sits on its specimen's center line (40px tile, 20px radio). */
+  .gs .gs-expand--tpl .Polaris-Choice { align-items: flex-start; }
+  .gs .gs-expand--tpl .Polaris-Choice__Control { margin-top: 10px; }
+  .gs-tpl-opt { display: flex; align-items: flex-start; gap: 12px; }
+  .gs-tpl-text { display: grid; gap: 2px; padding-top: 1px; }
+  .gs-tpl-t { font-size: 13.5px; line-height: 20px; text-wrap: pretty; }
+  .gs-tpl-t b { font-weight: 650; }
+  .gs-tpl-d { font-size: 12.5px; line-height: 17px; color: var(--gs-muted); }
+  /* Not for this store: dimmed specimen, quiet text, an empty ring (not a
+     filled grey dot that reads as half-picked). */
+  .gs-tpl-opt.is-off .oa-tpl { opacity: .45; filter: grayscale(1); }
+  .gs-tpl-opt.is-off .gs-tpl-t, .gs-tpl-opt.is-off .gs-tpl-d { color: #7D7973; }
+  .gs .gs-expand--tpl .Polaris-RadioButton__Input:disabled + .Polaris-RadioButton__Backdrop,
+  .gs .gs-expand--tpl .Polaris-RadioButton__ChoiceLabel:hover .Polaris-RadioButton__Input:disabled + .Polaris-RadioButton__Backdrop {
+    background: transparent; border: var(--p-border-width-0165, 1.5px) solid #D6D3CC; }
+  .gs .gs-expand--tpl .Polaris-RadioButton__Input:disabled + .Polaris-RadioButton__Backdrop::before { opacity: 0; }
+
+  .gs-notice { margin-top: 20px; }
+  .gs-cta { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 18px; margin-top: 28px; }
+  .gs-meta { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; font-size: 12.5px; color: var(--gs-muted); }
+  .gs-meta i { width: 3px; height: 3px; border-radius: 50%; background: #D6D3CC; }
+
+  .gs-alt { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 16px 32px 18px; background: var(--gs-sand); border-top: 1px solid var(--gs-line); }
+  .gs-alt-d { font-size: 13px; color: var(--gs-muted); }
+
+  @media (max-width: 489px) {
+    .gs { padding-left: 16px; padding-right: 16px; }
+  }
+  @media (max-width: 640px) {
+    .gs { padding-top: 16px; }
+    .gs-main { padding: 18px 16px 22px; }
+    .gs-top { margin-bottom: 24px; }
+    .gs-h1 { font-size: 28px; }
+    .gs-row { grid-template-columns: 64px minmax(0, 1fr); column-gap: 14px; align-items: start; }
+    .gs-d { white-space: normal; text-wrap: pretty; }
+    .gs-act { grid-column: 2; justify-self: start; margin-top: 6px; }
+    .gs-expand { grid-column: 1 / -1; }
+    .gs-alt { padding: 14px 16px; }
+  }
 `;

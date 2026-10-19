@@ -73,7 +73,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-async function mount(initialStep = 0) {
+async function mount(initialStep = 0, data: WelcomeData = DATA) {
   vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
     const entry: Record<string, string> = { url: String(url) };
     (init?.body as FormData | undefined)?.forEach((v, k) => (entry[k] = String(v)));
@@ -92,7 +92,7 @@ async function mount(initialStep = 0) {
   };
   const router = createMemoryRouter(
     [
-      { path: "/", element: <AppProvider i18n={en}><WelcomeIntro data={DATA} initialStep={initialStep} /></AppProvider> },
+      { path: "/", element: <AppProvider i18n={en}><WelcomeIntro data={data} initialStep={initialStep} /></AppProvider> },
       { path: "/app/api/setup-offer", action: offerAction },
       { path: "/app/onboarding/scope", element: <Landed name="scope" /> },
     ],
@@ -147,7 +147,7 @@ describe("Welcome intro", () => {
     expect(text()).toContain("AI writes your quiz");
     await click(button("Get started"));
     expect(text()).toContain("What should your quiz do for you?");
-    await click(button("Skip this"));
+    await click(button("Continue"));
     expect(text()).toContain("How do you want to get started?");
     await click(button("Back"));
     expect(text()).toContain("What should your quiz do for you?");
@@ -156,7 +156,9 @@ describe("Welcome intro", () => {
 
   it("goals toggle, save when moving on, and travel with the finish", async () => {
     const text = await mount(1);
-    expect(button("Skip this")).toBeTruthy();
+    // The main action always moves on; picks are optional.
+    expect(button("Continue")).toBeTruthy();
+    expect(button("Skip this")).toBeUndefined();
     const goal = (t: string) => buttons().find((b) => b.textContent?.includes(t));
     await click(goal("Grow my email list"));
     await click(goal("Cut returns"));
@@ -202,6 +204,33 @@ describe("Welcome intro", () => {
     await settle(300);
     expect(apiPosts.find((p) => p.intent === "complete")).toMatchObject({ path: "expert" });
     expect(landed).toContain("scope");
+  });
+
+  it("draws the store's own products when it has them, and drawn ones otherwise", async () => {
+    const preview = ["Cherry Glaze", "Ballet Pink", "Boba", "Dirty Martini"].map((name, i) => ({
+      name,
+      imageUrl: `https://cdn.shopify.com/s/files/p${i}.webp?v=1`,
+    }));
+    const text = await mount(0, { ...DATA, preview });
+    for (const p of preview) expect(text()).toContain(p.name);
+    // Sized for the drawing, not the full-resolution original.
+    const img = document.querySelector<HTMLImageElement>(".gw-res-img img")!;
+    expect(img.getAttribute("src")).toBe("https://cdn.shopify.com/s/files/p0.webp?v=1&width=220");
+    expect(text()).not.toContain("Glow Serum");
+    act(() => root?.unmount());
+    const empty = await mount(0);
+    expect(empty()).toContain("Glow Serum");
+    expect(document.querySelector(".gw-res-img img")).toBeNull();
+    // The brand mark is the black logo, not a tinted tile.
+    expect(document.querySelector(".oa-logo")?.getAttribute("src")).toBe("/brand/gleame-logo.svg");
+  });
+
+  it("goal cards show what each goal adds, with no icon tiles", async () => {
+    const text = await mount(1);
+    expect(text()).toContain("Email me my matches");
+    expect(text()).toContain("Light warm");
+    expect(document.querySelectorAll(".gw-goal .Polaris-Icon")).toHaveLength(0);
+    expect(document.querySelectorAll(".gw-goal-art")).toHaveLength(4);
   });
 
   it("Skip intro finishes as a skip from any slide but the last", async () => {
