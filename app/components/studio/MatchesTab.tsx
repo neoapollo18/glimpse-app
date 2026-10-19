@@ -64,11 +64,30 @@ const linkButton: React.CSSProperties = {
   cursor: "pointer",
 };
 
+// Requests still in flight. A sentence commits on blur, so clicking Publish
+// right after typing one races its save: the Publish sheet waits for these
+// before it checks whether matching is set up.
+const inflight = new Set<Promise<unknown>>();
+
+/** Resolves once every Check matches request in flight has finished, or
+ * after `capMs` (an AI turn can take a while; the check then reads anyway). */
+export function answerRuleSavesSettled(capMs = 8000): Promise<void> {
+  if (inflight.size === 0) return Promise.resolve();
+  return Promise.race([
+    Promise.allSettled([...inflight]).then(() => undefined),
+    new Promise<void>((r) => setTimeout(r, capMs)),
+  ]);
+}
+
 async function post(fields: Record<string, string>): Promise<any> {
   const fd = new FormData();
   for (const [k, v] of Object.entries(fields)) fd.append(k, v);
-  const res = await fetch("/app/api/answer-rules", { method: "POST", body: fd });
-  return res.json().catch(() => ({ ok: false, error: "Something went wrong" }));
+  const request = fetch("/app/api/answer-rules", { method: "POST", body: fd }).then((res) =>
+    res.json().catch(() => ({ ok: false, error: "Something went wrong" })),
+  );
+  inflight.add(request);
+  void request.catch(() => {}).finally(() => inflight.delete(request));
+  return request;
 }
 
 function fireEvent(event: string, properties: Record<string, unknown> = {}) {

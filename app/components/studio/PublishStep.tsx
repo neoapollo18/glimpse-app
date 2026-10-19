@@ -10,6 +10,7 @@ import {
   Icon,
   InlineStack,
   Modal,
+  Spinner,
   Text,
   Box,
   InlineGrid,
@@ -21,6 +22,8 @@ import { isQuestionServable } from "../../lib/option-visibility";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { addQuizBlockUrl, templateLabel } from "../../lib/theme-extension";
 import { useQuizBlockStatus } from "../QuizPlacementStatus";
+import { matchingReadiness } from "../../lib/matching-readiness";
+import { answerRuleSavesSettled } from "./MatchesTab";
 
 // Optional scopes for one-click publish (shopify.app.glimpse-app.toml).
 const PAGE_SCOPE = "write_online_store_pages";
@@ -70,6 +73,48 @@ export function templateAwaitingPublish(data: StudioLoaderData): boolean {
 const PREVIEW_ONLY_LINE =
   "Template quizzes are paused on storefronts right now, so publishing is paused for this quiz. While paused, shoppers see the classic quiz layout.";
 
+/** Matching readiness from the Studio loader: every source the recommender
+ * matches on (lib/matching-readiness), read on each load. Data without it
+ * (older fixtures) falls back to the draft's rules and mode. */
+function loaderMatchingReady(data: StudioLoaderData): boolean {
+  if (data.matchingReady) return data.matchingReady.ready;
+  const settings = (data.draft?.settings ?? {}) as Record<string, unknown>;
+  return matchingReadiness({
+    ruleCount: data.draft?.flow.rules.length ?? 0,
+    mode: String(settings.recommendation_mode ?? "matrix"),
+  }).ready;
+}
+
+/** Matching readiness, re-read whenever `active` turns true: Check matches
+ * saves through a plain fetch that doesn't revalidate the Studio loader, so
+ * the loader's answer could predate a sentence written seconds ago. Saves
+ * still in flight (a sentence commits on blur, as Publish is clicked)
+ * finish first. A failed re-read keeps the loader's answer. */
+function useMatchingReady(data: StudioLoaderData, active: boolean): { ready: boolean; checking: boolean } {
+  const [fresh, setFresh] = useState<boolean | null>(null);
+  const [checking, setChecking] = useState(false);
+  useEffect(() => {
+    if (!active) return;
+    setFresh(null);
+    setChecking(true);
+    let cancelled = false;
+    answerRuleSavesSettled()
+      .then(() => fetch("/app/api/matching-readiness"))
+      .then((r) => r.json())
+      .then((d: { ok?: boolean; ready?: unknown }) => {
+        if (!cancelled && d?.ok && typeof d.ready === "boolean") setFresh(d.ready);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setChecking(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [active]);
+  return { ready: fresh ?? loaderMatchingReady(data), checking };
+}
+
 
 // ---------------------------------------------------------------------
 // Publish sheet (modal)
@@ -91,6 +136,8 @@ export function PublishSheet({
   const [addToMenu, setAddToMenu] = useState(true);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ liveUrl: string | null; error: string | null } | null>(null);
+  // Matching is re-read on every opening (useMatchingReady).
+  const { ready: logicReady, checking: checkingMatching } = useMatchingReady(data, open);
   // Each opening starts at the checklist (the Hidden badge opens this sheet
   // to show which questions are hidden), not at the last publish's result.
   useEffect(() => {
@@ -100,12 +147,7 @@ export function PublishSheet({
   const shopify = useAppBridge();
 
   const flow = data.draft?.flow;
-  const settings = (data.draft?.settings ?? {}) as Record<string, unknown>;
   const questionCount = flow?.questions.length ?? 0;
-  const ruleCount = flow?.rules.length ?? 0;
-  const mode = String(settings.recommendation_mode ?? "matrix");
-  const hasGuidance = String(settings.ai_guidance ?? "").trim() !== "";
-  const logicReady = ruleCount > 0 || (mode !== "matrix" && hasGuidance);
   const servableCount = (flow?.questions ?? []).filter((q) =>
     isQuestionServable(q as Parameters<typeof isQuestionServable>[0]),
   ).length;
@@ -248,15 +290,19 @@ export function PublishSheet({
                   ))}
                 </>
               )}
-              <ChecklistRow
-                ok={logicReady}
-                warn={!logicReady}
-                label={
-                  logicReady
-                    ? "Matching is set up"
-                    : "No matching set up yet. Shoppers still get results, but generic ones."
-                }
-              />
+              {checkingMatching ? (
+                <ChecklistRow ok={false} pending label="Checking matching…" />
+              ) : (
+                <ChecklistRow
+                  ok={logicReady}
+                  warn={!logicReady}
+                  label={
+                    logicReady
+                      ? "Matching is set up"
+                      : "No matching set up yet. Shoppers still get results, but generic ones."
+                  }
+                />
+              )}
               <ChecklistRow
                 ok={data.catalog.syncEnabled}
                 warn={!data.catalog.syncEnabled}
@@ -507,7 +553,9 @@ export function LiveTab({
   const ruleCount = data.draft?.flow.rules.length ?? 0;
   const mode = String(settings.recommendation_mode ?? "matrix");
   const surfaceOn = data.quizSurfaceEnabled !== false;
-  const matrixWithoutRules = mode === "matrix" && ruleCount === 0;
+  // Re-read on arrival: matching may have been written in Check matches
+  // since the Studio loaded.
+  const noMatching = !useMatchingReady(data, true).ready;
   const previewOnly = isPreviewOnly(data);
   const awaitingPublish = templateAwaitingPublish(data);
   // Two separate facts: the on/off switch (shoppers may see the quiz) and
@@ -591,7 +639,7 @@ export function LiveTab({
                     Hide from shoppers
                   </Button>
                 ) : !previewOnly ? (
-                  <Button loading={toggling} disabled={questionCount === 0 || matrixWithoutRules} onClick={() => setLive(true)}>
+                  <Button loading={toggling} disabled={questionCount === 0 || noMatching} onClick={() => setLive(true)}>
                     Show to shoppers
                   </Button>
                 ) : null}
@@ -617,7 +665,7 @@ export function LiveTab({
               {questionCount === 1 ? "question" : "questions"}
               {ruleCount > 0 ? ` · ${ruleCount} ${ruleCount === 1 ? "rule" : "rules"}` : ""} · {MODE_LABELS[mode] ?? mode} matching.
             </Text>
-            {matrixWithoutRules && !surfaceOn && !previewOnly && (
+            {noMatching && !surfaceOn && !previewOnly && (
               <Text as="p" variant="bodySm" tone="subdued">
                 Pin products to answer paths in Check matches before showing the quiz to shoppers.
               </Text>
@@ -877,15 +925,19 @@ function versionLabel(v: { label: string | null; createdBy: string }): string {
   return "Auto-saved";
 }
 
-function ChecklistRow({ ok, warn, label }: { ok: boolean; warn?: boolean; label: string }) {
+function ChecklistRow({ ok, warn, pending, label }: { ok: boolean; warn?: boolean; pending?: boolean; label: string }) {
   return (
     <InlineStack gap="200" blockAlign="center" wrap={false}>
-      <span style={{ flexShrink: 0 }}>
-        <Icon
-          source={ok ? CheckIcon : warn ? AlertTriangleIcon : XIcon}
-          tone={ok ? "success" : warn ? "caution" : "critical"}
-          accessibilityLabel={ok ? "Done" : warn ? "Check" : "Missing"}
-        />
+      <span style={{ flexShrink: 0, display: "inline-flex", width: 20, justifyContent: "center" }}>
+        {pending ? (
+          <Spinner size="small" accessibilityLabel="Checking" />
+        ) : (
+          <Icon
+            source={ok ? CheckIcon : warn ? AlertTriangleIcon : XIcon}
+            tone={ok ? "success" : warn ? "caution" : "critical"}
+            accessibilityLabel={ok ? "Done" : warn ? "Check" : "Missing"}
+          />
+        )}
       </span>
       <Text as="span" variant="bodyMd">
         {label}

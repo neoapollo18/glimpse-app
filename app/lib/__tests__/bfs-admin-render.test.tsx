@@ -259,6 +259,75 @@ describe("Studio publish flow", () => {
     expect(button("Cancel")).toBeTruthy();
   });
 
+  // bsdhaus (kpfu0s-11, 2026-10-18): matrix mode, no matrix rules, matched
+  // by Check matches sentences. The sheet warned "No matching set up yet"
+  // and Show to shoppers was disabled.
+  const sentencesOnly = (ready: boolean) =>
+    studioData({
+      draft: {
+        settings: { recommendation_mode: "matrix", ai_guidance: "" },
+        flow: { questions: [{ axisKey: "vibe", prompt: "Vibe?", options: [] }], rules: [] },
+      },
+      matchingReady: { ready, sources: ready ? ["answers"] : [] },
+    });
+
+  it("counts Check matches sentences as matching", async () => {
+    const text = await mount(<PublishSheet data={sentencesOnly(true)} problems={[]} open onClose={() => {}} onFix={() => {}} />);
+    expect(text()).toContain("Matching is set up");
+    expect(text()).not.toContain("No matching set up yet");
+  });
+
+  it("re-reads matching when it opens, so a sentence saved seconds ago counts", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      calls.push(String(url));
+      return new Response(JSON.stringify({ ok: true, ready: true, sources: ["answers"] }), { headers: { "Content-Type": "application/json" } });
+    });
+    try {
+      const text = await mount(<PublishSheet data={sentencesOnly(false)} problems={[]} open onClose={() => {}} onFix={() => {}} />);
+      expect(calls).toContain("/app/api/matching-readiness");
+      expect(text()).toContain("Matching is set up");
+      expect(text()).not.toContain("No matching set up yet");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("still warns when nothing matches, and keeps the loader's answer if the re-read fails", async () => {
+    const text = await mount(<PublishSheet data={sentencesOnly(false)} problems={[]} open onClose={() => {}} onFix={() => {}} />);
+    expect(text()).toContain("No matching set up yet");
+  });
+
+  it("Show to shoppers is enabled for a quiz matched by sentences", async () => {
+    await mount(
+      <LiveTab data={sentencesOnly(true)} quizName="Find the tile" onOpenPublish={() => {}} onOpenHistory={() => {}} onViewStore={() => {}} viewStoreBusy={false} />,
+    );
+    expect(button("Show to shoppers")?.getAttribute("aria-disabled")).not.toBe("true");
+    expect(document.body.textContent).not.toContain("Pin products to answer paths");
+  });
+
+  it("the Live tab re-reads matching too, so sentences written since load count", async () => {
+    vi.stubGlobal("fetch", async () =>
+      new Response(JSON.stringify({ ok: true, ready: true, sources: ["answers"] }), { headers: { "Content-Type": "application/json" } }));
+    try {
+      await mount(
+        <LiveTab data={sentencesOnly(false)} quizName="Find the tile" onOpenPublish={() => {}} onOpenHistory={() => {}} onViewStore={() => {}} viewStoreBusy={false} />,
+      );
+      expect(button("Show to shoppers")?.getAttribute("aria-disabled")).not.toBe("true");
+      expect(document.body.textContent).not.toContain("Pin products to answer paths");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("Show to shoppers stays off for a quiz with nothing to match on", async () => {
+    await mount(
+      <LiveTab data={sentencesOnly(false)} quizName="Find the tile" onOpenPublish={() => {}} onOpenHistory={() => {}} onViewStore={() => {}} viewStoreBusy={false} />,
+    );
+    expect(button("Show to shoppers")?.getAttribute("aria-disabled")).toBe("true");
+    expect(document.body.textContent).toContain("Pin products to answer paths");
+  });
+
   it("the Live tab body has no primary buttons (the title bar's Publish is the page's one)", async () => {
     await mount(
       <LiveTab data={studioData()} quizName="Find Your Vibe" onOpenPublish={() => {}} onOpenHistory={() => {}} onViewStore={() => {}} viewStoreBusy={false} />,

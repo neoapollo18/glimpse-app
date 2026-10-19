@@ -31,12 +31,15 @@ import {
   decorateFlowForColumnar,
   getPoolSnapshot,
   loadColumnarStudioView,
+  enabledColumnarSpec,
   maybeRefreshColumnarPool,
   syncColumnarPool,
   updateColumnarSpec,
   type ColumnarStudioView,
 } from "../lib/columnar/engine.server";
 import { applyColumnarPatch, validateColumnarPatch } from "../lib/columnar/spec";
+import { matchingReadiness } from "../lib/matching-readiness";
+import { countActiveAnswerRules, getMatchingReadiness } from "../lib/matching-readiness.server";
 import {
   captureLiveConfig,
   saveLiveQuizConfig,
@@ -574,7 +577,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const slideParam = url.searchParams.get("slide") ?? "";
   const onOffers = slideParam === "offers-bundle" || slideParam === "offers-crosssell";
   const onIntegrations = slideParam === "integrations";
-  const [offers, offerCatalog, klaviyo, matchProducts, whyProducts, columnar] = await Promise.all([
+  const [offers, offerCatalog, klaviyo, matchProducts, whyProducts, columnar, answerRuleCount] = await Promise.all([
     onOffers ? getQuizOffers(shop.id) : Promise.resolve(null as QuizOffers | null),
     slideParam === "offers-crosssell" ? loadOfferCatalog(shop.id) : Promise.resolve(null),
     onIntegrations
@@ -600,10 +603,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           return null;
         })
       : Promise.resolve(null as ColumnarStudioView | null),
+    draft ? countActiveAnswerRules(shop.id, draft.flow.questions.map((q) => q.axisKey)) : Promise.resolve(0),
   ]);
+
+  // Publish checklist and the Live tab's Show to shoppers: every source
+  // the recommender matches on, not only matrix rules (lib/matching-readiness).
+  const matchingReady = matchingReadiness({
+    ruleCount: counts?.rules ?? draft?.flow.rules.length ?? 0,
+    mode: liveConfig?.recommendation_mode ?? "matrix",
+    columnar: Boolean(enabledColumnarSpec(liveConfig)),
+    answerRules: answerRuleCount,
+  });
 
   return json({
     matching,
+    matchingReady,
     offers,
     offerCatalog,
     klaviyo,
@@ -894,17 +908,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         // from the publish era. Config edits are already on the site.
         const enabled = String(formData.get("enabled")) === "true";
         if (enabled) {
-          // The old publish gate, relocated: a matrix-mode quiz with zero
-          // rules recommends from the generic fallback pool — don't let it
-          // in front of shoppers. (ai/hybrid rank without rules by design.)
-          const [counts, cfg] = await Promise.all([
+          // The old publish gate, relocated: a quiz that matches on nothing
+          // (no rules, answer sentences, columnar engine or ai/hybrid mode)
+          // recommends from the generic fallback pool, so don't let it in
+          // front of shoppers (lib/matching-readiness).
+          const [counts, readiness] = await Promise.all([
             getRecommendationCounts(shop.id).catch(() => null),
-            getChatAssistantConfig(shopDomain).catch(() => null),
+            getMatchingReadiness(shop.id, shopDomain),
           ]);
           if ((counts?.questions ?? 0) === 0) {
             return json({ ok: false, error: "Your quiz has no questions yet.", intent });
           }
-          if ((counts?.rules ?? 0) === 0 && (cfg?.recommendation_mode ?? "matrix") === "matrix") {
+          if (!readiness.ready) {
             return json({
               ok: false,
               error:
