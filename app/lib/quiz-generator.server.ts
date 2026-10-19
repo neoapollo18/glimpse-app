@@ -789,7 +789,6 @@ export async function generateQuizConfig(args: {
   const profile = await loadBrandProfileSafe(shopDomain);
   const resolvedBrief: BrandBrief = {
     ...brief,
-    goals: brief.goals ?? (await loadIntroGoals(shopDomain)),
     category: (profile?.category ?? "").trim() || brief.category || "beauty products",
     brandVoice:
       (profile?.tone ? TONE_VOICE[profile.tone] : null) ?? (brief.brandVoice || "warm and confident"),
@@ -804,6 +803,12 @@ export async function generateQuizConfig(args: {
       ? (profile.templateAssignment.template as TemplateId)
       : null;
   const existingConfig = await captureLiveConfigSafe(shopId);
+  // Welcome-intro goals shape a store's FIRST generated quiz only: a later
+  // rebuild (after the quiz was emptied) must not undo Studio choices, such
+  // as email capture switched off.
+  if (!resolvedBrief.goals && !existingConfig?.settings.quiz_generation_report) {
+    resolvedBrief.goals = await loadIntroGoals(shopDomain);
+  }
   const persistedTemplate = existingConfig?.settings.quiz_template ?? null;
   let assignedTemplate: TemplateId | null = profileTemplate;
   let templateSource: "profile" | "merchant" = "profile";
