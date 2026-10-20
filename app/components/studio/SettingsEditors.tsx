@@ -645,13 +645,8 @@ export function PhotoEditor({
           setGateEnabled(v);
           schedule("copy", "quiz_gate_enabled", v);
         }}
-        helpText="When off, shoppers go straight from the questions to their results, and so does the preview when you play the quiz. It only appears here, marked Off, so you can still edit it. The results page's shade picker and try-on offer are unaffected."
+        helpText="When off, shoppers go straight from the questions to their results."
       />
-      {!gateEnabled && (
-        <Banner tone="info">
-          The photo step is turned off: shoppers skip straight to results.
-        </Banner>
-      )}
       <BlockStack gap="100">
         <Text as="p" variant="bodyMd">
           AI try-on: {tryonEnabled ? "On" : "Off"}

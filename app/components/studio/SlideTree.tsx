@@ -157,6 +157,7 @@ export function SlideTree({
   hasTemplate,
   onOpenGallery,
   imagesAttention,
+  showPhoto = true,
 }: {
   flow: StudioFlow | null;
   selectedSlide: string;
@@ -178,6 +179,9 @@ export function SlideTree({
   onOpenGallery?: () => void;
   /** Reason text when the Images item should carry the amber dot. */
   imagesAttention?: string | null;
+  /** The photo step does something for this store (try-on on and set up,
+   * or a shade question that reads the photo). */
+  showPhoto?: boolean;
 }) {
   const questions = flow?.questions ?? [];
   // Drag-to-reorder: question rows only. dragQi = the question being
@@ -451,10 +455,9 @@ export function SlideTree({
         ))}
 
         {row("lead", "Email capture", { icon: EmailIcon })}
-        {/* Always listed: the widget shows the photo step and the try-on
-            upsell even without a photo question, so its on/off switches
-            must always be reachable. */}
-        {row("photo", "Photo & try-on", { icon: CameraIcon })}
+        {/* Only where the photo does something: shoppers never see the
+            step otherwise (gateOnForShoppers in the widget). */}
+        {showPhoto && row("photo", "Photo & try-on", { icon: CameraIcon })}
         {row("results", "Results", { icon: FlagIcon })}
 
         {!readOnly && onAdd && (

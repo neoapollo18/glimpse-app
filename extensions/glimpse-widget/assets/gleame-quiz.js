@@ -2911,10 +2911,11 @@
   // so merchants can style it while it's off.
   // Whether shoppers see the photo step.
   function gateOnForShoppers() {
-    // Template quizzes: with no photo question AND try-on off, the photo
-    // would feed nothing, so the step is skipped. (Legacy shops keep the
-    // shipped behavior.)
-    if (config && config.template && !shadeAxis() && config.tryonEnabled === false) return false;
+    // The photo feeds two things: try-on (on only when the Gleame team
+    // turned it on AND a product is set up, see quiz-config) and a shade
+    // question. With neither, asking for a photo does nothing, so every
+    // quiz, classic or template, skips the step.
+    if (!shadeAxis() && config && config.tryonEnabled === false) return false;
     return !(config && config.gate && config.gate.enabled === false);
   }
 

@@ -622,7 +622,9 @@ describe("v3 widget templates", () => {
   });
 
   it("(8a) legacy walk-through: template null never touches template DOM; structure pinned", async () => {
-    const root = await boot({ config: makeConfig(null), flow: makeFlow(), sampleRecommend: makeSampleRecommend(), productJson: makeProductJson(), studio: false, overrides: { step: null } });
+    // Try-on on so the walk-through still passes the photo step (with
+    // try-on off and no shade question it is skipped, see (8b)).
+    const root = await boot({ config: { ...makeConfig(null), tryonEnabled: true }, flow: makeFlow(), sampleRecommend: makeSampleRecommend(), productJson: makeProductJson(), studio: false, overrides: { step: null } });
     const assertLegacy = (label: string) => {
       expect(root.querySelector(".gq-slot"), label).toBeNull();
       expect(root.querySelector('[class*="gq-tpl-"]'), label).toBeNull();
@@ -661,6 +663,49 @@ describe("v3 widget templates", () => {
     expect(stageChild(root).classList.contains("gq-results")).toBe(true);
     expect(root.querySelectorAll(".gq-match-card").length).toBe(3);
     assertLegacy("results");
+  });
+
+  it("(8c) classic quiz with a shade question keeps the photo step even with try-on off (shade detection)", async () => {
+    const flow = {
+      ...makeFlow(),
+      photoAxes: ["shade"],
+      photoAxisDetails: [{ key: "shade", label: "Shade", values: [{ value: "fair", label: "Fair", swatch: "#F1D3C2" }] }],
+    };
+    const root = await boot({ config: { ...makeConfig(null), tryonEnabled: false }, flow, sampleRecommend: makeSampleRecommend(), productJson: makeProductJson(), studio: false, overrides: { step: null } });
+    (root.querySelector(".gq-intro-question .gq-chip, .gq-intro-question .gq-option") as HTMLElement).click();
+    await wait(220 + SWAP);
+    (root.querySelector(".gq-option-block button") as HTMLElement).click();
+    await wait(220 + SWAP);
+    (root.querySelector(".gq-option-block button") as HTMLElement).click();
+    (root.querySelector(".gq-continue-btn") as HTMLElement).click();
+    await wait(SWAP);
+    (root.querySelector(".gq-option-block button") as HTMLElement).click();
+    await wait(220 + SWAP);
+    (root.querySelector(".gq-option-block button") as HTMLElement).click();
+    await wait(220 + SWAP);
+    (root.querySelector(".gq-skip-link") as HTMLElement).click();
+    await wait(SWAP);
+    expect(stageChild(root).classList.contains("gq-step--gate")).toBe(true);
+  });
+
+  it("(8b) classic quiz with try-on off and no shade question: no photo step, lead goes straight to results", async () => {
+    const root = await boot({ config: { ...makeConfig(null), tryonEnabled: false }, flow: makeFlow(), sampleRecommend: makeSampleRecommend(), productJson: makeProductJson(), studio: false, overrides: { step: null } });
+    (root.querySelector(".gq-intro-question .gq-chip, .gq-intro-question .gq-option") as HTMLElement).click();
+    await wait(220 + SWAP);
+    (root.querySelector(".gq-option-block button") as HTMLElement).click();
+    await wait(220 + SWAP);
+    (root.querySelector(".gq-option-block button") as HTMLElement).click();
+    (root.querySelector(".gq-continue-btn") as HTMLElement).click();
+    await wait(SWAP);
+    (root.querySelector(".gq-option-block button") as HTMLElement).click();
+    await wait(220 + SWAP);
+    (root.querySelector(".gq-option-block button") as HTMLElement).click();
+    await wait(220 + SWAP);
+    expect(stageChild(root).classList.contains("gq-step--lead")).toBe(true);
+    (root.querySelector(".gq-skip-link") as HTMLElement).click();
+    await wait(SWAP);
+    expect(root.querySelector(".gq-step--gate")).toBeNull();
+    expect(stageChild(root).classList.contains("gq-results")).toBe(true);
   });
 
   it("(8b/8c) storefront mode renders every template's intro, first visual question, lead and results; 'off' never renders a lead", async () => {

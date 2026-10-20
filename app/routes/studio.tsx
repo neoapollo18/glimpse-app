@@ -141,6 +141,7 @@ import {
 } from "../components/studio/navigate-parent";
 import { setAppToastMode, showAppToast } from "../components/studio/toast";
 import { StudioToastHost } from "../components/studio/StudioToastHost";
+import { shopHasTryonProducts } from "../lib/tryon-availability.server";
 import { ArrivalNotice, NoticeSlot } from "../components/studio/StudioNotices";
 import { StudioSaveBarProvider, useStudioSaveBarHost } from "../components/studio/save-bar";
 import { postStudioAction } from "../components/studio/studio-data";
@@ -615,7 +616,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     answerRules: answerRuleCount,
   });
 
+  // The photo step only does something with try-on (switched on by the
+  // Gleame team AND a product set up) or a shade question that reads the
+  // photo; the Studio lists it only then, matching what shoppers see.
+  const tryonAvailable =
+    liveConfig?.quiz_tryon_enabled === true
+      ? await shopHasTryonProducts(shop.id, liveConfig).catch(() => true)
+      : false;
+
   return json({
+    tryonAvailable,
     matching,
     matchingReady,
     offers,
@@ -2291,6 +2301,10 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
               hasTemplate={Boolean(data.studio.template)}
               onOpenGallery={tab === "build" ? () => confirmLeave(() => setOverlay(true)) : undefined}
               imagesAttention={imagesAttention}
+              showPhoto={
+                data.tryonAvailable === true ||
+                Boolean(data.draft?.flow.axes.some((a: { source: string }) => a.source === "photo"))
+              }
             />
           )
         }
