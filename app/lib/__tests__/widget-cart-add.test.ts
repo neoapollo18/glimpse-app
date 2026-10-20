@@ -525,3 +525,35 @@ describe("Bundle & save card (classic and t1/t2/t5)", () => {
     expect(problemText(root, ".gq-bundle-offer")).toBe(SOLD_OUT.description);
   });
 });
+
+describe("theme cart drawer after a quiz add", () => {
+  // Dawn-family themes mark <cart-drawer> "is-empty" while the cart is
+  // empty, which hides the drawer header and items. renderContents only
+  // swaps what is inside it, so a first add into an empty cart must drop
+  // the class too (as the theme's own product form does), or the drawer
+  // opens showing only the subtotal.
+  it("Dawn-family drawer: renders the sections we asked for and drops the empty-cart class", async () => {
+    const root = await bootResults(null);
+    const drawer = document.createElement("cart-drawer");
+    drawer.className = "drawer is-empty";
+    const rendered: unknown[] = [];
+    (drawer as any).renderContents = (state: unknown) => rendered.push(state);
+    document.body.appendChild(drawer);
+    const sections = { "cart-drawer": '<div id="CartDrawer"></div>', "cart-icon-bubble": "<span></span>" };
+    fetchMock = vi.fn((url: string, init: any = {}) =>
+      url.includes("/cart/add.js")
+        ? cartAdd(init).then((r: any) => ({ ...r, json: () => r.json().then((b: any) => ({ ...b, sections })) }))
+        : routedFetch(url, init),
+    );
+    (window as any).fetch = fetchMock;
+
+    const btn = root.querySelector(".gq-bundle-offer .gq-bo-add") as HTMLButtonElement;
+    btn.click();
+    await settle();
+
+    expect(btn.textContent).toBe("Added to bag ✓");
+    expect(rendered).toHaveLength(1);
+    expect((rendered[0] as any).sections).toEqual(sections);
+    expect(drawer.classList.contains("is-empty")).toBe(false);
+  });
+});

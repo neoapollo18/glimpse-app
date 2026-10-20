@@ -819,11 +819,24 @@
   // <cart-drawer> custom element exposes renderContents(), which swaps in the
   // 'cart-drawer'/'cart-icon-bubble' sections we requested and opens itself —
   // the same call the theme's own product form makes.
+  // An empty cart marks <cart-drawer> itself "is-empty", which hides the
+  // drawer header and line items; renderContents only replaces what is
+  // inside it, so the theme's product form drops the class after the add.
+  // Without that, a first add into an empty cart opens a drawer showing
+  // only the subtotal.
   function dawnDrawerSync(addBody) {
     var drawerEl = document.querySelector('cart-drawer');
     if (!drawerEl || typeof drawerEl.renderContents !== 'function') return false;
     if (!(addBody && addBody.sections && addBody.sections['cart-drawer'])) return false;
-    try { drawerEl.renderContents(addBody); return true; } catch (e) { return false; }
+    try {
+      drawerEl.renderContents(addBody);
+    } catch (e) {
+      return false;
+    }
+    try {
+      if (drawerEl.classList && drawerEl.classList.contains('is-empty')) drawerEl.classList.remove('is-empty');
+    } catch (e) { /* the drawer is already rendered */ }
+    return true;
   }
 
   // Prestige-family drawer: no renderContents; the theme listens for a
