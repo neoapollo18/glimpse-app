@@ -622,7 +622,8 @@ export function PhotoEditor({
   }));
   const [manualShade, setManualShade] = useState<boolean>(settings.quiz_manual_shade_enabled !== false);
   const [gateEnabled, setGateEnabled] = useState<boolean>(settings.quiz_gate_enabled !== false);
-  const [tryonEnabled, setTryonEnabled] = useState<boolean>(settings.quiz_tryon_enabled !== false);
+  // Try-on is switched on by the Gleame team (/admin), never here.
+  const tryonEnabled = settings.quiz_tryon_enabled === true;
   const setValue = (key: string, value: string) => {
     setValues((prev) => ({ ...prev, [key]: value }));
     schedule("copy", key, value);
@@ -651,16 +652,16 @@ export function PhotoEditor({
           The photo step is turned off: shoppers skip straight to results.
         </Banner>
       )}
-      <Checkbox
-        label="Generate try-on photos"
-        checked={tryonEnabled}
-        disabled={disabled}
-        onChange={(v) => {
-          setTryonEnabled(v);
-          schedule("copy", "quiz_tryon_enabled", v);
-        }}
-        helpText="When off, result cards keep the product photos, with no AI try-on images anywhere in the quiz. The photo is still used for shade detection."
-      />
+      <BlockStack gap="100">
+        <Text as="p" variant="bodyMd">
+          AI try-on: {tryonEnabled ? "On" : "Off"}
+        </Text>
+        <Text as="p" variant="bodySm" tone="subdued">
+          {tryonEnabled
+            ? "Set up by the Gleame team. Contact us to change it."
+            : "Set up by the Gleame team. Contact us if you'd like try-on photos in your quiz."}
+        </Text>
+      </BlockStack>
       <CopyField label="Headline" fieldKey="quiz_gate_headline" values={values} setValue={setValue} disabled={disabled} />
       <CopyField label="Helper text" fieldKey="quiz_gate_helper" values={values} setValue={setValue} disabled={disabled} multiline={2} />
       <InlineStack gap="200">

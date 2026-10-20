@@ -22,6 +22,7 @@ import {
   Box,
   Icon,
   Checkbox,
+  InlineGrid,
 } from "@shopify/polaris";
 import { SearchIcon } from "@shopify/polaris-icons";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
@@ -39,6 +40,8 @@ import {
 } from "../lib/supabase.server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { shopHasTryonProducts } from "../lib/tryon-availability.server";
+import { invalidateStorefrontCache } from "../lib/storefront-cache.server";
 import {
   ADMIN_ALLOWED_SHOPS,
   mintAdminToken,
@@ -206,7 +209,34 @@ interface Shop {
    * from configured try-on prompts; true/false forces on/off. Gates the
    * try-on nav, home strip, and the legacy analytics sections. */
   vto_enabled?: boolean | null;
+  /** The store's quiz, for the Features panel. Null = no quiz config row. */
+  quiz?: QuizState | null;
 }
+
+interface QuizState {
+  /** Shoppers can see the quiz (on, in quiz or both mode). */
+  live: boolean;
+  /** Template served live, or null for the classic quiz. */
+  template: string | null;
+  /** chat_assistant_config.quiz_tryon_enabled: set here only (migration 094). */
+  tryonEnabled: boolean;
+  /** At least one product the quiz can recommend is set up for try-on;
+   * shoppers see try-on only when this and tryonEnabled are both true.
+   * Null = couldn't read. */
+  tryonReady: boolean | null;
+}
+
+type QuizConfigRow = {
+  shop_domain: string;
+  enabled: boolean | null;
+  assistant_mode: string | null;
+  quiz_template: string | null;
+  template_live_at: string | null;
+  quiz_tryon_enabled: boolean | null;
+  product_scope: string | null;
+  selected_product_ids: string[] | null;
+  quiz_multi_set_prompt: string | null;
+};
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   console.log("🔐 Founders admin page accessed");
@@ -255,6 +285,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     for (const ps of prismaShops) {
       if (ps.accessToken) shopTokenMap.set(ps.shop, { token: ps.accessToken, scope: ps.scope });
     }
+
+    // Quiz state per store for the Features panel: live or not, template,
+    // and whether try-on is on and actually set up.
+    const { data: quizConfigs, error: quizConfigsError } = await supabase
+      .from("chat_assistant_config")
+      .select("shop_domain, enabled, assistant_mode, quiz_template, template_live_at, quiz_tryon_enabled, product_scope, selected_product_ids, quiz_multi_set_prompt");
+    if (quizConfigsError) console.error("Error fetching quiz configs:", quizConfigsError.message);
+    const quizConfigFor = new Map(
+      ((quizConfigs ?? []) as QuizConfigRow[]).map((c) => [c.shop_domain, c]),
+    );
 
     // For each shop, fetch products with category info and variant configs
     const shopsWithProducts = await Promise.all(
@@ -329,8 +369,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           ? diffMissingScopes(tokenEntry.scope)
           : null;
 
+        const cfg = quizConfigFor.get(shop.shop_domain);
+        let quiz: QuizState | null = null;
+        if (cfg) {
+          let tryonReady: boolean | null = null;
+          try {
+            tryonReady = await shopHasTryonProducts(shop.id, cfg as never);
+          } catch (e) {
+            console.error(`[admin] try-on readiness unreadable for ${shop.shop_domain}:`, e instanceof Error ? e.message : e);
+          }
+          quiz = {
+            live: cfg.enabled === true && (cfg.assistant_mode == null || cfg.assistant_mode === "quiz" || cfg.assistant_mode === "both"),
+            template: cfg.template_live_at ? cfg.quiz_template : null,
+            tryonEnabled: cfg.quiz_tryon_enabled === true,
+            tryonReady,
+          };
+        }
+
         return {
           ...shop,
+          quiz,
           products: productsWithVariants,
           conversionStats,
           monthlySessions: shop.monthly_sessions ?? null,
@@ -779,6 +837,32 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ success: true, vtoValue: value });
   }
 
+  if (actionType === "update-quiz-tryon") {
+    // Quiz try-on (chat_assistant_config.quiz_tryon_enabled) is switched on
+    // and off here only (migration 094): merchants see it read-only.
+    const targetShopDomain = formData.get("targetShopDomain");
+    if (!targetShopDomain || typeof targetShopDomain !== "string") {
+      return json({ success: false, error: "Missing targetShopDomain" });
+    }
+    const enabled = formData.get("enabled") === "true";
+    const { data: updated, error: updateError } = await supabase
+      .from("chat_assistant_config")
+      .update({ quiz_tryon_enabled: enabled })
+      .eq("shop_domain", targetShopDomain)
+      .select("shop_domain");
+    if (updateError) {
+      console.error(`[quiz-tryon] toggle failed for ${targetShopDomain}:`, updateError);
+      return json({ success: false, error: updateError.message });
+    }
+    // An UPDATE matching no row "succeeds": this store has no quiz config.
+    if (!updated || updated.length === 0) {
+      return json({ success: false, error: "This store has no quiz set up yet." });
+    }
+    invalidateStorefrontCache(targetShopDomain);
+    console.log(`✅ Quiz try-on ${enabled ? "ON" : "OFF"} for ${targetShopDomain} (by ${shopDomain})`);
+    return json({ success: true, tryonEnabled: enabled });
+  }
+
   if (actionType === "refresh-sessions") {
     // Per-shop manual refresh. Writes monthly_sessions/sessions_updated_at in
     // Supabase exactly like the cron; no billing side effects — tier fees
@@ -915,6 +999,28 @@ export default function FoundersAdmin() {
   const [vtoOverrides, setVtoOverrides] = useState<Record<string, "auto" | "on" | "off">>({});
   const [togglingVtoShop, setTogglingVtoShop] = useState<string | null>(null);
 
+  // Quiz try-on, the Gleame-only switch: optimistic, reverted on failure.
+  const tryonFetcher = useFetcher<any>();
+  const [tryonOverrides, setTryonOverrides] = useState<Record<string, boolean>>({});
+  const [togglingTryonShop, setTogglingTryonShop] = useState<string | null>(null);
+  const [tryonError, setTryonError] = useState<{ shop: string; message: string } | null>(null);
+  useEffect(() => {
+    if (tryonFetcher.state !== "idle" || !togglingTryonShop) return;
+    const data = tryonFetcher.data;
+    if (data?.success && typeof data.tryonEnabled === "boolean") {
+      setTryonOverrides((prev) => ({ ...prev, [togglingTryonShop]: data.tryonEnabled }));
+      setTryonError(null);
+    } else {
+      setTryonOverrides((prev) => {
+        const next = { ...prev };
+        delete next[togglingTryonShop];
+        return next;
+      });
+      setTryonError({ shop: togglingTryonShop, message: `Try-on didn't change: ${data?.error ?? "no response"}` });
+    }
+    setTogglingTryonShop(null);
+  }, [tryonFetcher.data, tryonFetcher.state, togglingTryonShop]);
+
   // Apply skin-analysis toggle results to local state when the fetcher settles.
   useEffect(() => {
     if (skinAnalysisFetcher.state !== "idle" || !togglingSkinAnalysisShop) return;
@@ -990,10 +1096,18 @@ export default function FoundersAdmin() {
   }, [refFetcher.data, refFetcher.state, refFetcherTarget]);
 
   // Filter shops by search query
-  const filteredShops = (shops || []).filter((shop: Shop) =>
-    shop.shop_domain.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    shop.shop_name?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const [shopFilter, setShopFilter] = useState<"all" | "live" | "tryon" | "tryon-unready">("all");
+  const filteredShops = (shops || []).filter((shop: Shop) => {
+    const q = searchQuery.toLowerCase();
+    const matches = shop.shop_domain.toLowerCase().includes(q) || Boolean(shop.shop_name?.toLowerCase().includes(q));
+    if (!matches) return false;
+    if (shopFilter === "live") return Boolean(shop.quiz?.live);
+    if (shopFilter === "tryon") return Boolean(tryonOverrides[shop.shop_domain] ?? shop.quiz?.tryonEnabled);
+    if (shopFilter === "tryon-unready") {
+      return Boolean(tryonOverrides[shop.shop_domain] ?? shop.quiz?.tryonEnabled) && shop.quiz?.tryonReady === false;
+    }
+    return true;
+  });
 
   const toggleShop = (shopId: string) => {
     setExpandedShop(expandedShop === shopId ? null : shopId);
@@ -1079,6 +1193,32 @@ export default function FoundersAdmin() {
 
   const isSkinAnalysisEnabled = (shop: Shop) =>
     skinAnalysisOverrides[shop.shop_domain] ?? Boolean(shop.is_skin_analysis_enabled);
+
+  const isTryonOn = (shop: Shop) => tryonOverrides[shop.shop_domain] ?? Boolean(shop.quiz?.tryonEnabled);
+
+  const setQuizTryon = (shop: Shop, enabled: boolean) => {
+    setTogglingTryonShop(shop.shop_domain);
+    setTryonOverrides((prev) => ({ ...prev, [shop.shop_domain]: enabled }));
+    const formData = new FormData();
+    formData.append("action", "update-quiz-tryon");
+    formData.append("targetShopDomain", shop.shop_domain);
+    formData.append("enabled", String(enabled));
+    formData.set("adminToken", adminToken);
+    tryonFetcher.submit(formData, { method: "POST" });
+  };
+
+  // What the try-on switch means for this store's shoppers right now.
+  const tryonHelp = (shop: Shop): string => {
+    if (!shop.quiz) return "This store has no quiz yet.";
+    const ready = shop.quiz.tryonReady;
+    if (isTryonOn(shop)) {
+      if (ready === true) return "Shoppers see try-on in the quiz.";
+      if (ready === false) return "On, but no product is set up for try-on, so shoppers don't see it yet.";
+      return "On. Couldn't check which products are set up.";
+    }
+    if (ready === true) return "Off. Products are set up: turning it on shows try-on to shoppers.";
+    return "Off. Set up a product's try-on prompt below before turning it on.";
+  };
 
   const vtoValue = (shop: Shop): "auto" | "on" | "off" =>
     vtoOverrides[shop.shop_domain] ??
@@ -1282,19 +1422,33 @@ export default function FoundersAdmin() {
             </Layout.Section>
           </Layout>
 
-          {/* Search */}
+          {/* Search and filter */}
           <Card>
-            <TextField
-              label=""
-              labelHidden
-              value={searchQuery}
-              onChange={setSearchQuery}
-              placeholder="Search shops by domain..."
-              prefix={<Icon source={SearchIcon} />}
-              autoComplete="off"
-              clearButton
-              onClearButtonClick={() => setSearchQuery("")}
-            />
+            <InlineGrid columns={{ xs: 1, md: "2fr 1fr" }} gap="300">
+              <TextField
+                label="Search"
+                labelHidden
+                value={searchQuery}
+                onChange={setSearchQuery}
+                placeholder="Search shops by domain..."
+                prefix={<Icon source={SearchIcon} />}
+                autoComplete="off"
+                clearButton
+                onClearButtonClick={() => setSearchQuery("")}
+              />
+              <Select
+                label="Show"
+                labelInline
+                options={[
+                  { label: "All stores", value: "all" },
+                  { label: "Quiz live", value: "live" },
+                  { label: "Try-on on", value: "tryon" },
+                  { label: "Try-on on, nothing set up", value: "tryon-unready" },
+                ]}
+                value={shopFilter}
+                onChange={(v) => setShopFilter(v as typeof shopFilter)}
+              />
+            </InlineGrid>
           </Card>
 
           {/* Shops List */}
@@ -1313,11 +1467,27 @@ export default function FoundersAdmin() {
           {filteredShops.map((shop: Shop) => (
             <Card key={shop.id}>
               <BlockStack gap="400">
-                {/* Shop Header - Click to expand */}
-                <InlineStack align="space-between" blockAlign="center">
-                  <BlockStack gap="100">
-                    <InlineStack gap="200" blockAlign="center">
+                {/* Store header: name, status, sessions, products */}
+                <InlineStack align="space-between" blockAlign="start" gap="400">
+                  <BlockStack gap="150">
+                    {/* align="start": the outer row's space-between is an
+                        inherited CSS variable and would spread these. */}
+                    <InlineStack gap="200" align="start" blockAlign="center">
                       <Text as="h3" variant="headingMd">{shop.shop_domain}</Text>
+                      {shop.quiz ? (
+                        <Badge tone={shop.quiz.live ? "success" : undefined}>
+                          {shop.quiz.live ? `Quiz live${shop.quiz.template ? ` · ${shop.quiz.template}` : ""}` : "Quiz off"}
+                        </Badge>
+                      ) : (
+                        <Badge>No quiz</Badge>
+                      )}
+                      {isTryonOn(shop) && (
+                        <Badge tone={shop.quiz?.tryonReady === false ? "warning" : "info"}>
+                          {shop.quiz?.tryonReady === false ? "Try-on on · nothing set up" : "Try-on on"}
+                        </Badge>
+                      )}
+                    </InlineStack>
+                    <InlineStack gap="200" align="start" blockAlign="center">
                       {(() => {
                         const info = getSessionInfo(shop);
                         if (info.count !== null && info.count !== undefined) {
@@ -1355,35 +1525,59 @@ export default function FoundersAdmin() {
                       {shop.products.length} product{shop.products.length !== 1 ? "s" : ""} configured
                     </Text>
                   </BlockStack>
-                  <BlockStack gap="200" align="end">
-                    <Checkbox
-                      label="Skin Analysis (beta)"
-                      checked={isSkinAnalysisEnabled(shop)}
-                      onChange={() => toggleSkinAnalysis(shop)}
-                      disabled={togglingSkinAnalysisShop === shop.shop_domain}
-                    />
-                    <Select
-                      label="Try-on + assistant"
-                      labelInline
-                      options={[
-                        { label: "Auto (from config)", value: "auto" },
-                        { label: "On", value: "on" },
-                        { label: "Off", value: "off" },
-                      ]}
-                      value={vtoValue(shop)}
-                      onChange={(v) => setVto(shop, v)}
-                      disabled={togglingVtoShop !== null}
-                    />
-                    {vtoError && vtoError.includes(shop.shop_domain) && (
-                      <Text as="p" variant="bodySm" tone="critical">
-                        {vtoError}
-                      </Text>
-                    )}
-                    <Button onClick={() => toggleShop(shop.id)}>
-                      {expandedShop === shop.id ? "Collapse" : "View Products"}
-                    </Button>
-                  </BlockStack>
+                  <Button onClick={() => toggleShop(shop.id)}>
+                    {expandedShop === shop.id ? "Hide products" : "View products"}
+                  </Button>
                 </InlineStack>
+
+                {/* Features: Gleame-only switches for this store. Merchants
+                    can't change any of these. */}
+                <Box background="bg-surface-secondary" padding="300" borderRadius="200">
+                  <BlockStack gap="200">
+                    <Text as="h4" variant="headingSm">Features</Text>
+                    <InlineGrid columns={{ xs: 1, md: 3 }} gap="400">
+                      <BlockStack gap="100">
+                        <Checkbox
+                          label="Quiz try-on"
+                          checked={isTryonOn(shop)}
+                          onChange={(v) => setQuizTryon(shop, v)}
+                          disabled={!shop.quiz || togglingTryonShop !== null}
+                          helpText={tryonHelp(shop)}
+                        />
+                        {tryonError && tryonError.shop === shop.shop_domain && (
+                          <Text as="p" variant="bodySm" tone="critical">
+                            {tryonError.message}
+                          </Text>
+                        )}
+                      </BlockStack>
+                      <BlockStack gap="100">
+                        <Select
+                          label="Try-on setup pages"
+                          options={[
+                            { label: "Auto (show once set up)", value: "auto" },
+                            { label: "Show", value: "on" },
+                            { label: "Hide", value: "off" },
+                          ]}
+                          value={vtoValue(shop)}
+                          onChange={(v) => setVto(shop, v)}
+                          disabled={togglingVtoShop !== null}
+                          helpText="The merchant's Products and try-on settings pages. Doesn't turn try-on on."
+                        />
+                        {vtoError && vtoError.includes(shop.shop_domain) && (
+                          <Text as="p" variant="bodySm" tone="critical">
+                            {vtoError}
+                          </Text>
+                        )}
+                      </BlockStack>
+                      <Checkbox
+                        label="Skin analysis (beta)"
+                        checked={isSkinAnalysisEnabled(shop)}
+                        onChange={() => toggleSkinAnalysis(shop)}
+                        disabled={togglingSkinAnalysisShop === shop.shop_domain}
+                      />
+                    </InlineGrid>
+                  </BlockStack>
+                </Box>
 
                 {/* Conversion Stats - Always visible */}
                 {shop.conversionStats && shop.conversionStats.totalOrders > 0 && (

@@ -456,8 +456,8 @@ const COPY_KEYS = new Set([
   "quiz_manual_shade_enabled",
   // Photo step on/off (migration 068)
   "quiz_gate_enabled",
-  // Try-on generation on/off (migration 069) — photo/shade flow unaffected
-  "quiz_tryon_enabled",
+  // quiz_tryon_enabled is deliberately NOT a copy key: try-on is switched
+  // on by the Gleame team in /admin only (2026-10-20).
   // Lead capture step (migration 067)
   "quiz_lead_enabled", "quiz_lead_collect_phone",
   "quiz_lead_headline", "quiz_lead_body", "quiz_lead_button_label",
@@ -516,7 +516,6 @@ const ENUM_COPY_KEYS: Record<string, readonly string[]> = {
 const BOOL_COPY_KEYS = new Set([
   "quiz_manual_shade_enabled",
   "quiz_gate_enabled",
-  "quiz_tryon_enabled",
   "quiz_lead_enabled",
   "quiz_lead_collect_phone",
   "quiz_bundle_enabled",

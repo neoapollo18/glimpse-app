@@ -108,3 +108,40 @@ describe("columnar spec across saves and restores", () => {
     expect(state.written).toEqual([{ recommendation_tuning: { rankerModel: "lite" } }]);
   });
 });
+
+// Quiz try-on is switched on by the Gleame team in /admin only (migration
+// 094). No editing path may change it: a Studio save, a version restore
+// or a Build with AI turn.
+describe("quiz try-on is admin-only", () => {
+  it("a restored version that had try-on on never turns it on", async () => {
+    state.live = { ...state.live, quiz_tryon_enabled: false };
+    const current = await captureLiveConfig(SHOP);
+    const restored = {
+      ...current,
+      settings: { ...current.settings, quiz_tryon_enabled: true, quiz_headline: "Restored headline" },
+    } as QuizDraft;
+    const saved = await saveLiveQuizConfig(SHOP, restored, { preWriteConfig: current });
+    expect(saved.ok).toBe(true);
+    expect(state.written).toEqual([{ quiz_headline: "Restored headline" }]);
+  });
+
+  it("an edit can't turn it off either: the live value is left alone", async () => {
+    state.live = { ...state.live, quiz_tryon_enabled: true };
+    const current = await captureLiveConfig(SHOP);
+    const edited = { ...current, settings: { ...current.settings, quiz_tryon_enabled: false } } as QuizDraft;
+    const saved = await saveLiveQuizConfig(SHOP, edited, { preWriteConfig: current });
+    expect(saved.ok).toBe(true);
+    expect(state.written).toEqual([]);
+  });
+
+  it("Build with AI can't set it", async () => {
+    state.live = { ...state.live, quiz_tryon_enabled: false };
+    const current = await captureLiveConfig(SHOP);
+    const r = applyUpdateCopy(current as DraftShape, { fields: { quiz_tryon_enabled: true } }, []);
+    if (r.ok) {
+      expect((r.draft as QuizDraft).settings.quiz_tryon_enabled).not.toBe(true);
+    } else {
+      expect(r.ok).toBe(false);
+    }
+  });
+});

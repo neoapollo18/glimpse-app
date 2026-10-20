@@ -3634,6 +3634,9 @@ export interface ChatAssistantConfig {
   // shop server-side (migration 069). The photo step, shade detection, and
   // manual shade picking are unaffected — built for Locks & Mane, whose
   // generated photos misrepresented hair color next to the detected shade.
+  // Gleame-admin only since 2026-10-20 (migration 094): set from /admin,
+  // never by a merchant edit, restore or Build with AI (saveLiveQuizConfig
+  // and the copilot copy keys skip it). Off for new stores.
   quiz_tryon_enabled: boolean;
   // "Add all to bag" bundle button under the results match grid (migration
   // 070): one cart call for every match. Label template shares the
@@ -3939,7 +3942,8 @@ const CHAT_ASSISTANT_DEFAULTS: ChatAssistantConfig = {
   quiz_shade_fallbacks: null,
   quiz_manual_shade_enabled: true,
   quiz_gate_enabled: true,
-  quiz_tryon_enabled: true,
+  // Admin-only (see the type above): a new store starts without try-on.
+  quiz_tryon_enabled: false,
   quiz_bundle_enabled: false,
   quiz_bundle_label: 'Add all {count} to bag · {total}',
   quiz_bundle_size: 0,

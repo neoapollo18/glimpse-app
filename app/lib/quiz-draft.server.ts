@@ -524,6 +524,10 @@ export async function saveLiveQuizConfig(
   const droppedKeys: string[] = [];
   for (const [key, raw] of Object.entries(filterSettings(config.settings))) {
     if (key === "enabled" || key === "assistant_mode") continue;
+    // Quiz try-on is switched on and off by the Gleame team in /admin only
+    // (2026-10-20): no Studio edit, version restore or Build with AI turn
+    // can change it, so restoring an old version never turns try-on on.
+    if (key === "quiz_tryon_enabled") continue;
     const value = key === "recommendation_tuning" ? keepLiveColumnar(raw, liveSettings[key]) : raw;
     // Only write keys that exist on the live row: a stale quiz_* key (an
     // old restored version predating a column rename, or an AI-invented
