@@ -142,6 +142,7 @@ import {
 import { setAppToastMode, showAppToast } from "../components/studio/toast";
 import { StudioToastHost } from "../components/studio/StudioToastHost";
 import { shopHasTryonProducts } from "../lib/tryon-availability.server";
+import { bundlesAllowed } from "../lib/bundles.server";
 import { ArrivalNotice, NoticeSlot } from "../components/studio/StudioNotices";
 import { StudioSaveBarProvider, useStudioSaveBarHost } from "../components/studio/save-bar";
 import { postStudioAction } from "../components/studio/studio-data";
@@ -626,6 +627,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   return json({
     tryonAvailable,
+    // Bundles are off for every store but the allowlisted ones.
+    bundlesAllowed: bundlesAllowed(shopDomain),
     matching,
     matchingReady,
     offers,
@@ -2301,6 +2304,7 @@ function StudioEditor({ data }: { data: StudioLoaderData }) {
               hasTemplate={Boolean(data.studio.template)}
               onOpenGallery={tab === "build" ? () => confirmLeave(() => setOverlay(true)) : undefined}
               imagesAttention={imagesAttention}
+              showBundles={data.bundlesAllowed === true}
               showPhoto={
                 data.tryonAvailable === true ||
                 Boolean(data.draft?.flow.axes.some((a: { source: string }) => a.source === "photo"))

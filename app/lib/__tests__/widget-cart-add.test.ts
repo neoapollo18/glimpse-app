@@ -557,3 +557,22 @@ describe("theme cart drawer after a quiz add", () => {
     expect(drawer.classList.contains("is-empty")).toBe(false);
   });
 });
+
+describe("bundles switched off for the store (server allowlist, 2026-10-20)", () => {
+  it("t3 shows no Add routine to cart; each step keeps its own Add to bag", async () => {
+    const root = await bootResults("t3", { bundleEnabled: false, bundleDiscount: null });
+    expect(root.querySelector(".gq-t3r-addall")).toBeNull();
+    expect(root.querySelector(".gq-add-btn--bundle")).toBeNull();
+    expect(root.querySelector(".gq-t3r-total")).not.toBeNull();
+    const singles = [...root.querySelectorAll<HTMLButtonElement>("button")].filter((b) => /^Add to bag/.test(b.textContent || ""));
+    expect(singles.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("classic and t5 show no Bundle & save card", async () => {
+    for (const template of [null, "t5"]) {
+      const root = await bootResults(template, { bundleEnabled: false, bundleDiscount: null });
+      expect(root.querySelector(".gq-bundle-offer"), String(template)).toBeNull();
+      expect(root.querySelector(".gq-add-btn--bundle"), String(template)).toBeNull();
+    }
+  });
+});

@@ -13,6 +13,7 @@
 //   - sampleRecommend: canned quiz-recommend response derived from the
 //             draft's rule targets so the results screen has cards to show.
 
+import { bundlesAllowed } from "./bundles.server";
 import {
   supabase,
   getChatAssistantConfig,
@@ -263,8 +264,10 @@ export async function buildPreviewQuizConfig(
         ...((draft.settings ?? {}) as Record<string, unknown>),
       })
     : null;
+  // Same bundle allowlist as the storefront (lib/bundles.server).
+  const bundles = bundlesAllowed(shopDomain);
   const publicOffers = publicOffersPayload(offers, {
-    bundleEnabled: config.quiz_bundle_enabled,
+    bundleEnabled: bundles && config.quiz_bundle_enabled,
     bundleSize: config.quiz_bundle_size,
   });
   // Same rule as the storefront quiz-config: try-on is offered only when the
@@ -372,14 +375,14 @@ export async function buildPreviewQuizConfig(
       restartLabel: renderTokens(config.end_restart_label),
       subtext: renderTokens(config.quiz_results_subtext),
       showMatchesLabel: config.quiz_show_matches_label,
-      bundleEnabled: config.quiz_bundle_enabled,
+      bundleEnabled: bundles && config.quiz_bundle_enabled,
       bundleLabel: config.quiz_bundle_label,
       bundleSize: config.quiz_bundle_size,
       matchFootnote: config.quiz_match_footnote
         ? renderTokens(config.quiz_match_footnote)
         : null,
       crossSell: publicOffers.crossSell,
-      bundleDiscount: publicOffers.bundleDiscount,
+      bundleDiscount: bundles ? publicOffers.bundleDiscount : null,
       ...resultsCtaPayload(config),
       // Preview only: "why this fits" lines by product handle, so an edit
       // shows on the cards without re-running recommendations.

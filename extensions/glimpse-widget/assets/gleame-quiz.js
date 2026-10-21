@@ -8444,9 +8444,13 @@
         tot.appendChild(el('small', 'gq-t3r-total-save', escapeHtml(results.bundleDiscount.note || T('bundleFine', 'Bundle savings applied at checkout'))));
       }
       foot.appendChild(tot);
-      var bundleRow = tplBundleRow(matches, results, T('addRoutine', 'Add routine to cart'));
-      bundleRow.classList.add('gq-t3r-addall');
-      foot.appendChild(bundleRow);
+      // Add-all only where bundles are on (server allowlist, 2026-10-20);
+      // otherwise each step keeps its own Add to bag.
+      if (results.bundleEnabled) {
+        var bundleRow = tplBundleRow(matches, results, T('addRoutine', 'Add routine to cart'));
+        bundleRow.classList.add('gq-t3r-addall');
+        foot.appendChild(bundleRow);
+      }
       wrap.appendChild(foot);
     }
     screen.appendChild(wrap);

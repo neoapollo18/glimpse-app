@@ -1,3 +1,4 @@
+import { bundlesAllowed } from "../lib/bundles.server";
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { findShopByDomain, getChatAssistantConfig, shopHasValidAccess } from "../lib/supabase.server";
@@ -49,6 +50,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (!(await shopHasValidAccess(shop.shop_domain))) {
     return json({ error: "Subscription inactive" }, { status: 403, headers: CORS_HEADERS });
   }
+  // Bundles are off for every store but the allowlisted ones.
+  if (!bundlesAllowed(shop.shop_domain)) return json({ code: null }, { headers: CORS_HEADERS });
   const [offers, config] = await Promise.all([getQuizOffers(shop.id), getChatAssistantConfig(shop.shop_domain)]);
   // The bundle button itself may have been switched off since this
   // shopper loaded the (60s-cached) config: no code without a bundle.

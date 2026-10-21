@@ -348,7 +348,7 @@ function EditBody({
       </InlineStack>
     );
   }
-  if (selectedSlide === "offers-bundle") {
+  if (selectedSlide === "offers-bundle" && data.bundlesAllowed === true) {
     return (
       <BundleEditor
         key={`bundle:${chatEpoch}:${data.offers ? "loaded" : "none"}`}

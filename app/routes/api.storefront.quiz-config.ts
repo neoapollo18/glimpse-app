@@ -1,3 +1,4 @@
+import { bundlesAllowed } from "../lib/bundles.server";
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import {
@@ -110,8 +111,11 @@ async function buildQuizConfig(shopDomain: string, url: URL, storePreview: boole
     // Studio Offers (migration 086); a missing table reads as all off.
     getQuizOffers(verifiedShop.id),
   ]);
+  // Bundles are off for every store but the allowlisted ones
+  // (lib/bundles.server): no Add all, no Bundle & save, no bundle discount.
+  const bundles = bundlesAllowed(verifiedShop.shop_domain);
   const publicOffers = publicOffersPayload(offers, {
-    bundleEnabled: config.quiz_bundle_enabled,
+    bundleEnabled: bundles && config.quiz_bundle_enabled,
     bundleSize: config.quiz_bundle_size,
   });
   // Try-on is offered only when it can render something: the merchant
@@ -326,7 +330,7 @@ async function buildQuizConfig(shopDomain: string, url: URL, storePreview: boole
         showMatchesLabel: config.quiz_show_matches_label,
         // "Add all" bundle button (migration 070). Older cached configs
         // omit it — widget treats absent as disabled.
-        bundleEnabled: config.quiz_bundle_enabled,
+        bundleEnabled: bundles && config.quiz_bundle_enabled,
         bundleLabel: config.quiz_bundle_label,
         // 0 = all matches; N>0 = shopper picks N (migration 071).
         bundleSize: config.quiz_bundle_size,
@@ -339,7 +343,7 @@ async function buildQuizConfig(shopDomain: string, url: URL, storePreview: boole
         // discount CODE is not here: quiz-bundle-discount serves it after
         // the bundle add.
         crossSell: publicOffers.crossSell,
-        bundleDiscount: publicOffers.bundleDiscount,
+        bundleDiscount: bundles ? publicOffers.bundleDiscount : null,
         // Card button: add to cart (default) or view product, plus the
         // small link for the other action (migration 092).
         ...resultsCtaPayload(config),

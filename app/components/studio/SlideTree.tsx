@@ -158,6 +158,7 @@ export function SlideTree({
   onOpenGallery,
   imagesAttention,
   showPhoto = true,
+  showBundles = true,
 }: {
   flow: StudioFlow | null;
   selectedSlide: string;
@@ -182,6 +183,8 @@ export function SlideTree({
   /** The photo step does something for this store (try-on on and set up,
    * or a shade question that reads the photo). */
   showPhoto?: boolean;
+  /** Bundles are on for this store (server allowlist, lib/bundles.server). */
+  showBundles?: boolean;
 }) {
   const questions = flow?.questions ?? [];
   // Drag-to-reorder: question rows only. dragQi = the question being
@@ -492,7 +495,7 @@ export function SlideTree({
         {/* Sell more (migration 086): store-wide commerce + connections,
             kept below the screens so the quiz itself stays the focus. */}
         <RailHeader>Sell more</RailHeader>
-        {row("offers-bundle", "Bundle & discount", { icon: CartDiscountIcon })}
+        {showBundles && row("offers-bundle", "Bundle & discount", { icon: CartDiscountIcon })}
         {row("offers-crosssell", "Upsell & cross-sell", { icon: CartUpIcon })}
         {row("integrations", "Integrations", { icon: ConnectIcon })}
       </div>
