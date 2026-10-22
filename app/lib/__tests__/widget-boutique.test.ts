@@ -274,6 +274,8 @@ describe("grid results (quiz_results_layout)", () => {
     expect(res.querySelector(".gq-gr-answers-edit")!.textContent).toBe("Edit");
     expect(res.querySelector(".gq-gr-bundle-text")!.innerHTML).toBe("<strong>Mix &amp; match:</strong> add any 2 or 3 sets and save 15%");
     expect(res.querySelector(".gq-gr-bundle-status")!.textContent).toBe("0 of 2 added");
+    // A live discount keeps the designed bar: no set picks.
+    expect(res.querySelector(".gq-gr-bundle--set, .gq-gr-pick")).toBeNull();
     // Shopify's placeholder variant name never shows; a real one does.
     const specs = Array.from(res.querySelectorAll(".gq-gr-spec")).map((s) => s.textContent);
     expect(specs).toEqual(["Short / Almond"]);
@@ -326,10 +328,24 @@ describe("grid results (quiz_results_layout)", () => {
     expect(lead.querySelector(".gq-step--lead .gq-lead-input")).not.toBeNull();
   });
 
-  it("no live discount: no bundle bar, no promise", async () => {
-    const root = await boot(makeConfig({}, { bundleDiscount: null }), "results");
+  it("no live discount: the set bar adds the picked sets and promises nothing", async () => {
+    const root = await boot(makeConfig({}, { bundleDiscount: null, bundleSize: 2 }), "results");
     await wait(30);
-    expect(root.querySelector(".gq-gr-bundle")).toBeNull();
+    const bar = root.querySelector(".gq-gr-bundle--set")!;
+    expect(bar.querySelector(".gq-gr-bundle-text")!.innerHTML).toBe("<strong>Mix &amp; match:</strong> add any 2+ sets");
+    expect(root.textContent).not.toContain("save");
+    const btn = bar.querySelector<HTMLButtonElement>(".gq-gr-bundle-add")!;
+    expect(btn.textContent).toBe("Add 2 to bag · $37.98");
+    btn.click();
+    await wait(20);
+    expect(btn.textContent).toBe("Added to bag ✓");
+    expect(root.querySelector(".gq-gr-bagbar-btn")!.textContent).toBe("View bag · $37.98");
+  });
+
+  it("no live discount and fewer matches than the bundle asks for: no bar", async () => {
+    const root = await boot(makeConfig({}, { bundleDiscount: null, bundleSize: 3 }), "results");
+    await wait(30);
+    expect((root.querySelector(".gq-gr-bundle--set") as HTMLElement).style.display).toBe("none");
     expect(root.textContent).not.toContain("save");
   });
 });

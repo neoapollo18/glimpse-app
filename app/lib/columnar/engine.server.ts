@@ -543,7 +543,11 @@ export async function computeColumnarRecommendations(params: {
   resultKey?: string | null;
   clientIP: string;
 }): Promise<ColumnarResult> {
-  const { verifiedShop, verifiedDomain, chatConfig, spec, criteria, clientIP } = params;
+  const { verifiedShop, verifiedDomain, chatConfig, criteria, clientIP } = params;
+  // The "Also matched" row is retired (2026-10-21): the field stays in the
+  // response, always empty, so every widget version renders nothing, and
+  // sets nobody sees are no longer probed for stock.
+  const spec: ColumnarSpec = { ...params.spec, alsoMatchedCount: 0 };
   const keyOnly = Object.keys(criteria).length === 0 && Boolean(params.resultKey);
   const decoded = keyOnly ? decodeResultKey(params.resultKey) : null;
   if (keyOnly && !decoded) {

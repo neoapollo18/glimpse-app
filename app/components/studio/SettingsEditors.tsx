@@ -703,8 +703,12 @@ const PLACEMENT_LABELS: Record<EmailPlacement, string> = {
   hook_start: "Promise a discount up front, ask before results",
   gate_results: "Ask right before results (skip always visible)",
   after_results: "Show results first, ask below the match",
+  both: "Both: ask before results and below the match",
   off: "Off",
 };
+
+const BOTH_HELP =
+  "Its own step before results, plus the card under the matches. Shoppers who gave their email in the step see the card as saved, never a second ask.";
 
 export function LeadEditor({
   settings,
@@ -723,12 +727,12 @@ export function LeadEditor({
   const { schedule, saveState, error, clearError } = useSettingsAutosave(onPreviewUpdate);
   const hasTemplate = isTemplateId(template);
   // Classic quizzes with grid results choose between the step before
-  // results (default) and a card below the matches.
+  // results (default), a card below the matches, or both.
   const classicGrid = !hasTemplate && settings.quiz_results_layout === "grid";
   // "" = default (column NULL); the applier stores null for it.
   const readPlacement = (v: unknown) =>
     classicGrid
-      ? v === "after_results" ? "after_results" : ""
+      ? v === "after_results" || v === "both" ? v : ""
       : typeof v === "string" && (EMAIL_PLACEMENTS as string[]).includes(v) ? v : "";
   const [placement, setPlacement] = useState<string>(() => readPlacement(settings.quiz_email_placement));
   useEffect(() => {
@@ -780,6 +784,7 @@ export function LeadEditor({
           options={[
             { label: "Ask right before results (default)", value: "" },
             { label: PLACEMENT_LABELS.after_results, value: "after_results" },
+            { label: PLACEMENT_LABELS.both, value: "both" },
           ]}
           value={placement}
           disabled={disabled || !enabled}
@@ -790,7 +795,9 @@ export function LeadEditor({
           helpText={
             placement === "after_results"
               ? "A card under the matches. Easy to miss on phones: it sits below every result."
-              : "Its own step after the last question, before the photo step."
+              : placement === "both"
+                ? BOTH_HELP
+                : "Its own step after the last question, before the photo step."
           }
         />
       )}
@@ -810,7 +817,9 @@ export function LeadEditor({
           helpText={
             placement === "" && defaultLabel
               ? `Using this template's default: ${defaultLabel.toLowerCase()}.`
-              : "The discount code, when set, is revealed on submit in every placement."
+              : placement === "both"
+                ? `${BOTH_HELP} The discount code, when set, is revealed on submit.`
+                : "The discount code, when set, is revealed on submit in every placement."
           }
         />
       )}

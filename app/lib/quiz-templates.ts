@@ -17,11 +17,13 @@
 export type TemplateId = "t1" | "t2" | "t3" | "t4" | "t5";
 /** Intro types A..E (spec 5.1). */
 export type IntroType = "split" | "hero" | "landing" | "founder" | "minimal";
-export type EmailPlacement = "hook_start" | "gate_results" | "after_results" | "off";
+/** "both" (migration 095): the step before results AND the card below the
+ * match; a shopper who gave their email in the step sees the card saved. */
+export type EmailPlacement = "hook_start" | "gate_results" | "after_results" | "both" | "off";
 export type SlotKind = "hero" | "lifestyle" | "product" | "variant" | "swatch" | "icon" | "logo" | "thumb";
 
 export const TEMPLATE_IDS: TemplateId[] = ["t1", "t2", "t3", "t4", "t5"];
-export const EMAIL_PLACEMENTS: EmailPlacement[] = ["hook_start", "gate_results", "after_results", "off"];
+export const EMAIL_PLACEMENTS: EmailPlacement[] = ["hook_start", "gate_results", "after_results", "both", "off"];
 
 export function isTemplateId(v: unknown): v is TemplateId {
   return typeof v === "string" && (TEMPLATE_IDS as string[]).includes(v);

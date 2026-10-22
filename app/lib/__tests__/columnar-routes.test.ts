@@ -88,7 +88,7 @@ beforeEach(() => {
 });
 
 describe("Studio preview (quiz-preview-recommend)", () => {
-  it("returns product data for the six matches and the Also matched row", async () => {
+  it("returns product data for the six matches only (the Also matched row is retired)", async () => {
     const token = jwt.sign({ shopId: SHOP.id, shopDomain: SHOP.shop_domain }, "test-secret", { algorithm: "HS256" });
     const res = await previewAction({
       request: new Request(`https://app.example/quiz-preview-recommend?token=${token}`, {
@@ -99,8 +99,10 @@ describe("Studio preview (quiz-preview-recommend)", () => {
       context: {},
     } as never);
     const body = (await (res as Response).json()) as { productJson: Record<string, { featured_image: string; price: number }> };
-    expect(Object.keys(body.productJson).sort()).toEqual(Array.from({ length: 12 }, (_, i) => `set-${i}`).sort());
-    expect(body.productJson["set-9"]).toMatchObject({ featured_image: "https://cdn.example/set-9.jpg", price: 2700 });
+    // An older engine result that still carries Also matched sets: the
+    // preview never loads them.
+    expect(Object.keys(body.productJson).sort()).toEqual(Array.from({ length: 6 }, (_, i) => `set-${i}`).sort());
+    expect(body.productJson["set-3"]).toMatchObject({ featured_image: "https://cdn.example/set-3.jpg", price: 2100 });
   });
 });
 

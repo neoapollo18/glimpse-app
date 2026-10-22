@@ -79,12 +79,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       resultKey,
     });
     // /products/<handle>.js lookalikes for the picks (the preview widget
-    // reads product images/prices from this map instead of the storefront),
-    // including a columnar shop's Also matched row.
-    const productJson = await previewProductJson(shop.id, [
-      ...result.matches,
-      ...(result.columnar?.alsoMatched ?? []),
-    ]);
+    // reads product images/prices from this map instead of the storefront).
+    const productJson = await previewProductJson(shop.id, result.matches);
     return json({ ...result, productJson });
   } catch (e) {
     console.error("[quiz-preview-recommend]", e);

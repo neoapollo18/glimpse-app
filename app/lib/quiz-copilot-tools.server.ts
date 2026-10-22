@@ -504,7 +504,7 @@ const NOT_NULL_COPY_KEYS = new Set(["end_restart_label"]);
 // Copy keys with a closed value set — anything else is rejected, so a
 // stray string can never violate the migration-080 CHECK constraints.
 const ENUM_COPY_KEYS: Record<string, readonly string[]> = {
-  quiz_email_placement: ["hook_start", "gate_results", "after_results", "off"],
+  quiz_email_placement: ["hook_start", "gate_results", "after_results", "both", "off"],
   // Mirror migration 088's CHECKs; null (standard) clears them.
   quiz_ui_style: ["boutique"],
   quiz_results_layout: ["grid"],

@@ -170,7 +170,8 @@ describe("computeColumnarRecommendations", () => {
     expect(r.columnar.rung).toBe(1);
     expect(r.columnar.bestMatchBadge).toBe(true);
     expect(r.columnar.header).toEqual({ kind: "normal", text: null });
-    expect(r.columnar.alsoMatched).toHaveLength(6);
+    // The Also matched row is retired: the field stays, always empty.
+    expect(r.columnar.alsoMatched).toEqual([]);
     const answers = decodeResultKey(r.columnar.resultKey)!;
     for (const m of [...r.matches, ...r.columnar.alsoMatched]) {
       const p = [...byId.values()].find((x) => x.handle === m.productHandle)!;

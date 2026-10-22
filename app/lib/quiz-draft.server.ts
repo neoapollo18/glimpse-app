@@ -545,15 +545,28 @@ export async function saveLiveQuizConfig(
   if (droppedKeys.length) {
     console.warn(`quiz-live: save dropped unknown settings keys for ${shopDomain}: ${droppedKeys.join(", ")}`);
   }
+  let placementError: string | undefined;
   if (Object.keys(settingsToWrite).length > 0) {
     try {
       await saveChatAssistantConfig(shopDomain, settingsToWrite as Partial<ChatAssistantConfig>);
     } catch (e) {
-      return {
-        ok: false,
-        error: `Questions saved, but copy/design settings failed: ${(e as Error).message}. Your previous config is in version history.`,
-        warning,
-      };
+      // Migration 095 not run yet: the old CHECK refuses the "both" email
+      // placement. Everything else in the edit still saves.
+      const { quiz_email_placement: placement, ...rest } = settingsToWrite;
+      const retry = placement === "both" && isEmailPlacementCheckError(e);
+      try {
+        if (!retry) throw e;
+        if (Object.keys(rest).length > 0) {
+          await saveChatAssistantConfig(shopDomain, rest as Partial<ChatAssistantConfig>);
+        }
+        placementError = EMAIL_BOTH_NEEDS_MIGRATION;
+      } catch (e2) {
+        return {
+          ok: false,
+          error: `Questions saved, but copy/design settings failed: ${(e2 as Error).message}. Your previous config is in version history.`,
+          warning,
+        };
+      }
     }
   }
 
@@ -576,7 +589,16 @@ export async function saveLiveQuizConfig(
   }
 
   await pruneVersions(shopId);
+  if (placementError) return { ok: false, error: placementError, warning };
   return { ok: true, warning };
+}
+
+export const EMAIL_BOTH_NEEDS_MIGRATION =
+  "The “Both” email placement needs a database update (migration 095) before it can be saved. Your other changes saved.";
+
+/** The pre-095 CHECK on quiz_email_placement refusing a value. */
+export function isEmailPlacementCheckError(e: unknown): boolean {
+  return /quiz_email_placement_check/.test(e instanceof Error ? e.message : String(e));
 }
 
 export type QuizSurfaceResult = { ok: boolean; error?: string; templateLive?: boolean };

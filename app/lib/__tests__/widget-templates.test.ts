@@ -505,6 +505,22 @@ describe("v3 widget templates", () => {
     expect(gate.querySelector(".gq-tpl-lead-inline")).toBeNull(); // Routine defaults to gate_results
   });
 
+  it('email placement "both": its own lead screen and the results card, saved once given', async () => {
+    const step = await boot(previewFor("t1", "lead", false, { emailPlacement: "both" }));
+    expect(step.querySelector(".gq-tpl-lead .gq-tpl-lead-form")).not.toBeNull();
+    // No discount code: a code would be revealed in the card instead.
+    const lead = { ...(makeConfig("t1").lead as object), hasDiscount: false, discountCode: null, discountMessage: null };
+    const results = await boot(previewFor("t1", "results", false, { emailPlacement: "both", lead }));
+    const card = results.querySelector(".gq-t1r .gq-tpl-lead-inline")!;
+    expect(card.querySelector(".gq-tpl-lead-form")).not.toBeNull();
+    (card.querySelector(".gq-lead-input") as HTMLInputElement).value = "shopper@example.com";
+    card.querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
+    await wait(20);
+    const saved = results.querySelector(".gq-t1r .gq-tpl-lead-saved")!;
+    expect(saved.textContent).toBe("Saved ✓ You’re on the list.");
+    expect(results.querySelector(".gq-t1r .gq-tpl-lead-form")).toBeNull();
+  });
+
   it("Match: S1 rows carry tag + description, S3 shows 'Select all that apply' + Continue, numeral is zero-padded", async () => {
     const q1 = await boot(previewFor("t1", "q1", false));
     expect(q1.querySelectorAll(".gq-t1-row").length).toBe(4);

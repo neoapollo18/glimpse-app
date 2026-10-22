@@ -3702,7 +3702,7 @@ export interface ChatAssistantConfig {
   // ---- v3 Template × Look (migration 080, docs/overhaul/V3-CONTRACTS.md §4) ----
   // All NULL for legacy shops; only read when quiz_template is set.
   quiz_look: 'editorial' | 'minimal' | 'bold' | null;
-  quiz_email_placement: 'hook_start' | 'gate_results' | 'after_results' | 'off' | null;
+  quiz_email_placement: 'hook_start' | 'gate_results' | 'after_results' | 'both' | 'off' | null;
   quiz_phases: Array<{ label: string; axisKeys: string[] }> | null;
   quiz_founder: { name: string; credentials: string | null; portraitUrl: string | null } | null;
   quiz_generation_report: Record<string, unknown> | null;
@@ -4244,7 +4244,7 @@ function mapChatAssistantRow(data: any): ChatAssistantConfig {
     quiz_look: ['editorial', 'minimal', 'bold'].includes(data.quiz_look)
       ? (data.quiz_look as ChatAssistantConfig['quiz_look'])
       : null,
-    quiz_email_placement: ['hook_start', 'gate_results', 'after_results', 'off'].includes(data.quiz_email_placement)
+    quiz_email_placement: ['hook_start', 'gate_results', 'after_results', 'both', 'off'].includes(data.quiz_email_placement)
       ? (data.quiz_email_placement as ChatAssistantConfig['quiz_email_placement'])
       : null,
     quiz_phases: mapQuizPhases(data.quiz_phases),

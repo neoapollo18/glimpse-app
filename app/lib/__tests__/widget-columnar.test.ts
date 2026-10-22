@@ -585,7 +585,7 @@ describe("analytics (contract 5)", () => {
 });
 
 describe("columnar results (contract 4)", () => {
-  it("normal: today's headline, Best Match badge, meta line, why line, also matched", async () => {
+  it("normal: today's headline, Best Match badge, meta line, why line", async () => {
     const { root } = await bootPreview({ step: "results", sample: columnar("normal") });
     await wait(20);
     const res = root.querySelector(".gq-results--grid")!;
@@ -602,13 +602,6 @@ describe("columnar results (contract 4)", () => {
     expect(Array.from(meta.querySelectorAll(".gq-gr-meta-tok:not(.gq-gr-meta--extra)")).map((t) => t.textContent)).toEqual(["Short", "Almond"]);
     expect(meta.querySelectorAll(".gq-gr-meta--extra")).toHaveLength(2); // the finish and its separator
     expect(first.querySelector(".gq-gr-why")!.textContent).toBe("✓Cat-eye chrome in your short almond.");
-    // Also matched: compact cards, no why line, no badge.
-    const also = res.querySelector(".gq-gr-also")!;
-    expect(also.querySelector(".gq-gr-also-title")!.textContent).toBe("Also matched for you");
-    const compact = also.querySelectorAll(".gq-gr-card--compact");
-    expect(compact).toHaveLength(3);
-    expect(also.querySelector(".gq-gr-why, .gq-gr-pill")).toBeNull();
-    expect(compact[0].querySelector(".gq-gr-meta")!.textContent).toBe("Short · Oval · Glossy");
   });
 
   it("relaxed and fewer: the header says so, no badge, no merchant subtext", async () => {
@@ -631,15 +624,29 @@ describe("columnar results (contract 4)", () => {
     expect(root.querySelector(".gq-gr-pill")).toBeNull();
   });
 
-  it("also matched adds to the bag like any card and counts toward the bundle", async () => {
-    const { root } = await bootPreview({ step: "results", sample: columnar("normal") });
+  // Card 2026-10-21 ("What is this 'Also matched for you' section?"): a
+  // response that still carries Also matched sets (an older server, a
+  // cached result) shows the six matches and nothing under them, in the
+  // Studio preview and on the storefront.
+  it("never renders an Also matched row, even when the response carries one", async () => {
+    const sample = columnar("normal");
+    expect(sample.columnar.alsoMatched).toHaveLength(3);
+    const { root } = await bootPreview({ step: "results", sample });
     await wait(30);
-    const add = root.querySelector<HTMLButtonElement>(".gq-gr-also .gq-gr-add")!;
-    expect(add.disabled).toBe(false);
-    add.click();
-    await wait(20);
-    expect(add.classList.contains("is-added")).toBe(true);
-    expect(root.querySelector(".gq-gr-bundle-status")!.textContent).toBe("1 of 2 added");
+    const noAlso = (r: HTMLElement) => {
+      expect(r.querySelectorAll(".gq-gr-card")).toHaveLength(6);
+      expect(r.querySelector(".gq-gr-also, .gq-gr-card--compact")).toBeNull();
+      expect(r.textContent).not.toContain("Also matched");
+      for (const h of ALSO) expect(r.innerHTML).not.toContain(h.productName);
+    };
+    noAlso(root);
+    delete (window as any).GLEAME_QUIZ_PREVIEW;
+    sessionStorage.clear();
+    recommendReply = () => columnar("normal");
+    const store = await bootStorefront();
+    await playToResults(store);
+    expect(store.querySelector(".gq-results--grid")).not.toBeNull();
+    noAlso(store);
   });
 
   it("zero state: plain header, the loosen tap re-runs with that answer open", async () => {

@@ -108,7 +108,8 @@ export const UI_TEXT_ENTRIES: UiTextEntry[] = [
 
   // ---- Results ----
   { key: "quiz_best_match_pill", column: true, label: "Best match pill", group: "results", default: "Best match" },
-  { key: "quiz_also_matched_label", column: true, label: "Also matched heading", group: "results", default: "Also matched for you" },
+  // Match (t1) only: the pool results' Also matched row was retired.
+  { key: "quiz_also_matched_label", column: true, label: "Also matched heading", group: "results", default: "Also matched for you", scope: ["t1"] },
   { key: "quiz_view_product_label", column: true, label: "View product", group: "results", default: "View full product" },
   { key: "viewShort", label: "View product (small cards)", group: "results", default: "View", scope: ["t1", "t2", "t3"] },
   { key: "end_restart_label", column: true, label: "Try another look", group: "results", default: "Try another look" },
@@ -124,7 +125,7 @@ export const UI_TEXT_ENTRIES: UiTextEntry[] = [
   { key: "answersRailTitle", label: "Answers panel title", group: "results", default: "Your answers · tap to edit", scope: ["featured"] },
   { key: "answersRailEdit", label: "Edit one answer", group: "results", default: "edit", scope: ["featured"] },
   { key: "saveMatches", label: "Email card title", group: "results", default: "Save your matches", scope: ["grid"] },
-  { key: "savedDone", label: "Email card thank-you", group: "results", default: "Saved ✓ You’re on the list.", scope: ["grid"] },
+  { key: "savedDone", label: "Email card thank-you", group: "results", default: "Saved ✓ You’re on the list.", scope: ["grid", "template"] },
   { key: "completeTheLook", label: "Cross-sell heading", group: "results", default: "Complete the look", help: "When the cross-sell title under Sell more is blank." },
   { key: "choose", label: "Cross-sell choose button", group: "results", default: "Choose" },
   { key: "xsellAdd", label: "Cross-sell add button", group: "results", default: "+ Add" },
@@ -178,6 +179,9 @@ export const UI_TEXT_ENTRIES: UiTextEntry[] = [
   { key: "rangeOr", label: "Pick range", group: "bag", default: "{min} or {max}", vars: ["min", "max"], varHints: { min: "the fewest", max: "the most" }, scope: ["grid"], help: "Fills {range} in the mix & match bar." },
   { key: "gridAdded", label: "Added (grid cards)", group: "bag", default: "Added", scope: ["grid"] },
   { key: "gridBundleBar", label: "Mix & match bar", group: "bag", default: "**Mix & match:** add any {range} and save {discount}", vars: ["range", "discount"], scope: ["grid"], help: "**Stars** make text bold." },
+  { key: "gridSetBar", label: "Mix & match bar (no discount)", group: "bag", default: "**Mix & match:** pick any {range} and add them in one tap", vars: ["range"], scope: ["grid"], help: "Used when the bundle label doesn't name {range}. **Stars** make text bold." },
+  { key: "gridSetPickMore", label: "Mix & match: pick more", group: "bag", default: "Pick {n} more", vars: ["n"], scope: ["grid"] },
+  { key: "ariaSetPick", label: "Set pick (screen readers)", group: "bag", default: "Pick {name} for the set", vars: ["name"], scope: ["grid"] },
   { key: "gridAddedCount", label: "Mix & match progress", group: "bag", default: "**{n} of {min}** added", vars: ["n", "min"], scope: ["grid"] },
   { key: "gridDiscountAppliedAmount", label: "Mix & match discount applied", group: "bag", default: "{amount} off applied ✓", vars: ["amount"], scope: ["grid"] },
   { key: "gridDiscountApplied", label: "Mix & match discount applied (no amount)", group: "bag", default: "Discount applied ✓", scope: ["grid"] },

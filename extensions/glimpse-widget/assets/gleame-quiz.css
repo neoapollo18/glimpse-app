@@ -2553,6 +2553,39 @@
   #gleame-quiz-root.gq-compact.gq-boutique .gq-step--lead .gq-step-body > .gq-question-helper { text-align: center; margin-left: auto; margin-right: auto; }
 }
 
+/* ---- Desktop fit: pool boutique steps in one window (2026-10-21) ----
+   gleame-quiz.js (fitClassicStep) adds these to a question, email or photo
+   step only when its Continue row would sit past the fold under the
+   store's header, one level at a time (cumulative): gq-fit-1 tightens the
+   rhythm, gq-fit-2 compacts the answers, gq-fit-3 the prompt and chrome.
+   Photo answers scale down whole (the script narrows the answer block).
+   Pool boutique (Glamnetic) only; desktop only, phones never change. */
+@media (min-width: 990px) {
+  #gleame-quiz-root.gq-boutique.gq-pool .gq-step.gq-fit-1 { min-height: 0; }
+  #gleame-quiz-root.gq-boutique.gq-pool .gq-fit-1 .gq-step-header { margin-bottom: 24px; }
+  #gleame-quiz-root.gq-boutique.gq-pool .gq-fit-1 .gq-question-helper { margin-top: 6px; }
+  #gleame-quiz-root.gq-boutique.gq-pool .gq-fit-1 .gq-step-body > .gq-option-block { margin-top: 20px; }
+  #gleame-quiz-root.gq-boutique.gq-pool .gq-fit-1 .gq-step-body > .gq-cta-bar { margin-top: 20px; padding-top: 16px; }
+  #gleame-quiz-root.gq-boutique.gq-pool .gq-fit-1 .gq-gate-cols { margin-top: 18px; }
+
+  #gleame-quiz-root.gq-boutique.gq-pool .gq-fit-2 .gq-question-title { font-size: 30px; }
+  #gleame-quiz-root.gq-boutique.gq-pool .gq-fit-2 .gq-nail-grid .gq-option--nail { min-height: 112px; gap: 10px; padding: 14px 12px 12px; }
+  #gleame-quiz-root.gq-boutique.gq-pool .gq-fit-2 .gq-nail-grid.gq-n-9 .gq-option--nail { min-height: 100px; gap: 8px; padding: 12px 12px 10px; }
+  #gleame-quiz-root.gq-boutique.gq-pool .gq-fit-2 .gq-option--boxed { min-height: 72px; padding: 14px 16px 12px; }
+  #gleame-quiz-root.gq-boutique.gq-pool .gq-fit-2 .gq-option-any { min-height: 44px; }
+  #gleame-quiz-root.gq-boutique.gq-pool .gq-step--gate.gq-fit-2 .gq-dropzone { padding: 28px 32px; }
+
+  #gleame-quiz-root.gq-boutique.gq-pool .gq-fit-3 .gq-step-header { margin-bottom: 14px; }
+  #gleame-quiz-root.gq-boutique.gq-pool .gq-fit-3 .gq-question-title { font-size: 26px; }
+  #gleame-quiz-root.gq-boutique.gq-pool .gq-fit-3 .gq-question-helper { margin-top: 4px; font-size: 14px; }
+  #gleame-quiz-root.gq-boutique.gq-pool .gq-fit-3 .gq-step-body > .gq-option-block { margin-top: 14px; }
+  #gleame-quiz-root.gq-boutique.gq-pool .gq-fit-3 .gq-step-body > .gq-cta-bar { margin-top: 14px; padding-top: 12px; }
+  #gleame-quiz-root.gq-boutique.gq-pool .gq-fit-3 .gq-nail-grid { gap: 10px; }
+  #gleame-quiz-root.gq-boutique.gq-pool .gq-fit-3 .gq-nail-grid .gq-option--nail { min-height: 88px; gap: 6px; padding: 10px 10px 8px; }
+  #gleame-quiz-root.gq-boutique.gq-pool .gq-fit-3 .gq-nail-grid.gq-n-9 .gq-option--nail { min-height: 80px; gap: 6px; padding: 8px 10px; }
+  #gleame-quiz-root.gq-boutique.gq-pool .gq-step--gate.gq-fit-3 .gq-dropzone { padding: 20px 28px; }
+}
+
 /* ---- Phones ---- */
 @media (max-width: 900px) {
   #gleame-quiz-root.gq-boutique .gq-ci-proof .gq-ba-frame { height: auto; aspect-ratio: 4 / 5; border: 1px solid var(--gq-line); border-radius: 14px; }
@@ -2702,6 +2735,48 @@
 #gleame-quiz-root .gq-gr-bundle-progress { display: flex; align-items: center; gap: 10px; flex: none; font-size: 13px; color: var(--gq-ink-soft); }
 #gleame-quiz-root .gq-gr-bundle-status strong { color: var(--gq-ink); }
 #gleame-quiz-root .gq-gr-bundle.is-unlocked .gq-gr-bundle-status { color: var(--gq-accent); font-weight: 600; }
+/* No live discount: the same bar picks sets and adds them in one tap. */
+#gleame-quiz-root .gq-gr-bundle--set { flex-wrap: wrap; }
+#gleame-quiz-root .gq-gr-bundle--set .gq-gr-bundle-add {
+  flex: none;
+  width: auto;
+  min-height: 42px;
+  margin: 0;
+  padding: 0 22px;
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0.01em;
+}
+#gleame-quiz-root .gq-gr-bundle--set .gq-gr-bundle-add:disabled { opacity: 0.55; cursor: default; }
+#gleame-quiz-root .gq-gr-bundle--set .gq-gr-bundle-add.is-added:disabled { opacity: 1; }
+#gleame-quiz-root .gq-gr-bundle-problem { flex: 1 1 100%; margin: 0; font-size: 12.5px; }
+#gleame-quiz-root .gq-gr-bundle-problem:empty { display: none; }
+/* The set pick on a card's photo, top right. */
+#gleame-quiz-root .gq-gr-pick {
+  appearance: none;
+  -webkit-appearance: none;
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  margin: 0;
+  padding: 0;
+  border: 1.5px solid #ffffff;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 4px 12px -6px rgba(0, 0, 0, 0.35);
+  /* A faint check says "tap to pick" before anything is picked. */
+  color: color-mix(in srgb, var(--gq-ink) 28%, transparent);
+  cursor: pointer;
+}
+#gleame-quiz-root .gq-gr-pick:hover { color: var(--gq-accent); }
+#gleame-quiz-root .gq-gr-pick.is-picked { border-color: var(--gq-accent); background: var(--gq-accent); color: var(--gq-accent-text, #ffffff); }
 #gleame-quiz-root .gq-gr-pips { display: inline-flex; gap: 4px; }
 #gleame-quiz-root .gq-gr-pip {
   width: 10px;
@@ -2963,35 +3038,14 @@
 #gleame-quiz-root .gq-gr-bagbar { display: none; }
 
 /* Pool engine results (contract 4): a plain-spoken header when colors or
-   style were relaxed or fewer than six match, the "Also matched" row,
-   and the zero state with its one-tap loosen. */
+   style were relaxed or fewer than six match, and the zero state with
+   its one-tap loosen. */
 #gleame-quiz-root .gq-results-headline.gq-results-headline--note {
   max-width: 760px;
   font-size: clamp(24px, 2.6vw, 32px);
   line-height: 1.2;
   letter-spacing: -0.015em;
 }
-#gleame-quiz-root .gq-gr-also { margin-top: 40px; }
-#gleame-quiz-root .gq-gr-also-title {
-  margin: 0 0 14px;
-  font-family: var(--gq-font-body);
-  font-size: 20px;
-  font-weight: 600;
-  line-height: 1.2;
-  color: var(--gq-ink);
-  text-transform: none;
-  letter-spacing: 0;
-}
-#gleame-quiz-root .gq-gr-also-row { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px; }
-#gleame-quiz-root .gq-gr-card--compact { border-radius: 14px; }
-#gleame-quiz-root .gq-gr-card--compact .gq-gr-body {
-  grid-template-areas: "name name" "spec spec" "price price" "add add";
-  padding: 10px 10px 12px;
-}
-#gleame-quiz-root .gq-gr-card--compact .gq-gr-name { font-size: 13.5px; line-height: 1.25; }
-#gleame-quiz-root .gq-gr-card--compact .gq-gr-spec { font-size: 11.5px; }
-#gleame-quiz-root .gq-gr-card--compact .gq-gr-price { margin-top: 4px; font-size: 13px; }
-#gleame-quiz-root .gq-gr-card--compact .gq-gr-add { min-height: 36px; margin-top: 10px; padding: 0 10px; font-size: 13px; }
 #gleame-quiz-root .gq-gr-zero {
   display: flex;
   flex-direction: column;
@@ -3020,7 +3074,6 @@
 
 @media (max-width: 900px) {
   #gleame-quiz-root .gq-gr-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-  #gleame-quiz-root .gq-gr-also-row { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
   #gleame-quiz-root .gq-gr-lead .gq-tpl-lead-card { grid-template-columns: minmax(0, 1fr); }
   #gleame-quiz-root .gq-gr-lead .gq-tpl-lead-form { grid-column: 1; grid-row: auto; margin-top: 14px; }
 }
@@ -3036,6 +3089,9 @@
   #gleame-quiz-root .gq-gr-grid { margin-top: 16px; }
   #gleame-quiz-root .gq-gr-card { border-radius: 16px; }
   #gleame-quiz-root .gq-gr-pill { top: 8px; left: 8px; }
+  #gleame-quiz-root .gq-gr-bundle--set .gq-gr-bundle-text { flex-basis: calc(100% - 34px); }
+  #gleame-quiz-root .gq-gr-bundle--set .gq-gr-bundle-add { flex: 1 1 100%; min-height: 44px; }
+  #gleame-quiz-root .gq-gr-pick { top: 8px; right: 8px; width: 28px; height: 28px; }
   #gleame-quiz-root .gq-gr-see { right: 8px; bottom: 8px; padding: 6px 9px; font-size: 10.5px; }
   #gleame-quiz-root .gq-gr-body { grid-template-areas: "name name" "spec price" "add add"; padding: 10px 10px 12px; }
   #gleame-quiz-root .gq-gr-name { font-size: 14px; }
@@ -3046,20 +3102,6 @@
   #gleame-quiz-root .gq-gr-meta--extra { display: none; }
   #gleame-quiz-root .gq-gr-add { min-height: 40px; margin-top: 10px; font-size: 13px; }
   #gleame-quiz-root .gq-results-headline.gq-results-headline--note { font-size: 24px; }
-  /* Also matched swipes, like the add-ons row. */
-  #gleame-quiz-root .gq-gr-also { margin-top: 30px; }
-  #gleame-quiz-root .gq-gr-also-title { font-size: 18px; }
-  #gleame-quiz-root .gq-gr-also-row {
-    display: flex;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    gap: 10px;
-    margin: 0 -16px;
-    padding: 0 16px 4px;
-    scrollbar-width: none;
-  }
-  #gleame-quiz-root .gq-gr-also-row::-webkit-scrollbar { display: none; }
-  #gleame-quiz-root .gq-gr-also-row > .gq-gr-card { flex: 0 0 40%; scroll-snap-align: start; }
   #gleame-quiz-root .gq-gr-zero { padding: 22px 20px; }
   #gleame-quiz-root .gq-gr-loosen { width: 100%; min-height: 50px; }
   #gleame-quiz-root .gq-results--grid .gq-xsell-row { margin: 0 -16px; padding: 0 16px 4px; gap: 10px; }

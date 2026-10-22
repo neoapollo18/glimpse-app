@@ -61,9 +61,11 @@
     matches: null,          // quiz-recommend matches (no images — safe to persist)
     matrixApplied: false,
     partial: false,
-    columnar: null,         // pool-engine results extras (contract 4): header, badge, also matched, resultKey
+    columnar: null,         // pool-engine results extras (contract 4): header, badge, resultKey
     quizStarted: false,     // quiz_start fired; persisted so a mid-quiz refresh doesn't re-fire it
     leadDone: false,        // lead step submitted OR skipped — never shown twice per session
+    leadSaved: false,       // a lead was stored this session (any placement): "both" shows it saved
+    leadCardSkipped: false, // "both": the results card was skipped too, so it stays gone
     leadToken: null,        // signed lead id from quiz-lead (migration 086) — reports results to the lead
     leadReportedKey: null,  // match set already reported for that lead
   };
@@ -1252,6 +1254,14 @@
   function poolBoutique() {
     return boutiqueActive() && Boolean(branching());
   }
+  // Desktop fit for classic steps (2026-10-21): the pool boutique layout
+  // only, so every other classic quiz renders and scrolls as before.
+  function classicFitOn() {
+    return poolBoutique();
+  }
+  // Screens with nothing to fit (intro, results) still take the fitted
+  // steps' header-aware scroll on a step change.
+  function fitNothing() {}
   function compactActive() {
     return Boolean(config && !config.template && (config.compactLayout === true || config.uiStyle === 'boutique'));
   }
@@ -1743,6 +1753,7 @@
       case 'intro':
       default:         next = tpl ? tplIntroScreen(tpl) : renderIntro(); break;
     }
+    if (!tpl && classicFitOn() && !next.gqFit) next.gqFit = fitNothing;
     swapScreen(next, direction || 'forward', seq);
     reportPreviewStep();
     if (state.screen === 'results') reportLeadResults();
@@ -2451,6 +2462,7 @@
     }
 
     screen.appendChild(body);
+    if (classicFitOn()) screen.gqFit = function() { fitClassicStep(screen); };
     return screen;
   }
 
@@ -3013,7 +3025,10 @@
   }
 
   function submitLead(email, phone) {
-    if (PREVIEW) return Promise.resolve({ preview: true });
+    if (PREVIEW) {
+      state.leadSaved = true;
+      return Promise.resolve({ preview: true });
+    }
     var payload = {
       shopDomain: shopDomain,
       email: email || null,
@@ -3031,6 +3046,10 @@
         if (!res.ok) {
           throw new Error((data && data.error) || ('quiz-lead ' + res.status));
         }
+        // Stored: a results card after the step shows it saved, not a
+        // second ask ("both" placement).
+        state.leadSaved = true;
+        saveState();
         // Signed lead id (migration 086): lets results report the matches
         // to this lead without the email ever being sent again.
         if (data && typeof data.leadToken === 'string' && data.leadToken.length < 200) {
@@ -3352,6 +3371,7 @@
     body.appendChild(skip);
 
     screen.appendChild(body);
+    if (classicFitOn()) screen.gqFit = function() { fitClassicStep(screen); };
     return screen;
   }
 
@@ -3475,6 +3495,7 @@
     }
 
     screen.appendChild(body);
+    if (classicFitOn()) screen.gqFit = function() { fitClassicStep(screen); };
     return screen;
   }
 
@@ -3637,7 +3658,9 @@
       screenEl.classList.add('gq-step--working');
       screenEl.appendChild(buildLoadingView(caption));
       var rect = root.getBoundingClientRect();
-      if (rect.top < 0) root.scrollIntoView({ block: 'start' });
+      // Fitted desktop steps: never tuck the quiz under a sticky header.
+      if (classicFitOn() && fitActive()) fitScrollIntoView(screenEl, rect.top, false, true);
+      else if (rect.top < 0) root.scrollIntoView({ block: 'start' });
       return;
     }
     var w = el('div', 'gq-working');
@@ -3812,7 +3835,6 @@
         text: typeof h.text === 'string' && h.text.trim() ? h.text.trim() : null,
       },
       bestMatchBadge: c.bestMatchBadge === true,
-      alsoMatched: Array.isArray(c.alsoMatched) ? c.alsoMatched.slice(0, 12) : [],
       resultKey: typeof c.resultKey === 'string' && RESULT_KEY_RE.test(c.resultKey) ? c.resultKey : null,
       loosen: c.loosen && typeof c.loosen.axisKey === 'string' && typeof c.loosen.label === 'string' && c.loosen.label.trim()
         ? { axisKey: c.loosen.axisKey, label: c.loosen.label.trim() }
@@ -3939,7 +3961,8 @@
         screen: 'intro', screenIndex: 0, criteria: {}, answers: [],
         hasPhoto: false, detectedShade: null, matches: null,
         matrixApplied: false, partial: false, columnar: null, quizStarted: false,
-        leadDone: prev.leadDone, leadToken: prev.leadToken || null, leadReportedKey: null,
+        leadDone: prev.leadDone, leadSaved: prev.leadSaved, leadCardSkipped: prev.leadCardSkipped,
+        leadToken: prev.leadToken || null, leadReportedKey: null,
         gridAdded: null, shopperName: prev.shopperName,
       };
       storeRecommend(data);
@@ -4346,37 +4369,28 @@
       screen.appendChild(referral);
     }
 
-    // Bundle offer: ONLY with a live bundle discount, so the bar never
-    // promises a saving checkout won't give.
+    // Bundle offer: the saving ONLY with a live bundle discount, so the
+    // bar never promises a saving checkout won't give. Without one the
+    // set bar still adds the picked sets in one tap.
     var gridUnits = 0;
     matches.forEach(function(m) { gridUnits += Math.max(1, m.quantity || 1); });
     var bd = definitive && results.bundleEnabled && matches.length >= 2 && results.bundleDiscount &&
       results.bundleDiscount.minQty <= gridUnits ? results.bundleDiscount : null;
     var refreshers = [];
     function refreshAll() { refreshers.forEach(function(fn) { fn(); }); }
+    var setBar = !bd && definitive && results.bundleEnabled && matches.length >= 2
+      ? gridSetBar(matches, results, refreshers) : null;
     if (bd) screen.appendChild(buildGridBundleBar(bd, results, refreshers));
+    else if (setBar) screen.appendChild(setBar.el);
 
     // Read once per render: the cards' product JSON can land in any order.
     var pendingKey = hasPhotoNow ? gridPendingTryon : null;
     if (hasPhotoNow) gridPendingTryon = null;
     var grid = el('div', 'gq-gr-grid');
     matches.forEach(function(m, i) {
-      grid.appendChild(buildGridCard(m, i, definitive, hasPhotoNow, results, bd, refreshAll, pendingKey));
+      grid.appendChild(buildGridCard(m, i, definitive, hasPhotoNow, results, bd, refreshAll, pendingKey, setBar));
     });
     screen.appendChild(grid);
-
-    // Pool engine: the next six candidates, compact, same add-to-bag.
-    var also = state.columnar && Array.isArray(state.columnar.alsoMatched) ? state.columnar.alsoMatched : [];
-    if (also.length > 0) {
-      var alsoSec = el('section', 'gq-gr-also');
-      alsoSec.appendChild(el('h3', 'gq-gr-also-title', escapeHtml(results.alsoMatchedLabel || 'Also matched for you')));
-      var alsoRow = el('div', 'gq-gr-also-row');
-      also.forEach(function(m, i) {
-        alsoRow.appendChild(buildGridCard(m, matches.length + i, definitive, false, results, bd, refreshAll, null, true));
-      });
-      alsoSec.appendChild(alsoRow);
-      screen.appendChild(alsoSec);
-    }
 
     if (state.partial && shadeActionable) screen.appendChild(buildShadeGate());
     if (definitive) {
@@ -4528,6 +4542,175 @@
     return bar;
   }
 
+  // Mix & match without a live bundle discount (2026-10-21): pick toggles
+  // on the cards (the bundle size is the pre-selection) and one tap that
+  // adds the picked sets. It promises no saving; once a discount is live
+  // the discount bar above takes its place. Sets already in the bag or
+  // sold out drop out of the pick.
+  var SET_BAG_SVG = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8h12l-1 12H7L6 8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>';
+  var PICK_SVG = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>';
+  function gridSetBar(matches, results, refreshers) {
+    var size = Math.floor(Number(results.bundleSize)) || 0;
+    // The bar's own copy says "any {range}": the same minimum here.
+    var min = Math.max(2, size || 2);
+    var pre = size > 0 ? Math.min(size, matches.length) : matches.length;
+    var picks = matches.map(function(m, i) {
+      return { m: m, key: matchKey(m), on: i < pre, choice: null, toggle: null, onAdded: null };
+    });
+    var ready = false;
+
+    var bar = el('div', 'gq-gr-bundle gq-gr-bundle--set');
+    bar.appendChild(el('span', 'gq-gr-bundle-badge', SET_BAG_SVG));
+    // The merchant's label when it names the threshold; its "save
+    // {discount}" clause drops out while no discount is live.
+    var label = results.bundleLabel && /\{(min|range)\}/.test(results.bundleLabel)
+      ? results.bundleLabel
+      : T('gridSetBar', '**Mix & match:** pick any {range} and add them in one tap');
+    var text = bundleThresholdTokens(label, null, results)
+      .replace(/\{count\}/g, String(min))
+      .replace(/\{(discount|was|total|set_word)\}/g, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+    bar.appendChild(el('span', 'gq-gr-bundle-text', renderAccent(text).replace(/<span class="gq-accent">/g, '<strong>').replace(/<\/span>/g, '</strong>')));
+    var btn = el('button', 'gq-add-btn gq-gr-bundle-add', TH('bundleAddSome', 'Add {count} to bag', { count: min }));
+    btn.type = 'button';
+    btn.disabled = true;
+    bar.appendChild(btn);
+    var problem = el('p', 'gq-add-problem gq-gr-bundle-problem', '');
+    problem.setAttribute('role', 'status');
+    bar.appendChild(problem);
+
+    function inBag(p) {
+      return Boolean(state.gridAdded && Object.prototype.hasOwnProperty.call(state.gridAdded, p.key));
+    }
+    function addable(p) {
+      return Boolean(p.choice && p.choice.id && !p.choice.soldOut && !inBag(p));
+    }
+    function selection() {
+      var items = [], count = 0, total = 0, known = true;
+      picks.forEach(function(p) {
+        if (!p.on || !addable(p)) return;
+        var q = Math.max(1, p.m.quantity || 1);
+        items.push({ id: p.choice.id, quantity: q });
+        count += q;
+        if (p.choice.unit != null) total += p.choice.unit * q;
+        else known = false;
+      });
+      return { items: items, count: count, total: known && items.length ? total : null };
+    }
+    function refresh() {
+      var left = 0;
+      picks.forEach(function(p) {
+        if (!p.toggle) return;
+        var show = !ready || addable(p);
+        if (show) left++;
+        p.toggle.style.display = show ? '' : 'none';
+        p.toggle.classList.toggle('is-picked', p.on);
+        p.toggle.setAttribute('aria-pressed', p.on ? 'true' : 'false');
+      });
+      if (btn.classList.contains('is-working') || btn.classList.contains('is-added')) return;
+      // Fewer sets left to add than the bar asks for: nothing to offer.
+      bar.style.display = ready && left < min ? 'none' : '';
+      var s = selection();
+      if (!ready) {
+        btn.disabled = true;
+        return;
+      }
+      btn.disabled = s.count < min;
+      btn.textContent = s.count < min
+        ? T('gridSetPickMore', 'Pick {n} more', { n: min - s.count })
+        : T('bundleAddSome', 'Add {count} to bag', { count: s.count }) + (s.total != null ? ' · ' + formatMoney(s.total) : '');
+    }
+    refreshers.push(refresh);
+
+    function pickFor(i) {
+      var p = picks[i];
+      if (!p) return null;
+      var t = el('button', 'gq-gr-pick', PICK_SVG);
+      t.type = 'button';
+      t.setAttribute('aria-label', T('ariaSetPick', 'Pick {name} for the set', { name: p.m.productName || p.m.title || '' }));
+      t.onclick = function(e) {
+        e.stopPropagation();
+        if (btn.classList.contains('is-working')) return;
+        p.on = !p.on;
+        // A new pick is a new set: "Added" ends here.
+        btn.classList.remove('is-added');
+        problem.textContent = '';
+        refresh();
+      };
+      p.toggle = t;
+      return t;
+    }
+    // The card's own "Added" state, for sets this bar puts in the bag.
+    function onAdded(i, fn) {
+      if (picks[i]) picks[i].onAdded = fn;
+    }
+
+    Promise.all(picks.map(function(p) { return choiceFor(p.m); })).then(function(cs) {
+      cs.forEach(function(c, i) { picks[i].choice = c; });
+      ready = true;
+      refresh();
+    });
+
+    function pickForVariant(id) {
+      for (var i = 0; i < picks.length; i++) {
+        if (picks[i].choice && String(picks[i].choice.id) === String(id)) return picks[i];
+      }
+      return null;
+    }
+    btn.onclick = function() {
+      var s = selection();
+      if (s.count < min) return;
+      btn.disabled = true;
+      btn.classList.add('is-working');
+      btn.textContent = T('adding', 'Adding…');
+      problem.textContent = '';
+      // Success and failure are separate branches: nothing after a
+      // successful add (tracking) can turn it into "Couldn't add".
+      addAllToBag(s.items).then(function(outcome) {
+        var failed = (outcome && outcome.failed) || [];
+        var added = (outcome && outcome.added) || s.items;
+        btn.classList.remove('is-working');
+        btn.classList.add('is-added');
+        var units = 0;
+        added.forEach(function(it) { units += it.quantity; });
+        btn.textContent = failed.length
+          ? T('addedSome', 'Added {n} of {total} to bag', { n: units, total: s.count })
+          : T('added', 'Added to bag ✓');
+        if (failed.length) {
+          problem.textContent = addProblemText(failed, function(id) {
+            var p = pickForVariant(id);
+            return p ? (p.m.productName || '') : '';
+          });
+        }
+        try {
+          if (!state.gridAdded || typeof state.gridAdded !== 'object') state.gridAdded = {};
+          added.forEach(function(it) {
+            var p = pickForVariant(it.id);
+            if (!p) return;
+            state.gridAdded[p.key] = { c: p.choice.unit != null ? p.choice.unit * it.quantity : 0, q: it.quantity };
+            quizAdds[String(it.id)] = (quizAdds[String(it.id)] || 0) + it.quantity;
+            if (p.onAdded) p.onAdded();
+          });
+          saveState();
+          var total = 0;
+          added.forEach(function(it) { var p = pickForVariant(it.id); if (p && p.choice.unit != null) total += p.choice.unit * it.quantity; });
+          refreshCartToken().then(function() { trackEvent('quiz_add_bundle_to_bag', bundleProps({ items: added, total: total })); });
+          refreshers.forEach(function(fn) { if (fn !== refresh) fn(); });
+          refresh();
+        } catch (e) { /* the add itself succeeded */ }
+      }, function(err) {
+        btn.classList.remove('is-working');
+        btn.textContent = T('addFailed', 'Couldn’t add — try again');
+        // Shopify's reason ("sold out", "only 2 left") beats a bare retry.
+        problem.textContent = err && err.reason ? String(err.reason).slice(0, 160) : '';
+        setTimeout(refresh, 2600);
+      });
+    };
+    refresh();
+    return { el: bar, pickFor: pickFor, onAdded: onAdded };
+  }
+
   // Grid bundle discount status, from Shopify's answer (cartDiscountApplies),
   // never from the item count alone: 'pending' while the code is being put
   // on the cart, 'applied' once the cart says it applies, 'refused' when it
@@ -4583,15 +4766,17 @@
     return toks.length ? toks : null;
   }
 
-  // compact: an "Also matched" card (smaller, no why line, no try-on).
-  function buildGridCard(m, idx, definitive, hasPhotoNow, results, bd, refreshAll, pendingKey, compact) {
+  // setBar: the no-discount set bar, whose pick toggle sits on the photo.
+  function buildGridCard(m, idx, definitive, hasPhotoNow, results, bd, refreshAll, pendingKey, setBar) {
     var key = matchKey(m);
-    var card = el('div', 'gq-gr-card' + (compact ? ' gq-gr-card--compact' : ''));
+    var card = el('div', 'gq-gr-card');
     var media = el('div', 'gq-media gq-gr-media');
     var img = el('img', 'gq-media-img');
     img.alt = m.title || m.productName || '';
     img.loading = idx < 2 ? 'eager' : 'lazy';
     media.appendChild(img);
+    var pick = setBar ? setBar.pickFor(idx) : null;
+    if (pick) media.appendChild(pick);
     // Same claim rule as the featured layout: "Best match" only when the
     // merchant's rules (or the pool engine's exact rung) put this set first.
     if (idx === 0 && bestMatchClaim()) {
@@ -4638,7 +4823,7 @@
     // Pool engine matches carry their own why line (reasons[0]), written
     // against this shopper's answers; it wins over the static ones.
     var why = (meta && Array.isArray(m.reasons) && m.reasons[0]) || whyFits(m) || m.tagline || (Array.isArray(m.reasons) && m.reasons[0]) || '';
-    if (why && !compact) body.appendChild(el('p', 'gq-gr-why', '<span class="gq-gr-why-mark">✓</span><span>' + escapeHtml(why) + '</span>'));
+    if (why) body.appendChild(el('p', 'gq-gr-why', '<span class="gq-gr-why-mark">✓</span><span>' + escapeHtml(why) + '</span>'));
 
     // CTA setting (migration 092): View product as the button keeps the
     // grid's add logic behind a small link (or drops it when that's off).
@@ -4650,7 +4835,7 @@
       add.type = 'button';
       body.appendChild(add);
     }
-    if (results.matchFootnote && !compact) body.appendChild(buildMatchFootnote(results.matchFootnote));
+    if (results.matchFootnote) body.appendChild(buildMatchFootnote(results.matchFootnote));
     card.appendChild(body);
 
     var qty = Math.max(1, m.quantity || 1);
@@ -4724,6 +4909,7 @@
       add.innerHTML = BAG_CHECK_SVG + '<span>' + TH('gridAdded', 'Added') + '</span>';
     }
     if (state.gridAdded && Object.prototype.hasOwnProperty.call(state.gridAdded, key)) showAdded();
+    if (setBar) setBar.onAdded(idx, showAdded);
 
     fetchProductJson(m.productHandle).then(function(pj) {
       var choice = cartChoice(pj, m);
@@ -4758,7 +4944,7 @@
         links.forEach(function(a) { a.href = href; });
       }
 
-      if (config.tryonEnabled === false || cached || compact) return;
+      if (config.tryonEnabled === false || cached) return;
       // Product not set up for try-on: no "See on me", no transform.
       if (!matchTryonReady(m)) return;
       // One automatic try-on per photo: the card the shopper tapped, else
@@ -4809,13 +4995,25 @@
 
   // Email capture as a card under the grid results ("Save your matches").
   // Same form, validation and discount reveal as every other placement.
+  // "both" (migration 095): the step asked first, so the card asks only a
+  // shopper who skipped it and shows the email as saved to one who gave it.
   function gridLeadCard() {
-    if (!leadActive() || state.leadDone || tplLeadBeforeResults()) return null;
+    var placement = config.emailPlacement;
+    if (!leadActive() || (placement !== 'after_results' && placement !== 'both')) return null;
+    var both = placement === 'both';
+    if (both && state.leadSaved) {
+      var saved = el('section', 'gq-gr-lead gq-gr-lead--saved');
+      saved.appendChild(el('p', 'gq-gr-lead-eyebrow', TH('saveMatches', 'Save your matches')));
+      saved.appendChild(el('p', 'gq-gr-lead-done', TH('savedDone', 'Saved \u2713 You\u2019re on the list.')));
+      return saved;
+    }
+    if (both ? state.leadCardSkipped : state.leadDone) return null;
     var lead = config.lead || {};
     if (!state.leadViewed) {
       state.leadViewed = true;
       saveState();
-      trackEvent('quiz_lead_view');
+      // The step already counted this shopper's view.
+      if (!(both && state.leadDone)) trackEvent('quiz_lead_view');
     }
     var wrap = el('section', 'gq-gr-lead');
     wrap.appendChild(el('p', 'gq-gr-lead-eyebrow', TH('saveMatches', 'Save your matches')));
@@ -4823,6 +5021,7 @@
       inline: true,
       onDone: function(kind) {
         state.leadDone = true;
+        if (both && kind === 'skip') state.leadCardSkipped = true;
         saveState();
         if (kind === 'skip') {
           if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
@@ -5998,6 +6197,8 @@
       // A captured/declined lead survives restarts — never re-ask the same
       // session for the email it already gave (or refused).
       leadDone: state.leadDone,
+      leadSaved: state.leadSaved,
+      leadCardSkipped: state.leadCardSkipped,
       // Same shopper, same lead: a retake's new matches report to it too.
       leadToken: state.leadToken || null,
       leadReportedKey: null,
@@ -6071,7 +6272,7 @@
   var TPL_EMAIL_DEFAULT = { t1: 'gate_results', t2: 'hook_start', t3: 'gate_results', t4: 'gate_results', t5: 'gate_results' };
   function tplEmailPlacement() {
     var p = config && config.emailPlacement;
-    if (p === 'hook_start' || p === 'gate_results' || p === 'after_results' || p === 'off') return p;
+    if (p === 'hook_start' || p === 'gate_results' || p === 'after_results' || p === 'both' || p === 'off') return p;
     return TPL_EMAIL_DEFAULT[config.template] || 'gate_results';
   }
 
@@ -6079,11 +6280,12 @@
   // Legacy shops: always (the shipped bonus step), except classic grid
   // results with the merchant's "below the match" placement, which carry
   // the capture as a card under the results. Templates: hook_start and
-  // gate_results; after_results renders a card inside the results.
+  // gate_results; after_results renders a card inside the results, and
+  // "both" (migration 095) asks in the step and keeps the card.
   function tplLeadBeforeResults() {
     if (!activeTpl()) return !gridResultsActive() || config.emailPlacement !== 'after_results';
     var p = tplEmailPlacement();
-    return p === 'hook_start' || p === 'gate_results';
+    return p === 'hook_start' || p === 'gate_results' || p === 'both';
   }
 
   function httpsUrl(u) {
@@ -6566,10 +6768,11 @@
     return screen;
   }
 
-  // ---- Desktop fit (template question screens) ----
+  // ---- Desktop fit (template question screens, classic pool boutique) ----
   //
   // On desktop the whole question step (chrome, prompt, every answer, the
-  // Continue row) should sit in one visible frame. The step renders as
+  // Continue row) should sit in one visible frame. Classic quizzes on the
+  // pool boutique layout (fitClassicStep) use the same engine. The step renders as
   // designed first; only when it runs past the fold does this step through
   // compactness levels (gq-fit-1 tighter rhythm, gq-fit-2 text answers in
   // columns, gq-fit-3 compact answers and prompt; the stylesheet scopes all
@@ -6663,6 +6866,16 @@
     return above + contentH - room;
   }
 
+  // Where a fitted step's content ends: the template body, or a classic
+  // step's last row (the Continue bar). The classic body stretches to the
+  // step's desktop min-height, so its own bottom says nothing.
+  function fitEnd(screen) {
+    var tplBody = screen.querySelector('.gq-tpl-body');
+    if (tplBody) return tplBody;
+    var body = screen.querySelector('.gq-step-body');
+    return body ? body.lastElementChild : null;
+  }
+
   function fitSetLevel(screen, level) {
     for (var i = 1; i <= FIT_LEVELS; i++) screen.classList.toggle('gq-fit-' + i, i <= level);
   }
@@ -6688,14 +6901,17 @@
   // Answer-image grids on the step (Match tiles, Consult cards): their
   // images scale with the column. Fixed icon/thumb slots are sized by the
   // levels instead. Records the designed columns, rows and image height.
-  function fitImageGrids(body) {
+  // classic: the classic step's photo answers (.gq-option-img), whose
+  // grid may be a pool-trimmed flex row.
+  function fitImageGrids(body, classic) {
     var grids = [];
     var blocks = body.querySelectorAll('.gq-option-block');
     for (var i = 0; i < blocks.length; i++) {
       var list = blocks[i].firstElementChild;
-      if (!list || window.getComputedStyle(list).display !== 'grid') continue;
-      var slots = list.querySelectorAll('.gq-slot:not(.gq-slot--fixed)');
-      var slot = null, swatch = true;
+      var display = list ? window.getComputedStyle(list).display : '';
+      if (!list || (display !== 'grid' && !(classic && display === 'flex'))) continue;
+      var slots = list.querySelectorAll(classic ? '.gq-option-img' : '.gq-slot:not(.gq-slot--fixed)');
+      var slot = null, swatch = !classic;
       for (var s = 0; s < slots.length; s++) {
         if (slots[s].offsetHeight <= 0) continue;
         if (!slot) slot = slots[s];
@@ -6706,12 +6922,26 @@
       var items = list.children;
       var cols = 1;
       while (cols < items.length && Math.abs(items[cols].offsetTop - items[0].offsetTop) < 2) cols++;
-      grids.push({
+      var g = {
         block: blocks[i], list: list, slot: slot, n: items.length, swatch: swatch,
         cols0: cols, rows: Math.ceil(items.length / cols), h0: slot.offsetHeight,
-      });
+      };
+      if (classic) g.k = fitWidthPerImage(g);
+      grids.push(g);
     }
     return grids;
+  }
+
+  // Answer-block pixels per pixel of image width. A grid gives up one per
+  // column; a trimmed row is sized off its full-count grid, so it is
+  // measured instead.
+  function fitWidthPerImage(g) {
+    var w = g.list.getBoundingClientRect().width;
+    var sw = g.slot.offsetWidth;
+    g.block.style.setProperty('max-width', Math.max(0, Math.floor(w - 60)) + 'px');
+    var d = sw - g.slot.offsetWidth;
+    g.block.style.removeProperty('max-width');
+    return d > 0 ? 60 / d : g.cols0;
   }
 
   // Fewest columns that hold each grid's answers in r rows, so the rows
@@ -6747,7 +6977,7 @@
         g.block.style.removeProperty('max-width');
         continue;
       }
-      var narrower = g.cols * (g.sw - cap * g.sw / g.sh);
+      var narrower = (g.k || g.cols) * (g.sw - cap * g.sw / g.sh);
       g.block.style.setProperty('max-width', Math.floor(g.w - narrower) + 'px');
     }
   }
@@ -6756,18 +6986,19 @@
   // from the designed one down: balanced columns, images at their natural
   // size for those columns, then scaled down until the step fits. Keeps
   // the layout with the tallest images (score: full-width grids get
-  // FIT_FULL_GAIN); ties keep fewer columns.
-  function fitImageLayout(grids, over, floor) {
+  // FIT_FULL_GAIN); ties keep fewer columns. designedOnly keeps the
+  // designed columns (classic steps: their rows are the design).
+  function fitImageLayout(grids, over, floor, designedOnly) {
     var best = null, rows = 0, i;
     for (i = 0; i < grids.length; i++) rows = Math.max(rows, grids[i].rows);
-    for (var r = rows; r >= 1; r--) {
-      var cols = fitColsForRows(grids, r);
+    for (var r = rows; r >= (designedOnly ? rows : 1); r--) {
+      var cols = designedOnly ? null : fitColsForRows(grids, r);
       var lines = 0, top = 0, low = Infinity, full = true;
       fitGridCols(grids, cols);
       for (i = 0; i < grids.length; i++) {
         top = Math.max(top, grids[i].top);
         low = Math.min(low, grids[i].top);
-        lines += Math.ceil(grids[i].n / cols[i]);
+        lines += Math.ceil(grids[i].n / grids[i].cols);
         if (grids[i].top < grids[i].sh - 0.5) full = false;
       }
       // More columns only make the images smaller from here on.
@@ -6789,14 +7020,27 @@
   }
 
   function fitTplStep(screen) {
+    fitStep(screen, false);
+  }
+
+  // Classic steps on the pool engine's boutique layout (Glamnetic): the
+  // question, email and photo steps fit the same way. Their answers keep
+  // the designed rows; photo answers scale down whole.
+  function fitClassicStep(screen) {
+    fitStep(screen, true);
+  }
+
+  function fitStep(screen, classic) {
     if (!stageEl || screen.parentNode !== stageEl) return;
-    var body = screen.querySelector('.gq-tpl-body');
+    var body = screen.querySelector(classic ? '.gq-step-body' : '.gq-tpl-body');
     fitReset(screen, body);
     if (!body || !fitActive()) return;
+    var end = fitEnd(screen);
+    if (!end) return;
     var room = window.innerHeight - fitTopInset() - fitMargin();
-    var over = function() { return fitOverflow(screen, body, room); };
+    var over = function() { return fitOverflow(screen, end, room); };
     if (over() <= 0) return;
-    var grids = fitImageGrids(body);
+    var grids = fitImageGrids(body, classic);
     var floor = FIT_IMG_FLOOR, h0 = 0, rows = 0, last = null, i;
     for (i = 0; i < grids.length; i++) {
       h0 = Math.max(h0, grids[i].h0);
@@ -6811,7 +7055,7 @@
       // Lay the images out again only when this level changed the step.
       if (!grids.length || (last !== null && Math.abs(o - last) < 1)) continue;
       last = o;
-      var layout = fitImageLayout(grids, over, floor);
+      var layout = fitImageLayout(grids, over, floor, classic);
       fitGridCols(grids, null);
       if (layout && (!best || layout.score > best.score * FIT_LEVEL_GAIN)) {
         best = layout;
@@ -6832,7 +7076,7 @@
     fitSetLevel(screen, FIT_LEVELS);
     if (!grids.length) return;
     var compact = null;
-    for (var r = rows; r >= 1; r--) {
+    for (var r = rows; r >= 1 && !classic; r--) {
       var cols = fitColsForRows(grids, r);
       fitGridCols(grids, cols);
       if (grids.some(function(g) { return g.top < floor; })) break;
@@ -6843,10 +7087,10 @@
     screen.classList.add('gq-fit-img');
   }
 
-  // Desktop template question steps, 180ms after they mount: bring the
-  // quiz top out from under the window edge or a fixed/sticky header, or
-  // (after a step change) scroll just enough to show the Continue row,
-  // never tucking the quiz top under the header.
+  // Desktop fitted steps (templates, classic pool boutique), 180ms after
+  // they mount: bring the quiz top out from under the window edge or a
+  // fixed/sticky header, or (after a step change) scroll just enough to
+  // show the Continue row, never tucking the quiz top under the header.
   function fitScrollIntoView(screen, rootTop, stepChanged, reduce) {
     var behavior = reduce ? 'auto' : 'smooth';
     var inset = fitTopInset();
@@ -6857,7 +7101,7 @@
       return;
     }
     if (!stepChanged || rootTop <= inset) return;
-    var body = screen.querySelector('.gq-tpl-body');
+    var body = fitEnd(screen);
     if (!body) return;
     // Untransformed bottom: the stage carries no entry animation.
     var bottom = stageEl.getBoundingClientRect().top +
@@ -7399,27 +7643,43 @@
 
   // after_results: the capture card below the hero match inside the
   // results body. Submit swaps the card for the reveal; skip removes it.
-  // Reload never re-asks (state.leadDone).
+  // Reload never re-asks (state.leadDone). "both": the step asked first,
+  // so the card asks only a shopper who skipped it and shows the email as
+  // saved to one who gave it.
   function tplLeadCard() {
-    if (tplEmailPlacement() !== 'after_results') return null;
-    if (!leadActive() || state.leadDone) return null;
+    var placement = tplEmailPlacement();
+    if (placement !== 'after_results' && placement !== 'both') return null;
+    if (!leadActive()) return null;
+    var both = placement === 'both';
+    if (both && state.leadSaved) return tplLeadSavedCard();
+    if (both ? state.leadCardSkipped : state.leadDone) return null;
     var lead = config.lead || {};
     // Once per session (persisted): results re-render on every price/shade
     // update and must not re-emit the view event.
     if (!state.leadViewed) {
       state.leadViewed = true;
       saveState();
-      trackEvent('quiz_lead_view');
+      // The step already counted this shopper's view.
+      if (!(both && state.leadDone)) trackEvent('quiz_lead_view');
     }
     var card = tplLeadForm(lead, {
       inline: true,
       onDone: function(kind) {
         state.leadDone = true;
+        if (both && kind === 'skip') state.leadCardSkipped = true;
         saveState();
-        if (card.parentNode) card.parentNode.removeChild(card);
+        if (!card.parentNode) return;
+        if (both && kind === 'submit') card.parentNode.replaceChild(tplLeadSavedCard(), card);
+        else card.parentNode.removeChild(card);
       },
     });
     card.classList.add('gq-tpl-lead-inline');
+    return card;
+  }
+
+  function tplLeadSavedCard() {
+    var card = el('div', 'gq-tpl-lead-card gq-tpl-lead-card--inline gq-tpl-lead-inline gq-tpl-lead-saved');
+    card.appendChild(el('p', 'gq-tpl-lead-body', TH('savedDone', 'Saved \u2713 You\u2019re on the list.')));
     return card;
   }
 
