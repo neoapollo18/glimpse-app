@@ -576,3 +576,43 @@ describe("bundles switched off for the store (server allowlist, 2026-10-20)", ()
     }
   });
 });
+
+describe("Horizon theme cart after a quiz add", () => {
+  // Horizon's cart icon, cart items and drawer listen on document for
+  // 'cart:update' with detail.resource (the cart) and detail.data.itemCount.
+  // The App Review store runs Horizon: without this the bubble stayed at 0
+  // and the drawer said the cart was empty after a successful add.
+  it("dispatches cart:update with the cart's item count when Horizon's elements are on the page", async () => {
+    const root = await bootResults(null);
+    document.body.appendChild(document.createElement("cart-items-component"));
+    const seen: any[] = [];
+    const onUpdate = (e: Event) => seen.push((e as CustomEvent).detail);
+    document.addEventListener("cart:update", onUpdate);
+    try {
+      const add = [...root.querySelectorAll<HTMLButtonElement>("button")].find((b) => /^Add to bag/.test(b.textContent || ""))!;
+      add.click();
+      await settle();
+      expect(seen).toHaveLength(1);
+      expect(seen[0].sourceId).toBe("gleame-quiz");
+      expect(seen[0].data).toEqual({ itemCount: 1, source: "gleame-quiz" });
+      expect(seen[0].resource.item_count).toBe(1);
+    } finally {
+      document.removeEventListener("cart:update", onUpdate);
+    }
+  });
+
+  it("other themes get no cart:update (their listeners expect other shapes)", async () => {
+    const root = await bootResults(null);
+    const seen: unknown[] = [];
+    const onUpdate = (e: Event) => seen.push(e);
+    document.addEventListener("cart:update", onUpdate);
+    try {
+      const add = [...root.querySelectorAll<HTMLButtonElement>("button")].find((b) => /^Add to bag/.test(b.textContent || ""))!;
+      add.click();
+      await settle();
+      expect(seen).toHaveLength(0);
+    } finally {
+      document.removeEventListener("cart:update", onUpdate);
+    }
+  });
+});

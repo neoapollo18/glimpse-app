@@ -191,17 +191,18 @@ describe("Routine (t3) name capture on the storefront", () => {
     expect(skip.form).toBeNull();
   });
 
-  it("a blank name keeps Continue disabled and stays on the step", async () => {
+  it("Continue is never disabled: with no name it moves on like Skip", async () => {
+    // App Review (2026-10-21): a greyed Continue that does nothing on click
+    // reads as broken, so a blank name continues without one.
     const root = await openNameStep();
-    expect(continueBtn(root).disabled).toBe(true);
+    expect(continueBtn(root).disabled).toBe(false);
     typeName(root, "   ");
-    expect(continueBtn(root).disabled).toBe(true);
+    expect(continueBtn(root).disabled).toBe(false);
     continueBtn(root).click();
-    // A submit with no name (as Enter would send it) is ignored too.
-    (root.querySelector(".gq-t3-name-form") as HTMLFormElement).requestSubmit();
     await wait(SWAP);
-    expect(root.querySelector(".gq-t3-name")).not.toBeNull();
-    expect(savedState().screen).toBe("name");
+    expect(root.querySelector(".gq-t3-name")).toBeNull();
+    expect(savedState().screen).toBe("question");
+    expect(savedState().shopperName || "").toBe("");
   });
 
   it("whitespace in the name is collapsed and trimmed", async () => {

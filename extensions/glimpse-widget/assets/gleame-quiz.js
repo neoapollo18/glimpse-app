@@ -651,7 +651,7 @@
     } catch (e) { /* old browsers: ignore */ }
     var handled = false;
     try {
-      handled = Boolean(dawnDrawerSync(body) || prestigeCartSync(body, bundled) || fluorescentCartSync());
+      handled = Boolean(dawnDrawerSync(body) || prestigeCartSync(body, bundled) || fluorescentCartSync() || horizonCartSync());
     } catch (e) { handled = false; }
     try {
       if (!handled) refreshCartUi(body);
@@ -888,6 +888,33 @@
         // brand-new cart that render can race the cart cookie and come back
         // empty. One delayed re-emit self-heals that without a visible cost.
         setTimeout(function() { try { emit('quick-cart:updated'); } catch (e) {} }, 1200);
+      })
+      .catch(function() {});
+  }
+
+  // Horizon (Shopify's default theme family since 2025): the cart icon,
+  // cart items and drawer listen on document for 'cart:update' with the
+  // cart as detail.resource and detail.data.itemCount (the icon sets that
+  // absolute count; the items re-render their own section; the drawer
+  // opens when the theme has auto-open on). The 'cart:updated' and
+  // 'cart:refresh' events above mean nothing to it, so without this a
+  // quiz add left the bubble at 0 and the drawer saying "Your cart is
+  // empty" (App Review store, 2026-10-21). Gated on Horizon's own elements:
+  // other themes listening for 'cart:update' expect other shapes.
+  function horizonCartSync() {
+    if (!document.querySelector('cart-drawer-component, cart-items-component, cart-icon [ref="cartBubbleCount"]')) return false;
+    return fetch('/cart.js', { credentials: 'same-origin' })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(cart) {
+        if (!cart || typeof cart.item_count !== 'number') return;
+        document.dispatchEvent(new CustomEvent('cart:update', {
+          bubbles: true,
+          detail: {
+            resource: cart,
+            sourceId: 'gleame-quiz',
+            data: { itemCount: cart.item_count, source: 'gleame-quiz' },
+          },
+        }));
       })
       .catch(function() {});
   }
@@ -7183,14 +7210,14 @@
     // Continue is this form's submit button: a click, keyboard activation
     // and Enter in the field all reach onsubmit (like the lead forms).
     cont.type = 'submit';
-    cont.disabled = !input.value.trim();
     form.appendChild(cont);
-    input.oninput = function() { cont.disabled = !input.value.trim(); };
+    // Continue is never disabled (App Review, 2026-10-21: a greyed button
+    // that does nothing reads as broken, and autofill without an input
+    // event left it disabled). With no name it moves on like Skip.
     form.onsubmit = function(e) {
       e.preventDefault();
       var v = input.value.trim().replace(/\s+/g, ' ');
-      if (!v) return;
-      state.shopperName = v.slice(0, 40);
+      state.shopperName = v ? v.slice(0, 40) : '';
       leaveNameCapture();
     };
     body.appendChild(form);
