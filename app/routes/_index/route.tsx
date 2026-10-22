@@ -22,9 +22,9 @@ export default function App() {
   return (
     <div className={styles.index}>
       <div className={styles.content}>
-        <h1 className={styles.heading}>Gleame - AI Product Visualizations</h1>
+        <h1 className={styles.heading}>Gleame: product match quizzes</h1>
         <p className={styles.text}>
-          Let customers see how they'll look with your products using AI-powered transformations. Increase conversions by letting shoppers try before they buy.
+          A quiz page for your Shopify store. Shoppers answer a few questions and get products matched to them, ready to add to cart.
         </p>
         {showForm && (
           <Form className={styles.form} method="post" action="/auth/login">
@@ -40,13 +40,13 @@ export default function App() {
         )}
         <ul className={styles.list}>
           <li>
-            <strong>AI Transformations</strong>. Customers upload photos and see realistic results with your products using advanced AI technology.
+            <strong>Built from your catalog</strong>. Gleame drafts the questions and the matching from your products. You can edit all of it.
           </li>
           <li>
-            <strong>Instant Setup</strong>. Configure products with simple transformation prompts in minutes. No technical knowledge required.
+            <strong>Matches you control</strong>. Pin products to answers, or let rules and AI pick the best fit for each shopper.
           </li>
           <li>
-            <strong>Boost Conversions</strong>. Proven to increase purchase confidence and reduce returns by letting customers visualize products on themselves.
+            <strong>Results you can measure</strong>. See which answers and recommendations lead to add-to-carts and orders.
           </li>
         </ul>
       </div>

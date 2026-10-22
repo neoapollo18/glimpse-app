@@ -93,13 +93,13 @@ export function QuizPlacementStatus({ quizLive }: { quizLive: boolean }) {
   }
 
   // Before go-live the badge sits under "Set up the quiz page", which says
-  // the rest; once live, the note explains why a missing section is fine.
+  // the rest; once live, the note says where to add it.
   return (
     <InlineStack gap="200" blockAlign="center">
       <Badge>Quiz section not added</Badge>
       {quizLive && (
         <Text as="span" variant="bodySm" tone="subdued">
-          Not in your published theme. A quiz page made with one-click Publish works without it.
+          Not in your published theme yet. Add the Gleame Quiz block in your theme editor.
         </Text>
       )}
     </InlineStack>

@@ -24,6 +24,7 @@ import { authenticate } from "../shopify.server";
 import { findShopByDomain } from "../lib/supabase.server";
 import { rememberShopCurrency } from "../lib/shop-currency.server";
 import { getQuizDashboard } from "../lib/quiz-dashboard.server";
+import { bundlesAllowed } from "../lib/bundles.server";
 import { buildInsights, parseRange, DASHBOARD_RANGES, type Insight, type QuizDashboardData, type WindowStats } from "../lib/quiz-dashboard";
 
 // Quiz analytics (2026-10-15 revamp). One dashboard, five tabs, every rate
@@ -39,7 +40,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     findShopByDomain(session.shop).catch(() => null),
   ]);
   const currency = shop ? await rememberShopCurrency(shop.id, (q) => admin.graphql(q)).catch(() => null) : null;
-  return json({ data, currency, range });
+  // Bundles are off for every store but the allowlisted ones (App Review,
+  // 2026-10-20), so the bundle figure shows only there.
+  return json({ data, currency, range, bundles: bundlesAllowed(session.shop) });
 };
 
 type TabId = "overview" | "funnel" | "answers" | "products" | "leads";
@@ -231,7 +234,7 @@ function Section({ title, badge, children, hint }: { title: string; badge?: Reac
 }
 
 export default function QuizAnalytics() {
-  const { data, currency, range } = useLoaderData<typeof loader>();
+  const { data, currency, range, bundles } = useLoaderData<typeof loader>();
   const [params, setParams] = useSearchParams();
   const initialTab = (TABS.find((t) => t.id === params.get("tab"))?.id ?? "overview") as TabId;
   const [tab, setTab] = useState<TabId>(initialTab);
@@ -288,7 +291,7 @@ export default function QuizAnalytics() {
         {tab === "overview" && <Overview d={d} cur={cur} prev={prev} money={money} onTab={setTab} />}
         {tab === "funnel" && <Funnel d={d} cur={cur} />}
         {tab === "answers" && <Answers d={d} cur={cur} />}
-        {tab === "products" && <Products d={d} money={money} />}
+        {tab === "products" && <Products d={d} money={money} bundles={bundles} />}
         {tab === "leads" && <Leads d={d} range={range} />}
       </BlockStack>
     </Page>
@@ -558,7 +561,7 @@ function Answers({ d, cur }: { d: QuizDashboardData; cur: WindowStats }) {
   );
 }
 
-function Products({ d, money }: { d: QuizDashboardData; money: Money }) {
+function Products({ d, money, bundles }: { d: QuizDashboardData; money: Money; bundles: boolean }) {
   const o = d.orders;
   const aov = o && o.quizOrders > 0 ? o.quizRevenue / o.quizOrders : null;
   const storeAov = o && o.storeOrders > 0 ? o.storeRevenue / o.storeOrders : null;
@@ -571,11 +574,13 @@ function Products({ d, money }: { d: QuizDashboardData; money: Money }) {
   ]);
   return (
     <BlockStack gap="400">
-      <InlineGrid columns={{ xs: 2, md: 4 }} gap="400">
+      <InlineGrid columns={{ xs: 2, md: bundles ? 4 : 3 }} gap="400">
         <Kpi label="Quiz orders" value={o ? o.quizOrders.toLocaleString() : "—"} sub={o && o.finisherCarts > 0 ? `${pct(o.quizBuyerCarts, o.finisherCarts)}% of shoppers who saw matches bought` : undefined} />
         <Kpi label="Quiz revenue" value={o ? money.whole(o.quizRevenue) : "—"} sub={o && o.storeRevenue > 0 ? `${((o.quizRevenue / o.storeRevenue) * 100).toFixed(1)}% of store revenue` : undefined} />
         <Kpi label="Quiz order value" value={aov != null ? money.cents(aov) : "—"} sub={storeAov != null ? `store average ${money.cents(storeAov)}` : undefined} />
-        <Kpi label="Bundle adds" value={d.current.bundleAdds.toLocaleString()} sub={`${d.current.discountApplied} with the bundle discount applied`} />
+        {bundles && (
+          <Kpi label="Bundle adds" value={d.current.bundleAdds.toLocaleString()} sub={`${d.current.discountApplied} with the bundle discount applied`} />
+        )}
       </InlineGrid>
       <Section
         title="Products"

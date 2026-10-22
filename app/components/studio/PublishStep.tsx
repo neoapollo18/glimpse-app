@@ -26,10 +26,24 @@ import { matchingReadiness } from "../../lib/matching-readiness";
 import { answerRuleSavesSettled } from "./MatchesTab";
 
 // Optional scopes for one-click publish (shopify.app.glimpse-app.toml).
+// read_themes only lets Publish check the theme for the quiz block, so
+// publishing goes ahead without it.
 const PAGE_SCOPE = "write_online_store_pages";
 const NAV_SCOPE = "write_online_store_navigation";
+const THEME_SCOPE = "read_themes";
 const SCOPE_DECLINED_LINE =
   "Publishing needs permission to add the Find My Match page to your Online Store. Click Publish again to allow it, or add the Gleame Quiz block from the theme editor instead.";
+
+/** A publish that went through (publish.server PublishResult). */
+interface PublishOutcome {
+  liveUrl: string | null;
+  /** The quiz shows on the page. False: the page exists, empty, until the
+   * Gleame Quiz block is added in the theme editor. */
+  quizOnPage: boolean;
+  /** The page's theme template ("page.find-my-match"), or null when it is
+   * on the default page template (the merchant creates ours first). */
+  pageTemplate: string | null;
+}
 
 // V2-SPEC Part 7 (Live tab restored 2026-10-16 with the setup guide):
 //   1. PublishSheet: a Polaris modal reachable from the title bar Publish
@@ -135,16 +149,28 @@ export function PublishSheet({
 }) {
   const [addToMenu, setAddToMenu] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ liveUrl: string | null; error: string | null } | null>(null);
+  const [outcome, setOutcome] = useState<PublishOutcome | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // Finish was clicked and the block still isn't on the page.
+  const [stillMissing, setStillMissing] = useState(false);
   // Matching is re-read on every opening (useMatchingReady).
   const { ready: logicReady, checking: checkingMatching } = useMatchingReady(data, open);
   // Each opening starts at the checklist (the Hidden badge opens this sheet
   // to show which questions are hidden), not at the last publish's result.
   useEffect(() => {
-    if (open) setResult(null);
+    if (open) {
+      setOutcome(null);
+      setError(null);
+      setStillMissing(false);
+    }
   }, [open]);
   const revalidator = useRevalidator();
   const shopify = useAppBridge();
+  // Where the admin reports the quiz block (re-checked when the merchant
+  // comes back from the theme editor). Sent with Publish for stores whose
+  // theme Gleame can't read.
+  const blockStatus = useQuizBlockStatus();
+  const blockTemplates = blockStatus?.state === "active" ? blockStatus.placements.map((p) => p.template) : [];
 
   const flow = data.draft?.flow;
   const questionCount = flow?.questions.length ?? 0;
@@ -159,16 +185,20 @@ export function PublishSheet({
   // store-wide re-auth. Returns null when access is (or may be) there, or
   // the line to show. A FAILED request is not a grant: treating it as one
   // hid the real error behind the server's "needs permission" card.
-  const ensureScopes = async (needed: string[]): Promise<string | null> => {
+  // `optional` scopes are asked for in the same prompt but never block.
+  const ensureScopes = async (needed: string[], optional: string[] = []): Promise<string | null> => {
     // Scopes API absent (not embedded, old host): let the server decide;
     // it reports missingScopes if access is really absent.
     if (!shopify?.scopes) return null;
     try {
       const { granted } = await shopify.scopes.query();
-      const missing = needed.filter((sc) => !granted.includes(sc));
+      const missing = [...needed, ...optional].filter((sc) => !granted.includes(sc));
       if (missing.length === 0) return null;
       const res = await shopify.scopes.request(missing);
-      return res.result === "granted-all" ? null : SCOPE_DECLINED_LINE;
+      if (res.result === "granted-all") return null;
+      if (!needed.some((sc) => missing.includes(sc))) return null;
+      const after = await shopify.scopes.query();
+      return needed.every((sc) => after.granted.includes(sc)) ? null : SCOPE_DECLINED_LINE;
     } catch (e) {
       console.error("[publish] scopes request failed", e);
       return `Shopify couldn't ask for permission to add the page (${(e as Error)?.message || "unknown error"}). Reload the app and try again, or add the Gleame Quiz block from the theme editor instead.`;
@@ -176,21 +206,23 @@ export function PublishSheet({
   };
 
   const publish = async () => {
+    const finishing = outcome !== null;
     setBusy(true);
-    setResult(null);
+    setError(null);
     try {
       // The menu link is best-effort on the server, so only the page scope
       // gates the publish; the nav scope rides along when the box is ticked.
       const needed = addToMenu ? [PAGE_SCOPE, NAV_SCOPE] : [PAGE_SCOPE];
-      const scopeError = await ensureScopes(needed);
+      const scopeError = await ensureScopes(needed, [THEME_SCOPE]);
       if (scopeError) {
-        setResult({ liveUrl: null, error: scopeError });
+        setError(scopeError);
         return;
       }
       const post = async () => {
         const fd = new FormData();
         fd.append("intent", "publish");
         fd.append("addToMenu", String(addToMenu));
+        fd.append("blockTemplates", blockTemplates.join(","));
         const res = await fetch("/app/api/publish-quiz", { method: "POST", body: fd });
         return res.json().catch(() => null);
       };
@@ -200,7 +232,7 @@ export function PublishSheet({
       if (!body?.ok && Array.isArray(body?.missingScopes) && body.missingScopes.length > 0) {
         const retryError = await ensureScopes(body.missingScopes);
         if (retryError) {
-          setResult({ liveUrl: null, error: retryError });
+          setError(retryError);
           return;
         }
         body = await post();
@@ -216,32 +248,45 @@ export function PublishSheet({
         }
       }
       if (body?.ok) {
-        setResult({ liveUrl: body.liveUrl ?? null, error: null });
+        const quizOnPage = body.quizOnPage !== false;
+        setOutcome({
+          liveUrl: body.liveUrl ?? null,
+          quizOnPage,
+          pageTemplate: typeof body.pageTemplate === "string" ? body.pageTemplate : null,
+        });
+        setStillMissing(finishing && !quizOnPage);
         revalidator.revalidate();
       } else {
-        setResult({ liveUrl: null, error: body?.error ?? "Publishing failed" });
+        setError(body?.error ?? "Publishing failed");
       }
     } catch (e) {
-      setResult({ liveUrl: null, error: (e as Error).message });
+      setError((e as Error).message);
     } finally {
       setBusy(false);
     }
   };
 
-  const live = Boolean(result?.liveUrl);
+  const live = Boolean(outcome?.quizOnPage);
+  // Published, but the page is empty until the Gleame Quiz block is added.
+  const placing = Boolean(outcome && !outcome.quizOnPage);
+  const admin = `https://admin.shopify.com/store/${data.shopDomain.replace(".myshopify.com", "")}`;
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title={live ? "Your quiz is live" : "Publish your quiz"}
+      title={live ? "Your quiz is live" : placing ? "Add the quiz to your page" : "Publish your quiz"}
       primaryAction={
         live
-          ? { content: "Open the live page", url: result!.liveUrl!, external: true }
-          : previewOnly
-            ? undefined
-            : { content: "Publish", onAction: () => void publish(), loading: busy, disabled: questionCount === 0 }
+          ? outcome!.liveUrl
+            ? { content: "Open the live page", url: outcome!.liveUrl, external: true }
+            : undefined
+          : placing
+            ? { content: "Finish", onAction: () => void publish(), loading: busy }
+            : previewOnly
+              ? undefined
+              : { content: "Publish", onAction: () => void publish(), loading: busy, disabled: questionCount === 0 }
       }
-      secondaryActions={[{ content: live ? "Done" : "Cancel", onAction: onClose }]}
+      secondaryActions={[{ content: live ? "Done" : placing ? "Close" : "Cancel", onAction: onClose }]}
     >
       {live ? (
         <Modal.Section>
@@ -249,9 +294,64 @@ export function PublishSheet({
             <Text as="p" variant="bodyMd">
               Your quiz is on your store.
             </Text>
-            <Text as="p" variant="bodySm" tone="subdued">
-              {result!.liveUrl!.replace(/^https:\/\//, "")}
+            {outcome!.liveUrl && (
+              <Text as="p" variant="bodySm" tone="subdued">
+                {outcome!.liveUrl.replace(/^https:\/\//, "")}
+              </Text>
+            )}
+          </BlockStack>
+        </Modal.Section>
+      ) : placing ? (
+        <Modal.Section>
+          <BlockStack gap="300">
+            <Text as="p" variant="bodyMd">
+              Your Find My Match page is ready and your quiz is turned on. Last step: add the Gleame Quiz block to
+              the page in your theme editor.
             </Text>
+            {stillMissing && (
+              <Banner tone="warning">
+                The Gleame Quiz block isn&rsquo;t on the page yet. Add it in the theme editor and click Save, then
+                click Finish.
+              </Banner>
+            )}
+            {error && <Banner tone="critical">{error}</Banner>}
+            <BlockStack gap="0">
+              {outcome!.pageTemplate ? (
+                <SetupStep
+                  n={1}
+                  title="Add the quiz block"
+                  action={
+                    <Button url={addQuizBlockUrl(data.shopDomain, data.apiKey, outcome!.pageTemplate)} external>
+                      Add the quiz block
+                    </Button>
+                  }
+                >
+                  Your theme editor opens with the Gleame Quiz block ready to add. Click <b>Save</b>.
+                </SetupStep>
+              ) : (
+                <SetupStep
+                  n={1}
+                  title="Create the quiz template"
+                  action={
+                    <Button url={`${admin}/themes/current/editor?template=page`} external>
+                      Open theme editor
+                    </Button>
+                  }
+                >
+                  In your theme editor, open the page menu at the top and go to <b>Pages → Create template</b>. Name
+                  it <b>find-my-match</b>, then click <b>Add block → Gleame Quiz → Save</b>.
+                </SetupStep>
+              )}
+              <SetupStep n={2} title="Come back and click Finish">
+                {outcome!.pageTemplate
+                  ? addToMenu
+                    ? "Gleame checks the block is there and adds the page to your main menu."
+                    : "Gleame checks the block is there."
+                  : addToMenu
+                    ? "Gleame puts your Find My Match page on that template and adds it to your main menu."
+                    : "Gleame puts your Find My Match page on that template."}
+              </SetupStep>
+            </BlockStack>
           </BlockStack>
         </Modal.Section>
       ) : (
@@ -317,7 +417,8 @@ export function PublishSheet({
               </Text>
               <Text as="p" variant="bodyMd">
                 Dedicated page (recommended): Gleame creates a Find My Match page in your
-                Online Store and turns the quiz on.
+                Online Store and turns the quiz on. Then you add the Gleame Quiz block to it in
+                your theme editor.
               </Text>
               {data.studio.template && !previewOnly && (
                 <Text as="p" variant="bodySm" tone="subdued">
@@ -332,10 +433,10 @@ export function PublishSheet({
                 label="Add to main menu"
                 checked={addToMenu}
                 onChange={setAddToMenu}
-                helpText="Puts a Find My Match link in your store's main navigation."
+                helpText="Puts a Find My Match link in your store's main navigation once the quiz is on the page."
               />
               <Divider />
-              {result?.error && <Banner tone="critical">{result.error}</Banner>}
+              {error && <Banner tone="critical">{error}</Banner>}
               <Text as="p" variant="bodySm" tone="subdued">
                 {previewOnly ? PREVIEW_ONLY_LINE : "Nothing is visible to shoppers until you publish."}
               </Text>
@@ -474,7 +575,7 @@ function SetupGuide({ data, quizName, onViewStore, onOpenPublish, previewOnly }:
           <Box paddingBlockEnd="300">
             <InlineStack gap="200" blockAlign="center" wrap>
               <Text as="p" variant="bodySm">
-                Fastest: Publish creates the page, adds it to your menu and shows it to shoppers in one click (steps 1 to 3).
+                Faster: Publish creates the page, turns the quiz on and opens the theme editor for the block.
               </Text>
               <Button size="slim" onClick={onOpenPublish}>
                 Publish
@@ -588,13 +689,13 @@ export function LiveTab({
   const subline = previewOnly
     ? null
     : !surfaceOn
-      ? "Put it on a page with the steps below (or Publish does it in one click), then show it to shoppers."
+      ? "Put it on a page with the steps below (or use Publish), then show it to shoppers."
       : placed
         ? placedWhere
           ? `On the ${placedWhere}.`
           : null
         : notPlaced
-          ? "Shoppers can’t see it until it’s on a page. Finish the steps below, or Publish does it in one click."
+          ? "Shoppers can’t see it until it’s on a page. Finish the steps below, or use Publish."
           : unchecked
             ? "We couldn’t check your theme. If the quiz isn’t on a page yet, finish the steps below."
             : null;

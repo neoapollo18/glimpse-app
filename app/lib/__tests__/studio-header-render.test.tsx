@@ -124,11 +124,11 @@ describe("Studio top bar and Live tab", () => {
     expect(hosted.text()).toContain("Live");
   });
 
-  it("ready quiz: Show to shoppers, one-click Publish, the video and the four setup steps", () => {
+  it("ready quiz: Show to shoppers, Publish, the video and the four setup steps", () => {
     const { text } = mount(liveTab(studioData({ quizSurfaceEnabled: false })));
     expect(text()).toContain("Not showing to shoppers yet");
     expect(text()).toContain("Show to shoppers");
-    expect(text()).toContain("Fastest: Publish creates the page");
+    expect(text()).toContain("Faster: Publish creates the page");
     for (const step of ["Create the quiz template", "Create the quiz page", "Add it to your menu", "Check it on your store"]) {
       expect(text(), step).toContain(step);
     }

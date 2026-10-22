@@ -41,7 +41,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shop = await findShopByDomain(shopDomain);
   if (!shop) {
     return json(
-      { error: "Shop not found", config: null, variants: [], multiSetPrompt: "" },
+      { error: "Shop not found", config: null, variants: [], multiSetPrompt: "", tryonEnabled: false },
       { status: 404 },
     );
   }
@@ -57,8 +57,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     config,
     variants,
     // Multi-set try-on prompt (migration 052) — lives on chat_assistant_config,
-    // edited here because this page is where rule quantities are set.
+    // edited here because this page is where rule quantities are set. Shown
+    // only where the Gleame team turned quiz try-on on (admin-only since
+    // 2026-10-20).
     multiSetPrompt: chatConfig.quiz_multi_set_prompt ?? "",
+    tryonEnabled: chatConfig.quiz_tryon_enabled === true,
   });
 };
 
@@ -300,7 +303,7 @@ function buildDisplayMeta(o: EditorQuestionOption): Record<string, string | numb
 // Component
 // ---------------------------------------------------------------------
 export default function AssistantRecommendations() {
-  const { config, variants, multiSetPrompt: initialMultiSetPrompt } =
+  const { config, variants, multiSetPrompt: initialMultiSetPrompt, tryonEnabled } =
     useLoaderData<typeof loader>();
   const fetcher = useFetcher<{ success?: boolean; error?: string }>();
   const isSaving = fetcher.state !== "idle";
@@ -1309,7 +1312,7 @@ const NUM_RANKS = 3;
                         helpText={
                           axis.source === "photo"
                             ? "Classified automatically from the shopper's photo by AI. Pick clear, visually distinct values."
-                            : "A button-choice question in the chat"
+                            : "A button-choice question in the quiz"
                         }
                       />
                     </div>
@@ -1453,7 +1456,7 @@ const NUM_RANKS = 3;
                         onChange={(v) => updateQuestion(axis.key, { helperText: v })}
                         autoComplete="off"
                         placeholder="This helps us pick the right shade for you."
-                        helpText="Sub-line under the question heading on the quiz page. The chat ignores it."
+                        helpText="Sub-line under the question heading."
                       />
                       <InlineStack gap="400" blockAlign="start" wrap={false}>
                         <div style={{ flex: 1 }}>
@@ -1840,8 +1843,8 @@ const NUM_RANKS = 3;
             <Text as="h2" variant="headingMd">Rules matrix</Text>
             <Text as="p" variant="bodySm" tone="subdued">
               Each row is one combination of axis values. Assign up to {NUM_RANKS}{" "}
-              products or shades per cell in rank order; rank 1 gets the Top Match
-              badge in the chat. Leave blank to fall back to AI for that combination.
+              products or shades per cell in rank order; rank 1 gets the Top match
+              badge in the quiz results. Leave blank to fall back to AI for that combination.
             </Text>
             {combinations.length === 0 && (
               <Banner tone="info">
@@ -2079,8 +2082,7 @@ const NUM_RANKS = 3;
                                     />
                                   </div>
                                   {/* Units recommended per rule ("2 sets") —
-                                      applied to cart adds on both surfaces:
-                                      quiz add-to-bag and the chat bundle.
+                                      applied to quiz add-to-bag.
                                       Only meaningful once a target is
                                       assigned. */}
                                   <div style={{ width: 64 }}>
@@ -2112,36 +2114,39 @@ const NUM_RANKS = 3;
         {/* Multi-set try-on prompt (migrations 052 + 053). Kept on this page
             because rule quantities are set here — the two features work
             together. This is the shop-wide FALLBACK; per-product/per-variant
-            multi_set_prompt columns take precedence when configured. */}
-        <Card>
-          <BlockStack gap="300">
-            <Text as="h2" variant="headingMd">
-              Multi-set try-on prompt
-            </Text>
-            <Text as="p" variant="bodySm" tone="subdued">
-              Your product and shade prompts describe wearing ONE set. When a
-              matched rule has Qty 2 or more, this prompt is used INSTEAD of
-              the product's own prompt so the preview renders the multi-set
-              look. Write it as a complete try-on instruction, not an
-              add-on note. Products with their own multi-set prompt
-              configured ignore this and use theirs. Use {"{count}"} for the
-              number of sets. Leave empty to render multi-set picks the same
-              as a single set.
-            </Text>
-            <TextField
-              label="Multi-set try-on prompt"
-              labelHidden
-              value={multiSetPrompt}
-              onChange={setMultiSetPrompt}
-              multiline={4}
-              autoComplete="off"
-              placeholder="Apply {count} full sets of this product at once: a complete instruction for the whole try-on…"
-            />
-            <Text as="p" variant="bodySm" tone="subdued">
-              Saved with the rest of this page.
-            </Text>
-          </BlockStack>
-        </Card>
+            multi_set_prompt columns take precedence when configured. Only
+            for stores with quiz try-on on (set by the Gleame team). */}
+        {tryonEnabled && (
+          <Card>
+            <BlockStack gap="300">
+              <Text as="h2" variant="headingMd">
+                Multi-set try-on prompt
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Your product and shade prompts describe wearing ONE set. When a
+                matched rule has Qty 2 or more, this prompt is used INSTEAD of
+                the product's own prompt so the preview renders the multi-set
+                look. Write it as a complete try-on instruction, not an
+                add-on note. Products with their own multi-set prompt
+                configured ignore this and use theirs. Use {"{count}"} for the
+                number of sets. Leave empty to render multi-set picks the same
+                as a single set.
+              </Text>
+              <TextField
+                label="Multi-set try-on prompt"
+                labelHidden
+                value={multiSetPrompt}
+                onChange={setMultiSetPrompt}
+                multiline={4}
+                autoComplete="off"
+                placeholder="Apply {count} full sets of this product at once: a complete instruction for the whole try-on…"
+              />
+              <Text as="p" variant="bodySm" tone="subdued">
+                Saved with the rest of this page.
+              </Text>
+            </BlockStack>
+          </Card>
+        )}
       </BlockStack>
     </Page>
   );

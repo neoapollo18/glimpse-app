@@ -80,6 +80,11 @@ type EngineTuningConfig = Pick<
 
 export type LlmRankResult = {
   ordered: Candidate[];
+  // The candidates the ranker chose (ordered starts with them). Results
+  // are served from these only: the unpicked tail is what the ranker left
+  // out, e.g. yoga pants for a shopper who said skincare (App Review,
+  // 2026-10-22).
+  picked: Set<Candidate>;
   // Shopper-facing one-liner per LLM-picked candidate (object identity
   // keyed — the same Candidate references flow back to the caller).
   reasons: Map<Candidate, string>;
@@ -380,9 +385,10 @@ export async function llmOrderCandidates(params: {
     const systemPrompt =
       'You rank product recommendations for a beauty/cosmetics store quiz. ' +
       'You get the shopper\'s quiz answers and a JSON array of candidate products. ' +
-      `Choose and rank the ${topK} best candidates for this shopper, best first.\n` +
+      `Choose and rank up to ${topK} candidates for this shopper, best first.\n` +
       'Rules:\n' +
       '- Judge ONLY from the candidate data given; never invent product facts.\n' +
+      '- Leave out candidates that clearly don\'t fit the shopper\'s answers, above all a different kind of product than the one they said they are shopping for (no apparel for a skincare shopper). Include every candidate that reasonably fits; returning fewer picks is fine.\n' +
       '- When colorDistanceFromPick is present, lower means perceptually closer to the shade the shopper picked — strongly prefer closer.\n' +
       '- merchantPriority items are ones the store wants surfaced: prefer them over EQUALLY suitable alternatives, but never rank a poorly-matching priority item above a clearly better match.\n' +
       '- Avoid recommending multiple near-identical variants of the same product in the top picks unless the shopper\'s answers call for it.\n' +
@@ -436,7 +442,7 @@ export async function llmOrderCandidates(params: {
               text:
                 `Shopper's answers:\n${answers}\n\n` +
                 `Candidates:\n${JSON.stringify(catalog)}\n\n` +
-                `Return the top ${topK} ranked best-first.`,
+                `Return up to ${topK} that fit, ranked best-first.`,
             },
           ],
         },
@@ -503,7 +509,7 @@ export async function llmOrderCandidates(params: {
     console.log(
       `[${logTag}] LLM ranked ${picked.length}/${shuffled.length} candidates for ${shopDomain}`,
     );
-    return { ordered, reasons };
+    return { ordered, reasons, picked: pickedSet };
   } catch (err) {
     console.error(`[${logTag}] LLM ranking failed for ${shopDomain}:`, err instanceof Error ? err.message : err);
     return null;

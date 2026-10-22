@@ -4,10 +4,12 @@
 //   preview-link:  mint the tokenized on-store preview URL (app proxy,
 //                  7-day shareable token). Fires store_preview_opened is
 //                  the widget's job; this only mints.
-//   publish:       one-click publish: page + optional nav link + surface
-//                  ON (+ template go-live stamp for template quizzes,
-//                  migration 081). Returns the live URL. Fires
-//                  publish_completed.
+//   publish:       one-click publish: page (no script; the quiz shows
+//                  through the Gleame Quiz app block) + optional nav link
+//                  once the block is on the page + surface ON (+ template
+//                  go-live stamp for template quizzes, migration 081).
+//                  Returns the live URL and whether the quiz is on the
+//                  page yet. Fires publish_completed.
 //   unpublish:     surface OFF (+ template stamp cleared) + nav link
 //                  removal (page left in place).
 
@@ -42,11 +44,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const result = await publishQuiz(session.shop, adminGraphql, {
       pageTitle: form.get("pageTitle") ? String(form.get("pageTitle")) : undefined,
       addToMenu: form.get("addToMenu") !== "false",
+      blockTemplates: String(form.get("blockTemplates") ?? "")
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean),
     });
     if (result.ok) {
       trackOverhaulEvent(session.shop, "publish_completed", {
         path: result.path,
         nav_link_added: result.navLinkAdded,
+        quiz_on_page: result.quizOnPage ?? false,
         template_live: result.templateLive ?? false,
       });
     }

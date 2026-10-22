@@ -142,6 +142,9 @@ export async function computeQuizRecommendations({
   const mode = chatConfig.recommendation_mode;
   let aiOrdered = aiOrderCandidates(pool.candidates);
   let llmReasons: Map<Candidate, string> | null = null;
+  // What the LLM ranker chose. Non-matrix results come from these only, never
+  // padded up to num_recommendations from the candidates it left out.
+  let llmPicked: Set<Candidate> | null = null;
 
   // Rule matching (multi-select aware). Exact coverage first; partial when
   // the shopper hasn't answered every rule axis yet (e.g. shade pending) —
@@ -216,6 +219,7 @@ export async function computeQuizRecommendations({
     if (ranked) {
       aiOrdered = ranked.ordered;
       llmReasons = ranked.reasons;
+      llmPicked = ranked.picked;
     } else {
       aiOrdered = guardAndPrioritize(aiOrdered, criteria, flow, chatConfig, "quiz-recommend");
     }
@@ -418,7 +422,20 @@ export async function computeQuizRecommendations({
   // - exact: a merchant can author both a variant rule and a whole-product
   //   rule for the same product in one cell — keep the variant-level pick
   //   and drop the product-level duplicate.
-  const matrixSegment = matrixApplied ? ordered.slice(0, matrixCount) : ordered;
+  // LLM-ranked results: only the ranker's picks (and store-wide always
+  // products), so a skincare shopper isn't handed yoga pants to fill a
+  // third card (App Review, 2026-10-22). If the stock filter left none of
+  // them, the full ordering serves as before rather than an empty result.
+  const alwaysIds = new Set(always.map((a) => a.id));
+  const rankerSegment =
+    !matrixApplied && llmPicked
+      ? ordered.filter((c) => llmPicked!.has(c) || alwaysIds.has(c.product.id))
+      : [];
+  const matrixSegment = matrixApplied
+    ? ordered.slice(0, matrixCount)
+    : rankerSegment.length > 0
+      ? rankerSegment
+      : ordered;
   const picks: Candidate[] = [];
   const seenProducts = new Set<string>();
   if (partial && matrixApplied) {

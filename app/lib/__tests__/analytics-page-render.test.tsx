@@ -77,11 +77,11 @@ function fixture() {
   };
 }
 
-async function mount(path = "/") {
+async function mount(path = "/", extra: Record<string, unknown> = {}) {
   const host = document.createElement("div");
   document.body.innerHTML = "";
   document.body.appendChild(host);
-  const loaderData = fixture();
+  const loaderData = { ...fixture(), ...extra };
   const router = createMemoryRouter(
     [{ path: "/", element: <AppProvider i18n={en}><QuizAnalytics /></AppProvider>, loader: async () => loaderData }],
     { initialEntries: [path] },
@@ -132,6 +132,13 @@ describe("revamped analytics page", () => {
     expect(text()).toContain("Recommended");
     expect(text()).toContain("Quiz order value");
     expect(text()).toContain("$60.00");
+    // Bundles are allowlisted (App Review, 2026-10-20): no bundle figure elsewhere.
+    expect(text()).not.toContain("Bundle adds");
+  });
+
+  it("Products tab shows bundle adds for a store with bundles", async () => {
+    const text = await mount("/?tab=products", { bundles: true });
+    expect(text()).toContain("Bundle adds");
   });
 
   it("Leads tab", async () => {

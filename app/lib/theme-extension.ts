@@ -2,8 +2,10 @@
 //
 // The extension ships one app block: blocks/gleame-quiz.liquid, a full-page
 // section. The Studio setup guide has merchants create a `find-my-match`
-// page template and add the block there; one-click Publish mounts the quiz
-// through quiz-embed.js on a page instead, without the block.
+// page template and add the block there; one-click Publish creates the page,
+// puts it on that template and links to the theme editor to add the block.
+// (Pages published before 2026-10-22 mount the quiz through quiz-embed.js
+// in their body instead.)
 
 /** The quiz app block's handle (its Liquid filename). */
 export const QUIZ_BLOCK_HANDLE = "gleame-quiz";

@@ -293,6 +293,51 @@ describe("Studio publish flow", () => {
     }
   });
 
+  // Shopify App Review (2026-10-22): Publish no longer writes a script into
+  // the page. With the block not on the page yet, the sheet sends the
+  // merchant to the theme editor with the block ready to add, then Finish.
+  it("after Publish, walks the merchant to add the quiz block before calling it live", async () => {
+    const publishes: Array<Record<string, string>> = [];
+    let blockOnPage = false;
+    vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+      if (String(url) === "/app/api/publish-quiz") {
+        const entry: Record<string, string> = {};
+        (init!.body as FormData).forEach((v, k) => (entry[k] = String(v)));
+        publishes.push(entry);
+        return Response.json({
+          ok: true,
+          liveUrl: "https://review-store.myshopify.com/pages/find-my-match",
+          quizOnPage: blockOnPage,
+          pageTemplate: "page.find-my-match",
+        });
+      }
+      return Response.json({ ok: true, ready: true });
+    });
+    try {
+      const text = await mount(<PublishSheet data={studioData()} problems={[]} open onClose={() => {}} onFix={() => {}} />);
+      await click(button("Publish"));
+      expect(publishes[0]).toMatchObject({ intent: "publish", addToMenu: "true" });
+      expect(text()).toContain("Add the quiz to your page");
+      expect(text()).not.toContain("Your quiz is live");
+      const link = Array.from(document.querySelectorAll("a")).find((a) => a.textContent?.trim() === "Add the quiz block");
+      expect(link?.getAttribute("href")).toBe(
+        "https://admin.shopify.com/store/review-store/themes/current/editor?template=page.find-my-match&addAppBlockId=key/gleame-quiz&target=newAppsSection",
+      );
+      expect(primaries()).toEqual(["Finish"]);
+
+      // Finish before the block is added says so.
+      await click(button("Finish"));
+      expect(text()).toContain("isn’t on the page yet");
+
+      blockOnPage = true;
+      await click(button("Finish"));
+      expect(publishes).toHaveLength(3);
+      expect(text()).toContain("Your quiz is live");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("still warns when nothing matches, and keeps the loader's answer if the re-read fails", async () => {
     const text = await mount(<PublishSheet data={sentencesOnly(false)} problems={[]} open onClose={() => {}} onFix={() => {}} />);
     expect(text()).toContain("No matching set up yet");

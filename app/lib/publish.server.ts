@@ -4,12 +4,21 @@
  * publishQuiz, in order:
  *   0. Preconditions (questions exist; for a template quiz, templates are
  *      not paused and migration 081 has run), all before any Shopify write.
- *   1. Page: pageCreate "Find My Match" whose body mounts the quiz via
- *      /quiz-embed.js (zero theme writes; works on any theme). Idempotent:
- *      an existing page with our handle is reused, not duplicated (and
- *      re-published / re-mounted if the merchant hid or emptied it).
+ *   1. Page: pageCreate "Find My Match". Since 2026-10-22 (Shopify App
+ *      Review) Gleame never writes a script into the page: the quiz shows
+ *      through the Gleame Quiz app block on the page's theme template. When
+ *      the live theme has a `find-my-match` page template, the page is put
+ *      on it. The live theme is read (read_themes, optional scope) to learn
+ *      whether the block is there; if not, the Publish sheet sends the
+ *      merchant to the theme editor to add it, then publishes again.
+ *      Idempotent: an existing page with our handle is reused, not
+ *      duplicated (and re-published if the merchant hid it). Pages
+ *      published before 2026-10-22 mount the quiz through quiz-embed.js in
+ *      their body; they are left exactly as they are and keep working.
  *   2. Nav: optional "Add to my main menu": menuUpdate appends a PAGE
- *      item to the shop's main menu (write_online_store_navigation).
+ *      item to the shop's main menu (write_online_store_navigation), only
+ *      once the quiz shows on the page, so the menu never links to an
+ *      empty page.
  *   3. Surface: flips the quiz storefront switch ON (and, for a template
  *      quiz, stamps the template live in the same write).
  *
@@ -21,9 +30,6 @@
  * the uninstalled webhook cannot reliably delete the page/nav item. The
  * spec's "webhook removes the nav link" is best-effort only; unpublish
  * is the reliable cleanup path.
- *
- * The theme-editor deep link (addAppBlockId) remains available from the
- * Placements area for merchants who want the native app block instead.
  */
 
 import { supabase, getChatAssistantConfig, getRecommendationCounts } from "./supabase.server";
@@ -32,8 +38,11 @@ import { isTemplateId } from "./quiz-templates";
 import { templateLivePatch, TEMPLATES_NEED_MIGRATION_ERROR } from "./template-live.server";
 import { isMissingColumnError } from "./brand-library-status";
 import type { AdminGraphql } from "./brand-profile.server";
+import { QUIZ_BLOCK_HANDLE, QUIZ_PAGE_TEMPLATE } from "./theme-extension";
 
 const PAGE_HANDLE = "find-my-match";
+/** "find-my-match": the page template suffix the setup guide has merchants create. */
+const QUIZ_TEMPLATE_SUFFIX = QUIZ_PAGE_TEMPLATE.replace(/^page\./, "");
 
 export interface PublishResult {
   ok: boolean;
@@ -44,6 +53,17 @@ export interface PublishResult {
   path?: "one-click";
   /** The storefront now serves this quiz's template (template shops). */
   templateLive?: boolean;
+  /** The quiz shows on the page: the Gleame Quiz block is on the page's
+   * theme template, or the page body mounts it (pages published before
+   * 2026-10-22). When false the page exists but is empty until the merchant
+   * adds the block, and no menu link was added. */
+  quizOnPage?: boolean;
+  /** Theme template the page uses, e.g. "page.find-my-match"; null when it
+   * uses the default page template. The block deep link targets it. */
+  pageTemplate?: string | null;
+  /** Whether the live theme could be read (read_themes). When false,
+   * quizOnPage relies on the admin's own report of the block's placements. */
+  themeRead?: boolean;
   /** Optional access scopes the shop hasn't granted yet (toml
    * optional_scopes). The Publish sheet requests them via App Bridge and
    * retries. */
@@ -55,6 +75,7 @@ export interface PublishResult {
 
 export const PUBLISH_PAGE_SCOPE = "write_online_store_pages";
 export const PUBLISH_NAV_SCOPE = "write_online_store_navigation";
+export const PUBLISH_THEME_SCOPE = "read_themes";
 
 /** Admin API "Access denied ... Required access: ..." for a scope the shop
  * hasn't granted. */
@@ -112,13 +133,79 @@ const MENU_UPDATE = `#graphql
   }
 `;
 
-function pageBody(shopDomain: string, appUrl: string): string {
-  return [
-    // min-height reserves the quiz's space until it paints (gleame-quiz.js
-    // clears it), so the theme footer doesn't jump when it renders.
-    `<div id="gleame-quiz-root" data-shop-domain="${shopDomain}" style="min-height:100vh"></div>`,
-    `<script src="${appUrl}/quiz-embed.js" defer></script>`,
-  ].join("\n");
+const THEME_TEMPLATES_QUERY = `#graphql
+  query GleameQuizTemplates($filenames: [String!]) {
+    themes(first: 1, roles: [MAIN]) {
+      nodes {
+        files(filenames: $filenames, first: 5) {
+          nodes {
+            filename
+            body {
+              ... on OnlineStoreThemeFileBodyText { content }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+/** An app block entry for the quiz block, e.g.
+ * "shopify://apps/gleame/blocks/gleame-quiz/<uuid>". */
+const QUIZ_BLOCK_TYPE = new RegExp(`/blocks/${QUIZ_BLOCK_HANDLE}/`);
+
+/** Whether a JSON template holds the quiz block, enabled, in an enabled
+ * section. Walks nested blocks too (Horizon-style themes nest them). An
+ * unparseable template falls back to a plain text search. */
+export function templateHasQuizBlock(content: string): boolean {
+  let json: unknown;
+  try {
+    // JSON templates legally open with a /* comment */ block.
+    json = JSON.parse(content.replace(/^\s*\/\*[\s\S]*?\*\//, ""));
+  } catch {
+    return QUIZ_BLOCK_TYPE.test(content);
+  }
+  const visit = (node: unknown): boolean => {
+    if (!node || typeof node !== "object") return false;
+    const n = node as Record<string, unknown>;
+    if (n.disabled === true) return false;
+    if (typeof n.type === "string" && QUIZ_BLOCK_TYPE.test(n.type)) return true;
+    for (const key of ["sections", "blocks"]) {
+      const children = n[key];
+      if (children && typeof children === "object") {
+        for (const child of Object.values(children as Record<string, unknown>)) if (visit(child)) return true;
+      }
+    }
+    return false;
+  };
+  return visit(json);
+}
+
+/** The live theme's page templates for `suffixes` ("" = the default page
+ * template), each mapped to whether it holds the quiz block; a template
+ * missing from the theme is missing from the map. null when the theme
+ * can't be read (read_themes not granted, or the read failed). */
+async function readPageTemplates(
+  adminGraphql: AdminGraphql,
+  suffixes: string[]
+): Promise<Map<string, boolean> | null> {
+  const filenames = suffixes.map((s) => (s ? `templates/page.${s}.json` : "templates/page.json"));
+  try {
+    const data = await adminGraphql(THEME_TEMPLATES_QUERY, { filenames });
+    const theme = data?.themes?.nodes?.[0];
+    if (!theme) return null;
+    const out = new Map<string, boolean>();
+    for (const file of theme.files?.nodes ?? []) {
+      const m = /^templates\/page(?:\.(.+))?\.json$/.exec(String(file?.filename ?? ""));
+      if (!m) continue;
+      const content = file?.body?.content;
+      out.set(m[1] ?? "", typeof content === "string" && templateHasQuizBlock(content));
+    }
+    return out;
+  } catch (e) {
+    console.warn(`[publish] theme templates unreadable: ${(e as Error).message}`);
+    return null;
+  }
 }
 
 /** Strip null/absent fields so MenuItemUpdateInput round-trips cleanly. */
@@ -135,17 +222,17 @@ function menuItemInput(item: any): Record<string, unknown> {
 export async function publishQuiz(
   shopDomain: string,
   adminGraphql: AdminGraphql,
-  opts: { pageTitle?: string; addToMenu?: boolean } = {}
+  opts: {
+    pageTitle?: string;
+    addToMenu?: boolean;
+    /** Templates the admin reports the quiz block on (App Bridge
+     * app.extensions()), e.g. ["page.find-my-match"]. Used only when the
+     * theme can't be read. */
+    blockTemplates?: string[];
+  } = {}
 ): Promise<PublishResult> {
-  const appUrl = (process.env.SHOPIFY_APP_URL ?? "").replace(/\/$/, "");
   const pageTitle = (opts.pageTitle ?? "Find My Match").trim() || "Find My Match";
   const addToMenu = opts.addToMenu !== false;
-  // Without the app URL the page body would load a relative /quiz-embed.js
-  // from the merchant's own domain: a page that silently renders nothing.
-  if (!/^https:\/\//.test(appUrl)) {
-    console.error(`[publish] SHOPIFY_APP_URL is not set to an https URL; refusing to publish ${shopDomain}`);
-    return { ok: false, error: "Publishing is unavailable right now. Please try again shortly." };
-  }
 
   // 0. Preconditions, checked BEFORE any Shopify write so a refused publish
   // never leaves a stray page or menu link behind. The UI checks these too;
@@ -174,43 +261,57 @@ export async function publishQuiz(
   }
 
   // 1. Page (reuse ours if it already exists — republish must not stack
-  // duplicate pages).
+  // duplicate pages). Nothing is ever written into the page body.
   let pageId: string | null = null;
   let handle = PAGE_HANDLE;
+  let pageTemplate: string | null = null;
+  let quizOnPage = false;
+  let themeRead = false;
   try {
     const existing = await adminGraphql(PAGES_QUERY, { query: `handle:${PAGE_HANDLE}` });
     const hit = existing?.pages?.nodes?.find((p: any) => p.handle === PAGE_HANDLE);
+    const body = typeof hit?.body === "string" ? hit.body : "";
+    // Published before 2026-10-22: the body mounts the quiz through
+    // quiz-embed.js. Left as it is (it works); never moved onto a template,
+    // where the block would mount a second quiz.
+    const embedMounted = body.includes("gleame-quiz-root");
+    // A template the merchant (or an earlier publish) chose is kept.
+    const chosenSuffix = typeof hit?.templateSuffix === "string" ? hit.templateSuffix.trim() : "";
+    const templates = await readPageTemplates(
+      adminGraphql,
+      [...new Set(["", QUIZ_TEMPLATE_SUFFIX, chosenSuffix])]
+    );
+    themeRead = templates !== null;
+    // A chosen template the live theme doesn't have renders as the default
+    // page template, so it counts as none.
+    const keptSuffix = chosenSuffix && (!templates || templates.has(chosenSuffix)) ? chosenSuffix : "";
+    // Our template goes on a page without one, once the theme has it (an
+    // unreadable theme: once the admin reports the block on it).
+    const hint = opts.blockTemplates ?? [];
+    const themeHasOurs = templates ? templates.has(QUIZ_TEMPLATE_SUFFIX) : hint.includes(QUIZ_PAGE_TEMPLATE);
+    const assignSuffix = !keptSuffix && !embedMounted && themeHasOurs ? QUIZ_TEMPLATE_SUFFIX : "";
+    const suffix = keptSuffix || assignSuffix;
+    const templateName = suffix ? `page.${suffix}` : "page";
+    pageTemplate = suffix ? templateName : null;
+    const blockOnTemplate = templates ? templates.get(suffix) === true : hint.includes(templateName);
+    quizOnPage = embedMounted || blockOnTemplate;
+
     if (hit) {
       pageId = hit.id;
-      // Republish after the merchant hid the page (or emptied it) must
-      // bring it back; otherwise "Open the live page" 404s. A page body the
-      // merchant customised is kept as long as it still mounts the quiz.
-      // A page on a theme template (templateSuffix, e.g. page.gleame-quiz
-      // with the native app block from Placements) renders the quiz from
-      // the theme: its body is never touched, since appending the embed
-      // there would mount the widget twice on one #gleame-quiz-root.
-      const body = typeof hit.body === "string" ? hit.body : "";
-      const onThemeTemplate = typeof hit.templateSuffix === "string" && hit.templateSuffix.trim() !== "";
-      const needsMount = !onThemeTemplate && !body.includes("gleame-quiz-root");
-      if (hit.isPublished === false || needsMount) {
-        const page: Record<string, unknown> = { isPublished: true };
-        if (needsMount) {
-          const mount = pageBody(shopDomain, appUrl);
-          page.body = body.trim() ? `${body}\n${mount}` : mount;
-        }
+      // Republish after the merchant hid the page must bring it back;
+      // otherwise "Open the live page" 404s.
+      const page: Record<string, unknown> = {};
+      if (hit.isPublished === false) page.isPublished = true;
+      if (assignSuffix) page.templateSuffix = assignSuffix;
+      if (Object.keys(page).length > 0) {
         const updated = await adminGraphql(PAGE_UPDATE, { id: hit.id, page });
         const errs = updated?.pageUpdate?.userErrors;
         if (errs?.length) return { ok: false, error: `Page: ${errs[0].message}` };
       }
     } else {
-      const created = await adminGraphql(PAGE_CREATE, {
-        page: {
-          title: pageTitle,
-          handle: PAGE_HANDLE,
-          isPublished: true,
-          body: pageBody(shopDomain, appUrl),
-        },
-      });
+      const page: Record<string, unknown> = { title: pageTitle, handle: PAGE_HANDLE, isPublished: true };
+      if (assignSuffix) page.templateSuffix = assignSuffix;
+      const created = await adminGraphql(PAGE_CREATE, { page });
       const errs = created?.pageCreate?.userErrors;
       if (errs?.length) return { ok: false, error: `Page: ${errs[0].message}` };
       pageId = created?.pageCreate?.page?.id ?? null;
@@ -238,8 +339,11 @@ export async function publishQuiz(
   if (!pageId) return { ok: false, error: "Page: no id returned" };
 
   // 2. Nav link (best-effort — a menu failure must not fail the publish).
+  // Only once the quiz shows on the page: a menu link to an empty page is
+  // the dead end App Review flags. The Publish sheet's Finish publishes
+  // again after the block is added, which adds the link then.
   let navLinkAdded = false;
-  if (addToMenu) {
+  if (addToMenu && quizOnPage) {
     try {
       const menus = await adminGraphql(MENUS_QUERY);
       const nodes = menus?.menus?.nodes ?? [];
@@ -283,6 +387,9 @@ export async function publishQuiz(
     liveUrl: `https://${shopDomain}/pages/${handle}`,
     pageId,
     navLinkAdded,
+    quizOnPage,
+    pageTemplate,
+    themeRead,
     path: "one-click",
     templateLive: Boolean(surface.templateLive),
   };
