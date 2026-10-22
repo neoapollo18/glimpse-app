@@ -1,16 +1,19 @@
 // Columnar matching pipeline (Glamnetic recommendation logic v3, brief
-// sections 4-6). Pure functions of (answers, pool): Step A hard filters,
-// Step B vibe gate, Step C soft scoring, the section 5 relaxation ladder,
-// Step E "also matched", the branching availability rows and the resultKey
-// permalink encoding. The server module (engine.server.ts) adds I/O: the
-// pool load, stock, the Step D ranker and caching.
+// sections 4-6, fix spec v4). Pure functions of (answers, pool): Step A
+// hard filters, the vibe / drama tiers, Step C soft scoring, Step E "also
+// matched", the branching blocks and the resultKey permalink encoding. The
+// server module (engine.server.ts) adds I/O: the pool load, stock, the
+// Step D ranker and caching.
 //
-// Length, shape and finish are never relaxed. Only color, drama and the
-// French Girl Chic gate step down, in that order.
+// Length, shape, finish and color are never relaxed (v4 made color hard).
+// Vibe and drama rank the sets that pass, in tiers; the ranker only
+// reorders inside a tier. Branching hides any option that can't leave at
+// least spec.fullMatchMin sets matching every answer.
 
 import type { DerivedProduct } from "./attributes";
-import { vibeMatches } from "./attributes";
+import { claimableVibes, vibeMatches } from "./attributes";
 import {
+  COLUMNAR_DEFAULTS,
   COLUMNAR_ROLES,
   DEFAULT_ANSWER_LABELS,
   ROLE_VOCAB,
@@ -158,20 +161,60 @@ export function activeVibe(answers: ColumnarAnswers, spec: Pick<ColumnarSpec, "v
   return v && vibeEnabled(spec, v) ? v : null;
 }
 
-/** Step A: exact length, shape and finish. Never relaxed. */
+/** A super short set has no shape (Glamnetic tags its shape "Super Short"),
+ * so a shape pick never applies to it. It still needs Super Short among
+ * the lengths to get past the length filter. */
+export const shapeless = (p: Pick<DerivedProduct, "length" | "shape">): boolean =>
+  p.shape === "super_short" && p.length === "super_short";
+
+/** Step A: length, shape, finish and color (at least one picked family).
+ * Never relaxed. */
 export function passesHardFilters(p: DerivedProduct, answers: ColumnarAnswers): boolean {
   const lengths = specific(answers.length);
   if (lengths && !(p.length && lengths.includes(p.length))) return false;
   const shapes = specific(answers.shape);
-  if (shapes && !(p.shape && shapes.includes(p.shape))) return false;
+  if (shapes && !shapeless(p) && !(p.shape && shapes.includes(p.shape))) return false;
   const finishes = specific(answers.finish);
   if (finishes && !(p.finish && finishes.includes(p.finish))) return false;
+  const colors = specific(answers.color);
+  if (colors && !p.colors.some((c) => colors.includes(c))) return false;
   return true;
 }
 
-/** Step B: French Girl Chic is the only gate; every other vibe boosts. */
-export function passesVibeGate(p: DerivedProduct, vibe: string | null): boolean {
-  return vibe === "french_girl" ? vibeMatches(p, vibe) : true;
+/** Vibes that gate instead of rank: Lisa's "French tips & ombres only". */
+export const GATE_VIBES: readonly string[] = ["french_girl"];
+
+/** Does the set fit the shopper's vibe and drama picks? A surprise or
+ * skipped question always fits. */
+export function softMatch(
+  p: DerivedProduct,
+  answers: ColumnarAnswers,
+  vibe: string | null,
+): { vibe: boolean; drama: boolean } {
+  const dramas = specific(answers.drama);
+  return {
+    vibe: !vibe || vibeMatches(p, vibe),
+    drama: !dramas || p.drama.some((d) => dramas.includes(d)),
+  };
+}
+
+export type Tier = 1 | 2 | 3 | 4;
+
+/**
+ * Tier inside the hard-filtered set: 1 = vibe and drama both fit, 2 = drama
+ * only, 3 = vibe only, 4 = neither. Drama outranks vibe: it is the look the
+ * shopper asked for in so many words (solid vs full nail art), it shows on
+ * the card, and it comes straight from tags, where a vibe is a softer read.
+ * A gate vibe swaps the two, since Lisa made French Girl Chic "French tips
+ * and ombres only".
+ */
+export function tierOf(p: DerivedProduct, answers: ColumnarAnswers, vibe: string | null): Tier {
+  const m = softMatch(p, answers, vibe);
+  if (m.vibe && m.drama) return 1;
+  const gate = vibe !== null && GATE_VIBES.includes(vibe);
+  if (gate ? m.vibe : m.drama) return 2;
+  if (gate ? m.drama : m.vibe) return 3;
+  return 4;
 }
 
 /** Share of the product's values the shopper picked (a nude-only set beats
@@ -251,25 +294,32 @@ export function stepCOrder(
 }
 
 export interface LadderResult {
+  /** 1 = every shown set matches every answer; 2 = some step outside the
+   * drama picks; 4 = some step outside the vibe (and maybe drama); 5 =
+   * fewer than resultCount sets pass the hard filters. 3 (color relaxed)
+   * is retired: color is a hard filter since fix spec v4. */
   rung: Rung;
-  /** Products passing Step A + B. */
+  /** Sets matching every answer (hard filters, vibe and drama). */
   exactCount: number;
-  /** Products passing Step A alone (exact length, shape, finish). */
+  /** Sets passing the hard filters (length, shape, finish, color). */
   hardCount: number;
-  /** The rung's set in Step C order: the ranker's candidates come from here. */
+  /** The hard-filtered set in tier, then Step C order. The ranker's
+   * candidates and the Also matched row both come from here. */
   ordered: DerivedProduct[];
-  /** Other exact-on-length/shape/finish products (Step C order) that back
-   * the "Also matched" row once the rung's set runs out. */
-  backfill: DerivedProduct[];
+  /** Tier of every set in `ordered`, by id. */
+  tiers: Map<string, Tier>;
+  /** What the shown sets step outside of (for the header). */
+  outside: { vibe: boolean; drama: boolean };
   /** Which answer one tap loosens when nothing matches. */
-  loosen: "finish" | "shape" | null;
+  loosen: "finish" | "shape" | "color" | null;
 }
 
 /**
- * Brief section 5. Rung 1 = exact on everything (A + B + a picked color +
- * a picked drama level), 2 drops drama, 3 drops color, 4 lifts the French
- * Girl Chic gate, 5 shows whatever exists. Stops at the first rung with at
- * least resultCount products.
+ * Fix spec v4 (replaces the brief's section 5 ladder): every set shown
+ * passes the hard filters; vibe and drama order them in tiers (tierOf),
+ * Step C's score orders each tier. The French Girl Chic gate holds while
+ * at least resultCount French or ombre sets pass, as rung 4 used to; below
+ * that, the other sets fill in after them.
  */
 export function runLadder(
   pool: DerivedProduct[],
@@ -278,78 +328,93 @@ export function runLadder(
 ): LadderResult {
   const vibe = activeVibe(answers, spec);
   const hard = pool.filter((p) => passesHardFilters(p, answers));
-  const gated = hard.filter((p) => passesVibeGate(p, vibe));
-  const colors = specific(answers.color);
-  const dramas = specific(answers.drama);
-  const colorOk = (p: DerivedProduct) => !colors || p.colors.some((c) => colors.includes(c));
-  const dramaOk = (p: DerivedProduct) => !dramas || p.drama.some((d) => dramas.includes(d));
   const need = spec.resultCount;
-  // The first rung that admits a product: 1 = a picked color and drama
-  // level, 2 = a picked color, 3 = through the vibe gate, 4 = gate lifted.
-  // A relaxed set lists every closer set first, so "a few step outside
-  // your picks" stays true whenever the ranker falls back to this order.
-  const tierOf = (p: DerivedProduct) => (!passesVibeGate(p, vibe) ? 4 : !colorOk(p) ? 3 : !dramaOk(p) ? 2 : 1);
+  const gated = vibe && GATE_VIBES.includes(vibe) ? hard.filter((p) => vibeMatches(p, vibe)) : hard;
+  const set = gated.length >= need ? gated : hard;
+  const tiers = new Map<string, Tier>(set.map((p) => [p.id, tierOf(p, answers, vibe)]));
+  const ordered = stepCOrder(set, answers, vibe, spec.weights, (p) => tiers.get(p.id)!).map((s) => s.product);
 
-  const sets: Array<[Rung, DerivedProduct[]]> = [
-    [1, gated.filter((p) => colorOk(p) && dramaOk(p))],
-    [2, gated.filter(colorOk)],
-    [3, gated],
-  ];
-  // Rung 4 only exists where a gate does; elsewhere it equals rung 3.
-  if (vibe === "french_girl") sets.push([4, hard]);
-
-  let rung: Rung = 5;
-  let set = hard;
-  for (const [r, s] of sets) {
-    if (s.length >= need) {
-      rung = r;
-      set = s;
-      break;
-    }
+  // The ranker can only reorder inside a tier, so the top of this order
+  // already says what the grid steps outside of.
+  const top = ordered.slice(0, need);
+  const outside = { vibe: false, drama: false };
+  for (const p of top) {
+    const m = softMatch(p, answers, vibe);
+    if (!m.vibe) outside.vibe = true;
+    if (!m.drama) outside.drama = true;
   }
-  // At rung 5 the French gate stays lifted (rung 4 already lifted it), so
-  // the shopper sees every set that is exact on length, shape and finish.
-  // Only the set widens: color and drama keep their full weight in the
-  // score at every rung, and the tier keeps French and ombre sets first.
-  const ordered = stepCOrder(set, answers, vibe, spec.weights, tierOf).map((s) => s.product);
-  const inSet = new Set(ordered.map((p) => p.id));
-  const backfillPool = (rung <= 3 ? gated : hard).filter((p) => !inSet.has(p.id));
-  const backfill = stepCOrder(backfillPool, answers, vibe, spec.weights, tierOf).map((s) => s.product);
+  const rung: Rung = top.length < need ? 5 : outside.vibe ? 4 : outside.drama ? 2 : 1;
 
   let loosen: LadderResult["loosen"] = null;
   if (ordered.length === 0) {
-    const without = (role: "finish" | "shape") => {
+    const without = (role: "finish" | "shape" | "color") => {
       const a = { ...answers };
       delete a[role];
       return pool.some((p) => passesHardFilters(p, a));
     };
-    const candidates = (["finish", "shape"] as const).filter((r) => specific(answers[r]));
+    const candidates = (["finish", "shape", "color"] as const).filter((r) => specific(answers[r]));
     loosen = candidates.find((r) => without(r)) ?? candidates[0] ?? null;
   }
 
-  return { rung, exactCount: gated.length, hardCount: hard.length, ordered, backfill, loosen };
+  let exactCount = 0;
+  for (const t of tiers.values()) if (t === 1) exactCount++;
+  return { rung, exactCount, hardCount: hard.length, ordered, tiers, outside, loosen };
 }
 
-/** Step D result (or the deterministic fallback) plus Step E. */
-export function selectResults(
-  ladder: Pick<LadderResult, "ordered" | "backfill">,
-  spec: Pick<ColumnarSpec, "resultCount" | "alsoMatchedCount">,
-  rankedIds?: string[] | null,
-): { results: DerivedProduct[]; alsoMatched: DerivedProduct[] } {
+const tierIn = (ladder: Pick<LadderResult, "tiers">, p: DerivedProduct): Tier => ladder.tiers.get(p.id) ?? 4;
+
+/**
+ * The Step D candidate set: every set of a tier the grid can reach (up to
+ * the tier of the last grid slot), capped at candidateCount. The ranker
+ * never sees a set it could only place above a closer one.
+ */
+export function rankerCandidates(
+  ladder: Pick<LadderResult, "ordered" | "tiers">,
+  spec: Pick<ColumnarSpec, "candidateCount" | "resultCount">,
+): DerivedProduct[] {
   const n = Math.min(spec.resultCount, ladder.ordered.length);
-  const byId = new Map(ladder.ordered.map((p) => [p.id, p]));
-  let results: DerivedProduct[];
-  if (rankedIds && rankedIds.length === n && rankedIds.every((id) => byId.has(id)) && new Set(rankedIds).size === n) {
-    results = rankedIds.map((id) => byId.get(id)!);
-  } else {
-    results = ladder.ordered.slice(0, n);
+  if (n === 0) return [];
+  const boundary = tierIn(ladder, ladder.ordered[n - 1]);
+  return ladder.ordered.filter((p) => tierIn(ladder, p) <= boundary).slice(0, Math.max(spec.candidateCount, n));
+}
+
+/**
+ * Step D's picks (or the Step C fallback) plus Step E. A valid ranking is
+ * exactly n distinct candidates; it then decides the order inside each
+ * tier and which sets of the last tier fill the grid, but never the tiers:
+ * a closer set it left out is put back ahead of the farther ones.
+ */
+export function selectResults(
+  ladder: Pick<LadderResult, "ordered" | "tiers">,
+  spec: Pick<ColumnarSpec, "resultCount" | "alsoMatchedCount" | "candidateCount">,
+  rankedIds?: string[] | null,
+): { results: DerivedProduct[]; alsoMatched: DerivedProduct[]; usedRanker: boolean } {
+  const candidates = rankerCandidates(ladder, spec);
+  const n = Math.min(spec.resultCount, ladder.ordered.length);
+  const byId = new Map(candidates.map((p) => [p.id, p]));
+  let results = ladder.ordered.slice(0, n);
+  let usedRanker = false;
+  if (n > 0 && rankedIds && rankedIds.length === n && rankedIds.every((id) => byId.has(id)) && new Set(rankedIds).size === n) {
+    const picked = rankedIds.map((id) => byId.get(id)!);
+    const boundary = tierIn(ladder, ladder.ordered[n - 1]);
+    const out: DerivedProduct[] = [];
+    for (let t = 1; t <= boundary; t++) {
+      const mine = picked.filter((p) => tierIn(ladder, p) === t);
+      if (t < boundary) {
+        out.push(...mine, ...candidates.filter((p) => tierIn(ladder, p) === t && !mine.includes(p)));
+      } else {
+        out.push(...mine.slice(0, n - out.length));
+      }
+    }
+    // n distinct candidates always refill the grid; anything else is Step C.
+    if (out.length === n) {
+      results = out;
+      usedRanker = true;
+    }
   }
-  const picked = new Set(results.map((p) => p.id));
-  const alsoMatched = ladder.ordered
-    .filter((p) => !picked.has(p.id))
-    .concat(ladder.backfill)
-    .slice(0, spec.alsoMatchedCount);
-  return { results, alsoMatched };
+  const shown = new Set(results.map((p) => p.id));
+  const alsoMatched = ladder.ordered.filter((p) => !shown.has(p.id)).slice(0, spec.alsoMatchedCount);
+  return { results, alsoMatched, usedRanker };
 }
 
 // ---- Copy (brief section 5 "Copy rules on the results page") ----
@@ -373,25 +438,27 @@ export interface HeaderCopy {
 }
 
 export function headerFor(
-  ladder: Pick<LadderResult, "rung" | "ordered">,
+  ladder: Pick<LadderResult, "rung" | "outside">,
   answers: ColumnarAnswers,
   labels: AnswerLabels,
   shown: number,
 ): HeaderCopy {
   if (shown === 0) return { kind: "none", text: "We don't have that combination yet." };
-  if (ladder.rung === 5) {
+  // Only vibe and drama ever step outside the picks; never length, shape,
+  // finish or color.
+  const outside = [ladder.outside.vibe ? "vibe" : null, ladder.outside.drama ? "style" : null]
+    .filter(Boolean)
+    .join(" and ");
+  if (ladder.rung === 5 && !outside) {
     return {
       kind: "fewer",
       text: `${shown} ${shown === 1 ? "set matches" : "sets match"} exactly. Change an answer above to see more.`,
     };
   }
-  if (ladder.rung === 1) return { kind: "normal", text: null };
-  // What stepped down at this rung: drama at 2, color at 3, the vibe gate
-  // at 4. Never length, shape or finish.
-  const outside = ladder.rung === 2 ? "style" : ladder.rung === 3 ? "color" : "vibe";
+  if (!outside) return { kind: "normal", text: null };
   const path = pathPhrase(answers, labels);
   return {
-    kind: "relaxed",
+    kind: ladder.rung === 5 ? "fewer" : "relaxed",
     text: `Here's what we have${path ? ` in ${path}` : ""}. A few step outside your ${outside} picks.`,
   };
 }
@@ -419,7 +486,8 @@ function fitPhrase(p: DerivedProduct): string {
  * Templated why-line (the ranker's fallback and the "Also matched" row):
  * the set's exact finish, length and shape, plus the strongest answer it
  * echoes back in the shopper's own words. Names only attributes the set
- * has, and never hedges on length, shape or finish.
+ * has, a vibe only where Lisa approved it (or the French tip / ombre tags
+ * say so), and never hedges on length, shape or finish.
  */
 export function whyLine(
   p: DerivedProduct,
@@ -432,14 +500,15 @@ export function whyLine(
   const dramaHit = specific(answers.drama)?.find((d) => p.drama.includes(d));
   const color = colorHit ? lower(label(labels, colorHit)) : null;
   const drama = dramaHit ? lower(label(labels, dramaHit)) : null;
+  const claimVibe = vibe && claimableVibes(p).includes(vibe) ? vibe : null;
   const lines: string[] = [];
-  if (vibe === "french_girl" && (p.isFrench || p.isOmbre)) {
-    lines.push(`${p.isFrench ? "French tips" : "Soft ombre"}, ${fit}, made for ${label(labels, vibe)}.`);
+  if (claimVibe === "french_girl") {
+    lines.push(`${p.isFrench ? "French tips" : "Soft ombre"}, ${fit}, made for ${label(labels, claimVibe)}.`);
   }
   if (color && drama) lines.push(`${fit} in ${color}, ${drama} as asked.`);
   if (color) lines.push(`${fit} in the ${color} you picked.`);
   if (drama) lines.push(`${fit}, ${drama} like you asked.`);
-  if (vibe && vibeMatches(p, vibe)) lines.push(`${fit}, made for ${label(labels, vibe)}.`);
+  if (claimVibe) lines.push(`${fit}, made for ${label(labels, claimVibe)}.`);
   // Only answers the shopper actually gave: a surprise or skipped question
   // was never "chosen", and a super short set has no shape to match.
   const chosen = (["length", "shape", "finish"] as const).filter((role) => {
@@ -461,6 +530,7 @@ export function whyLine(
 const LENGTH_WORDS: Array<[string, string]> = [
   ["\\bsuper[\\s-]?short\\b", "super_short"],
   ["\\bextra[\\s-]?short\\b", "super_short"],
+  ["\\bextra[\\s-]?long\\b", "long"],
   ["\\bshort\\b", "short"],
   ["\\bmedium\\b", "medium"],
   // "long-lasting" / "long-wear" talk about wear, not length.
@@ -486,17 +556,37 @@ const COLOR_WORDS: Record<string, RegExp> = {
   pinks_purples: /\bpinks?\b|\bpurples?\b|\blilac\b|\blavender\b|\bmauve\b/i,
   reds_berries: /\breds?\b|\bberry\b|\bberries\b|\bburgundy\b|\bcherry\b|\bmaroon\b/i,
   bold_bright: /\bblues?\b|\bgreens?\b|\bneon\b|\bteal\b/i,
-  dark_moody: /\bblack\b|\bgr[ae]y\b/i,
-  metallics: /\bgold\b|\bsilver\b|\bmetallics?\b/i,
+  dark_moody: /\bblack\b|\bgr[ae]y\b|\bdark\b|\bmoody\b/i,
+  metallics: /\bgold\b|\bsilver\b|\bbronze\b|\bcopper\b|\bmetallics?\b/i,
   oranges_yellows: /\boranges?\b|\byellows?\b|\bcoral\b|\bpeach\b/i,
-  white: /\bwhite\b|\bmilky\b/i,
+  white: /\bwhite\b|\bmilky\b|\bivory\b/i,
+};
+// The drama answers in the shopper's words ("A little extra" is a claim:
+// the Berry Baby bug). Checked after length phrases ("extra short") are
+// consumed.
+const DRAMA_WORDS: Record<string, RegExp> = {
+  clean_classic: /\bclean\b(?![\s-]girl)|\bclassic\b/i,
+  little_extra: /\bextra\b/i,
+  statement: /\bstatement\b/i,
+  full_art: /\bnail[\s-]?art\b|\bfull[\s-]on\b|\bart\b/i,
+};
+// The vibe tiles' words: a claim only where claimableVibes allows it.
+const VIBE_WORDS: Record<string, RegExp> = {
+  clean_girl: /\bclean[\s-]girl\b|\bminimal(ist)?\b/i,
+  soft_sweet: /\bsweet\b/i,
+  french_girl: /\bfrench[\s-]girl\b/i,
+  main_character: /\bmain[\s-]character\b/i,
+  vacay: /\bvacay\b|\bvacation\b/i,
+  alt_edgy: /\bedgy\b|\balt(ernative)?\b|\bgrunge\b|\bgoth(ic)?\b/i,
+  holiday: /\bholidays?\b|\bfestive\b/i,
 };
 const BANNED_HEDGES = /\b(closest|similar|almost|nearly|close to)\b/i;
 
 /**
  * Hard constraints on a ranker reason: short, no hedging, and every length,
- * shape, finish, color or design word it uses must be true of this set.
- * Anything else is swapped for the templated line.
+ * shape, finish, color, drama, vibe or design word it uses must be true of
+ * this set (a vibe only where claimableVibes allows it). Anything else is
+ * swapped for the templated line.
  */
 export function reasonIsValid(reason: unknown, p: DerivedProduct): reason is string {
   if (typeof reason !== "string") return false;
@@ -513,11 +603,16 @@ export function reasonIsValid(reason: unknown, p: DerivedProduct): reason is str
   for (const [id, re] of Object.entries(SHAPE_WORDS)) if (re.test(text) && p.shape !== id) return false;
   for (const [id, re] of Object.entries(FINISH_WORDS)) if (re.test(text) && p.finish !== id) return false;
   for (const [id, re] of Object.entries(COLOR_WORDS)) if (re.test(text) && !p.colors.includes(id)) return false;
-  // "French Girl Chic" is the shopper's vibe, not a claim about the set.
-  if (/\bfrench\b(?!\s+girl)/i.test(text) && !p.isFrench) return false;
+  for (const [id, re] of Object.entries(DRAMA_WORDS)) if (re.test(rest) && !p.drama.includes(id)) return false;
+  const vibes = claimableVibes(p);
+  for (const [id, re] of Object.entries(VIBE_WORDS)) if (re.test(text) && !vibes.includes(id)) return false;
+  // "French Girl Chic" is checked as a vibe above; "French" alone is tips.
+  if (/\bfrench\b(?![\s-]girl)/i.test(text) && !p.isFrench) return false;
   if (/\bombre\b/i.test(text) && !p.isOmbre) return false;
   if (/\b3d\b|\bgems?\b/i.test(text) && !p.is3d) return false;
   if (/\bglitter\b/i.test(text) && !p.hasGlitter) return false;
+  if (/\bsolid\b/i.test(text) && !p.isSolid) return false;
+  if (/\bpattern(s|ed)?\b/i.test(text) && !p.hasPattern) return false;
   return true;
 }
 
@@ -527,9 +622,13 @@ export const BRANCH_COLUMNS = ["length", "shape", "finish"] as const;
 export type BranchColumn = (typeof BRANCH_COLUMNS)[number];
 
 export interface BranchingBlock {
+  /** Legacy (contract 3): what a widget deployed before fix spec v4 reads.
+   * Such a widget ignores `full`. */
   threshold: number;
   questions: Record<string, { column: BranchColumn; values: Record<string, string> }>;
   pool: { columns: ["length", "shape", "finish"]; rows: Array<[string, string, string]> };
+  /** Fix spec v4: full-match branching (see FullBranching). */
+  full?: FullBranching;
 }
 
 export function branchingRows(eligible: DerivedProduct[]): Array<[string, string, string]> {
@@ -538,8 +637,19 @@ export function branchingRows(eligible: DerivedProduct[]): Array<[string, string
     .map((p) => [p.length!, p.shape!, p.finish!]);
 }
 
-/** The block recommendation-config serves: one row per eligible product. */
-export function buildBranching(spec: Pick<ColumnarSpec, "axes" | "threshold">, eligible: DerivedProduct[]): BranchingBlock {
+/** The flow's questions as the branching block needs them. */
+export type FlowQuestionsForBranching = Array<{
+  axisKey: string;
+  options: Array<{ axisValue: string; selectAll?: boolean | null }>;
+}>;
+
+/** The block recommendation-config serves: one row per eligible product,
+ * plus the v4 full-match block when the flow's questions are given. */
+export function buildBranching(
+  spec: Pick<ColumnarSpec, "axes" | "threshold"> & Partial<Pick<ColumnarSpec, "fullMatchMin">>,
+  eligible: DerivedProduct[],
+  flowQuestions?: FlowQuestionsForBranching,
+): BranchingBlock {
   const questions: BranchingBlock["questions"] = {};
   for (const [axisKey, axis] of Object.entries(spec.axes)) {
     if (axis.role === "length" || axis.role === "shape" || axis.role === "finish") {
@@ -550,7 +660,182 @@ export function buildBranching(spec: Pick<ColumnarSpec, "axes" | "threshold">, e
     threshold: spec.threshold,
     questions,
     pool: { columns: ["length", "shape", "finish"], rows: branchingRows(eligible) },
+    ...(flowQuestions ? { full: buildFullBranching(spec, eligible, flowQuestions) } : {}),
   };
+}
+
+// ---- Full-match branching (fix spec v4) ----
+//
+// An option shows only if, given every earlier answer, at least `min` sets
+// can still match EVERY answer (hard filters, vibe and drama) for some way
+// of answering the questions after it. The widget runs the same check
+// (fullVisibleBits in gleame-quiz.js, the same algorithm as the one below;
+// widget-columnar.test.ts runs both on the real pool).
+//
+// Why it holds on every path: an option is shown only when some
+// completion keeps `min` sets, where a completion answers each later
+// question with "open" if it has a select-all option, else with one of its
+// options. Any union of shown options keeps every row a single shown
+// option keeps; "open" keeps more; and a question left with no option
+// shown is answered open, which keeps at least what its single option in
+// the completion kept. So each step keeps a completion alive, and the last
+// answer leaves `min` sets or more.
+
+/** Row columns, also the order of BranchingBlock.full.columns. */
+export const FULL_COLUMNS = COLUMNAR_ROLES;
+export type FullColumn = ColumnarRole;
+
+export interface FullBranchQuestion {
+  axisKey: string;
+  column: FullColumn;
+  /** Has a select-all option ("Surprise me", "Open to anything"). */
+  any: boolean;
+  /** axisValue -> bit index in this column's row mask. */
+  values: Record<string, number>;
+}
+
+/**
+ * `branching.full`, about 7 KB for Glamnetic's 416 sets:
+ *   min        fullMatchMin (3): full matches an option must keep reachable
+ *   threshold  spec.threshold (6), applied as before to thresholdColumns:
+ *              an option there also needs this many rows on the path of
+ *              earlier answers to those columns
+ *   columns    row layout: vibe, length, shape, color, finish, drama
+ *   anyIfEmpty columns where a 0 mask means "no value" (a super short set
+ *              has no shape): such a row passes that column's filter but
+ *              counts toward none of its options
+ *   questions  the flow's mapped questions in flow order
+ *   rows       one per eligible set: per column, a bit mask over
+ *              ROLE_VOCAB[column] (bit i = vocab[i]); multi-valued columns
+ *              (color, vibe, drama) set several bits. Vibe = approved labels
+ *              where present, else the tag rules.
+ */
+export interface FullBranching {
+  min: number;
+  threshold: number;
+  thresholdColumns: FullColumn[];
+  anyIfEmpty: FullColumn[];
+  columns: FullColumn[];
+  questions: FullBranchQuestion[];
+  rows: number[][];
+}
+
+const bitOf = (role: ColumnarRole, id: string): number => ROLE_VOCAB[role].indexOf(id);
+const maskOf = (role: ColumnarRole, ids: Iterable<string | null>): number => {
+  let m = 0;
+  for (const id of ids) {
+    const i = id ? bitOf(role, id) : -1;
+    if (i >= 0) m |= 1 << i;
+  }
+  return m;
+};
+
+/** One row per set, columns as FULL_COLUMNS. */
+export function fullRow(p: DerivedProduct): number[] {
+  return FULL_COLUMNS.map((c) => {
+    switch (c) {
+      case "vibe":
+        return maskOf(c, p.vibes);
+      case "length":
+        return maskOf(c, [p.length]);
+      case "shape":
+        return shapeless(p) ? 0 : maskOf(c, [p.shape]);
+      case "color":
+        return maskOf(c, p.colors);
+      case "finish":
+        return maskOf(c, [p.finish]);
+      case "drama":
+        return maskOf(c, p.drama);
+    }
+  });
+}
+
+export function buildFullBranching(
+  spec: Pick<ColumnarSpec, "axes" | "threshold"> & Partial<Pick<ColumnarSpec, "fullMatchMin">>,
+  eligible: DerivedProduct[],
+  flowQuestions: FlowQuestionsForBranching,
+): FullBranching {
+  const questions: FullBranchQuestion[] = [];
+  for (const q of flowQuestions) {
+    const axis = Object.prototype.hasOwnProperty.call(spec.axes, q.axisKey) ? spec.axes[q.axisKey] : null;
+    if (!axis || questions.some((e) => e.axisKey === q.axisKey)) continue;
+    // Only options the flow actually offers (retired vibe tiles are gone
+    // by now), so the completion check never leans on a missing option.
+    const values: Record<string, number> = {};
+    for (const o of q.options) {
+      if (o.selectAll || !Object.prototype.hasOwnProperty.call(axis.values, o.axisValue)) continue;
+      const bit = bitOf(axis.role, axis.values[o.axisValue]);
+      if (bit >= 0) values[o.axisValue] = bit;
+    }
+    questions.push({ axisKey: q.axisKey, column: axis.role, any: q.options.some((o) => Boolean(o.selectAll)), values });
+  }
+  return {
+    min: spec.fullMatchMin ?? COLUMNAR_DEFAULTS.fullMatchMin,
+    threshold: spec.threshold,
+    thresholdColumns: ["length", "shape", "finish"],
+    anyIfEmpty: ["shape"],
+    columns: [...FULL_COLUMNS],
+    questions,
+    rows: eligible.filter((p) => p.length && p.shape && p.finish).map(fullRow),
+  };
+}
+
+const uniqueBits = (values: Record<string, number>): number[] =>
+  [...new Set(Object.values(values))].sort((a, b) => a - b);
+
+/**
+ * Bits of question qi's options to show, given the answers before it:
+ * answers[j] is the bit mask of question j's picks (0 = open: surprise,
+ * skipped or unanswered). Fewer than two left skips the question (one is
+ * recorded for the shopper), as for legacy branching.
+ */
+export function fullVisibleBits(b: FullBranching, qi: number, answers: ReadonlyArray<number | null | undefined>): number[] {
+  const q = b.questions[qi];
+  if (!q) return [];
+  const col = (name: FullColumn) => b.columns.indexOf(name);
+  const empty = b.anyIfEmpty.map(col);
+  const passes = (row: number[], c: number, mask: number) =>
+    !mask || (row[c] & mask) !== 0 || (row[c] === 0 && empty.includes(c));
+  const prior: Array<[number, number]> = [];
+  const priorT: Array<[number, number]> = [];
+  for (let j = 0; j < qi && j < b.questions.length; j++) {
+    const m = answers[j] || 0;
+    const c = col(b.questions[j].column);
+    if (!m || c < 0) continue;
+    prior.push([c, m]);
+    if (b.thresholdColumns.includes(b.questions[j].column)) priorT.push([c, m]);
+  }
+  const ci = col(q.column);
+  if (ci < 0) return [];
+  const base = b.rows.filter((r) => prior.every(([c, m]) => passes(r, c, m)));
+  const thresholded = b.thresholdColumns.includes(q.column);
+  const baseT = thresholded ? b.rows.filter((r) => priorT.every(([c, m]) => passes(r, c, m))) : [];
+  const later = b.questions
+    .slice(qi + 1)
+    .filter((x) => !x.any && col(x.column) >= 0)
+    .map((x) => ({ c: col(x.column), bits: uniqueBits(x.values) }));
+  const feasible = (rows: number[][], k: number): boolean => {
+    if (rows.length < b.min) return false;
+    if (k === later.length) return true;
+    for (const bit of later[k].bits) {
+      if (feasible(rows.filter((r) => passes(r, later[k].c, 1 << bit)), k + 1)) return true;
+    }
+    return false;
+  };
+  const out: number[] = [];
+  for (const bit of uniqueBits(q.values)) {
+    const own = (r: number[]) => (r[ci] & (1 << bit)) !== 0;
+    if (thresholded && baseT.filter(own).length < b.threshold) continue;
+    if (feasible(base.filter(own), 0)) out.push(bit);
+  }
+  return out;
+}
+
+/** An answer as fullVisibleBits takes it: its picks' bits for the
+ * question's column, 0 for surprise / skipped. */
+export function fullAnswerMask(q: FullBranchQuestion, a: RoleAnswer | undefined): number {
+  if (!Array.isArray(a)) return 0;
+  return maskOf(q.column, a);
 }
 
 /** A prior answer on a branching column: the union of its picks. */
@@ -674,7 +959,7 @@ export function labelsFromFlow(
   return out;
 }
 
-// ---- Assembly: ladder + Step D picks (or fallback) + Step E + copy ----
+// ---- Assembly: tiers + Step D picks (or fallback) + Step E + copy ----
 
 export interface AssembledItem {
   product: DerivedProduct;
@@ -690,20 +975,16 @@ export interface AssembledColumnar {
   bestMatchBadge: boolean;
   results: AssembledItem[];
   alsoMatched: AssembledItem[];
-  loosen: "finish" | "shape" | null;
-  /** True when the ranker's order was used (false = Step C fallback). */
+  loosen: "finish" | "shape" | "color" | null;
+  /** True when the ranker's picks were used (false = Step C fallback). */
   ranked: boolean;
 }
 
-/** The Step D candidate set: the top of the rung's Step C order. */
-export const rankerCandidates = (ladder: Pick<LadderResult, "ordered">, spec: Pick<ColumnarSpec, "candidateCount">) =>
-  ladder.ordered.slice(0, spec.candidateCount);
-
 /**
  * Everything after Step D, pure: the ranker's picks when they are exactly
- * the right count from the candidate set (else the top of Step C), its
- * reasons where they pass the copy rules (else the templated line), and
- * the header per brief section 5.
+ * the right count from the candidate set (else the top of Step C), held to
+ * the tiers; its reasons where they pass the copy rules (else the
+ * templated line); and the header.
  */
 export function assembleColumnar(
   ladder: LadderResult,
@@ -712,15 +993,7 @@ export function assembleColumnar(
   labels: AnswerLabels,
   ranked?: { ids: string[]; reasons: Record<string, string> } | null,
 ): AssembledColumnar {
-  const candidates = rankerCandidates(ladder, spec);
-  const { results, alsoMatched } = selectResults(
-    { ordered: candidates, backfill: ladder.ordered.slice(spec.candidateCount).concat(ladder.backfill) },
-    spec,
-    ranked?.ids ?? null,
-  );
-  const usedRanker = Boolean(
-    ranked && results.length > 0 && ranked.ids.length === results.length && ranked.ids.every((id, i) => results[i].id === id),
-  );
+  const { results, alsoMatched, usedRanker } = selectResults(ladder, spec, ranked?.ids ?? null);
   const vibe = activeVibe(answers, spec);
   const item = (p: DerivedProduct, llmReason: string | undefined): AssembledItem => ({
     product: p,
@@ -731,7 +1004,8 @@ export function assembleColumnar(
     rung: ladder.rung,
     exactCount: ladder.exactCount,
     header: headerFor(ladder, answers, labels, results.length),
-    bestMatchBadge: ladder.rung === 1 && results.length > 0,
+    // #1 matches every answer whenever any set does (tier 1 leads).
+    bestMatchBadge: results.length > 0 && tierIn(ladder, results[0]) === 1,
     results: results.map((p) => item(p, ranked?.reasons[p.id])),
     alsoMatched: alsoMatched.map((p) => item(p, undefined)),
     loosen: results.length === 0 ? ladder.loosen : null,

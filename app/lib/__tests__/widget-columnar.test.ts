@@ -10,6 +10,10 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
+import { deriveProduct, splitPool } from "../columnar/attributes";
+import { buildBranching, fullVisibleBits } from "../columnar/pipeline";
+import { SHAPE_IDS } from "../columnar/spec";
+import { glamneticSpec, loadGlamneticFlow, loadGlamneticPool } from "./fixtures/glamnetic-columnar";
 
 const WIDGET_PATH = path.resolve(__dirname, "../../../extensions/glimpse-widget/assets/gleame-quiz.js");
 let source = "";
@@ -854,5 +858,155 @@ describe("finish swatches", () => {
     const { root } = await bootPreview({ flow: makeFlow(null), step: "q5" });
     const nails = Array.from(root.querySelectorAll(".gq-nail-grid .gq-nail")).map((n) => n.className);
     expect(nails).toEqual(["gq-nail gq-nail--glossy", "gq-nail gq-nail--glazed", "gq-nail gq-nail--velvet", "gq-nail gq-nail--chrome", "gq-nail gq-nail--matte", "gq-nail gq-nail--any"]);
+  });
+});
+
+// ---- Full-match branching (fix spec v4): the live questions and the real
+// pool, the block built by the server's own buildBranching ----
+
+const fixtureFlow = loadGlamneticFlow();
+const v4Spec = glamneticSpec();
+const v4Eligible = splitPool(loadGlamneticPool().map((p) => deriveProduct(p, { holidayCollections: v4Spec.holidayCollections }))).eligible;
+const v4Block = buildBranching(v4Spec, v4Eligible, fixtureFlow);
+const v4Full = v4Block.full!;
+
+function liveFlow(): Record<string, unknown> {
+  return {
+    configured: true,
+    photoAxes: [],
+    photoAxisDetails: [],
+    questions: fixtureFlow.map((q) =>
+      question(
+        q.axisKey,
+        q.prompt ?? q.axisKey,
+        { multiSelect: q.multiSelect, maxSelections: q.maxSelections, optionStyle: q.axisKey === "vibe" ? "boxed" : "visual" },
+        q.options.map((o) => opt(o.label, o.axisValue, { selectAll: o.selectAll })),
+      ),
+    ),
+    branching: JSON.parse(JSON.stringify(v4Block)),
+  };
+}
+
+/** The widget's own fullVisibleBits, lifted out verbatim. */
+function widgetFullVisibleBits(): (f: unknown, qi: number, answers: number[]) => number[] {
+  const m = /\/\/ <gleame-full-branching>[^\n]*\n(?:\s*\/\/[^\n]*\n)*([\s\S]*?)\n\s*\/\/ <\/gleame-full-branching>/.exec(source);
+  if (!m) throw new Error("gleame-full-branching markers not found");
+  return new Function(`${m[1]}\nreturn fullVisibleBits;`)();
+}
+
+describe("full-match branching (fix spec v4)", () => {
+  it("the widget's check matches the server's on every prefix of 600 random walks", () => {
+    const widget = widgetFullVisibleBits();
+    const max = fixtureFlow.map((q) => (q.multiSelect ? q.maxSelections ?? 9 : 1));
+    let seed = 11;
+    const r = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+    let compared = 0;
+    for (let walk = 0; walk < 600; walk++) {
+      const masks: number[] = [];
+      for (let qi = 0; qi < v4Full.questions.length; qi++) {
+        const server = fullVisibleBits(v4Full, qi, masks);
+        expect(widget(JSON.parse(JSON.stringify(v4Full)), qi, masks), `${qi}: ${masks.join(",")}`).toEqual(server);
+        compared++;
+        let mask = 0;
+        if (server.length === 1) mask = 1 << server[0];
+        else if (server.length > 1) {
+          for (const b of server.filter(() => r() < 0.4).slice(0, max[qi])) mask |= 1 << b;
+          if (!mask && !v4Full.questions[qi].any) mask = 1 << server[0];
+        }
+        masks.push(mask);
+      }
+    }
+    expect(compared).toBe(600 * 6);
+  });
+
+  // Plays the quiz from the vibe step, checking each screen against the
+  // server's check: picks[qi] names the option to tap, else the first shown.
+  async function playChecked(root: HTMLElement, picks: Record<number, string>) {
+    const nameOf = (qi: number, bit: number) =>
+      fixtureFlow[qi].options.find((o) => !o.selectAll && v4Full.questions[qi].values[o.axisValue] === bit)!.label;
+    const masks: number[] = [];
+    const screens: string[] = [];
+    for (let qi = 0; qi < v4Full.questions.length; qi++) {
+      const vis = fullVisibleBits(v4Full, qi, masks);
+      if (vis.length < 2) {
+        // Skipped: one option is recorded for the shopper, none leaves it open.
+        masks.push(vis.length ? 1 << vis[0] : 0);
+        continue;
+      }
+      const any = fixtureFlow[qi].options.filter((o) => o.selectAll).map((o) => o.label);
+      // The boutique intro carries the first question as tiles.
+      if (qi > 0) expect(title(root)).toBe(fixtureFlow[qi].prompt);
+      const shown = qi > 0 ? labels(root) : Array.from(root.querySelectorAll(".gq-option-visual-label")).map((e) => e.textContent!.trim());
+      expect(shown.sort(), fixtureFlow[qi].axisKey).toEqual([...vis.map((b) => nameOf(qi, b)), ...any].sort());
+      screens.push(fixtureFlow[qi].axisKey);
+      const label = picks[qi] ?? nameOf(qi, vis[0]);
+      const bit = v4Full.questions[qi].values[fixtureFlow[qi].options.find((o) => o.label === label && !o.selectAll)!.axisValue];
+      await tap(root, label);
+      // The vibe tiles advance on their own.
+      if (qi > 0) await next(root);
+      masks.push(1 << bit);
+    }
+    await wait(30);
+    await settle();
+    return { masks, screens };
+  }
+
+  it("Lisa's Alt & Edgy + Super Short: no color keeps three full matches, so the color step never asks", async () => {
+    recommendReply = () => columnar("normal");
+    const root = await bootStorefront({ flow: liveFlow() });
+    const alt = 1 << v4Full.questions[0].values.option_7;
+    const ss = 1 << v4Full.questions[1].values.super_short;
+    expect(fullVisibleBits(v4Full, 3, [alt, ss, 0])).toEqual([]);
+    const { screens } = await playChecked(root, { 0: "Alternative & Edgy", 1: "Super Short" });
+    // v3 asked for a color here and served plain pink solids.
+    expect(screens).not.toContain("color_family");
+    expect(screens).not.toContain("shape");
+    expect(recommendBodies).toHaveLength(1);
+    expect(recommendBodies[0].criteria.color_family).toBeUndefined();
+    expect(recommendBodies[0].criteria.length).toEqual(["super_short"]);
+  });
+
+  it("every screen shows exactly the options the server keeps (Alternative & Edgy, Short)", async () => {
+    recommendReply = () => columnar("normal");
+    const root = await bootStorefront({ flow: liveFlow() });
+    const { masks, screens } = await playChecked(root, { 0: "Alternative & Edgy", 1: "Short" });
+    expect(screens).toContain("color_family");
+    // Some colors were hidden on this path, and what was sent keeps three.
+    const alt = masks[0];
+    const short = masks[1];
+    expect(fullVisibleBits(v4Full, 3, [alt, short, masks[2]]).length).toBeLessThan(8);
+    const sent = recommendBodies[0].criteria;
+    expect(sent.vibe).toBe("option_7");
+    expect(sent.length).toEqual(["short"]);
+  });
+  it("the shape step after Main Character + Short shows what the server keeps", async () => {
+    const root = await bootStorefront({ flow: liveFlow() });
+    await tap(root, "Main Character Energy");
+    await tap(root, "Short");
+    await next(root);
+    const mc = 1 << v4Full.questions[0].values.main_character;
+    const short = 1 << v4Full.questions[1].values.short;
+    const shapes: string[] = fullVisibleBits(v4Full, 2, [mc, short]).map((b) => SHAPE_IDS[b]);
+    expect(labels(root)).toEqual([...fixtureFlow[2].options.filter((o) => !o.selectAll && shapes.includes(o.axisValue)).map((o) => o.label), "Open to anything"]);
+  });
+});
+
+describe("store preview token (fix spec v4, item 6)", () => {
+  it("quiz-recommend gets the signed preview token, not just the flag", async () => {
+    (window as any).GLEAME_QUIZ_STORE_PREVIEW = { token: "signed.jwt.token", id: "live" };
+    try {
+      const root = await bootStorefront();
+      await playToResults(root);
+      expect(recommendBodies[0]).toMatchObject({ storePreview: true, previewToken: "signed.jwt.token", previewId: "live" });
+    } finally {
+      delete (window as any).GLEAME_QUIZ_STORE_PREVIEW;
+    }
+  });
+
+  it("a shopper's request carries no token", async () => {
+    const root = await bootStorefront();
+    await playToResults(root);
+    expect(recommendBodies[0].previewToken).toBeUndefined();
+    expect(recommendBodies[0].storePreview).toBeUndefined();
   });
 });

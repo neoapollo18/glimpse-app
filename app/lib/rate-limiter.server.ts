@@ -312,6 +312,18 @@ export const RATE_LIMITS = {
     limit: 5000,
     windowMs: 24 * 60 * 60 * 1000,
   },
+  // Signed merchant store previews on a columnar shop skip the per-IP and
+  // shopper LLM limits (a QA suite of ~180 answer paths in a couple of
+  // minutes) but stay under this cap: at most one ranker call each, so
+  // the day window bounds the LLM spend.
+  QUIZ_RECOMMEND_PREVIEW_PER_SHOP_MINUTE: {
+    limit: 180,
+    windowMs: 60 * 1000,
+  },
+  QUIZ_RECOMMEND_PREVIEW_PER_SHOP_DAY: {
+    limit: 2000,
+    windowMs: 24 * 60 * 60 * 1000,
+  },
   // AI quiz creator (Claude, admin-authenticated). Generation is the
   // expensive call (~$0.50); copilot messages are cheap (~$0.10) thanks to
   // prompt caching. Keys are per shop, not per IP — these endpoints sit

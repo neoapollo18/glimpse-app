@@ -78,6 +78,7 @@ export async function computeQuizRecommendations({
   criteria,
   clientIP,
   resultKey,
+  storePreview,
 }: {
   verifiedShop: { id: string };
   verifiedDomain: string;
@@ -86,6 +87,9 @@ export async function computeQuizRecommendations({
   clientIP: string;
   /** Results permalink (columnar shops; ignored elsewhere). */
   resultKey?: string | null;
+  /** Verified store preview on a columnar shop (the route checked the
+   * token and charged the preview cap); ignored elsewhere. */
+  storePreview?: boolean;
 }): Promise<QuizRecommendResult> {
   // Columnar matching (Glamnetic logic v3) replaces this whole pipeline
   // for a shop that switched it on: its own pool, filters and ranker. Every
@@ -100,6 +104,7 @@ export async function computeQuizRecommendations({
       criteria,
       resultKey,
       clientIP,
+      storePreview,
     });
   }
 

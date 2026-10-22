@@ -1,48 +1,79 @@
 /**
- * Columnar engine QA (Glamnetic recommendation logic v3, brief section 9).
+ * Columnar engine QA (Glamnetic recommendation logic v3, brief section 9,
+ * fix spec v4).
  *
- * Runs against the Oct 17 fixture pool with no network: the Step D ranker
- * is stubbed with its deterministic fallback (the top of Step C), which is
- * exactly what shoppers get when the LLM times out. Prints:
+ * Runs against the Oct 17 fixture pool and the live quiz's questions
+ * (Oct 21) with no network: the Step D ranker is stubbed with its
+ * deterministic fallback (the top of Step C), which is exactly what
+ * shoppers get when the LLM times out. Prints:
  *   1. derivation vs Aaron's attribute export, per column, with every
  *      disagreement class
  *   2. the excluded products (the brief's eight missing a core tag)
- *   3. the section 6 branching tables and the hidden-options log
- *   4. the section 9 matrix: rung, exactCount, the six handles with their
- *      length / shape / finish, pass/fail against the row's expectation
- *   5. a sweep over every answer path branching lets a shopper reach:
- *      hard filters, closer sets first, honest "you chose" lines
+ *   3. the section 6 tables, the legacy hidden-options log, the v4
+ *      full-match block and the brief's "also verify" visibility checks
+ *   4. the section 9 matrix under v4: whether the live quiz can still
+ *      reach each row, rung, matches, the six handles, and what v3 did
+ *   5. the v4 walk: EVERY answer path the widget can show (see below),
+ *      each asserted to leave >= fullMatchMin sets matching every answer,
+ *      with no hard-filter violation, the tiers in order and no false
+ *      why-line
+ *   6. a hostile ranker on a sample of paths: it reverses the candidates
+ *      and writes false reasons; tiers and copy must still hold
  *
- * Run: npx tsx scripts/columnar-qa.mts
+ * The walk (section 5) follows the widget question by question, using
+ * fullVisibleBits (the server twin of the widget's check; the vitest
+ * suite runs both on this pool). At each question it takes every answer
+ * the widget can accept: with 0 options shown, the question is skipped
+ * (open); with 1, that option is recorded; with 2 or more, every
+ * non-empty union of shown options up to the question's max selections
+ * (vibe is single-select; length and shape have no max; color 3, finish
+ * 2, drama 2), plus "open" where the question has a select-all option.
+ * That is every path, unions included: about 2.95M on the Oct 17 pool.
+ *
+ * Run: npx tsx scripts/columnar-qa.mts [--sample=N]
+ *   --sample=N  run the full pipeline (ladder, picks, copy) on every Nth
+ *               path instead of all of them; the >= fullMatchMin check
+ *               always covers every path
  */
 
-import { deriveProduct, splitPool, vibeMatches, type DerivedProduct } from "../app/lib/columnar/attributes";
+import { claimableVibes, deriveProduct, splitPool, vibeMatches, type DerivedProduct } from "../app/lib/columnar/attributes";
 import {
   assembleColumnar,
   branchingRows,
-  branchVisibility,
   buildBranching,
   countRows,
   criteriaToAnswers,
   decodeResultKey,
   encodeResultKey,
+  fullAnswerMask,
+  fullVisibleBits,
   hiddenOptionsLog,
-  passesHardFilters,
+  labelsFromFlow,
+  rankerCandidates,
+  reasonIsValid,
   runLadder,
   type ColumnarAnswers,
+  type FullBranching,
+  type RoleAnswer,
 } from "../app/lib/columnar/pipeline";
-import { COLOR_IDS, DEFAULT_ANSWER_LABELS, DRAMA_IDS, VIBE_IDS } from "../app/lib/columnar/spec";
+import { DEFAULT_ANSWER_LABELS, ROLE_VOCAB, VIBE_IDS, type ColumnarRole } from "../app/lib/columnar/spec";
 import {
   glamneticSpec,
   loadAttributeExport,
+  loadGlamneticFlow,
   loadGlamneticPool,
   MISSING_CORE_TAG,
 } from "../app/lib/__tests__/fixtures/glamnetic-columnar";
 
+const sampleArg = process.argv.find((a) => a.startsWith("--sample="));
+const SAMPLE = Math.max(1, Number(sampleArg?.split("=")[1]) || 1);
+
 let failures = 0;
 const spec = glamneticSpec();
+const flow = loadGlamneticFlow();
+const labels = labelsFromFlow(spec, flow);
 const inputs = loadGlamneticPool();
-const derived = inputs.map((p) => deriveProduct(p, { holidayCollections: spec.holidayCollections }));
+const derived = inputs.map((p) => deriveProduct(p, { holidayCollections: spec.holidayCollections, vibeLabels: spec.vibeLabels }));
 const { eligible, excluded } = splitPool(derived);
 const byHandle = new Map(derived.map((p) => [p.handle, p]));
 
@@ -131,9 +162,10 @@ for (const len of ["super_short", "short", "medium"]) {
   console.log(`finish @ ${len.padEnd(11)} ${finishIds.map((f) => `${f} ${countRows(lengthRows, "finish", f, prior)}`).join(" · ")}`);
 }
 console.log(`eligible branching rows: ${branchingRows(eligible).length}`);
-const block = buildBranching(spec, eligible);
+const block = buildBranching(spec, eligible, flow);
+const full: FullBranching = block.full!;
 console.log(`served rows (eligible): ${block.pool.rows.length}, threshold ${block.threshold}`);
-console.log("hidden options on the single-length paths (eligible rows):");
+console.log("legacy hidden-options log (threshold only, single-length paths):");
 for (const e of hiddenOptionsLog(spec, block.pool.rows)) {
   const path = e.path.map((id) => DEFAULT_ANSWER_LABELS[id]).join(" > ");
   const hidden = e.hidden.map((h) => `${DEFAULT_ANSWER_LABELS[h.id]} (${h.count})`).join(", ") || "none";
@@ -141,7 +173,7 @@ for (const e of hiddenOptionsLog(spec, block.pool.rows)) {
   console.log(`    ${path.padEnd(22)} ${e.question.padEnd(6)} hidden: ${hidden}${skip}`);
 }
 
-console.log("\nvibe rule counts (eligible pool; brief's Oct 17 figure in brackets):");
+console.log("\nvibe counts (eligible pool; brief's Oct 17 figure in brackets):");
 const briefCounts: Record<string, string> = {
   french_girl: "165",
   main_character: "141",
@@ -154,75 +186,242 @@ for (const v of VIBE_IDS) {
   console.log(`    ${v.padEnd(15)} all ${String(all).padStart(3)} · eligible ${String(el).padStart(3)}${briefCounts[v] ? ` [${briefCounts[v]}]` : ""}`);
 }
 console.log(`    holiday by collection only: ${derived.filter((p) => p.holiday).length}`);
+const labeled = eligible.filter((p) => p.vibeSource === "labels").length;
+console.log(`    sets with approved vibe labels: ${labeled} of ${eligible.length} (the rest use the tag rules)`);
+
+const legacyBytes = JSON.stringify({ ...block, full: undefined }).length;
+console.log(
+  `\nv4 full-match block: ${full.rows.length} rows, ${JSON.stringify(full).length} bytes (legacy part ${legacyBytes}), ` +
+    `min ${full.min}, threshold ${full.threshold} on ${full.thresholdColumns.join("/")}`,
+);
+console.log(`questions: ${full.questions.map((q) => `${q.axisKey} (${q.column}${q.any ? ", has open" : ""})`).join(" > ")}`);
+
+const idOf = (qi: number, bit: number) => ROLE_VOCAB[full.questions[qi].column][bit];
+const nameOfId = (id: string) => labels[id] ?? DEFAULT_ANSWER_LABELS[id] ?? id;
+const qIndex = (role: ColumnarRole) => full.questions.findIndex((q) => q.column === role);
+/** Visible answer IDs of a role's question after the given picks (any role
+ * not given is open). */
+function visibleIds(role: ColumnarRole, prefix: Partial<Record<ColumnarRole, string[]>>): string[] {
+  const qi = qIndex(role);
+  const masks = full.questions.slice(0, qi).map((q) => fullAnswerMask(q, prefix[q.column]));
+  return fullVisibleBits(full, qi, masks).map((b) => idOf(qi, b));
+}
+
+console.log("\nbrief 'also verify' under v4 branching (vibe left open):");
+const SIX = ["almond", "coffin", "oval", "round", "squoval", "square"];
+const alsoChecks: Array<[string, boolean]> = [
+  ["Shape step skipped when only Super Short", visibleIds("shape", { length: ["super_short"] }).length < 2],
+  ["Round + Squoval hidden when only Medium", !visibleIds("shape", { length: ["medium"] }).some((s) => s === "round" || s === "squoval")],
+  ["Coffin + Square hidden when only Short", !visibleIds("shape", { length: ["short"] }).some((s) => s === "coffin" || s === "square")],
+  ["All six shapes shown for Short + Medium", SIX.every((s) => visibleIds("shape", { length: ["short", "medium"] }).includes(s))],
+  ["Square stays for Medium only (7 sets)", visibleIds("shape", { length: ["medium"] }).includes("square")],
+  ["Matte hidden for Short (5 < 6)", !visibleIds("finish", { length: ["short"] }).includes("matte")],
+  ["Every vibe tile shows at the first step", visibleIds("vibe", {}).length === VIBE_IDS.length],
+];
+for (const [name, ok] of alsoChecks) {
+  if (!ok) failures++;
+  console.log(`   ${ok ? "PASS" : "FAIL"}  ${name}`);
+}
+console.log(`   shapes after Super Short + Medium: ${visibleIds("shape", { length: ["super_short", "medium"] }).join(", ")}`);
+
+// ---------------------------------------------------------------------
+// Shared checks, written apart from the pipeline so they don't restate it
+// ---------------------------------------------------------------------
+const picked = (a: RoleAnswer | undefined) => (Array.isArray(a) && a.length ? a : null);
+/** Does the set satisfy one answer? The v4 rules as the spec states them. */
+function roleOk(p: DerivedProduct, role: ColumnarRole, ids: string[] | null): boolean {
+  if (!ids) return true;
+  switch (role) {
+    case "vibe":
+      return ids.some((v) => vibeMatches(p, v));
+    case "length":
+      return Boolean(p.length) && ids.includes(p.length!);
+    case "shape":
+      // A super short set has no shape; Super Short must be a picked length.
+      return (p.shape === "super_short" && p.length === "super_short") || (Boolean(p.shape) && ids.includes(p.shape!));
+    case "color":
+      return p.colors.some((c) => ids.includes(c));
+    case "finish":
+      return Boolean(p.finish) && ids.includes(p.finish!);
+    case "drama":
+      return p.drama.some((d) => ids.includes(d));
+  }
+}
+const HARD: ColumnarRole[] = ["length", "shape", "finish", "color"];
+const hardOk = (p: DerivedProduct, a: ColumnarAnswers) => HARD.every((r) => roleOk(p, r, picked(a[r])));
+const fullOk = (p: DerivedProduct, a: ColumnarAnswers) =>
+  hardOk(p, a) && roleOk(p, "vibe", picked(a.vibe)) && roleOk(p, "drama", picked(a.drama));
+/** 1 = vibe and drama fit, then drama only, vibe only, neither (French
+ * Girl Chic swaps the middle two). */
+function closeness(p: DerivedProduct, a: ColumnarAnswers): number {
+  const v = picked(a.vibe)?.[0] ?? null;
+  const vibeOk = roleOk(p, "vibe", v ? [v] : null);
+  const dramaOk = roleOk(p, "drama", picked(a.drama));
+  if (vibeOk && dramaOk) return 1;
+  if (v === "french_girl") return vibeOk ? 2 : dramaOk ? 3 : 4;
+  return dramaOk ? 2 : vibeOk ? 3 : 4;
+}
+type Out = ReturnType<typeof assembleColumnar>;
+function orderIssue(out: Out, a: ColumnarAnswers): string | null {
+  const shown = [...out.results, ...out.alsoMatched];
+  for (let i = 1; i < shown.length; i++) {
+    if (closeness(shown[i].product, a) < closeness(shown[i - 1].product, a)) {
+      return `${shown[i].product.handle} (closer) ranks behind ${shown[i - 1].product.handle}`;
+    }
+  }
+  return null;
+}
+// Every answer label the copy could echo, longest first.
+const LABELS: Array<[string, ColumnarRole, string]> = [];
+for (const role of ["color", "drama", "vibe"] as const) {
+  for (const id of ROLE_VOCAB[role]) {
+    for (const l of new Set([labels[id], DEFAULT_ANSWER_LABELS[id]].filter(Boolean))) LABELS.push([l.toLowerCase(), role, id]);
+  }
+}
+LABELS.sort((x, y) => y[0].length - x[0].length);
+/** A false or unearned why-line. Templated lines (echo = true) may only
+ * echo the shopper's own picks; a ranker's line only has to be true. */
+function whyIssue(reason: string, p: DerivedProduct, a: ColumnarAnswers, echo: boolean): string | null {
+  let text = reason.toLowerCase();
+  for (const [l, role, id] of LABELS) {
+    if (!text.includes(l)) continue;
+    text = text.split(l).join(" ");
+    if (echo && !picked(a[role])?.includes(id)) return `"${reason}" echoes ${role} "${l}" the shopper didn't pick (${p.handle})`;
+    const has = role === "color" ? p.colors.includes(id) : role === "drama" ? p.drama.includes(id) : claimableVibes(p).includes(id);
+    if (!has) return `"${reason}" claims ${role} "${l}" that ${p.handle} doesn't have`;
+  }
+  if (/french tips/i.test(reason) && !p.isFrench) return `"${reason}" claims French tips on ${p.handle}`;
+  if (/soft ombre/i.test(reason) && !p.isOmbre) return `"${reason}" claims ombre on ${p.handle}`;
+  const m = /exactly the (.+) you chose/.exec(reason);
+  for (const role of (m?.[1].split(/, | and /) ?? []) as Array<"length" | "shape" | "finish">) {
+    const have = p[role];
+    if (!have || !picked(a[role])?.includes(have)) return `"${reason}" claims a ${role} pick on ${p.handle}`;
+  }
+  if (!reasonIsValid(reason, p)) return `"${reason}" fails reasonIsValid on ${p.handle}`;
+  return null;
+}
+/** Everything a v4 result must hold, given its answers. */
+function resultIssue(out: Out, a: ColumnarAnswers, ladder: ReturnType<typeof runLadder>, ranker = false): string | null {
+  const shown = [...out.results, ...out.alsoMatched];
+  const hard = shown.find((i) => !hardOk(i.product, a));
+  if (hard) return `hard filter: ${hard.product.handle}`;
+  const order = orderIssue(out, a);
+  if (order) return order;
+  for (const i of shown) {
+    const why = whyIssue(i.reason, i.product, a, !ranker);
+    if (why) return why;
+  }
+  // French Girl Chic stays a gate while it can fill the grid.
+  if (picked(a.vibe)?.[0] === "french_girl" && eligible.filter((p) => hardOk(p, a) && vibeMatches(p, "french_girl")).length >= spec.resultCount) {
+    const off = shown.find((i) => !vibeMatches(i.product, "french_girl"));
+    if (off) return `French gate: ${off.product.handle}`;
+  }
+  if (out.results.length < Math.min(spec.resultCount, ladder.hardCount)) return `${out.results.length} results with ${ladder.hardCount} sets passing`;
+  return null;
+}
+
+/** Can the live quiz reach these answers? null = yes, else why not. */
+function reach(a: ColumnarAnswers): string | null {
+  const masks: number[] = [];
+  for (let qi = 0; qi < full.questions.length; qi++) {
+    const q = full.questions[qi];
+    const vis = fullVisibleBits(full, qi, masks);
+    const want = fullAnswerMask(q, a[q.column]);
+    const names = (bits: number[]) => bits.map((b) => nameOfId(idOf(qi, b))).join(", ");
+    const wantBits = ROLE_VOCAB[q.column].map((_, i) => i).filter((i) => want & (1 << i));
+    if (vis.length === 0) {
+      if (want) return `${q.axisKey}: skipped (nothing left keeps ${full.min} full matches), ${names(wantBits)} can't be picked`;
+      masks.push(0);
+      continue;
+    }
+    if (vis.length === 1) {
+      if (want !== 1 << vis[0]) return `${q.axisKey}: only ${names(vis)} is left (recorded for the shopper)`;
+      masks.push(want);
+      continue;
+    }
+    if (!want) {
+      if (!q.any) return `${q.axisKey}: the live quiz has no open option here`;
+      masks.push(0);
+      continue;
+    }
+    const hidden = wantBits.filter((b) => !vis.includes(b));
+    if (hidden.length) return `${q.axisKey}: ${names(hidden)} hidden (shown: ${names(vis)})`;
+    masks.push(want);
+  }
+  return null;
+}
 
 // ---------------------------------------------------------------------
 // 4. QA matrix (section 9)
 // ---------------------------------------------------------------------
-console.log("\n=== 4. QA matrix (section 9), ranker stubbed with the Step C fallback ===");
+console.log("\n=== 4. QA matrix (section 9) under v4, ranker stubbed with the Step C fallback ===");
+const run = (criteria: Record<string, string | string[]>) => {
+  const answers = criteriaToAnswers(criteria, spec);
+  const ladder = runLadder(eligible, answers, spec);
+  const out = assembleColumnar(ladder, answers, spec, labels, null);
+  return { answers, ladder, out, key: encodeResultKey(answers) };
+};
+type Run = ReturnType<typeof run>;
+const all = (r: Run, f: (p: DerivedProduct) => boolean) => r.out.results.every((i) => f(i.product));
 type Row = {
   n: number;
   label: string;
   criteria: Record<string, string | string[]>;
+  /** What v3 (Oct 17, color soft) returned, for the deltas. */
+  was: string;
   expect: string;
-  check: (r: ReturnType<typeof run>) => string | null;
-  /** The pool can't meet the brief's expectation without widening length,
-   * shape or finish: reported as DATA, not a failure, when the invariant
-   * (exact on every hard filter, every exact set shown) holds. */
-  dataNote?: (r: ReturnType<typeof run>) => string | null;
+  /** The brief calls this a normal path: the live quiz must reach it. */
+  mustReach?: boolean;
+  check: (r: Run) => string | null;
 };
-const run = (criteria: Record<string, string | string[]>) => {
-  const answers = criteriaToAnswers(criteria, spec);
-  const ladder = runLadder(eligible, answers, spec);
-  const out = assembleColumnar(ladder, answers, spec, {}, null);
-  return { answers, ladder, out, key: encodeResultKey(answers) };
-};
-const shapeVisible = (len: string[], shape: string) =>
-  branchVisibility(block.pool.rows, block.threshold, "shape", ["almond", "coffin", "oval", "round", "squoval", "square"], [
-    { column: "length", values: len },
-  ]).visible.includes(shape);
-
+function fmt(p: DerivedProduct, a: ColumnarAnswers) {
+  return `${p.handle.padEnd(50)} ${String(p.length).padEnd(11)} ${String(p.shape).padEnd(11)} ${String(p.finish).padEnd(13)} ${p.colors.join("+").padEnd(32)} tier ${closeness(p, a)}`;
+}
 const rows: Row[] = [
   {
     n: 1,
     label: "Alt & Edgy · Super Short · (skipped) · Pinks & purples · Glossy · A little extra",
     criteria: { vibe: "option_7", length: ["super_short"], color_family: ["pinks_pastels"], question_6: ["option_1"], style_tier: ["extra"] },
-    expect: "6 Super Short, no Short/Medium; rung 2-3",
+    was: "rung 3: 4 pink solids, then 2 off-color (unbothered: black/nude/orange; berry-baby: red, 'made for Alternative & Edgy')",
+    expect: "only super short glossy sets with pink; nothing off-color; branching keeps the shopper off this path",
     check: (r) =>
-      r.out.results.length !== 6
-        ? `${r.out.results.length} results`
-        : r.out.results.some((i) => i.product.length !== "super_short")
-          ? "non super short result"
-          : r.out.rung < 2 || r.out.rung > 3
-            ? `rung ${r.out.rung}`
-            : null,
+      r.out.results.length === 0
+        ? "no results"
+        : all(r, (p) => p.length === "super_short" && p.finish === "glossy" && p.colors.includes("pinks_purples"))
+          ? null
+          : "a result outside super short / glossy / pink",
   },
   {
     n: 2,
     label: "French Girl · Short · Almond · Nudes · Glossy · Clean & classic",
     criteria: { vibe: "french_girl", length: ["short"], shape: ["almond"], color_family: ["nudes_neutrals"], question_6: ["option_1"], style_tier: ["clean"] },
-    expect: "6 French tip or ombre, Short Almond; no relaxation (rung 1)",
+    was: "rung 1: 6 French tip nude sets",
+    expect: "reachable; 6 French tip or ombre nude sets, every one a full match (rung 1)",
+    mustReach: true,
     check: (r) =>
       r.out.results.length !== 6
         ? `${r.out.results.length} results`
-        : r.out.results.some((i) => !(i.product.isFrench || i.product.isOmbre))
-          ? "non french/ombre result"
-          : r.out.rung !== 1
-            ? `rung ${r.out.rung}`
-            : null,
+        : r.out.rung !== 1
+          ? `rung ${r.out.rung}`
+          : all(r, (p) => (p.isFrench || p.isOmbre) && p.colors.includes("nudes"))
+            ? null
+            : "non French / non nude result",
   },
   {
     n: 3,
     label: "French Girl · Medium · Coffin · Dark & moody · Matte · Full art",
     criteria: { vibe: "french_girl", length: ["medium"], shape: ["coffin"], color_family: ["dark_moody"], question_6: ["option_5"], style_tier: ["art"] },
-    expect: "starved: gate lifts (rung 4/5) before any length/shape/finish widening",
-    check: (r) => (r.out.rung < 4 ? `rung ${r.out.rung}` : null),
+    was: "rung 5: 1 set (lace-blush: pink + white, off-color)",
+    expect: "never off-color: zero results plus a loosen tap, or dark sets only; unreachable in the live quiz",
+    check: (r) => (all(r, (p) => p.colors.includes("dark_moody")) ? (r.out.results.length === 0 && !r.out.loosen ? "zero results without a loosen tap" : null) : "off-color result"),
   },
   {
     n: 4,
     label: "Holiday · Short · Oval · Reds & berries · Chrome · Statement",
     criteria: { vibe: "option_8", length: ["short"], shape: ["oval"], color_family: ["reds_berries"], question_6: ["option_4"], style_tier: ["statement"] },
-    expect: "thin path: only Short Oval Chrome, no Medium",
-    check: (r) => (r.out.results.some((i) => i.product.length === "medium") ? "medium leaked" : null),
+    was: "rung 5: 3 sets, 2 of them off-color (silver-siren, siren)",
+    expect: "no Medium, nothing off-color (Chrome is hidden for Short Oval: 3 < 6)",
+    check: (r) => (all(r, (p) => p.length === "short" && p.shape === "oval" && p.finish === "chrome" && p.colors.includes("reds_berries")) ? null : "a result outside short oval chrome reds"),
   },
   {
     n: 5,
@@ -235,9 +434,12 @@ const rows: Row[] = [
       question_6: ["option_1", "option_2"],
       style_tier: ["clean"],
     },
-    expect: "6 results inside the union; both lengths across results + also matched",
+    was: "rung 1: 6 results, both lengths across results + also matched",
+    expect: "reachable; 6 full matches inside the union; both lengths across results + also matched",
+    mustReach: true,
     check: (r) => {
       if (r.out.results.length !== 6) return `${r.out.results.length} results`;
+      if (r.out.rung !== 1) return `rung ${r.out.rung}`;
       const lens = new Set([...r.out.results, ...r.out.alsoMatched].map((i) => i.product.length));
       return lens.has("short") && lens.has("medium") ? null : `lengths ${[...lens].join("+")}`;
     },
@@ -246,7 +448,8 @@ const rows: Row[] = [
     n: 6,
     label: "Surprise · Super Short · (skipped) · Surprise · Surprise · Surprise",
     criteria: { vibe: "_any", length: ["super_short"], color_family: ["_any"], question_6: ["_any"], style_tier: ["_any"] },
-    expect: "6 Super Short, no two identical colorways",
+    was: "rung 1: 6 super short sets, 6 distinct colorways",
+    expect: "6 super short, no two identical colorways (the live Style step has no Surprise option)",
     check: (r) => {
       if (r.out.results.length !== 6) return `${r.out.results.length} results`;
       const ways = new Set(r.out.results.map((i) => i.product.colors.join("+")));
@@ -257,191 +460,264 @@ const rows: Row[] = [
     n: 7,
     label: "Main Character · Medium · Square · Bold & bright · Glossy · Full art",
     criteria: { vibe: "main_character", length: ["medium"], shape: ["square"], color_family: ["bold_bright"], question_6: ["option_1"], style_tier: ["art"] },
-    expect: "Square visible for Medium-only; rung reported",
-    check: () => (shapeVisible(["medium"], "square") ? null : "Square hidden for Medium-only"),
+    was: "rung 5: 4 nude / white medium square glossy sets (all off-color)",
+    expect: "Square visible for Medium only; nothing off-color",
+    check: (r) =>
+      !visibleIds("shape", { length: ["medium"] }).includes("square")
+        ? "Square hidden for Medium only"
+        : all(r, (p) => p.colors.includes("bold_bright"))
+          ? null
+          : "off-color result",
   },
   {
     n: 8,
     label: "Soft & Sweet · Short · Round · Pinks & purples · Velvet / cat eye · A little extra",
     criteria: { vibe: "soft_sweet", length: ["short"], shape: ["round"], color_family: ["pinks_pastels"], question_6: ["option_3"], style_tier: ["extra"] },
-    expect: "rung 1-2; shape stays Round",
-    check: (r) =>
-      r.out.results.some((i) => i.product.shape !== "round")
-        ? "non round result"
-        : r.out.rung > 2 && r.ladder.hardCount >= spec.resultCount
-          ? `rung ${r.out.rung}`
-          : null,
-    dataNote: (r) =>
-      r.ladder.hardCount < spec.resultCount
-        ? `only ${r.ladder.hardCount} Short Round Velvet sets exist, so rung 1-2 can't fill 6; branching hides Velvet on this path (${r.ladder.hardCount} < ${block.threshold})`
-        : null,
+    was: "rung 5: 3 sets, 1 off-color (pure-intentions: metallics + white)",
+    expect: "shape stays Round, pinks only (Velvet is hidden for Short Round: 3 < 6)",
+    check: (r) => (all(r, (p) => p.shape === "round" && p.colors.includes("pinks_purples")) ? null : "a non round or off-color result"),
   },
   {
     n: 9,
     label: "Vacay · Short · Squoval · Oranges & yellows · Glossy · Statement",
     criteria: { vibe: "vacation", length: ["short"], shape: ["squoval"], color_family: ["oranges_yellows"], question_6: ["option_1"], style_tier: ["statement"] },
-    expect: "not identical to row 7's candidate set",
+    was: "rung 3: 4 orange sets, then 2 off-color (blue-a-kiss, light-sage)",
+    expect: "oranges only; not identical to row 7's set",
     check: (r) => {
+      if (!all(r, (p) => p.colors.includes("oranges_yellows"))) return "off-color result";
       const row7 = run(rows[6].criteria);
-      const a = r.ladder.ordered.map((p) => p.id).join();
-      const b = row7.ladder.ordered.map((p) => p.id).join();
-      return a === b ? "same candidate set as row 7" : null;
+      return r.ladder.ordered.map((p) => p.id).join() === row7.ladder.ordered.map((p) => p.id).join() ? "same set as row 7" : null;
     },
   },
   {
     n: 10,
     label: "Any · Short · Almond · Nudes · Glossy · Clean & classic, then Edit color to Reds",
     criteria: { vibe: "_any", length: ["short"], shape: ["almond"], color_family: ["nudes_neutrals"], question_6: ["option_1"], style_tier: ["clean"] },
-    expect: "edit: new key, new picks, same length/shape/finish",
+    was: "rung 1 before and after the edit",
+    expect: "reachable; edit: new key, new picks, same length/shape/finish, reds only",
+    mustReach: true,
     check: (r) => {
       const edited = run({ ...rows[9].criteria, color_family: ["reds_berries"] });
-      console.log(`      edit -> key ${edited.key}, rung ${edited.out.rung}`);
-      for (const i of edited.out.results) console.log(`        ${fmt(i.product)}`);
+      console.log(`      edit -> key ${edited.key}, rung ${edited.out.rung}, full matches ${edited.ladder.exactCount}`);
+      for (const i of edited.out.results) console.log(`        ${fmt(i.product, edited.answers)}`);
       if (edited.key === r.key) return "same key after edit";
-      const before = r.out.results.map((i) => i.product.id).join();
-      if (before === edited.out.results.map((i) => i.product.id).join()) return "same picks after edit";
-      return edited.out.results.some((i) => !passesHardFilters(i.product, r.answers)) ? "edit widened L/S/F" : null;
+      if (r.out.results.map((i) => i.product.id).join() === edited.out.results.map((i) => i.product.id).join()) return "same picks after edit";
+      if (edited.out.results.some((i) => !(i.product.length === "short" && i.product.shape === "almond" && i.product.finish === "glossy"))) return "edit widened L/S/F";
+      return edited.out.results.every((i) => i.product.colors.includes("reds_berries")) ? null : "off-color after edit";
     },
   },
 ];
 
-// Checks every row (and the sweep below) shares, written apart from the
-// pipeline so they don't just restate it:
-//   - closer sets lead: in the fallback order, no set that steps outside
-//     the shopper's picks (French gate, then color, then drama) comes
-//     before one that doesn't
-//   - a templated "exactly the ... you chose" names only answers the
-//     shopper gave, and the set really has them
-const picked = (a: ColumnarAnswers[keyof ColumnarAnswers]) => (Array.isArray(a) && a.length ? a : null);
-function closeness(p: DerivedProduct, a: ColumnarAnswers): number {
-  if (picked(a.vibe)?.[0] === "french_girl" && !(p.isFrench || p.isOmbre)) return 4;
-  const colors = picked(a.color);
-  if (colors && !p.colors.some((c) => colors.includes(c))) return 3;
-  const dramas = picked(a.drama);
-  if (dramas && !p.drama.some((d) => dramas.includes(d))) return 2;
-  return 1;
-}
-function orderIssue(out: ReturnType<typeof run>["out"], a: ColumnarAnswers): string | null {
-  const shown = [...out.results, ...out.alsoMatched];
-  for (let i = 1; i < shown.length; i++) {
-    if (closeness(shown[i].product, a) < closeness(shown[i - 1].product, a)) {
-      return `${shown[i].product.handle} (closer) ranks behind ${shown[i - 1].product.handle}`;
-    }
-  }
-  return null;
-}
-function whyIssue(out: ReturnType<typeof run>["out"], a: ColumnarAnswers): string | null {
-  for (const i of [...out.results, ...out.alsoMatched]) {
-    const m = /exactly the (.+) you chose/.exec(i.reason);
-    if (!m) continue;
-    for (const role of m[1].split(/, | and /) as Array<"length" | "shape" | "finish">) {
-      const have = i.product[role];
-      if (!have || !picked(a[role])?.includes(have)) return `"${i.reason}" claims a ${role} pick on ${i.product.handle}`;
-    }
-  }
-  return null;
-}
-
-function fmt(p: DerivedProduct) {
-  return `${p.handle.padEnd(52)} ${String(p.length).padEnd(11)} ${String(p.shape).padEnd(11)} ${String(p.finish).padEnd(13)} ${p.colors.join("+")}`;
-}
-
 for (const row of rows) {
   const r = run(row.criteria);
   const roundTrip = JSON.stringify(decodeResultKey(r.key)) === JSON.stringify(r.answers);
+  const reachable = reach(r.answers);
   console.log(`\n#${row.n} ${row.label}`);
+  console.log(`   v3 was: ${row.was}`);
   console.log(`   expect: ${row.expect}`);
+  console.log(`   live quiz: ${reachable ? `unreachable (${reachable})` : "reachable"}`);
   console.log(
-    `   rung ${r.out.rung} · exactCount ${r.out.exactCount} · shown ${r.out.results.length} · header ${r.out.header.kind}${r.out.header.text ? ` "${r.out.header.text}"` : ""}${r.out.loosen ? ` · loosen ${r.out.loosen}` : ""} · key ${r.key}${roundTrip ? "" : " (round trip FAILED)"}`,
+    `   rung ${r.out.rung} · full matches ${r.ladder.exactCount} · pass hard filters ${r.ladder.hardCount} · shown ${r.out.results.length} · header ${r.out.header.kind}${r.out.header.text ? ` "${r.out.header.text}"` : ""}${r.out.loosen ? ` · loosen ${r.out.loosen}` : ""} · key ${r.key}${roundTrip ? "" : " (round trip FAILED)"}`,
   );
-  for (const i of r.out.results) console.log(`     ${fmt(i.product)}  why: ${i.reason}`);
-  // Pass = every result satisfies the hard filters AND the row expectation.
-  const hardFail = r.out.results.find((i) => !passesHardFilters(i.product, r.answers));
-  const why = hardFail
-    ? `hard filter violated by ${hardFail.product.handle}`
-    : orderIssue(r.out, r.answers) ?? whyIssue(r.out, r.answers) ?? row.check(r);
-  const data = !why && roundTrip ? row.dataNote?.(r) ?? null : null;
+  for (const i of r.out.results) console.log(`     ${fmt(i.product, r.answers)}  why: ${i.reason}`);
+  const why =
+    resultIssue(r.out, r.answers, r.ladder) ??
+    (row.mustReach && reachable ? `must be reachable: ${reachable}` : null) ??
+    (!reachable && r.ladder.exactCount < full.min ? `reachable with only ${r.ladder.exactCount} full matches` : null) ??
+    row.check(r);
   if (why || !roundTrip) failures++;
-  console.log(`   ${why || !roundTrip ? `FAIL: ${why ?? "resultKey round trip"}` : data ? `PASS (DATA: ${data})` : "PASS"}`);
-}
-
-// Answers the brief calls out under "Also verify".
-console.log("\n=== Also verify ===");
-const alsoChecks: Array<[string, boolean]> = [
-  ["Shape step skipped when only Super Short", branchVisibility(block.pool.rows, block.threshold, "shape", ["almond", "coffin", "oval", "round", "squoval", "square"], [{ column: "length", values: ["super_short"] }]).skipped],
-  ["Round + Squoval hidden when only Medium", !shapeVisible(["medium"], "round") && !shapeVisible(["medium"], "squoval")],
-  ["Coffin + Square hidden when only Short", !shapeVisible(["short"], "coffin") && !shapeVisible(["short"], "square")],
-  ["All six shapes shown for Short + Medium", ["almond", "coffin", "oval", "round", "squoval", "square"].every((s) => shapeVisible(["short", "medium"], s))],
-  ["Matte hidden for Short (5 < 6)", !branchVisibility(block.pool.rows, block.threshold, "finish", ["matte"], [{ column: "length", values: ["short"] }]).visible.includes("matte")],
-];
-for (const [name, ok] of alsoChecks) {
-  if (!ok) failures++;
-  console.log(`   ${ok ? "PASS" : "FAIL"}  ${name}`);
+  console.log(`   ${why || !roundTrip ? `FAIL: ${why ?? "resultKey round trip"}` : "PASS"}`);
 }
 
 // ---------------------------------------------------------------------
-// 5. Sweep: every path a shopper can reach through branching
+// 5. The v4 walk: every path the widget can show
 // ---------------------------------------------------------------------
-// Each single length, then each shape and finish the branching block shows
-// on that path (a skipped question is unanswered, a one-option question is
-// recorded for the shopper, "surprise" whenever 2+ options show), crossed
-// with every vibe, every single color and every single drama level, each
-// plus surprise. Ranker stubbed with the fallback, as above.
-console.log("\n=== 5. Sweep over every branching path ===");
-const SHAPES6 = ["almond", "coffin", "oval", "round", "squoval", "square"];
-const visibleFor = (column: "shape" | "finish", ids: string[], prior: Array<{ column: "length" | "shape"; values: string[] }>) => {
-  const v = branchVisibility(block.pool.rows, block.threshold, column, ids, prior);
-  if (v.visible.length === 0) return [undefined];
-  if (v.visible.length === 1) return [[v.visible[0]]];
-  return [...v.visible.map((id) => [id]), "surprise" as const];
-};
-const paths: ColumnarAnswers[] = [];
-for (const len of ["super_short", "short", "medium"]) {
-  const lp = { column: "length" as const, values: [len] };
-  for (const shape of visibleFor("shape", SHAPES6, [lp])) {
-    const sp = Array.isArray(shape) ? [lp, { column: "shape" as const, values: shape }] : [lp];
-    for (const finish of visibleFor("finish", ["glossy", "glazed_pearl", "velvet_cateye", "chrome", "matte"], sp)) {
-      const a: ColumnarAnswers = { length: [len] };
-      if (shape) a.shape = shape;
-      if (finish) a.finish = finish;
-      paths.push(a);
-    }
-  }
-}
-const sweepVibes: Array<ColumnarAnswers["vibe"]> = [...VIBE_IDS.map((v) => [v]), "surprise"];
-const sweepColors: Array<ColumnarAnswers["color"]> = [...COLOR_IDS.map((c) => [c]), "surprise"];
-const sweepDramas: Array<ColumnarAnswers["drama"]> = [...DRAMA_IDS.map((d) => [d]), "surprise"];
-const tally = { runs: 0, hard: 0, order: 0, why: 0, short: 0, rungs: [0, 0, 0, 0, 0, 0] };
-const firstIssue: string[] = [];
-for (const p of paths) {
-  for (const vibe of sweepVibes) {
-    for (const color of sweepColors) {
-      for (const drama of sweepDramas) {
-        const a: ColumnarAnswers = { ...p, vibe, color, drama };
-        const ladder = runLadder(eligible, a, spec);
-        const out = assembleColumnar(ladder, a, spec, {}, null);
-        tally.runs++;
-        tally.rungs[out.rung]++;
-        if (out.results.length < spec.resultCount) tally.short++;
-        const hard = [...out.results, ...out.alsoMatched].find((i) => !passesHardFilters(i.product, a));
-        const order = orderIssue(out, a);
-        const why = whyIssue(out, a);
-        if (hard) tally.hard++;
-        if (order) tally.order++;
-        if (why) tally.why++;
-        const issue = hard ? `hard filter: ${hard.product.handle}` : order ?? why;
-        if (issue && firstIssue.length < 5) firstIssue.push(`${encodeResultKey(a)}: ${issue}`);
+console.log("\n=== 5. v4 walk: every answer path the widget can show ===");
+const maxSel = full.questions.map((q) => {
+  const fq = flow.find((f) => f.axisKey === q.axisKey)!;
+  return fq.multiSelect ? fq.maxSelections ?? ROLE_VOCAB[q.column].length : 1;
+});
+/** Every non-empty union of the shown bits, up to max picks. */
+function unions(bits: number[], max: number): number[] {
+  const out: number[] = [];
+  for (let m = 1; m < 1 << bits.length; m++) {
+    let count = 0;
+    let mask = 0;
+    for (let i = 0; i < bits.length; i++) {
+      if (m & (1 << i)) {
+        count++;
+        mask |= 1 << bits[i];
       }
     }
+    if (count <= max) out.push(mask);
+  }
+  return out;
+}
+const idsOf = (qi: number, mask: number) => ROLE_VOCAB[full.questions[qi].column].filter((_, i) => mask & (1 << i));
+// What v4 hides on top of the legacy rule (threshold on length / shape /
+// finish, every option elsewhere): the same check with no full-match floor.
+const legacy: FullBranching = { ...full, min: 0 };
+const hiddenByV4 = full.questions.map(() => ({ nodes: 0, hidden: 0, skipped: 0 }));
+const hiddenExamples: string[] = [];
+const tally = {
+  paths: 0,
+  minFull: Infinity,
+  below: 0,
+  checked: 0,
+  exactMismatch: 0,
+  topNotFull: 0,
+  issues: 0,
+  rungs: [0, 0, 0, 0, 0, 0],
+  fewer: 0,
+  fullCounts: new Map<number, number>(),
+};
+const firstIssues: string[] = [];
+const started = Date.now();
+function leaf(answers: ColumnarAnswers, fullSets: DerivedProduct[]) {
+  tally.paths++;
+  const n = fullSets.length;
+  tally.minFull = Math.min(tally.minFull, n);
+  const bucket = n >= 50 ? 50 : n >= 10 ? 10 : n;
+  tally.fullCounts.set(bucket, (tally.fullCounts.get(bucket) ?? 0) + 1);
+  if (n < full.min) {
+    tally.below++;
+    if (firstIssues.length < 8) firstIssues.push(`${encodeResultKey(answers)}: ${n} full matches`);
+  }
+  if (tally.paths % SAMPLE !== 0) return;
+  tally.checked++;
+  const ladder = runLadder(eligible, answers, spec);
+  const out = assembleColumnar(ladder, answers, spec, labels, null);
+  tally.rungs[out.rung]++;
+  if (out.results.length < spec.resultCount) tally.fewer++;
+  let issue: string | null = null;
+  if (ladder.exactCount !== n) {
+    tally.exactMismatch++;
+    issue = `pipeline counts ${ladder.exactCount} full matches, the walk ${n}`;
+  }
+  const topCount = Math.min(full.min, out.results.length);
+  if (!issue && out.results.slice(0, topCount).some((i) => !fullOk(i.product, answers))) {
+    tally.topNotFull++;
+    issue = `a top-${full.min} result is not a full match`;
+  }
+  issue ??= resultIssue(out, answers, ladder);
+  if (issue) {
+    tally.issues++;
+    if (firstIssues.length < 8) firstIssues.push(`${encodeResultKey(answers)}: ${issue}`);
   }
 }
-console.log(`paths ${paths.length} x vibes ${sweepVibes.length} x colors ${sweepColors.length} x drama ${sweepDramas.length} = ${tally.runs} runs`);
-console.log(`rungs: ${[1, 2, 3, 4, 5].map((r) => `${r}: ${tally.rungs[r]}`).join(" · ")} · fewer than ${spec.resultCount}: ${tally.short}`);
-console.log(`hard-filter violations ${tally.hard} · closer set behind a farther one ${tally.order} · false "you chose" ${tally.why}`);
-for (const s of firstIssue) console.log(`    ${s}`);
-const sweepOk = tally.hard === 0 && tally.order === 0 && tally.why === 0;
-if (!sweepOk) failures++;
-console.log(`sweep: ${sweepOk ? "PASS" : "FAIL"}`);
+function walk(qi: number, masks: number[], answers: ColumnarAnswers, sets: DerivedProduct[]) {
+  if (qi === full.questions.length) return leaf(answers, sets);
+  const q = full.questions[qi];
+  const vis = fullVisibleBits(full, qi, masks);
+  const was = fullVisibleBits(legacy, qi, masks);
+  const h = hiddenByV4[qi];
+  h.nodes++;
+  const extra = was.filter((b) => !vis.includes(b));
+  h.hidden += extra.length;
+  if (vis.length < 2 && was.length >= 2) h.skipped++;
+  if (extra.length && hiddenExamples.length < 6 && qi <= 3) {
+    const path = full.questions
+      .slice(0, qi)
+      .map((x, j) => (masks[j] ? idsOf(j, masks[j]).join("+") : "open"))
+      .join(" > ");
+    hiddenExamples.push(`after ${path || "(start)"}: ${q.axisKey} hides ${extra.map((b) => idOf(qi, b)).join(", ")}`);
+  }
+  let choices: number[];
+  if (vis.length === 0) choices = [0];
+  else if (vis.length === 1) choices = [1 << vis[0]];
+  else choices = [...unions(vis, maxSel[qi]), ...(q.any ? [0] : [])];
+  for (const mask of choices) {
+    const ids = mask ? idsOf(qi, mask) : null;
+    const next: ColumnarAnswers = { ...answers };
+    // Open where the shopper could pick it = surprise; a skipped step stays unanswered.
+    if (ids) next[q.column] = ids;
+    else if (vis.length >= 2) next[q.column] = "surprise";
+    walk(qi + 1, [...masks, mask], next, sets.filter((p) => roleOk(p, q.column, ids)));
+  }
+}
+walk(0, [], {}, eligible);
+const secs = ((Date.now() - started) / 1000).toFixed(1);
+console.log(`paths ${tally.paths} (unions included) in ${secs}s; full pipeline run on ${tally.checked}${SAMPLE > 1 ? ` (every ${SAMPLE}th)` : " (all)"}`);
+console.log(`fewest full matches on any path: ${tally.minFull} (floor ${full.min}); paths below the floor: ${tally.below}`);
+console.log(
+  `full matches per path: ${[...tally.fullCounts.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([k, v]) => `${k === 50 ? "50+" : k === 10 ? "10-49" : k}: ${v}`)
+    .join(" · ")}`,
+);
+console.log(`rungs: ${[1, 2, 4, 5].map((r) => `${r}: ${tally.rungs[r]}`).join(" · ")} (3 retired) · fewer than ${spec.resultCount} shown: ${tally.fewer}`);
+console.log(
+  `pipeline vs walk full-match count mismatches ${tally.exactMismatch} · top-${full.min} not a full match ${tally.topNotFull} · ` +
+    `other issues (hard filter, tier order, French gate, false why-line) ${tally.issues - tally.exactMismatch - tally.topNotFull}`,
+);
+console.log("what the full-match floor hides beyond the legacy rule (per question, over every reachable prefix):");
+full.questions.forEach((q, i) => {
+  const h = hiddenByV4[i];
+  console.log(`    ${q.axisKey.padEnd(13)} prefixes ${String(h.nodes).padStart(7)} · options hidden ${String(h.hidden).padStart(7)} · steps it skips ${h.skipped}`);
+});
+for (const s of hiddenExamples) console.log(`    e.g. ${s}`);
+for (const s of firstIssues) console.log(`    ISSUE ${s}`);
+const walkOk = tally.below === 0 && tally.issues === 0;
+if (!walkOk) failures++;
+console.log(`walk: ${walkOk ? "PASS" : "FAIL"}`);
+
+// ---------------------------------------------------------------------
+// 6. A hostile ranker
+// ---------------------------------------------------------------------
+console.log("\n=== 6. Hostile ranker: reversed candidates, false reasons, every single-pick path ===");
+const FALSE_REASONS = [
+  "A little extra, made for Vacay Mode.",
+  "Full-on nail art in red, perfect for Holiday-Ready.",
+  "Clean & classic medium coffin in black.",
+  "Statement chrome for your Main Character Energy.",
+];
+let hostileRuns = 0;
+let hostileIssues = 0;
+let llmLinesKept = 0;
+let llmLinesReplaced = 0;
+const hostileFirst: string[] = [];
+function hostileWalk(qi: number, masks: number[], answers: ColumnarAnswers) {
+  if (qi === full.questions.length) {
+    hostileRuns++;
+    const ladder = runLadder(eligible, answers, spec);
+    const candidates = rankerCandidates(ladder, spec);
+    const n = Math.min(spec.resultCount, ladder.ordered.length);
+    const ids = candidates.slice().reverse().slice(0, n).map((p) => p.id);
+    const reasons = Object.fromEntries(candidates.map((p, i) => [p.id, FALSE_REASONS[i % FALSE_REASONS.length]]));
+    const out = assembleColumnar(ladder, answers, spec, labels, { ids, reasons });
+    const fallback = assembleColumnar(ladder, answers, spec, labels, null);
+    for (const i of out.results) {
+      if (reasons[i.product.id] === i.reason) llmLinesKept++;
+      else llmLinesReplaced++;
+    }
+    const tiers = (o: Out) => o.results.map((i) => closeness(i.product, answers)).join();
+    const issue =
+      resultIssue(out, answers, ladder, true) ??
+      (tiers(out) !== tiers(fallback) ? `tiers ${tiers(out)} vs fallback ${tiers(fallback)}` : null) ??
+      (n > 0 && !out.ranked ? "a valid ranking was not used" : null);
+    if (issue) {
+      hostileIssues++;
+      if (hostileFirst.length < 5) hostileFirst.push(`${encodeResultKey(answers)}: ${issue}`);
+    }
+    return;
+  }
+  const q = full.questions[qi];
+  const vis = fullVisibleBits(full, qi, masks);
+  const choices = vis.length === 0 ? [0] : vis.length === 1 ? [1 << vis[0]] : [...vis.map((b) => 1 << b), ...(q.any ? [0] : [])];
+  for (const mask of choices) {
+    const next: ColumnarAnswers = { ...answers };
+    if (mask) next[q.column] = idsOf(qi, mask);
+    else if (vis.length >= 2) next[q.column] = "surprise";
+    hostileWalk(qi + 1, [...masks, mask], next);
+  }
+}
+hostileWalk(0, [], {});
+console.log(
+  `every single-pick path: ${hostileRuns} · issues ${hostileIssues} · ranker lines kept (true of the set) ${llmLinesKept}, replaced ${llmLinesReplaced}`,
+);
+for (const s of hostileFirst) console.log(`    ISSUE ${s}`);
+if (hostileIssues) failures++;
+console.log(`hostile ranker: ${hostileIssues ? "FAIL" : "PASS"}`);
 
 console.log(`\n${failures === 0 ? "ALL PASS" : `${failures} FAILURE(S)`}`);
 process.exitCode = failures === 0 ? 0 : 1;

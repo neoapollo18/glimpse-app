@@ -132,6 +132,21 @@ export function glamneticSpec(overrides: Record<string, unknown> = {}): Columnar
   })!;
 }
 
+export interface FixtureFlowQuestion {
+  axisKey: string;
+  prompt: string | null;
+  multiSelect: boolean;
+  maxSelections: number | null;
+  options: Array<{ label: string; axisValue: string; selectAll: boolean }>;
+}
+
+/** The live quiz's questions (Oct 21 recommendation-config): the order,
+ * select-all options and max selections the widget branches over. */
+export function loadGlamneticFlow(): FixtureFlowQuestion[] {
+  return (JSON.parse(fs.readFileSync(here("./glamnetic-flow-v3.json"), "utf8")) as { questions: FixtureFlowQuestion[] })
+    .questions;
+}
+
 /** The brief's eight products missing a core tag (section 10, item 5). */
 export const MISSING_CORE_TAG = {
   "queen-of-hearts-medium-coffin-press-on-nails": "length",

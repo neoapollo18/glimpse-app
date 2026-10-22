@@ -7,9 +7,11 @@ import {
   trackAssistantEvent,
   type MultiCriteria,
 } from "../lib/supabase.server";
-import { checkRateLimit, getClientIP } from "../lib/rate-limiter.server";
+import { checkRateLimit, checkRateLimits, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
 import { computeQuizRecommendations } from "../lib/quiz-recommend.server";
 import { JSON_BODY_LIMIT_BYTES, rejectOversizedBody } from "../lib/storefront-api.server";
+import { verifyStorePreviewToken } from "../lib/app-proxy.server";
+import { enabledColumnarSpec } from "../lib/columnar/spec";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -23,9 +25,12 @@ const CORS_HEADERS = {
  * imagery (fetched client-side via /products/{handle}.js) and streams
  * try-on previews in separately via /api/storefront/quiz-tryon.
  *
- * Request:  JSON { shopDomain, criteria: { axis_key: axis_value | [axis_value, ...] }, resultKey? }
+ * Request:  JSON { shopDomain, criteria: { axis_key: axis_value | [axis_value, ...] }, resultKey?,
+ *                  previewToken?, previewId? }
  *           (arrays come from multi-select questions; resultKey = a columnar
- *           shop's results permalink, which alone re-serves that result)
+ *           shop's results permalink, which alone re-serves that result;
+ *           previewToken + previewId = the on-store preview's signed token,
+ *           see the rate limit below)
  * Response: {
  *   matches: [{ productId, variantId, variantNumericId, productHandle,
  *               productName, variantTitle, title, tagline, whyFits, rank,
@@ -59,12 +64,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     } catch {
       return json({ error: "Invalid JSON body" }, { status: 400, headers: CORS_HEADERS });
     }
-    const { shopDomain, criteria: rawCriteria, cartToken, deviceType, storePreview, resultKey: rawResultKey } = (body ?? {}) as {
+    const {
+      shopDomain,
+      criteria: rawCriteria,
+      cartToken,
+      deviceType,
+      storePreview,
+      previewToken,
+      previewId,
+      resultKey: rawResultKey,
+    } = (body ?? {}) as {
       shopDomain?: string;
       criteria?: unknown;
       cartToken?: unknown;
       deviceType?: unknown;
       storePreview?: unknown;
+      previewToken?: unknown;
+      previewId?: unknown;
       resultKey?: unknown;
     };
     // Shape-checked here; the engine decodes it strictly (pipeline.ts).
@@ -121,13 +137,27 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // twice per session. Note: in ai/hybrid modes this endpoint can make a
     // Gemini call — that path has its own tighter limiter below which
     // degrades to the shuffle fallback instead of erroring.
+    //
+    // A merchant's on-store preview forwards its signed token (the same
+    // JWT proxy.preview and quiz-config verify, bound to this shop). The
+    // storePreview boolean alone is a client claim and never exempts
+    // anything; only a verified token on a columnar shop does, and then
+    // under a per-shop preview cap instead.
     const clientIP = getClientIP(request);
-    const ipLimit = checkRateLimit(`quiz-recommend:ip:${clientIP}:minute`, 20, 60_000);
-    if (!ipLimit.allowed) {
-      return json(
+    const previewVerified =
+      typeof previewToken === "string" &&
+      typeof previewId === "string" &&
+      previewToken.length <= 2048 &&
+      verifyStorePreviewToken(previewToken, verifiedDomain, previewId);
+    const tooMany = (retryAfterSeconds: number) =>
+      json(
         { error: "Too many requests. Please wait a moment." },
-        { status: 429, headers: { ...CORS_HEADERS, "Retry-After": ipLimit.retryAfterSeconds.toString() } }
+        { status: 429, headers: { ...CORS_HEADERS, "Retry-After": retryAfterSeconds.toString() } }
       );
+    const checkIpLimit = () => checkRateLimit(`quiz-recommend:ip:${clientIP}:minute`, 20, 60_000);
+    if (!previewVerified) {
+      const ipLimit = checkIpLimit();
+      if (!ipLimit.allowed) return tooMany(ipLimit.retryAfterSeconds);
     }
 
     // Assistant kill switch is shared with chat.
@@ -136,7 +166,38 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return json({ error: "Assistant not enabled" }, { status: 403, headers: CORS_HEADERS });
     }
 
-    const result = await computeQuizRecommendations({ verifiedShop, verifiedDomain, chatConfig, criteria, clientIP, resultKey });
+    // Every other shop's preview keeps the shopper limit, checked here
+    // once the config says which engine runs.
+    const previewBudget = previewVerified && enabledColumnarSpec(chatConfig) !== null;
+    if (previewVerified && !previewBudget) {
+      const ipLimit = checkIpLimit();
+      if (!ipLimit.allowed) return tooMany(ipLimit.retryAfterSeconds);
+    }
+    if (previewBudget) {
+      const cap = checkRateLimits([
+        {
+          key: `quiz-recommend:preview:${verifiedShop.id}:minute`,
+          limit: RATE_LIMITS.QUIZ_RECOMMEND_PREVIEW_PER_SHOP_MINUTE.limit,
+          windowMs: RATE_LIMITS.QUIZ_RECOMMEND_PREVIEW_PER_SHOP_MINUTE.windowMs,
+        },
+        {
+          key: `quiz-recommend:preview:${verifiedShop.id}:day`,
+          limit: RATE_LIMITS.QUIZ_RECOMMEND_PREVIEW_PER_SHOP_DAY.limit,
+          windowMs: RATE_LIMITS.QUIZ_RECOMMEND_PREVIEW_PER_SHOP_DAY.windowMs,
+        },
+      ]);
+      if (!cap.allowed) return tooMany(cap.retryAfterSeconds);
+    }
+
+    const result = await computeQuizRecommendations({
+      verifiedShop,
+      verifiedDomain,
+      chatConfig,
+      criteria,
+      clientIP,
+      resultKey,
+      ...(previewBudget ? { storePreview: true } : {}),
+    });
 
     // Analytics (2026-10-15 revamp): what this shopper answered and what the
     // quiz recommended, for every finished quiz (not only email leads).

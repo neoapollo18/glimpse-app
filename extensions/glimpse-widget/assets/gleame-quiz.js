@@ -1561,6 +1561,8 @@
         cartToken: cartToken || undefined,
         deviceType: isMobile() ? 'mobile' : 'desktop',
         storePreview: Boolean(window.GLEAME_QUIZ_FORCE || window.GLEAME_QUIZ_STORE_PREVIEW) || undefined,
+        previewToken: storePreviewAuth().token,
+        previewId: storePreviewAuth().id,
       }),
     }).then(function(res) {
       if (!res.ok) throw new Error('quiz-recommend ' + res.status);
@@ -2190,10 +2192,142 @@
     return counts;
   }
 
+  // ---- Full-match branching (fix spec v4) ----
+  //
+  // branching.full (FullBranching in app/lib/columnar/pipeline.ts): every
+  // mapped question branches, vibe, color and drama included. An option
+  // shows only if, given every earlier answer, at least `min` sets can
+  // still match every answer for some way of answering the rest; length,
+  // shape and finish options also keep the `threshold` rule above. Rows
+  // are bit masks per column. A widget deployed before this ignores
+  // `full` and keeps the legacy rows.
+  function fullBranching() {
+    var b = branching();
+    var f = b && b.full;
+    if (!f || typeof f !== 'object' || !Array.isArray(f.questions) || !Array.isArray(f.rows) || !Array.isArray(f.columns)) return null;
+    return f;
+  }
+
+  // <gleame-full-branching> Same algorithm as fullVisibleBits in
+  // app/lib/columnar/pipeline.ts; widget-columnar.test.ts runs both on the
+  // real pool. Self-contained so the test can lift it out verbatim.
+  function fullVisibleBits(f, qi, answers) {
+    var q = f.questions[qi];
+    if (!q) return [];
+    function col(name) { return f.columns.indexOf(name); }
+    var empty = (Array.isArray(f.anyIfEmpty) ? f.anyIfEmpty : []).map(col);
+    var thrCols = Array.isArray(f.thresholdColumns) ? f.thresholdColumns : [];
+    function passes(row, c, mask) {
+      return !mask || (row[c] & mask) !== 0 || (row[c] === 0 && empty.indexOf(c) !== -1);
+    }
+    function uniqueBits(values) {
+      var bits = [];
+      for (var key in values) {
+        if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
+        if (typeof values[key] === 'number' && bits.indexOf(values[key]) === -1) bits.push(values[key]);
+      }
+      return bits.sort(function(a, b) { return a - b; });
+    }
+    function filterRows(rows, conds) {
+      return rows.filter(function(r) {
+        if (!Array.isArray(r)) return false;
+        for (var i = 0; i < conds.length; i++) if (!passes(r, conds[i][0], conds[i][1])) return false;
+        return true;
+      });
+    }
+    var prior = [];
+    var priorT = [];
+    for (var j = 0; j < qi && j < f.questions.length; j++) {
+      var m = answers[j] || 0;
+      var c = col(f.questions[j].column);
+      if (!m || c < 0) continue;
+      prior.push([c, m]);
+      if (thrCols.indexOf(f.questions[j].column) !== -1) priorT.push([c, m]);
+    }
+    var ci = col(q.column);
+    if (ci < 0) return [];
+    var base = filterRows(f.rows, prior);
+    var thresholded = thrCols.indexOf(q.column) !== -1;
+    var baseT = thresholded ? filterRows(f.rows, priorT) : [];
+    var later = [];
+    for (var l = qi + 1; l < f.questions.length; l++) {
+      var x = f.questions[l];
+      if (x.any || col(x.column) < 0) continue;
+      later.push({ c: col(x.column), bits: uniqueBits(x.values) });
+    }
+    var min = Number(f.min) >= 1 ? Math.floor(Number(f.min)) : 3;
+    var threshold = Number(f.threshold) >= 1 ? Math.floor(Number(f.threshold)) : 6;
+    function feasible(rows, k) {
+      if (rows.length < min) return false;
+      if (k === later.length) return true;
+      for (var i = 0; i < later[k].bits.length; i++) {
+        var mask = 1 << later[k].bits[i];
+        var next = rows.filter(function(r) { return passes(r, later[k].c, mask); });
+        if (feasible(next, k + 1)) return true;
+      }
+      return false;
+    }
+    var out = [];
+    uniqueBits(q.values).forEach(function(bit) {
+      function hasBit(r) { return (r[ci] & (1 << bit)) !== 0; }
+      if (thresholded && baseT.filter(hasBit).length < threshold) return;
+      if (feasible(base.filter(hasBit), 0)) out.push(bit);
+    });
+    return out;
+  }
+  // </gleame-full-branching>
+
+  // A shopper's answer as fullVisibleBits takes it: the bits of its picks,
+  // 0 for open to anything / skipped.
+  function fullAnswerBits(fq, a) {
+    if (!a || !a.values || a.values.length === 0 || a.selectAll || a.values.indexOf(ANY_VALUE) !== -1) return 0;
+    var m = 0;
+    a.values.forEach(function(v) {
+      if (own(fq.values, v) && typeof fq.values[v] === 'number') m |= 1 << fq.values[v];
+    });
+    return m;
+  }
+
+  // Visible bits per answer prefix: every render asks several times.
+  var fullMemo = { flow: null, bits: {} };
+
+  function fullBranchState(q, f) {
+    var fi = -1;
+    for (var i = 0; i < f.questions.length; i++) {
+      if (f.questions[i] && f.questions[i].axisKey === q.axisKey) { fi = i; break; }
+    }
+    if (fi === -1 || flow.questions.indexOf(q) === -1) return null;
+    var masks = [];
+    for (var j = 0; j < fi; j++) {
+      var at = -1;
+      for (var k = 0; k < flow.questions.length; k++) {
+        if (flow.questions[k].axisKey === f.questions[j].axisKey) { at = k; break; }
+      }
+      masks.push(at === -1 ? 0 : fullAnswerBits(f.questions[j], state.answers[at]));
+    }
+    if (fullMemo.flow !== flow) fullMemo = { flow: flow, bits: {} };
+    var sig = fi + '|' + masks.join(',');
+    if (!own(fullMemo.bits, sig)) fullMemo.bits[sig] = fullVisibleBits(f, fi, masks);
+    var bits = fullMemo.bits[sig];
+    var entry = f.questions[fi];
+    var ok = {};
+    var shown = [];
+    q.options.forEach(function(o) {
+      if (o.selectAll || ok[o.axisValue] === true || !conditionMet(o.showIf) || !own(entry.values, o.axisValue)) return;
+      if (bits.indexOf(entry.values[o.axisValue]) !== -1) {
+        ok[o.axisValue] = true;
+        shown.push(o);
+      }
+    });
+    return { ok: ok, skip: shown.length < 2, only: shown.length === 1 ? shown[0] : null };
+  }
+
   // { ok: {axisValue: true}, skip, only } for a branching question, null
   // for any other. skip = fewer than two specific options left; only =
   // the single one left, recorded as the shopper's answer.
   function branchState(q) {
+    var full = fullBranching();
+    if (full) return fullBranchState(q, full);
     var entry = branchEntry(q);
     var qi = entry ? flow.questions.indexOf(q) : -1;
     if (qi === -1) return null;
@@ -3950,6 +4084,8 @@
         cartToken: cartToken || undefined,
         deviceType: isMobile() ? 'mobile' : 'desktop',
         storePreview: Boolean(window.GLEAME_QUIZ_FORCE || window.GLEAME_QUIZ_STORE_PREVIEW) || undefined,
+        previewToken: storePreviewAuth().token,
+        previewId: storePreviewAuth().id,
       }),
     }).then(function(res) {
       if (!res.ok) throw new Error('quiz-recommend ' + res.status);
@@ -9132,6 +9268,15 @@
     var sp = window.GLEAME_QUIZ_STORE_PREVIEW;
     if (!sp || !sp.token) return '';
     return '&previewToken=' + encodeURIComponent(sp.token) + '&previewId=' + encodeURIComponent(sp.id || '');
+  }
+
+  // The same token for quiz-recommend's body: the server verifies it before
+  // a preview skips the shopper rate limit (storePreview alone is only a
+  // client claim). Undefined fields drop out of the JSON.
+  function storePreviewAuth() {
+    var sp = window.GLEAME_QUIZ_STORE_PREVIEW;
+    if (!sp || !sp.token) return { token: undefined, id: undefined };
+    return { token: String(sp.token), id: String(sp.id || '') };
   }
 
   // The theme block (gleame-quiz.liquid) starts both config requests inline,

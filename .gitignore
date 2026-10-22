@@ -33,3 +33,4 @@ data
 # machine that ran it, never committed by a stray add.
 /scripts/backups/glamnetic-v3-*.json
 /scripts/backups/tryon-admin-backfill-*.json
+/scripts/backups/glamnetic-vibe-labels-*

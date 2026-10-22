@@ -146,8 +146,8 @@ export function ColumnarMatchingCard({
           <Badge tone={view.enabled ? "success" : undefined}>{view.enabled ? "On" : "Off"}</Badge>
         </InlineStack>
         <Text as="p" variant="bodySm" tone="subdued">
-          Every match has exactly the length, shape and finish the shopper picked, from your product pool. Color,
-          drama and vibe decide the order. While on, this replaces the ranking above.
+          Every match has exactly the length, shape and finish the shopper picked and one of their colors, from your
+          product pool. Vibe and drama decide the order. While on, this replaces the ranking above.
         </Text>
         {view.error && (
           <Banner tone="critical">The product pool couldn&rsquo;t be loaded: {view.error}</Banner>
@@ -174,7 +174,7 @@ export function ColumnarMatchingCard({
             setMessage(null);
           }}
           disabled={disabled}
-          helpText="A question left with one option or none is skipped."
+          helpText={`Length, shape and finish options. Every option also needs ${view.fullMatchMin ?? 3} sets that match all of the shopper's answers. A question left with one option or none is skipped.`}
         />
         {view.vibes.length > 0 && (
           <BlockStack gap="100">

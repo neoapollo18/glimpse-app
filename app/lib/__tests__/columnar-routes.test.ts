@@ -39,6 +39,7 @@ vi.mock("../quiz-recommend.server", () => ({
 
 import { action as previewAction } from "../../routes/quiz-preview-recommend";
 import { action as storefrontAction } from "../../routes/api.storefront.quiz-recommend";
+import { mintStorePreviewToken } from "../app-proxy.server";
 
 const SHOP = { id: "shop-glam", shop_domain: "glamrco.myshopify.com" };
 const match = (i: number) => ({
@@ -132,5 +133,73 @@ describe("storefront quiz-recommend analytics", () => {
     expect(((await res.json()) as { matches: unknown[] }).matches).toHaveLength(6);
     expect(engine.compute).toHaveBeenCalledWith(expect.objectContaining({ resultKey: "c1.x.2.1.1.1.1" }));
     expect(db.trackAssistantEvent).not.toHaveBeenCalled();
+  });
+});
+
+describe("storefront quiz-recommend: store preview rate limit (fix spec v4, item 6)", () => {
+  const COLUMNAR_CONFIG = { enabled: true, recommendation_tuning: { columnar: { enabled: true } } };
+  const post = (ip: string, body: Record<string, unknown>) =>
+    storefrontAction({
+      request: new Request("https://app.example/api/storefront/quiz-recommend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Forwarded-For": ip },
+        body: JSON.stringify({ shopDomain: SHOP.shop_domain, criteria: { length: ["short"] }, ...body }),
+      }),
+      params: {},
+      context: {},
+    } as never) as Promise<Response>;
+  const statuses = async (ip: string, body: Record<string, unknown>, n: number) => {
+    const out: number[] = [];
+    for (let i = 0; i < n; i++) out.push((await post(ip, body)).status);
+    return out;
+  };
+
+  beforeEach(() => {
+    db.getChatAssistantConfig.mockResolvedValue(COLUMNAR_CONFIG as never);
+  });
+
+  it("the storePreview flag alone is a client claim: still 20 a minute per IP", async () => {
+    const s = await statuses("10.9.0.1", { storePreview: true }, 21);
+    expect(s.slice(0, 20).every((x) => x === 200)).toBe(true);
+    expect(s[20]).toBe(429);
+  });
+
+  it("a forged, foreign or other-draft token is still limited", async () => {
+    const forged = jwt.sign({ purpose: "store-preview", shopDomain: SHOP.shop_domain, draftId: "live" }, "not-the-secret");
+    const foreign = mintStorePreviewToken("other-shop.myshopify.com", "live");
+    const mine = mintStorePreviewToken(SHOP.shop_domain, "live");
+    for (const [ip, body] of [
+      ["10.9.0.2", { previewToken: forged, previewId: "live" }],
+      ["10.9.0.3", { previewToken: foreign, previewId: "live" }],
+      ["10.9.0.4", { previewToken: mine, previewId: "draft-2" }],
+    ] as const) {
+      expect((await statuses(ip, body, 21))[20], ip).toBe(429);
+    }
+    expect(engine.compute.mock.calls.every(([a]) => !(a as { storePreview?: boolean }).storePreview)).toBe(true);
+  });
+
+  it("a verified preview on a columnar shop skips the per-IP limit and tells the engine", async () => {
+    const token = mintStorePreviewToken(SHOP.shop_domain, "live");
+    const s = await statuses("10.9.0.5", { storePreview: true, previewToken: token, previewId: "live" }, 40);
+    expect(s.every((x) => x === 200)).toBe(true);
+    expect(engine.compute).toHaveBeenLastCalledWith(expect.objectContaining({ storePreview: true }));
+    // Merchant previews stay out of analytics, as before.
+    expect(db.trackAssistantEvent).not.toHaveBeenCalled();
+  });
+
+  it("every other shop's preview keeps the shopper limit", async () => {
+    db.getChatAssistantConfig.mockResolvedValue({ enabled: true, recommendation_tuning: {} } as never);
+    const token = mintStorePreviewToken(SHOP.shop_domain, "live");
+    const s = await statuses("10.9.0.6", { previewToken: token, previewId: "live" }, 21);
+    expect(s[20]).toBe(429);
+    expect(engine.compute.mock.calls.every(([a]) => !(a as { storePreview?: boolean }).storePreview)).toBe(true);
+  });
+
+  it("verified previews stay under a per-shop safety cap", async () => {
+    db.findShopByDomain.mockResolvedValue({ ...SHOP, id: "shop-cap" });
+    const token = mintStorePreviewToken(SHOP.shop_domain, "live");
+    const s = await statuses("10.9.0.7", { previewToken: token, previewId: "live" }, 181);
+    expect(s.slice(0, 180).every((x) => x === 200)).toBe(true);
+    expect(s[180]).toBe(429);
   });
 });

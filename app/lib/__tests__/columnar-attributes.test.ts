@@ -165,3 +165,34 @@ describe("tag rules", () => {
     expect(vibeMatches(deriveProduct(product(["Color_Nude", "_Nail Collection_Euro Summer 2026"])), "vacay")).toBe(true);
   });
 });
+
+describe("approved vibe labels (fix spec v4, item 3)", () => {
+  const base = ["Nail Length_Short", "Nail Shape_Almond", "Color_Red", "Finish_Glossy", "_Is Solid_TRUE"];
+
+  it("a labeled set takes exactly its labels; an unlabeled one keeps the tag rules", () => {
+    const tags = [...base, "_Nail Collection_Glossy Dark Maroon"];
+    const ruled = deriveProduct(product(tags));
+    // The "Dark" in a maroon collection's name reads as Alternative & Edgy.
+    expect(ruled.vibeSource).toBe("rules");
+    expect(ruled.vibes).toContain("alt_edgy");
+    const labeled = deriveProduct(product(tags), { vibeLabels: { "test-set": ["holiday", "soft_sweet"] } });
+    expect(labeled.vibeSource).toBe("labels");
+    expect(labeled.vibes).toEqual(["soft_sweet", "holiday"]);
+    expect(vibeMatches(labeled, "alt_edgy")).toBe(false);
+    expect(vibeMatches(labeled, "holiday")).toBe(true);
+    // Another handle's labels don't apply.
+    expect(deriveProduct(product(tags), { vibeLabels: { "other-set": ["vacay"] } }).vibeSource).toBe("rules");
+  });
+
+  it("[] means the set fits none of the six labeled vibes", () => {
+    const p = deriveProduct(product([...base, "Color_Black"]), { vibeLabels: { "test-set": [] } });
+    expect(p.vibes).toEqual([]);
+  });
+
+  it("French Girl Chic always follows the French tip / ombre tags", () => {
+    const french = deriveProduct(product([...base, "_Is French Tip_TRUE"]), { vibeLabels: { "test-set": ["clean_girl"] } });
+    expect(french.vibes).toEqual(["clean_girl", "french_girl"]);
+    const solid = deriveProduct(product(base), { vibeLabels: { "test-set": ["french_girl", "clean_girl"] } });
+    expect(solid.vibes).toEqual(["clean_girl"]);
+  });
+});

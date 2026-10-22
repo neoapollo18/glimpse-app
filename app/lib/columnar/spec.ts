@@ -42,6 +42,10 @@ export const DRAMA_IDS = ["clean_classic", "little_extra", "statement", "full_ar
 
 export type VibeId = (typeof VIBE_IDS)[number];
 
+// French Girl Chic is Lisa's own tag rule (French tip or ombre) and a gate,
+// so it always follows the tags; approved labels carry the other six.
+export const LABELED_VIBE_IDS: readonly VibeId[] = VIBE_IDS.filter((v) => v !== "french_girl");
+
 export const ROLE_VOCAB: Record<ColumnarRole, readonly string[]> = {
   vibe: VIBE_IDS,
   length: LENGTH_IDS,
@@ -105,8 +109,12 @@ export interface ColumnarSpec {
     syncedAt: string | null;
     source: "collection" | "csv";
   };
-  /** Branching availability threshold (brief section 6). */
+  /** Branching availability threshold (brief section 6): length, shape and
+   * finish options need this many sets on the hard-filter path so far. */
   threshold: number;
+  /** Fix spec v4: an option shows only if this many sets can still match
+   * every answer (hard filters, vibe and drama) after it. */
+  fullMatchMin: number;
   /** Step C top-K sent to the ranker. */
   candidateCount: number;
   resultCount: number;
@@ -118,10 +126,15 @@ export interface ColumnarSpec {
   /** Substrings matched against _Nail Collection_ names for Holiday-Ready. */
   holidayCollections: string[];
   llm: { enabled: boolean; timeoutMs: number };
+  /** Approved per-product vibes (handle -> vibe IDs, Lisa's sheet via
+   * scripts/glamnetic-vibe-labels.mts). A listed handle uses exactly these
+   * instead of the tag rules; [] means it fits none of them. */
+  vibeLabels: Record<string, VibeId[]>;
 }
 
 export const COLUMNAR_DEFAULTS = {
   threshold: 6,
+  fullMatchMin: 3,
   candidateCount: 40,
   resultCount: 6,
   alsoMatchedCount: 6,
@@ -147,6 +160,20 @@ const clampInt = (v: unknown, min: number, max: number, fallback: number): numbe
 const clampNum = (v: unknown, min: number, max: number, fallback: number): number =>
   typeof v === "number" && Number.isFinite(v) ? Math.max(min, Math.min(max, v)) : fallback;
 const safeKey = (k: string) => ID_RE.test(k) && !PROTO_KEYS.has(k);
+
+function sanitizeVibeLabels(raw: unknown): Record<string, VibeId[]> {
+  const out: Record<string, VibeId[]> = {};
+  if (!isObj(raw)) return out;
+  let n = 0;
+  for (const [handle, ids] of Object.entries(raw)) {
+    if (n >= MAX_POOL_HANDLES) break;
+    if (!HANDLE_RE.test(handle) || PROTO_KEYS.has(handle) || !Array.isArray(ids)) continue;
+    // Vocabulary order, so a re-save is byte-identical.
+    out[handle] = LABELED_VIBE_IDS.filter((v) => ids.includes(v));
+    n++;
+  }
+  return out;
+}
 
 function sanitizeAxes(raw: unknown): Record<string, ColumnarAxis> {
   const out: Record<string, ColumnarAxis> = {};
@@ -209,6 +236,7 @@ export function sanitizeColumnarSpec(raw: unknown): ColumnarSpec | undefined {
       source: pool.source === "csv" ? "csv" : "collection",
     },
     threshold: clampInt(raw.threshold, 1, 50, d.threshold),
+    fullMatchMin: clampInt(raw.fullMatchMin, 1, 12, d.fullMatchMin),
     candidateCount: clampInt(raw.candidateCount, 6, 100, d.candidateCount),
     resultCount: clampInt(raw.resultCount, 1, 12, d.resultCount),
     alsoMatchedCount: clampInt(raw.alsoMatchedCount, 0, 12, d.alsoMatchedCount),
@@ -230,7 +258,17 @@ export function sanitizeColumnarSpec(raw: unknown): ColumnarSpec | undefined {
       enabled: llm.enabled !== false,
       timeoutMs: clampInt(llm.timeoutMs, 500, 15_000, d.llm.timeoutMs),
     },
+    vibeLabels: sanitizeVibeLabels(raw.vibeLabels),
   };
+}
+
+/** The shop's columnar spec when it is switched on, else null. */
+export function enabledColumnarSpec(
+  config: { recommendation_tuning?: unknown } | null | undefined,
+): ColumnarSpec | null {
+  const tuning = config?.recommendation_tuning as { columnar?: ColumnarSpec } | undefined;
+  const spec = tuning && typeof tuning === "object" ? tuning.columnar : undefined;
+  return spec && spec.enabled === true ? spec : null;
 }
 
 /** A vibe tile is live unless the merchant retired it in Studio. */

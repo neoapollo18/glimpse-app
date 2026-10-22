@@ -1,0 +1,238 @@
+{
+ "_note": "Glamnetic Find My Match questions as recommendation-config served them on 2026-10-21 (labels, axis values, select-all, max selections); branching block and display fields dropped.",
+ "questions": [
+  {
+   "axisKey": "vibe",
+   "prompt": "What's the vibe?",
+   "multiSelect": false,
+   "maxSelections": null,
+   "options": [
+    {
+     "label": "Clean Girl & Minimalist",
+     "axisValue": "model_off_duty",
+     "selectAll": false
+    },
+    {
+     "label": "Soft & Sweet",
+     "axisValue": "soft_sweet",
+     "selectAll": false
+    },
+    {
+     "label": "French Girl Chic",
+     "axisValue": "french_girl",
+     "selectAll": false
+    },
+    {
+     "label": "Main Character Energy",
+     "axisValue": "main_character",
+     "selectAll": false
+    },
+    {
+     "label": "Vacay Mode",
+     "axisValue": "vacation",
+     "selectAll": false
+    },
+    {
+     "label": "Alternative & Edgy",
+     "axisValue": "option_7",
+     "selectAll": false
+    },
+    {
+     "label": "Holiday-Ready",
+     "axisValue": "option_8",
+     "selectAll": false
+    },
+    {
+     "label": "Surprise me",
+     "axisValue": "model_off_duty",
+     "selectAll": true
+    }
+   ]
+  },
+  {
+   "axisKey": "length",
+   "prompt": "How long do you like your nails?",
+   "multiSelect": true,
+   "maxSelections": null,
+   "options": [
+    {
+     "label": "Super Short",
+     "axisValue": "super_short",
+     "selectAll": false
+    },
+    {
+     "label": "Short",
+     "axisValue": "short",
+     "selectAll": false
+    },
+    {
+     "label": "Medium",
+     "axisValue": "medium",
+     "selectAll": false
+    }
+   ]
+  },
+  {
+   "axisKey": "shape",
+   "prompt": "Which shapes are you into?",
+   "multiSelect": true,
+   "maxSelections": null,
+   "options": [
+    {
+     "label": "Almond",
+     "axisValue": "almond",
+     "selectAll": false
+    },
+    {
+     "label": "Oval",
+     "axisValue": "oval",
+     "selectAll": false
+    },
+    {
+     "label": "Round",
+     "axisValue": "round",
+     "selectAll": false
+    },
+    {
+     "label": "Square",
+     "axisValue": "square",
+     "selectAll": false
+    },
+    {
+     "label": "Squoval",
+     "axisValue": "squoval",
+     "selectAll": false
+    },
+    {
+     "label": "Coffin",
+     "axisValue": "coffin",
+     "selectAll": false
+    },
+    {
+     "label": "Open to anything",
+     "axisValue": "almond",
+     "selectAll": true
+    }
+   ]
+  },
+  {
+   "axisKey": "color_family",
+   "prompt": "Any colors calling your name?",
+   "multiSelect": true,
+   "maxSelections": 3,
+   "options": [
+    {
+     "label": "Nudes & neutrals",
+     "axisValue": "nudes_neutrals",
+     "selectAll": false
+    },
+    {
+     "label": "Pinks & purples",
+     "axisValue": "pinks_pastels",
+     "selectAll": false
+    },
+    {
+     "label": "Reds & berries",
+     "axisValue": "reds_berries",
+     "selectAll": false
+    },
+    {
+     "label": "Bold & bright",
+     "axisValue": "bold_bright",
+     "selectAll": false
+    },
+    {
+     "label": "Dark & moody",
+     "axisValue": "dark_moody",
+     "selectAll": false
+    },
+    {
+     "label": "Metallic gold, bronze & silver",
+     "axisValue": "metallics",
+     "selectAll": false
+    },
+    {
+     "label": "Bright oranges & yellows",
+     "axisValue": "oranges_yellows",
+     "selectAll": false
+    },
+    {
+     "label": "White",
+     "axisValue": "white",
+     "selectAll": false
+    },
+    {
+     "label": "Surprise me",
+     "axisValue": "nudes_neutrals",
+     "selectAll": true
+    }
+   ]
+  },
+  {
+   "axisKey": "question_6",
+   "prompt": "What's your finish?",
+   "multiSelect": true,
+   "maxSelections": 2,
+   "options": [
+    {
+     "label": "Classic Glossy",
+     "axisValue": "option_1",
+     "selectAll": false
+    },
+    {
+     "label": "Glazed & Pearlescent",
+     "axisValue": "option_2",
+     "selectAll": false
+    },
+    {
+     "label": "Velvet & Cateye",
+     "axisValue": "option_3",
+     "selectAll": false
+    },
+    {
+     "label": "Bold Chrome",
+     "axisValue": "option_4",
+     "selectAll": false
+    },
+    {
+     "label": "Matte",
+     "axisValue": "option_5",
+     "selectAll": false
+    },
+    {
+     "label": "Surprise Me!",
+     "axisValue": "option_6",
+     "selectAll": true
+    }
+   ]
+  },
+  {
+   "axisKey": "style_tier",
+   "prompt": "Last one — how much drama?",
+   "multiSelect": true,
+   "maxSelections": 2,
+   "options": [
+    {
+     "label": "Clean & classic",
+     "axisValue": "clean",
+     "selectAll": false
+    },
+    {
+     "label": "A little extra",
+     "axisValue": "extra",
+     "selectAll": false
+    },
+    {
+     "label": "Statement",
+     "axisValue": "statement",
+     "selectAll": false
+    },
+    {
+     "label": "Full-on nail art",
+     "axisValue": "art",
+     "selectAll": false
+    }
+   ]
+  }
+ ]
+}

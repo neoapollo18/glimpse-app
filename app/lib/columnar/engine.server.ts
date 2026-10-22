@@ -25,7 +25,7 @@ import { geminiClient, extractGeminiText, stripJsonFences } from "../gemini.serv
 import { checkRateLimit, checkRateLimits, RATE_LIMITS } from "../rate-limiter.server";
 import { invalidateStorefrontCache } from "../storefront-cache.server";
 import { withShopSaveLock } from "../shop-save-lock.server";
-import { deriveProduct, splitPool, type DerivedProduct, type PoolProductInput } from "./attributes";
+import { claimableVibes, deriveProduct, splitPool, type DerivedProduct, type PoolProductInput } from "./attributes";
 import {
   answersToCriteria,
   assembleColumnar,
@@ -48,6 +48,7 @@ import {
   HANDLE_RE,
   VIBE_IDS,
   axisForRole,
+  enabledColumnarSpec,
   sanitizeColumnarSpec,
   vibeEnabled,
   type ColumnarRole,
@@ -63,14 +64,8 @@ const MAX_RESULT_ENTRIES = 5_000;
 const POOL_REFRESH_AFTER_MS = 60 * 60_000;
 const IN_CHUNK = 100;
 
-/** The shop's columnar spec when it is switched on, else null. */
-export function enabledColumnarSpec(
-  config: { recommendation_tuning?: unknown } | null | undefined,
-): ColumnarSpec | null {
-  const tuning = config?.recommendation_tuning as { columnar?: ColumnarSpec } | undefined;
-  const spec = tuning && typeof tuning === "object" ? tuning.columnar : undefined;
-  return spec && spec.enabled === true ? spec : null;
-}
+// Pure, in spec.ts, so the storefront route can ask without the engine.
+export { enabledColumnarSpec };
 
 // ---------------------------------------------------------------------
 // Pool
@@ -106,7 +101,7 @@ function hashOf(s: string): string {
 }
 
 const poolKey = (spec: ColumnarSpec) =>
-  hashOf(JSON.stringify([spec.pool.handles, spec.holidayCollections]));
+  hashOf(JSON.stringify([spec.pool.handles, spec.holidayCollections, spec.vibeLabels ?? {}]));
 
 async function loadPool(shopId: string, spec: ColumnarSpec): Promise<PoolSnapshot> {
   const handles = spec.pool.handles.filter((h) => HANDLE_RE.test(h));
@@ -145,7 +140,9 @@ async function loadPool(shopId: string, spec: ColumnarSpec): Promise<PoolSnapsho
       imageUrl: typeof r.image_url === "string" ? r.image_url : null,
     });
   }
-  const derived = inputs.map((p) => deriveProduct(p, { holidayCollections: spec.holidayCollections }));
+  const derived = inputs.map((p) =>
+    deriveProduct(p, { holidayCollections: spec.holidayCollections, vibeLabels: spec.vibeLabels ?? {} }),
+  );
   const { eligible, excluded } = splitPool(derived);
 
   const variants = new Map<string, PoolVariant[]>();
@@ -186,7 +183,7 @@ async function loadPool(shopId: string, spec: ColumnarSpec): Promise<PoolSnapsho
     variants,
     hash: hashOf(
       JSON.stringify(
-        eligible.map((p) => [p.id, p.length, p.shape, p.finish, p.colors, p.drama, p.collections, p.isFrench, p.isOmbre]),
+        eligible.map((p) => [p.id, p.length, p.shape, p.finish, p.colors, p.drama, p.collections, p.isFrench, p.isOmbre, p.vibes, p.vibeSource]),
       ),
     ),
   };
@@ -219,7 +216,8 @@ export function invalidateColumnarCaches(shopId: string, opts: { keepResults?: b
 
 /**
  * The flow a columnar shop serves: retired vibe tiles removed from the vibe
- * question, plus the branching block (one row per eligible product). Shops
+ * question, plus the branching block (one row per eligible product, with
+ * the v4 full-match block built from these questions). Shops
  * without an enabled spec get the flow back untouched. Fails open: a pool
  * read error serves the flow without branching rather than no quiz.
  */
@@ -243,7 +241,7 @@ export async function decorateFlowForColumnar<F extends { questions: Array<{ axi
   });
   try {
     const pool = await getPoolSnapshot(shopId, spec);
-    const branching = buildBranching(spec, pool.eligible);
+    const branching = buildBranching(spec, pool.eligible, questions);
     // No rows would hide every length, shape and finish option (contract
     // 3): serve the questions unfiltered instead.
     if (branching.pool.rows.length === 0) return { ...flow, questions };
@@ -395,9 +393,12 @@ function describeAnswers(answers: ColumnarAnswers, labels: AnswerLabels): string
  * Step D: one structured call ranks the Step C candidates and writes a
  * reason per pick. Returns null on timeout, error, or any pick outside the
  * set / short of n: the caller then serves Step C's order (brief 10.10).
+ * The candidates carry their tier; selectResults holds the picks to it
+ * whatever the model returns.
  */
 async function rankWithLlm(params: {
   candidates: DerivedProduct[];
+  tiers: Map<string, number>;
   n: number;
   answers: ColumnarAnswers;
   labels: AnswerLabels;
@@ -405,10 +406,11 @@ async function rankWithLlm(params: {
   timeoutMs: number;
   shopDomain: string;
 }): Promise<{ ids: string[]; reasons: Record<string, string> } | null> {
-  const { candidates, n, answers, labels, model, timeoutMs, shopDomain } = params;
+  const { candidates, tiers, n, answers, labels, model, timeoutMs, shopDomain } = params;
   const label = (id: string) => labels[id] ?? DEFAULT_ANSWER_LABELS[id] ?? id;
   const catalog = candidates.map((p, i) => ({
     id: i,
+    tier: tiers.get(p.id) ?? 4,
     title: p.title,
     length: p.length ? label(p.length) : null,
     shape: p.shape && p.shape !== "super_short" ? label(p.shape) : null,
@@ -416,18 +418,22 @@ async function rankWithLlm(params: {
     color_family: p.colors.map(label),
     design: p.design,
     drama: p.drama.map(label),
+    // Only vibes a reason may name (approved labels, French tip / ombre).
+    vibes: claimableVibes(p).map(label),
     is_3d: p.is3d,
     price: p.price,
   }));
   const system =
     "You rank press-on nail sets for a shopper who just finished a style quiz. " +
-    "Every candidate already has exactly the length, shape and finish the shopper chose. " +
+    "Every candidate already has exactly the length, shape and finish the shopper chose, and at least one of their colors. " +
+    "tier says how closely it fits their vibe and drama answers: 1 fits both, higher numbers fit less. " +
     `Pick exactly ${n} candidates, best first, and give each a reason.\n` +
     "Rules:\n" +
     "- Use only ids from the candidate list, each at most once.\n" +
+    "- Keep tier order: never put a candidate above one with a lower tier, and pick every lower-tier candidate before any higher-tier one.\n" +
+    "- Within a tier, prefer the shopper's colors, then the best variety. Avoid near-identical colorways in the picks.\n" +
     "- A reason is one line of at most 14 words, written to the shopper, echoing the words of their answers.\n" +
-    "- Mention only attributes listed on that candidate. Never say closest, similar or almost.\n" +
-    "- Prefer the shopper's colors and drama level, then their vibe. Avoid near-identical colorways in the picks.";
+    "- Mention only attributes listed on that candidate: a vibe only if it is in its vibes, a drama level only if it is in its drama, a color only if it is in its color_family. Never say closest, similar or almost.";
   const schema = {
     type: "object",
     properties: {
@@ -495,9 +501,10 @@ async function rankWithLlm(params: {
   }
 }
 
-const LOOSEN_LABELS: Record<"finish" | "shape", string> = {
+const LOOSEN_LABELS: Record<"finish" | "shape" | "color", string> = {
   finish: "Try any finish",
   shape: "Try any shape",
+  color: "Try any color",
 };
 
 function toMatch(
@@ -542,6 +549,9 @@ export async function computeColumnarRecommendations(params: {
   criteria: MultiCriteria;
   resultKey?: string | null;
   clientIP: string;
+  /** A signed merchant store preview (verified by the route, which also
+   * charged its own preview cap): the shopper LLM limiters don't apply. */
+  storePreview?: boolean;
 }): Promise<ColumnarResult> {
   const { verifiedShop, verifiedDomain, chatConfig, criteria, clientIP } = params;
   // The "Also matched" row is retired (2026-10-21): the field stays in the
@@ -595,7 +605,9 @@ export async function computeColumnarRecommendations(params: {
   let eligible = pool.eligible;
   let ladder = runLadder(eligible, answers, spec);
   for (let round = 0; round < 3; round++) {
-    const window = rankerCandidates(ladder, spec).concat(ladder.backfill.slice(0, spec.alsoMatchedCount));
+    // The ranker's candidates (a prefix of the order) plus the Also
+    // matched sets that would follow them.
+    const window = ladder.ordered.slice(0, rankerCandidates(ladder, spec).length + spec.alsoMatchedCount);
     const probe = await probeUnavailable(verifiedDomain, pool, window, probed);
     if (!probe || probe.unavailable.size === 0) break;
     eligible = eligible.filter((p) => !probe.unavailable.has(p.id));
@@ -603,16 +615,20 @@ export async function computeColumnarRecommendations(params: {
   }
 
   // Step D under the same limiter as the classic ranker: over it, the
-  // shopper still gets Step C's order with templated reasons.
+  // shopper still gets Step C's order with templated reasons. A verified
+  // store preview skips it (the route charged the preview cap), so a QA
+  // run tests the ranker, not the fallback.
   const candidates = rankerCandidates(ladder, spec);
   const n = Math.min(spec.resultCount, candidates.length);
   const tuning = chatConfig.recommendation_tuning;
   let ranked: { ids: string[]; reasons: Record<string, string> } | null = null;
   const wantsRanker = spec.llm.enabled && n >= 2 && Boolean(process.env.GEMINI_API_KEY);
   if (wantsRanker) {
-    const ipLimit = checkRateLimit(`quiz-recommend:llm:${clientIP}:minute`, 6, 60_000);
-    const shopLimit = ipLimit.allowed
-      ? checkRateLimits([
+    // The shop windows are only charged when the IP window allows it.
+    const allowed =
+      params.storePreview === true ||
+      (checkRateLimit(`quiz-recommend:llm:${clientIP}:minute`, 6, 60_000).allowed &&
+        checkRateLimits([
           {
             key: `quiz-recommend:llm-shop:${verifiedShop.id}:minute`,
             limit: RATE_LIMITS.QUIZ_RECOMMEND_LLM_PER_SHOP_MINUTE.limit,
@@ -623,11 +639,11 @@ export async function computeColumnarRecommendations(params: {
             limit: RATE_LIMITS.QUIZ_RECOMMEND_LLM_PER_SHOP_DAY.limit,
             windowMs: RATE_LIMITS.QUIZ_RECOMMEND_LLM_PER_SHOP_DAY.windowMs,
           },
-        ])
-      : null;
-    if (ipLimit.allowed && shopLimit?.allowed) {
+        ]).allowed);
+    if (allowed) {
       ranked = await rankWithLlm({
         candidates,
+        tiers: ladder.tiers,
         n,
         answers,
         labels,
@@ -870,6 +886,8 @@ export function maybeRefreshColumnarPool(
 export interface ColumnarStudioView {
   enabled: boolean;
   threshold: number;
+  /** Full matches every shown option must keep (fix spec v4). */
+  fullMatchMin: number;
   configured: boolean;
   vibes: Array<{ id: string; label: string; enabled: boolean }>;
   /** Answer labels for the hidden-options log, keyed by answer ID. */
@@ -905,6 +923,7 @@ export async function loadColumnarStudioView(shopId: string, spec: ColumnarSpec)
   return {
     enabled: spec.enabled,
     threshold: spec.threshold,
+    fullMatchMin: spec.fullMatchMin,
     configured: Object.keys(spec.axes).length > 0,
     vibes: VIBE_IDS.filter((id) => {
       const key = axisForRole(spec, "vibe");

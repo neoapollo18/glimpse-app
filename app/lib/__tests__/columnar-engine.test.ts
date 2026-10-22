@@ -85,6 +85,7 @@ vi.mock("../gemini.server", () => ({
 import {
   computeColumnarRecommendations,
   decorateFlowForColumnar,
+  getPoolSnapshot,
   invalidateColumnarCaches,
   syncColumnarPool,
   updateColumnarSpec,
@@ -266,14 +267,72 @@ describe("computeColumnarRecommendations", () => {
     expect(state.llmCalls).toBe(calls + 1);
   });
 
-  it("a starved path shows what exists and nothing wider", async () => {
+  it("a starved path shows what exists and nothing wider, color included", async () => {
+    // v3 showed two off-color sets (silver-siren, siren) beside this one.
     const r = await run({
-      criteria: { vibe: "french_girl", length: ["medium"], shape: ["coffin"], question_6: ["option_5"], color_family: ["dark_moody"], style_tier: ["art"] },
+      criteria: { vibe: "option_8", length: ["short"], shape: ["oval"], question_6: ["option_4"], color_family: ["reds_berries"], style_tier: ["statement"] },
     });
     expect(r.columnar.rung).toBe(5);
-    expect(r.matches.map((m) => m.meta)).toEqual([{ length: "Medium", shape: "Coffin", finish: "Matte" }]);
-    expect(r.columnar.header.kind).toBe("fewer");
-    expect(r.columnar.bestMatchBadge).toBe(false);
+    expect(r.matches.map((m) => m.productHandle)).toEqual(["miss-minty-short-oval-press-on-nails"]);
+    expect(r.columnar.alsoMatched).toEqual([]);
+    expect(r.columnar.header).toEqual({ kind: "fewer", text: "1 set matches exactly. Change an answer above to see more." });
+    // It matches every answer, so it is the best match.
+    expect(r.columnar.bestMatchBadge).toBe(true);
+    // v3's lone French match here was pink and white for a Dark & moody
+    // pick: now nothing, and one tap to loosen.
+    const none = await run({
+      criteria: { vibe: "french_girl", length: ["medium"], shape: ["coffin"], question_6: ["option_5"], color_family: ["dark_moody"], style_tier: ["art"] },
+    });
+    expect(none.matches).toEqual([]);
+    expect(none.columnar.loosen).toEqual({ axisKey: "question_6", label: "Try any finish" });
+  });
+
+  it("the ranker reorders inside a tier but can't lift a farther set above a closer one", async () => {
+    // Main Character, short almond glossy, Dark & moody, full nail art: two
+    // sets fit every answer, so the grid reaches tiers 2, 3 and 4.
+    const crit = { vibe: "main_character", length: ["short"], shape: ["almond"], color_family: ["dark_moody"], question_6: ["option_1"], style_tier: ["art"] };
+    let seen: Array<{ id: number; tier: number; vibes: string[] }> = [];
+    state.llm = async (req) => {
+      seen = JSON.parse(req.contents[0].parts[0].text.split("Candidates:\n")[1].split("\n\nReturn")[0]);
+      expect(req.config.systemInstruction).toMatch(/Keep tier order/);
+      // Hostile: the farthest candidates first, each "a little extra".
+      const picks = [...seen].reverse().slice(0, 6).map((c) => ({ id: c.id, reason: "A little extra, made for Vacay Mode." }));
+      return { text: JSON.stringify({ picks }) };
+    };
+    const r = await run({ criteria: crit });
+    expect(seen.length).toBeGreaterThan(6);
+    const tiers = seen.map((c) => c.tier);
+    // Candidates stop at the tier of the sixth slot, closest first.
+    expect([...tiers].sort((a, b) => a - b)).toEqual(tiers);
+    const tierOf = new Map(seen.map((c, i) => [i, c.tier]));
+    const fallbackTiers = [...tiers].slice(0, 6);
+    expect(new Set(fallbackTiers).size).toBeGreaterThan(1);
+    const shownTiers = r.matches.map((m) => {
+      const i = seen.findIndex((c: any) => c.title === m.productName);
+      return tierOf.get(i);
+    });
+    expect(shownTiers).toEqual(fallbackTiers);
+    // The false line ("made for Vacay Mode") never reaches the shopper.
+    expect(r.matches.every((m) => !/vacay/i.test(m.reasons[0]))).toBe(true);
+    // Rule-guessed vibes aren't offered to the ranker as facts.
+    expect(seen.every((c) => c.vibes.every((v) => v === "French Girl Chic"))).toBe(true);
+  });
+
+  it("a verified store preview skips the shopper LLM limit (the route charged the preview cap)", async () => {
+    state.llm = async (req) => {
+      const n = Number(/Return exactly (\d+) picks/.exec(req.contents[0].parts[0].text)![1]);
+      return { text: JSON.stringify({ picks: Array.from({ length: n }, (_, id) => ({ id, reason: "x" })) }) };
+    };
+    const colors = ["nudes_neutrals", "pinks_pastels", "reds_berries", "bold_bright", "dark_moody", "metallics", "oranges_yellows", "white"];
+    const sweep = async (ip: string, storePreview: boolean) => {
+      const before = state.llmCalls;
+      for (const c of colors) await run({ clientIP: ip, storePreview, criteria: { length: ["short"], color_family: [c] } });
+      return state.llmCalls - before;
+    };
+    // A shopper's IP gets 6 ranked results a minute, then Step C order.
+    expect(await sweep("10.77.0.1", false)).toBe(6);
+    invalidateColumnarCaches(SHOP.id);
+    expect(await sweep("10.77.0.2", true)).toBe(8);
   });
 
   it("offers one tap to loosen the finish when nothing matches", async () => {
@@ -323,6 +382,35 @@ describe("decorateFlowForColumnar", () => {
     expect(out.questions[1]).toBe(flow.questions[1]);
     expect(out.branching?.pool.rows).toHaveLength(416);
     expect(out.branching?.threshold).toBe(6);
+  });
+
+  it("adds the v4 full-match block from the served questions (retired tiles left out)", async () => {
+    const out = await decorateFlowForColumnar(SHOP.id, flow, {
+      recommendation_tuning: { columnar: glamneticSpec({ vibes: { holiday: { enabled: false } } }) },
+    });
+    const full = out.branching!.full!;
+    expect(full.min).toBe(3);
+    expect(full.rows).toHaveLength(416);
+    expect(full.questions).toEqual([
+      { axisKey: "vibe", column: "vibe", any: true, values: { model_off_duty: 0 } },
+      { axisKey: "length", column: "length", any: false, values: { short: 1 } },
+    ]);
+    // fullMatchMin is the spec's.
+    const four = await decorateFlowForColumnar(SHOP.id, flow, { recommendation_tuning: { columnar: glamneticSpec({ fullMatchMin: 4 }) } });
+    expect(four.branching!.full!.min).toBe(4);
+  });
+
+  it("approved vibe labels reach the pool (and a label change reloads it)", async () => {
+    const vibeCol = (f: { columns: string[]; rows: number[][] }, i: number) => f.rows[i][f.columns.indexOf("vibe")];
+    const before = (await decorateFlowForColumnar(SHOP.id, flow, { recommendation_tuning: { columnar: glamneticSpec() } })).branching!.full!;
+    const handle = "berry-baby-super-short-press-on-nails";
+    const labeled = glamneticSpec({ vibeLabels: { [handle]: ["holiday"] } });
+    const after = (await decorateFlowForColumnar(SHOP.id, flow, { recommendation_tuning: { columnar: labeled } })).branching!.full!;
+    const pool = await getPoolSnapshot(SHOP.id, labeled);
+    const i = pool.eligible.findIndex((p) => p.handle === handle);
+    expect(pool.eligible[i].vibes).toEqual(["holiday"]);
+    expect(vibeCol(after, i)).toBe(1 << 6);
+    expect(vibeCol(before, i)).not.toBe(vibeCol(after, i));
   });
 
   it("serves no branching block when nothing in the pool can be matched", async () => {

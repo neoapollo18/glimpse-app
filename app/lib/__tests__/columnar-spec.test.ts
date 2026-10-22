@@ -60,6 +60,7 @@ describe("mapRecommendationTuning", () => {
       version: 1,
       pool: { collectionHandle: null, handles: ["ok-handle"], syncedAt: null, source: "collection" },
       threshold: 50,
+      fullMatchMin: 3,
       candidateCount: COLUMNAR_DEFAULTS.candidateCount,
       resultCount: 6,
       alsoMatchedCount: 6,
@@ -68,7 +69,35 @@ describe("mapRecommendationTuning", () => {
       vibes: { holiday: { enabled: false } },
       holidayCollections: ["Holiday"],
       llm: { enabled: false, timeoutMs: 500 },
+      vibeLabels: {},
     });
+  });
+
+  it("keeps approved vibe labels (fix spec v4): handles checked, vibe IDs only, French Girl Chic left to the tags", () => {
+    const raw = {
+      ...glamneticSpec(),
+      fullMatchMin: 40,
+      vibeLabels: {
+        "berry-baby-super-short-press-on-nails": ["holiday", "alt_edgy", "alt_edgy", "spooky", 7],
+        "plain-set": [],
+        "french-set": ["french_girl", "clean_girl"],
+        "Bad Handle!": ["vacay"],
+        constructor: ["vacay"],
+        "not-a-list": "vacay",
+      },
+    };
+    const spec = sanitizeColumnarSpec(raw)!;
+    expect(spec.fullMatchMin).toBe(12);
+    expect(spec.vibeLabels).toEqual({
+      "berry-baby-super-short-press-on-nails": ["alt_edgy", "holiday"],
+      "plain-set": [],
+      "french-set": ["clean_girl"],
+    });
+    // Survives every Studio save: the mapper carries it, idempotently.
+    const mapped = mapRecommendationTuning({ columnar: spec });
+    expect(mapped.columnar?.vibeLabels).toEqual(spec.vibeLabels);
+    expect(sanitizeColumnarSpec(JSON.parse(JSON.stringify(spec)))).toEqual(spec);
+    expect(sanitizeColumnarSpec({ enabled: true })!.fullMatchMin).toBe(3);
   });
 
   it("keeps the contract's Glamnetic mapping intact", () => {

@@ -5,8 +5,10 @@
 //
 // Never inferred from titles or images. A product missing its length,
 // shape, color or finish tag is excluded from matching until Lisa tags it.
+// Vibes come from Lisa's approved labels (spec.vibeLabels) where a set has
+// them, else from the section 7 tag rules below.
 
-import { COLUMNAR_DEFAULTS } from "./spec";
+import { COLUMNAR_DEFAULTS, LABELED_VIBE_IDS, VIBE_IDS } from "./spec";
 
 export interface PoolProductInput {
   id: string;
@@ -58,6 +60,10 @@ export interface DerivedProduct {
   nonNail: boolean;
   /** Core fields with no usable tag (or conflicting tags). */
   missing: CoreField[];
+  /** Vibe IDs the set fits, vocabulary order. */
+  vibes: string[];
+  /** "labels" = Lisa approved them; "rules" = guessed from tags. */
+  vibeSource: "labels" | "rules";
 }
 
 // Color_* tag value -> color answer ID. Derived from the Oct 17 export,
@@ -159,7 +165,11 @@ const numericId = (gid: string): number => {
 
 export function deriveProduct(
   p: PoolProductInput,
-  opts: { holidayCollections?: readonly string[] } = {},
+  opts: {
+    holidayCollections?: readonly string[];
+    /** spec.vibeLabels: a listed handle takes exactly these vibes. */
+    vibeLabels?: Readonly<Record<string, readonly string[]>>;
+  } = {},
 ): DerivedProduct {
   const tags = Array.isArray(p.tags) ? p.tags.filter((t): t is string => typeof t === "string") : [];
   const missing: CoreField[] = [];
@@ -242,7 +252,7 @@ export function deriveProduct(
     finishLabel = pearl && !finishTags.includes("glazed") ? "Pearl" : "Glazed";
   } else if (finish === "glossy") finishLabel = "Glossy";
 
-  return {
+  const out: DerivedProduct = {
     id: p.id,
     shopifyId: p.shopifyId,
     handle: p.handle,
@@ -272,7 +282,20 @@ export function deriveProduct(
     recency: numericId(p.shopifyId),
     nonNail,
     missing,
+    vibes: [],
+    vibeSource: "rules",
   };
+  const labels =
+    opts.vibeLabels && Object.prototype.hasOwnProperty.call(opts.vibeLabels, p.handle) ? opts.vibeLabels[p.handle] : null;
+  if (Array.isArray(labels)) {
+    out.vibeSource = "labels";
+    out.vibes = VIBE_IDS.filter((v) =>
+      v === "french_girl" ? vibeRule(out, v) : LABELED_VIBE_IDS.includes(v) && labels.includes(v),
+    );
+  } else {
+    out.vibes = VIBE_IDS.filter((v) => vibeRule(out, v));
+  }
+  return out;
 }
 
 export const EXCLUSION_LABELS = {
@@ -317,9 +340,21 @@ const anyColor = (p: DerivedProduct, ids: string[]) => p.colors.some((c) => ids.
 const inCollection = (p: DerivedProduct, keys: string[]) =>
   p.collections.some((c) => keys.some((k) => c.toLowerCase().includes(k)));
 
-/** Does the product satisfy the vibe's rule? For French Girl Chic this is
- * the gate; for the others it's the boost. */
-export function vibeMatches(p: DerivedProduct, vibe: string): boolean {
+/** Does the set fit the vibe (approved label, else the tag rule)? For
+ * French Girl Chic this is the gate; for the others it ranks. */
+export function vibeMatches(p: Pick<DerivedProduct, "vibes">, vibe: string): boolean {
+  return p.vibes.includes(vibe);
+}
+
+/** Vibes a why-line may name: Lisa's approved labels, or the French tip /
+ * ombre tags. A vibe only guessed from color tags ranks the set but is
+ * never stated as fact. */
+export function claimableVibes(p: Pick<DerivedProduct, "vibes" | "vibeSource">): string[] {
+  return p.vibeSource === "labels" ? p.vibes : p.vibes.filter((v) => v === "french_girl");
+}
+
+/** The section 7 tag rule for one vibe (labels aside). */
+export function vibeRule(p: DerivedProduct, vibe: string): boolean {
   switch (vibe) {
     case "french_girl":
       return p.isFrench || p.isOmbre;
