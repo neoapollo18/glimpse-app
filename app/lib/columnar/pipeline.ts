@@ -438,13 +438,63 @@ export function runLadder(
 
 const keyIn = (ladder: Pick<LadderResult, "tiers">, p: DerivedProduct): number => ladder.tiers.get(p.id) ?? 99;
 
+export type ReservedRole = "length" | "shape" | "finish" | "color" | "drama";
+export interface Seat {
+  role: ReservedRole;
+  value: string;
+  /** Sets with this value the six must hold once this seat is filled. */
+  count: number;
+}
+
 /**
- * The six, from a tier-ordered list: first come first served, except
+ * Seats a multi-pick shopper is owed (Aaron, 2026-10-23): with 2+ answers
+ * on a question, every pick shows in the six. In order: one per picked
+ * length, one per picked shape, a second per picked length, then one per
+ * picked finish, color and drama. A single answer needs no seat (length
+ * and shape hold for every result; the rest rank).
+ */
+export function reservedSeats(answers: ColumnarAnswers): Seat[] {
+  const multi = (role: ReservedRole): string[] => {
+    const picked = specific(answers[role]);
+    return picked && picked.length > 1 ? picked : [];
+  };
+  const seats: Seat[] = [];
+  for (const value of multi("length")) seats.push({ role: "length", value, count: 1 });
+  for (const value of multi("shape")) seats.push({ role: "shape", value, count: 1 });
+  for (const value of multi("length")) seats.push({ role: "length", value, count: 2 });
+  for (const role of ["finish", "color", "drama"] as const) {
+    for (const value of multi(role)) seats.push({ role, value, count: 1 });
+  }
+  return seats;
+}
+
+/** Does the set carry this answer? A super short set has no shape. */
+export function hasValue(p: DerivedProduct, role: ReservedRole, value: string): boolean {
+  switch (role) {
+    case "length":
+      return p.length === value;
+    case "shape":
+      return !shapeless(p) && p.shape === value;
+    case "finish":
+      return p.finish === value;
+    case "color":
+      return p.colors.includes(value);
+    case "drama":
+      return p.drama.includes(value);
+  }
+}
+
+/**
+ * The six, from a tier-ordered list:
+ *   - first the reserved seats (reservedSeats), each from the sets passing
+ *     all four hard filters: the one that also fills the most open seats,
+ *     then the closest in the list;
+ *   - then first come first served;
  *   - no more than COLLECTION_CAP from one (counted) collection, unless the
- *     list can't fill the grid otherwise;
+ *     list can't fill the grid otherwise (or a seat has no other set);
  *   - a Super Short + another length shopper gets SUPER_SHORT_MIN Super
  *     Short sets when the list has them: the best ones replace the lowest
- *     picks.
+ *     picks that hold no seat.
  * Returned in list order, so the grid never shows a farther tier above a
  * closer one.
  */
@@ -467,9 +517,37 @@ export function pickResults(
     for (const c of counted(p)) per.set(c, (per.get(c) ?? 0) - 1);
   };
   const picks: DerivedProduct[] = [];
+  const reserved = new Set<string>();
+  const seats = reservedSeats(answers);
+  if (seats.length > 0) {
+    const held = (s: Seat) => picks.filter((p) => hasValue(p, s.role, s.value)).length;
+    const open = (p: DerivedProduct) => seats.filter((s) => held(s) < s.count && hasValue(p, s.role, s.value)).length;
+    const hard = order.filter((p) => passesHardFilters(p, answers));
+    for (const seat of seats) {
+      while (picks.length < n && held(seat) < seat.count) {
+        let best: DerivedProduct | null = null;
+        let bestFits = false;
+        let bestOpen = -1;
+        for (const p of hard) {
+          if (reserved.has(p.id) || !hasValue(p, seat.role, seat.value)) continue;
+          const f = fits(p);
+          const o = open(p);
+          if ((f && !bestFits) || (f === bestFits && o > bestOpen)) {
+            best = p;
+            bestFits = f;
+            bestOpen = o;
+          }
+        }
+        if (!best) break;
+        add(best, picks);
+        reserved.add(best.id);
+      }
+    }
+  }
   const capped: DerivedProduct[] = [];
   for (const p of order) {
     if (picks.length >= n) break;
+    if (reserved.has(p.id)) continue;
     if (fits(p)) add(p, picks);
     else capped.push(p);
   }
@@ -488,7 +566,7 @@ export function pickResults(
     for (let have = picks.filter(isSS).length; have < want && queue.length; have++) {
       if (picks.length >= n) {
         let k = picks.length - 1;
-        while (k >= 0 && isSS(picks[k])) k--;
+        while (k >= 0 && (isSS(picks[k]) || reserved.has(picks[k].id))) k--;
         if (k < 0) break;
         drop(k, picks);
       }
@@ -514,7 +592,10 @@ export function rankerCandidates(
   if (n === 0) return [];
   const picks = pickResults(ladder.ordered, answers, n, ladder.storewide);
   const boundary = Math.max(...picks.map((p) => keyIn(ladder, p)));
-  return ladder.ordered.filter((p) => keyIn(ladder, p) <= boundary).slice(0, Math.max(spec.candidateCount, n));
+  const window = ladder.ordered.filter((p) => keyIn(ladder, p) <= boundary).slice(0, Math.max(spec.candidateCount, n));
+  // A reserved seat can sit past the window: the ranker sees it too.
+  const ids = new Set([...window, ...picks].map((p) => p.id));
+  return ladder.ordered.filter((p) => ids.has(p.id));
 }
 
 /**

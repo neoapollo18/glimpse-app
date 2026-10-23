@@ -89,6 +89,26 @@ function keepOk(p: DerivedProduct, a: ColumnarAnswers): boolean {
   return fits(p.length, picks(a.length)) && (shapeless || fits(p.shape, picks(a.shape)));
 }
 const colorOk = (p: DerivedProduct, a: ColumnarAnswers) => !picks(a.color) || p.colors.some((c) => picks(a.color)!.includes(c));
+/** All four hard filters. */
+const hardOk = (p: DerivedProduct, a: ColumnarAnswers) => keepOk(p, a) && colorOk(p, a) && fits(p.finish, picks(a.finish));
+/** The seats of the 2026-10-23 card: with 2+ picks, one per length, one per
+ * shape, a second per length, then one per finish, color and drama. */
+type SeatRole = "length" | "shape" | "finish" | "color" | "drama";
+function seatsFor(a: ColumnarAnswers): Array<{ role: SeatRole; value: string; count: number }> {
+  const multi = (role: SeatRole) => (picks(a[role])?.length ?? 0) > 1 ? picks(a[role])! : [];
+  return [
+    ...multi("length").map((value) => ({ role: "length" as const, value, count: 1 })),
+    ...multi("shape").map((value) => ({ role: "shape" as const, value, count: 1 })),
+    ...multi("length").map((value) => ({ role: "length" as const, value, count: 2 })),
+    ...(["finish", "color", "drama"] as const).flatMap((role) => multi(role).map((value) => ({ role, value, count: 1 }))),
+  ];
+}
+function carries(p: DerivedProduct, role: SeatRole, value: string): boolean {
+  if (role === "length") return p.length === value;
+  if (role === "shape") return !(p.shape === "super_short" && p.length === "super_short") && p.shape === value;
+  if (role === "finish") return p.finish === value;
+  return (role === "color" ? p.colors : p.drama).includes(value);
+}
 /** Item 9's tiers. */
 function expectedTier(p: DerivedProduct, a: ColumnarAnswers): TierId {
   const c = colorOk(p, a);
@@ -146,11 +166,25 @@ describe("every result (logic v6.1, items 7-15), 2,000 random answer sets on the
         expect(out.header.perfect, key).toBe(perfect);
         expect(out.header.match, key).toBe(perfect === res.length ? "all" : perfect > 0 ? "some" : "closest");
       }
-      // 13. Super Short + another length: two super short sets.
+      // 13. Super Short + another length: two super short sets, unless
+      // multi-pick seats hold every other slot (seats win, 2026-10-23).
       const lens = picks(answers.length);
       if (lens && lens.length > 1 && lens.includes("super_short")) {
         const want = Math.min(2, keep.filter((p) => p.length === "super_short").length);
-        expect(res.filter((x) => x.product.length === "super_short").length, key).toBeGreaterThanOrEqual(want);
+        if (res.filter((x) => x.product.length === "super_short").length < want) {
+          expect(res.filter((x) => x.product.length !== "super_short").every((x) => hardOk(x.product, answers)), key).toBe(true);
+        }
+      }
+      // 16. (2026-10-23) Every pick of a 2+ answer question shows, two per
+      // picked length, from sets passing all four filters, as far as six
+      // seats reach: a pick missing means six such sets fill the grid.
+      for (const seat of seatsFor(answers)) {
+        const have = res.filter((x) => carries(x.product, seat.role, seat.value)).length;
+        const avail = keep.filter((p) => hardOk(p, answers) && carries(p, seat.role, seat.value)).length;
+        if (have < Math.min(seat.count, avail)) {
+          expect(res.length, `${key} ${seat.role}=${seat.value}`).toBe(6);
+          expect(res.every((x) => hardOk(x.product, answers)), `${key} ${seat.role}=${seat.value}`).toBe(true);
+        }
       }
       // 14. At most two from one collection while the pool can fill six.
       const per = new Map<string, number>();
@@ -390,6 +424,42 @@ describe("Super Short (item 13, and fix spec v4 item 1)", () => {
   it("pickResults keeps the order it is given when no rule applies", () => {
     const pool = many("x", 8, ["Color_Red"]);
     expect(pickResults(pool, base, 6, new Set()).map((p) => p.id)).toEqual(pool.slice(0, 6).map((p) => p.id));
+  });
+});
+
+describe("every pick shows (Aaron, 2026-10-23)", () => {
+  const six = (a: ColumnarAnswers) => assembleColumnar(runLadder(eligible, a, spec), a, spec, labels, null).results;
+  const trello: ColumnarAnswers = { vibe: ["clean_girl"], length: ["short"], shape: ["almond"], color: ["nudes"], finish: ["glossy"], drama: ["full_art"] };
+
+  it("the Trello cases on the real pool: Short+Medium, Almond+Oval, Glossy+Velvet", () => {
+    // v6.1 showed six Short, six Almond and six Glossy sets for these.
+    const lengths = six({ ...trello, length: ["short", "medium"] });
+    expect(lengths).toHaveLength(6);
+    expect(lengths.filter((x) => x.product.length === "medium").length).toBeGreaterThanOrEqual(2);
+    expect(lengths.filter((x) => x.product.length === "short").length).toBeGreaterThanOrEqual(2);
+    const shapes = six({ ...trello, color: ["reds_berries"], drama: ["clean_classic"], shape: ["almond", "oval"] });
+    expect(shapes).toHaveLength(6);
+    expect(shapes.some((x) => x.product.shape === "oval")).toBe(true);
+    expect(shapes.some((x) => x.product.shape === "almond")).toBe(true);
+    const finishes = six({ ...trello, drama: ["clean_classic"], finish: ["glossy", "velvet_cateye"] });
+    expect(finishes).toHaveLength(6);
+    expect(finishes.some((x) => x.product.finish === "velvet_cateye")).toBe(true);
+    expect(finishes.some((x) => x.product.finish === "glossy")).toBe(true);
+    for (const r of [lengths, shapes, finishes]) {
+      for (let k = 1; k < r.length; k++) expect(TIER_IDS.indexOf(r[k].tier)).toBeGreaterThanOrEqual(TIER_IDS.indexOf(r[k - 1].tier));
+    }
+  });
+
+  it("a seat goes to a set passing all four filters, even from a farther tier; the rest fill by rank", () => {
+    const answers: ColumnarAnswers = { ...base, length: ["short", "medium"] };
+    const shortPerfect = many("short-red", 8, ["Color_Red", "_Is Solid_TRUE"]);
+    const mediumOffColor = many("medium-blue", 3, ["Nail Length_Medium", "Color_Blue", "_Is Solid_TRUE"]);
+    const mediumArt = many("medium-red-art", 2, ["Nail Length_Medium", "Color_Red", "_Is 3D_TRUE"]);
+    const out = assemble([...shortPerfect, ...mediumOffColor, ...mediumArt], answers);
+    const names = out.results.map((x) => x.product.handle.replace(/-\d$/, ""));
+    expect(names).toEqual(["short-red", "short-red", "short-red", "short-red", "medium-red-art", "medium-red-art"]);
+    // One length alone: no seats.
+    expect(assemble([...shortPerfect, ...mediumArt], { ...answers, length: ["short"] }).results.every((x) => x.product.length === "short")).toBe(true);
   });
 });
 
