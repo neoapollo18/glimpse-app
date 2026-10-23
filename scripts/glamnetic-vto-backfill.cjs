@@ -1,9 +1,12 @@
 // Glamnetic press-on nails VTO backfill for glamrco.myshopify.com.
 //
-// Configures try-on for the 200 "Find My Nail Match" pool products
-// (brand-configs/glamnetic-pool.json): one universal reference-image-driven
-// transformation prompt (Charles, 2026-09-16) + the product's hero catalog
-// photo re-hosted to the reference-images bucket as webp. Purely additive:
+// Configures try-on for the "Find My Match" pool products: one universal
+// reference-image-driven transformation prompt (Charles, 2026-09-16; same
+// text re-confirmed 2026-10-22) + the product's hero catalog photo (the set
+// on a hand) re-hosted to the reference-images bucket as webp. The pool is
+// the live columnar spec's handles (recommendation_tuning.columnar.pool,
+// 2026-10-22); the original 200-product pool file is used only when the
+// shop has no columnar pool. Purely additive:
 // only fills rows whose transformation_prompt is NULL; never wipes or
 // rewrites existing VTO config. The Shopify store is never written to.
 //
@@ -13,6 +16,9 @@
 // (app/lib/ai.server.ts).
 //
 // USAGE: node scripts/glamnetic-vto-backfill.cjs [--dry-run]
+// A real run writes the ids it configured to scripts/backups/ (undo: set
+// transformation_prompt, ai_model, reference_image_url(s) back to NULL for
+// those ids).
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -52,7 +58,7 @@ async function resolveImageBuffer(p, poolEntry) {
   for (const url of candidates) {
     try { return await fetchImage(url); } catch { /* try next */ }
   }
-  const res = await fetch(`https://glamnetic.com/products/${p.handle}.json`, {
+  const res = await fetch(`https://www.glamnetic.com/products/${p.handle}.json`, {
     headers: { 'User-Agent': 'Mozilla/5.0' },
   });
   if (res.ok) {
@@ -70,30 +76,40 @@ async function main() {
   const { createClient } = require(path.join(__dirname, '..', 'node_modules', '@supabase/supabase-js'));
   const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_API_KEY);
 
-  const pool = JSON.parse(fs.readFileSync(POOL_PATH, 'utf8')).pool;
-  const poolById = new Map(pool.map((p) => [p.id, p]));
-  console.log(`pool: ${pool.length} products${dryRun ? ' (DRY RUN)' : ''}`);
-
   const shop = await sb.from('shops').select('id').eq('shop_domain', SHOP_DOMAIN).single();
   if (shop.error) throw new Error(`shop lookup: ${shop.error.message}`);
 
-  // Chunked .in() — 200 ids is fine in one call, but stay defensive.
+  // The live pool: the columnar spec's handles. Falls back to the original
+  // 200-product file for a shop without a columnar pool.
+  const cfg = await sb.from('chat_assistant_config').select('recommendation_tuning').eq('shop_domain', SHOP_DOMAIN).single();
+  if (cfg.error) throw new Error(`config lookup: ${cfg.error.message}`);
+  const liveHandles = cfg.data?.recommendation_tuning?.columnar?.pool?.handles;
+  const usingLive = Array.isArray(liveHandles) && liveHandles.length > 0;
+  const filePool = usingLive ? [] : JSON.parse(fs.readFileSync(POOL_PATH, 'utf8')).pool;
+  const poolById = new Map(filePool.map((p) => [p.id, p]));
+  const keys = usingLive ? [...new Set(liveHandles)] : [...poolById.keys()];
+  const keyCol = usingLive ? 'handle' : 'id';
+  console.log(`pool: ${keys.length} products from ${usingLive ? 'the live columnar spec' : 'glamnetic-pool.json'}${dryRun ? ' (DRY RUN)' : ''}`);
+
   const rows = [];
-  const ids = [...poolById.keys()];
-  for (let i = 0; i < ids.length; i += 100) {
+  for (let i = 0; i < keys.length; i += 100) {
     const r = await sb.from('products')
       .select('id, product_name, handle, status, image_url, transformation_prompt, reference_image_url')
       .eq('shop_id', shop.data.id)
-      .in('id', ids.slice(i, i + 100));
+      .in(keyCol, keys.slice(i, i + 100));
     if (r.error) throw new Error(`products fetch: ${r.error.message}`);
     rows.push(...r.data);
   }
-  const missing = ids.filter((id) => !rows.some((r) => r.id === id));
-  if (missing.length) console.warn(`WARN: ${missing.length} pool ids not found in products table:`, missing.slice(0, 5));
+  // A handle can match more than one row (duplicates, deleted copies):
+  // only active-or-unknown rows are configured.
+  const missing = keys.filter((k) => !rows.some((r) => r[keyCol] === k));
+  if (missing.length) console.warn(`WARN: ${missing.length} pool entries not found in products table:`, missing.slice(0, 5));
+  const configured = [];
 
   let done = 0, skipped = 0, failed = 0;
   for (const p of rows) {
     if (p.transformation_prompt) { skipped++; continue; } // already configured — never overwrite
+    if (p.status && p.status !== 'active') { skipped++; continue; } // archived/draft/deleted copies
     try {
       const buf = await resolveImageBuffer(p, poolById.get(p.id));
       if (dryRun) {
@@ -129,13 +145,21 @@ async function main() {
       if (upd.error) throw new Error(`update: ${upd.error.message}`);
       if (!upd.data || upd.data.length === 0) throw new Error('update matched 0 rows');
       done++;
+      configured.push(p.id);
       console.log(`+ ${p.product_name}`);
     } catch (e) {
       failed++;
       console.warn(`FAIL ${p.product_name}: ${e.message}`);
     }
   }
-  console.log(`\nconfigured: ${done}, already had prompt (skipped): ${skipped}, failed: ${failed}, pool ids missing from DB: ${missing.length}`);
+  if (!dryRun && configured.length) {
+    const dir = path.join(__dirname, 'backups');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, `glamnetic-vto-backfill-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
+    fs.writeFileSync(file, JSON.stringify({ configuredIds: configured }, null, 2));
+    console.log(`configured ids: ${file}`);
+  }
+  console.log(`\nconfigured: ${done}, skipped (already had a prompt, or not active): ${skipped}, failed: ${failed}, pool entries missing from DB: ${missing.length}`);
   if (failed > 0) process.exitCode = 1;
 }
 

@@ -34,3 +34,4 @@ data
 /scripts/backups/glamnetic-v3-*.json
 /scripts/backups/tryon-admin-backfill-*.json
 /scripts/backups/glamnetic-vibe-labels-*
+/scripts/backups/glamnetic-vto-backfill-*.json
