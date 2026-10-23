@@ -109,11 +109,14 @@ export interface ColumnarSpec {
     syncedAt: string | null;
     source: "collection" | "csv";
   };
-  /** Branching availability threshold (brief section 6): length, shape and
-   * finish options need this many sets on the hard-filter path so far. */
+  /** Branching availability threshold: a length or shape option needs this
+   * many sets on the length / shape path so far (v6.1: results never break
+   * length or shape and always fill the grid, so it matches resultCount).
+   * Widgets deployed before v6.1 also apply it to finish. */
   threshold: number;
   /** Fix spec v4: an option shows only if this many sets can still match
-   * every answer (hard filters, vibe and drama) after it. */
+   * every answer (hard filters, vibe and drama) after it. Read only by
+   * widgets deployed before v6.1 (branching.full.min). */
   fullMatchMin: number;
   /** Step C top-K sent to the ranker. */
   candidateCount: number;
@@ -141,6 +144,17 @@ export const COLUMNAR_DEFAULTS = {
   weights: { color: 0.4, drama: 0.35, vibe: 0.25 },
   holidayCollections: ["Holiday", "Snow", "Sleigh", "Winter", "Polar"],
   llm: { enabled: true, timeoutMs: 4000 },
+  // Logic v6.1 (fixed, not per shop):
+  /** Each step after Length shows at least this many options where the
+   * length / shape path has them. */
+  minOptions: 3,
+  /** Results from one collection, at most. */
+  collectionCap: 2,
+  /** A collection on more than this share of the pool is a shop-wide
+   * grouping, not a line, and doesn't count toward the cap. */
+  storewideCollectionShare: 0.1,
+  /** Super Short sets shown when Super Short is picked with another length. */
+  superShortMin: 2,
 } as const;
 
 // Pool handles can number in the thousands for a big collection; the cap

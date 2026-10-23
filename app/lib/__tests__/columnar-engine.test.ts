@@ -170,7 +170,8 @@ describe("computeColumnarRecommendations", () => {
     expect(r.matches).toHaveLength(6);
     expect(r.columnar.rung).toBe(1);
     expect(r.columnar.bestMatchBadge).toBe(true);
-    expect(r.columnar.header).toEqual({ kind: "normal", text: null });
+    expect(r.columnar.header).toEqual({ kind: "normal", text: "Six sets that match everything you picked", match: "all", perfect: 6 });
+    expect(r.matches.map((m) => m.tier)).toEqual(Array(6).fill("perfect"));
     // The Also matched row is retired: the field stays, always empty.
     expect(r.columnar.alsoMatched).toEqual([]);
     const answers = decodeResultKey(r.columnar.resultKey)!;
@@ -181,9 +182,10 @@ describe("computeColumnarRecommendations", () => {
       expect(m.variantNumericId).toMatch(/^\d+$/);
       expect(m.variantTitle).toBeNull();
     }
-    // Five valid LLM reasons; the hedging one is replaced by the template.
+    // Five valid LLM reasons; the hedging one is replaced by the set's own
+    // description.
     expect(r.matches.slice(0, 5).every((m) => m.reasons[0] === "French tips in the nudes you love.")).toBe(true);
-    expect(r.matches[5].reasons[0]).not.toMatch(/closest|coffin/i);
+    expect(r.matches[5].reasons[0]).toMatch(/^A glossy short almond set in /);
     expect(r.columnar.answers).toEqual({
       vibe: ["french_girl"],
       length: ["short"],
@@ -267,24 +269,30 @@ describe("computeColumnarRecommendations", () => {
     expect(state.llmCalls).toBe(calls + 1);
   });
 
-  it("a starved path shows what exists and nothing wider, color included", async () => {
-    // v3 showed two off-color sets (silver-siren, siren) beside this one.
+  it("a starved path still shows six on the same length and shape, the closest picks labeled (v6.1)", async () => {
+    // v4 showed only this one set; v3 put off-color sets beside it unlabeled.
     const r = await run({
       criteria: { vibe: "option_8", length: ["short"], shape: ["oval"], question_6: ["option_4"], color_family: ["reds_berries"], style_tier: ["statement"] },
     });
-    expect(r.columnar.rung).toBe(5);
-    expect(r.matches.map((m) => m.productHandle)).toEqual(["miss-minty-short-oval-press-on-nails"]);
-    expect(r.columnar.alsoMatched).toEqual([]);
-    expect(r.columnar.header).toEqual({ kind: "fewer", text: "1 set matches exactly. Change an answer above to see more." });
-    // It matches every answer, so it is the best match.
+    expect(r.matches).toHaveLength(6);
+    expect(r.matches[0]).toMatchObject({ productHandle: "miss-minty-short-oval-press-on-nails", tier: "perfect" });
+    expect(r.matches.every((m) => m.meta.length === "Short" && m.meta.shape === "Oval")).toBe(true);
+    expect(r.matches.slice(1).every((m) => m.tier !== "perfect")).toBe(true);
+    expect(r.columnar.header).toMatchObject({ kind: "relaxed", text: "1 perfect match, plus our next-best picks", match: "some", perfect: 1 });
+    expect(r.columnar.rung).toBe(4);
     expect(r.columnar.bestMatchBadge).toBe(true);
-    // v3's lone French match here was pink and white for a Dark & moody
-    // pick: now nothing, and one tap to loosen.
-    const none = await run({
+    // An off-color set carries the label (item 10).
+    for (const m of r.matches) {
+      const p = [...byId.values()].find((x) => x.handle === m.productHandle)!;
+      if (!p.colors.includes("reds_berries")) expect(["color", "color_finish"]).toContain(m.tier);
+    }
+    // v4 showed nothing here and offered a loosen tap; now the closest six.
+    const closest = await run({
       criteria: { vibe: "french_girl", length: ["medium"], shape: ["coffin"], question_6: ["option_5"], color_family: ["dark_moody"], style_tier: ["art"] },
     });
-    expect(none.matches).toEqual([]);
-    expect(none.columnar.loosen).toEqual({ axisKey: "question_6", label: "Try any finish" });
+    expect(closest.matches).toHaveLength(6);
+    expect(closest.columnar.header).toMatchObject({ match: "closest", text: "Nothing matches every pick yet, so here are the closest." });
+    expect(closest.columnar.loosen).toBeNull();
   });
 
   it("the ranker reorders inside a tier but can't lift a farther set above a closer one", async () => {
@@ -335,11 +343,30 @@ describe("computeColumnarRecommendations", () => {
     expect(await sweep("10.77.0.2", true)).toBe(8);
   });
 
-  it("offers one tap to loosen the finish when nothing matches", async () => {
-    const r = await run({ criteria: { length: ["super_short"], question_6: ["option_5"] } });
+  it("a finish with no set shows the closest six as Different finish; only an empty length + shape offers a loosen tap", async () => {
+    const ss = await run({ criteria: { length: ["super_short"], question_6: ["option_5"] } });
+    expect(ss.matches).toHaveLength(6);
+    expect(ss.matches.every((m) => m.tier === "finish")).toBe(true);
+    // A forged post the quiz can't make: Short has no coffin set.
+    const r = await run({ criteria: { length: ["short"], shape: ["coffin"] } });
     expect(r.matches).toEqual([]);
     expect(r.columnar.header).toEqual({ kind: "none", text: "We don't have that combination yet." });
-    expect(r.columnar.loosen).toEqual({ axisKey: "question_6", label: "Try any finish" });
+    expect(r.columnar.loosen).toEqual({ axisKey: "shape", label: "Try any shape" });
+  });
+
+  it("the ranker sees each candidate's tier and what it steps outside of", async () => {
+    let seen: Array<{ tier: number; differs: string | null }> = [];
+    let system = "";
+    state.llm = async (req) => {
+      seen = JSON.parse(req.contents[0].parts[0].text.split("Candidates:\n")[1].split("\n\nReturn")[0]);
+      system = req.config.systemInstruction;
+      return { text: JSON.stringify({ picks: [0, 1, 2, 3, 4, 5].map((id) => ({ id, reason: "x" })) }) };
+    };
+    await run({ criteria: { vibe: "option_8", length: ["short"], shape: ["oval"], question_6: ["option_4"], color_family: ["reds_berries"], style_tier: ["statement"] } });
+    expect(seen[0]).toMatchObject({ tier: 1, differs: null });
+    expect(seen.some((c) => c.differs === "Different color")).toBe(true);
+    expect(system).toMatch(/Never echo the shopper's answers back/);
+    expect(system).not.toMatch(/echoing the words of their answers/);
   });
 });
 
@@ -398,6 +425,11 @@ describe("decorateFlowForColumnar", () => {
     // fullMatchMin is the spec's.
     const four = await decorateFlowForColumnar(SHOP.id, flow, { recommendation_tuning: { columnar: glamneticSpec({ fullMatchMin: 4 }) } });
     expect(four.branching!.full!.min).toBe(4);
+    // Logic v6.1 rides along for the new widget; the v4 fields stay for
+    // the widget already deployed.
+    expect(full.hard).toEqual({ filterColumns: ["length", "shape", "color", "finish"], keepColumns: ["length", "shape"], threshold: 6, minOptions: 3 });
+    const t4 = await decorateFlowForColumnar(SHOP.id, flow, { recommendation_tuning: { columnar: glamneticSpec({ threshold: 4 }) } });
+    expect(t4.branching!.full!.hard!.threshold).toBe(4);
   });
 
   it("approved vibe labels reach the pool (and a label change reloads it)", async () => {

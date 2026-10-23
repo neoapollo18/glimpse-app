@@ -55,6 +55,9 @@ export type QuizRecommendResult = {
     tryon?: boolean;
     /** Columnar shops only: shopper-facing length / shape / finish. */
     meta?: ColumnarMeta;
+    /** Columnar shops only (logic v6.1): what the set steps outside of,
+     * "perfect" for nothing (pipeline TIER_IDS). */
+    tier?: string;
   }>;
   matrixApplied: boolean;
   partial: boolean;

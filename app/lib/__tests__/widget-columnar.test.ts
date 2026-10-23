@@ -11,7 +11,7 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { deriveProduct, splitPool } from "../columnar/attributes";
-import { buildBranching, fullVisibleBits } from "../columnar/pipeline";
+import { buildBranching, fullVisibleBits, hardVisibleBits } from "../columnar/pipeline";
 import { SHAPE_IDS } from "../columnar/spec";
 import { glamneticSpec, loadGlamneticFlow, loadGlamneticPool } from "./fixtures/glamnetic-columnar";
 
@@ -268,6 +268,13 @@ async function next(root: HTMLElement) {
 }
 const title = (root: HTMLElement) => screenEl(root).querySelector(".gq-question-title")?.textContent;
 const stepCount = (root: HTMLElement) => screenEl(root).querySelector(".gq-step-count")?.textContent;
+/** Logic v6.1 progress (pool boutique): dots only, one per question
+ * screen. "d" done, "c" current, "." to come. */
+const dots = (root: HTMLElement) =>
+  Array.from(screenEl(root).querySelectorAll(".gq-pips .gq-pip"))
+    .map((e) => (e.classList.contains("gq-pip--done") ? "d" : e.classList.contains("gq-pip--current") ? "c" : "."))
+    .join("");
+const stepNote = (root: HTMLElement) => screenEl(root).querySelector(".gq-step-note")?.textContent ?? null;
 
 async function toLength(root: HTMLElement) {
   await tap(root, "Main Character Energy");
@@ -275,15 +282,19 @@ async function toLength(root: HTMLElement) {
 }
 
 describe("branching (contract 3) against the Oct 17 pool", () => {
-  it("Super Short only: the shape step is skipped, nothing recorded, and the counter drops it", async () => {
+  it("Super Short only: the shape step is skipped and says so (items 1-2), nothing recorded, dots never jump (item 5)", async () => {
     const { root, posts } = await bootPreview();
     await toLength(root);
-    expect(stepCount(root)).toBe("Step 2 of 6");
+    // Dots only: no "Step 2 of 6".
+    expect(stepCount(root)).toBeUndefined();
+    expect(dots(root)).toBe("dc....");
     await tap(root, "Super short");
     await next(root);
     expect(title(root)).toBe("Any colors calling your name?");
-    expect(stepCount(root)).toBe("Step 3 of 5");
-    expect(screenEl(root).querySelectorAll(".gq-pip")).toHaveLength(5);
+    expect(stepCount(root)).toBeUndefined();
+    // Six dots still; the skipped Shape step reads as done.
+    expect(dots(root)).toBe("dddc..");
+    expect(stepNote(root)).toBe("Super short has one shape, so we skipped that step.");
     await tap(root, "Pinks & purples");
     await next(root);
     await tap(root, "Classic Glossy");
@@ -366,7 +377,9 @@ describe("branching (contract 3) against the Oct 17 pool", () => {
     await next(root);
     expect(title(root)).toBe("What's your finish?");
     expect(labels(root)).toEqual(["Classic Glossy", "Glazed & Pearlescent", "Surprise Me!"]);
-    expect(stepCount(root)).toBe("Step 4 of 5");
+    expect(dots(root)).toBe("ddddc.");
+    // Only the step right after the skipped one carries the note.
+    expect(stepNote(root)).toBeNull();
   });
 
   it("Short + Medium, Coffin: finish counts the union path (medium coffin)", async () => {
@@ -382,8 +395,8 @@ describe("branching (contract 3) against the Oct 17 pool", () => {
     expect(labels(root)).toEqual(["Classic Glossy", "Glazed & Pearlescent", "Surprise Me!"]);
   });
 
-  it("one finish left (Short Round): the step is skipped and that finish recorded", async () => {
-    const { root } = await bootPreview();
+  it("one finish left (Short Round): the step shows it beside Surprise me, and nothing is picked for the shopper (item 6)", async () => {
+    const { root, posts } = await bootPreview();
     await toLength(root);
     await tap(root, "Short");
     await next(root);
@@ -391,14 +404,17 @@ describe("branching (contract 3) against the Oct 17 pool", () => {
     await next(root);
     await tap(root, "Pinks & purples");
     await next(root);
+    // v4 skipped this step and recorded Classic Glossy.
+    expect(title(root)).toBe("What's your finish?");
+    expect(labels(root)).toEqual(["Classic Glossy", "Surprise Me!"]);
+    expect((screenEl(root).querySelector(".gq-continue-btn") as HTMLButtonElement).disabled).toBe(true);
+    await tap(root, "Surprise Me!");
+    await next(root);
     expect(title(root)).toBe("Last one: how much drama?");
-    expect(stepCount(root)).toBe("Step 5 of 5");
-    // Preview state is in memory only: read it off the results answers line.
     await tap(root, "Statement");
     await next(root);
     await wait(20);
-    const answers = Array.from(root.querySelectorAll(".gq-gr-answers-value")).map((e) => e.textContent);
-    expect(answers).toContain("Classic Glossy");
+    expect(posts[0].criteria.question_6).toEqual(["_any"]);
   });
 
   it("no finish left (Medium Square): skipped with no answer, so the engine filters nothing", async () => {
@@ -476,7 +492,7 @@ describe("Back skips a skipped step", () => {
     (screenEl(root).querySelector(".gq-back") as HTMLButtonElement).click();
     await settle();
     expect(title(root)).toBe("How long do you like your nails?");
-    expect(stepCount(root)).toBe("Step 2 of 5");
+    expect(dots(root)).toBe("dc....");
   });
 
   it("storefront: a history entry for a now-skipped step steps further back", async () => {
@@ -550,6 +566,8 @@ async function playToResults(root: HTMLElement) {
   await next(root);
   await tap(root, "Pinks & purples");
   await next(root);
+  await tap(root, "Classic Glossy");
+  await next(root);
   await tap(root, "Statement");
   await next(root);
   await wait(30);
@@ -561,14 +579,15 @@ describe("analytics (contract 5)", () => {
     recommendReply = () => columnar("normal");
   });
 
-  it("step events carry answer IDs; the pool-recorded finish fires as auto; results carry handles + rung", async () => {
+  it("step events carry answer IDs; nothing fires as auto (v6.1 records no answer); results carry handles + rung", async () => {
     const root = await bootStorefront();
     await playToResults(root);
     const answered = events.filter((e) => e.eventType === "quiz_question_answered").map((e) => e.properties);
     const byQ = (q: string) => answered.find((p) => p.q === q)!;
     expect(byQ("length").ids).toEqual(["short"]);
     expect(byQ("shape").ids).toEqual(["round"]);
-    expect(byQ("question_6")).toMatchObject({ vals: ["option_1"], ids: ["glossy"], auto: true });
+    expect(byQ("question_6")).toMatchObject({ vals: ["option_1"], ids: ["glossy"] });
+    expect(answered.some((p) => p.auto)).toBe(false);
     // No pool mapping for color in the branching block: raw values only.
     expect(byQ("color_family").ids).toBeUndefined();
     const shown = events.find((e) => e.eventType === "quiz_results_shown")!.properties;
@@ -674,9 +693,9 @@ describe("columnar results (contract 4)", () => {
     expect(answers).toContain("Surprise Me!");
   });
 
-  it("a loosened answer survives an edit where the pool would record it again", async () => {
-    // Short + Round leaves one finish (glossy), recorded for the shopper;
-    // the zero state then loosens exactly that answer.
+  it("a loosened answer survives an edit back through the quiz", async () => {
+    // Short + Round leaves one finish (glossy), the shopper taps it; the
+    // zero state then loosens exactly that answer.
     const replies = [columnar("none"), columnar("normal"), columnar("normal")];
     const { root, posts } = await bootPreview({ recommend: () => replies.shift() });
     await toLength(root);
@@ -685,6 +704,8 @@ describe("columnar results (contract 4)", () => {
     await tap(root, "Round");
     await next(root);
     await tap(root, "Pinks & purples");
+    await next(root);
+    await tap(root, "Classic Glossy");
     await next(root);
     await tap(root, "Statement");
     await next(root);
@@ -712,6 +733,96 @@ describe("columnar results (contract 4)", () => {
     expect(root.querySelector(".gq-gr-zero")).not.toBeNull();
     expect(root.querySelector(".gq-gr-loosen")).toBeNull();
     expect(root.querySelector(".gq-gr-zero-text")!.textContent).toBe("Change an answer above to see what we have.");
+  });
+});
+
+// Logic v6.1 replies: every match carries its tier; the header says how
+// many match everything.
+function tiered(tiers: string[], header: Record<string, unknown>) {
+  const base = columnar("normal");
+  return {
+    ...base,
+    matches: SIX.slice(0, tiers.length).map((m, i) => ({ ...m, tier: tiers[i] })),
+    columnar: { ...base.columnar, alsoMatched: [], bestMatchBadge: tiers[0] === "perfect", header },
+  };
+}
+
+describe("logic v6.1 results (items 8-10, 12)", () => {
+  const pills = (root: HTMLElement) =>
+    Array.from(root.querySelectorAll(".gq-gr-grid .gq-gr-card")).map((c) => c.querySelector(".gq-gr-pill")?.textContent ?? null);
+
+  it("every perfect match carries the badge; the closest picks follow under Next best picks, each labeled", async () => {
+    const sample = tiered(["perfect", "perfect", "vibe", "drama", "color", "finish"], {
+      kind: "relaxed",
+      text: "2 perfect matches, plus our next-best picks",
+      match: "some",
+      perfect: 2,
+    });
+    const { root } = await bootPreview({ step: "results", sample });
+    await wait(20);
+    expect(root.querySelector(".gq-results-headline")!.textContent).toBe("2 perfect matches, plus our next-best picks");
+    expect(pills(root)).toEqual(["Perfect match", "Perfect match", "Different vibe", "Different drama", "Different color", "Different finish"]);
+    expect(root.querySelectorAll(".gq-gr-pill--perfect")).toHaveLength(2);
+    // One divider, right after the last perfect match, spanning the grid.
+    const grid = root.querySelector(".gq-gr-grid")!;
+    const kids = Array.from(grid.children).map((c) => (c.classList.contains("gq-gr-divider") ? "divider" : "card"));
+    expect(kids).toEqual(["card", "card", "divider", "card", "card", "card", "card"]);
+    expect(grid.querySelector(".gq-gr-divider")!.textContent).toBe("Next best picks");
+    // The merchant's "Best match" pill gives way to the per-card badges.
+    expect(root.textContent).not.toContain("Best match");
+  });
+
+  it("the header matches the count: all six, some, none (Aaron's lines)", async () => {
+    const all = tiered(Array(6).fill("perfect"), { kind: "normal", text: "x", match: "all", perfect: 6 });
+    let { root } = await bootPreview({ step: "results", sample: all });
+    await wait(20);
+    expect(root.querySelector(".gq-results-headline")!.textContent).toBe("Six sets that match everything you picked");
+    expect(root.querySelector(".gq-gr-divider")).toBeNull();
+    const one = tiered(["perfect", "color", "color", "color", "color", "color"], { kind: "relaxed", text: "x", match: "some", perfect: 1 });
+    ({ root } = await bootPreview({ step: "results", sample: one }));
+    await wait(20);
+    expect(root.querySelector(".gq-results-headline")!.textContent).toBe("1 perfect match, plus our next-best picks");
+    const none = tiered(["vibe", "vibe", "color", "color", "finish", "color_finish"], { kind: "relaxed", text: "x", match: "closest", perfect: 0 });
+    ({ root } = await bootPreview({ step: "results", sample: none }));
+    await wait(20);
+    expect(root.querySelector(".gq-results-headline")!.textContent).toBe("Nothing matches every pick yet, so here are the closest.");
+    // No perfect match: no divider above the closest picks, every card labeled.
+    expect(root.querySelector(".gq-gr-divider")).toBeNull();
+    expect(pills(root)).toEqual(["Different vibe", "Different vibe", "Different color", "Different color", "Different finish", "Different color and finish"]);
+  });
+
+  it("every new string comes from Text & labels", async () => {
+    const config = makeConfig();
+    (config as Record<string, unknown>).uiText = {
+      poolHeaderSome: "{n} spot on, then close calls",
+      perfectMatch: "Spot on",
+      nextBestPicks: "Close calls",
+      tierColor: "Other shade",
+    };
+    const sample = tiered(["perfect", "perfect", "perfect", "color", "color", "color"], { kind: "relaxed", text: "x", match: "some", perfect: 3 });
+    const { root } = await bootPreview({ step: "results", sample, config });
+    await wait(20);
+    expect(root.querySelector(".gq-results-headline")!.textContent).toBe("3 spot on, then close calls");
+    expect(pills(root)).toEqual(["Spot on", "Spot on", "Spot on", "Other shade", "Other shade", "Other shade"]);
+    expect(root.querySelector(".gq-gr-divider")!.textContent).toBe("Close calls");
+  });
+
+  it("a reply from before v6.1 (no tiers) renders as it did: header text, Best match on the first card", async () => {
+    const { root } = await bootPreview({ step: "results", sample: columnar("relaxed") });
+    await wait(20);
+    expect(root.querySelector(".gq-results-headline")!.textContent).toBe(columnar("relaxed").columnar.header.text);
+    expect(root.querySelector(".gq-gr-pill--tier, .gq-gr-divider")).toBeNull();
+  });
+
+  it("the landing shows dots for the six steps, not 1 of 6 (item 5)", async () => {
+    const { root } = await bootPreview();
+    const head = root.querySelector(".gq-ci-ask-head")!;
+    expect(head.querySelector(".gq-ci-count")).toBeNull();
+    expect(head.querySelectorAll(".gq-pip")).toHaveLength(6);
+    expect(head.querySelectorAll(".gq-pip--current")).toHaveLength(1);
+    // Every other boutique quiz keeps its counter.
+    const plain = await bootPreview({ flow: makeFlow(null) });
+    expect(plain.root.querySelector(".gq-ci-count")!.textContent).toBe("1 of 6");
   });
 });
 
@@ -827,7 +938,7 @@ describe("results permalink (contract 4)", () => {
     await settle();
     expect(recommendBodies).toHaveLength(1);
     expect(title(root)).toBe("Any colors calling your name?");
-    expect(stepCount(root)).toBe("Step 4 of 6");
+    expect(dots(root)).toBe("dddc..");
   });
 
   it("reloading your own results link re-renders from the session; Start over drops only that r", async () => {
@@ -894,7 +1005,14 @@ function widgetFullVisibleBits(): (f: unknown, qi: number, answers: number[]) =>
   return new Function(`${m[1]}\nreturn fullVisibleBits;`)();
 }
 
-describe("full-match branching (fix spec v4)", () => {
+/** The widget's own hardVisibleBits (logic v6.1), lifted out verbatim. */
+function widgetHardVisibleBits(): (f: unknown, qi: number, answers: number[]) => number[] {
+  const m = /\/\/ <gleame-hard-branching>[^\n]*\n(?:\s*\/\/[^\n]*\n)*([\s\S]*?)\n\s*\/\/ <\/gleame-hard-branching>/.exec(source);
+  if (!m) throw new Error("gleame-hard-branching markers not found");
+  return new Function(`${m[1]}\nreturn hardVisibleBits;`)();
+}
+
+describe("full-match branching (fix spec v4): the rules a widget before v6.1 runs", () => {
   it("the widget's check matches the server's on every prefix of 600 random walks", () => {
     const widget = widgetFullVisibleBits();
     const max = fixtureFlow.map((q) => (q.multiSelect ? q.maxSelections ?? 9 : 1));
@@ -919,22 +1037,80 @@ describe("full-match branching (fix spec v4)", () => {
     expect(compared).toBe(600 * 6);
   });
 
-  // Plays the quiz from the vibe step, checking each screen against the
-  // server's check: picks[qi] names the option to tap, else the first shown.
+  it("served without the v6.1 rules (an app not yet deployed), the new widget runs v4's but never picks for the shopper", async () => {
+    const flow = liveFlow();
+    delete ((flow.branching as { full: Record<string, unknown> }).full).hard;
+    recommendReply = () => columnar("normal");
+    const root = await bootStorefront({ flow });
+    // v4 left Holiday + Medium one shape (Aaron: Oval) and recorded it.
+    const holiday = 1 << v4Full.questions[0].values.option_8;
+    const medium = 1 << v4Full.questions[1].values.medium;
+    const v4Shapes = fullVisibleBits(v4Full, 2, [holiday, medium]);
+    expect(v4Shapes).toHaveLength(1);
+    await tap(root, "Holiday-Ready");
+    await tap(root, "Medium");
+    await next(root);
+    // The step shows that shape beside Open to anything for the shopper to tap.
+    expect(title(root)).toBe("Which shapes are you into?");
+    const shape = fixtureFlow[2].options.find((o) => !o.selectAll && v4Full.questions[2].values[o.axisValue] === v4Shapes[0])!.label;
+    expect(labels(root)).toEqual([shape, "Open to anything"]);
+  });
+});
+
+describe("logic v6.1 branching in the widget (items 1-6)", () => {
+  it("the widget's check matches the server's on every prefix of 600 random walks", () => {
+    const widget = widgetHardVisibleBits();
+    const max = fixtureFlow.map((q) => (q.multiSelect ? q.maxSelections ?? 9 : 1));
+    let seed = 23;
+    const r = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+    let compared = 0;
+    for (let walk = 0; walk < 600; walk++) {
+      const masks: number[] = [];
+      for (let qi = 0; qi < v4Full.questions.length; qi++) {
+        const server = hardVisibleBits(v4Full, qi, masks);
+        expect(widget(JSON.parse(JSON.stringify(v4Full)), qi, masks), `${qi}: ${masks.join(",")}`).toEqual(server);
+        compared++;
+        let mask = 0;
+        for (const b of server.filter(() => r() < 0.4).slice(0, max[qi])) mask |= 1 << b;
+        if (!mask && server.length && !v4Full.questions[qi].any) mask = 1 << server[0];
+        masks.push(mask);
+      }
+    }
+    expect(compared).toBe(600 * 6);
+  });
+
+  it("...and on every single-pick prefix", () => {
+    const widget = widgetHardVisibleBits();
+    let compared = 0;
+    const walk = (qi: number, masks: number[]) => {
+      if (qi === v4Full.questions.length) return;
+      const server = hardVisibleBits(v4Full, qi, masks);
+      expect(widget(v4Full, qi, masks), `${qi}: ${masks.join(",")}`).toEqual(server);
+      compared++;
+      const choices = server.length ? server.map((b) => 1 << b) : [0];
+      if (server.length && v4Full.questions[qi].any) choices.push(0);
+      // Past the color step the tree is wide: follow the first two choices.
+      for (const m of qi >= 3 ? choices.slice(0, 2) : choices) walk(qi + 1, [...masks, m]);
+    };
+    walk(0, []);
+    expect(compared).toBeGreaterThan(500);
+  });
+
+  // Plays the live quiz from the vibe step, checking each screen against
+  // the server's check: picks[qi] names the option to tap, else the first.
   async function playChecked(root: HTMLElement, picks: Record<number, string>) {
     const nameOf = (qi: number, bit: number) =>
       fixtureFlow[qi].options.find((o) => !o.selectAll && v4Full.questions[qi].values[o.axisValue] === bit)!.label;
     const masks: number[] = [];
     const screens: string[] = [];
     for (let qi = 0; qi < v4Full.questions.length; qi++) {
-      const vis = fullVisibleBits(v4Full, qi, masks);
-      if (vis.length < 2) {
-        // Skipped: one option is recorded for the shopper, none leaves it open.
-        masks.push(vis.length ? 1 << vis[0] : 0);
+      const vis = hardVisibleBits(v4Full, qi, masks);
+      if (vis.length === 0) {
+        // Skipped, nothing recorded.
+        masks.push(0);
         continue;
       }
       const any = fixtureFlow[qi].options.filter((o) => o.selectAll).map((o) => o.label);
-      // The boutique intro carries the first question as tiles.
       if (qi > 0) expect(title(root)).toBe(fixtureFlow[qi].prompt);
       const shown = qi > 0 ? labels(root) : Array.from(root.querySelectorAll(".gq-option-visual-label")).map((e) => e.textContent!.trim());
       expect(shown.sort(), fixtureFlow[qi].axisKey).toEqual([...vis.map((b) => nameOf(qi, b)), ...any].sort());
@@ -951,43 +1127,36 @@ describe("full-match branching (fix spec v4)", () => {
     return { masks, screens };
   }
 
-  it("Lisa's Alt & Edgy + Super Short: no color keeps three full matches, so the color step never asks", async () => {
+  it("Lisa's Alt & Edgy + Super Short: every step but Shape asks, with every color (v4 skipped four of six)", async () => {
     recommendReply = () => columnar("normal");
     const root = await bootStorefront({ flow: liveFlow() });
     const alt = 1 << v4Full.questions[0].values.option_7;
     const ss = 1 << v4Full.questions[1].values.super_short;
-    expect(fullVisibleBits(v4Full, 3, [alt, ss, 0])).toEqual([]);
-    const { screens } = await playChecked(root, { 0: "Alternative & Edgy", 1: "Super Short" });
-    // v3 asked for a color here and served plain pink solids.
-    expect(screens).not.toContain("color_family");
-    expect(screens).not.toContain("shape");
+    expect(hardVisibleBits(v4Full, 3, [alt, ss, 0])).toHaveLength(8);
+    const { screens } = await playChecked(root, { 0: "Alternative & Edgy", 1: "Super Short", 3: "Pinks & purples" });
+    expect(screens).toEqual(["vibe", "length", "color_family", "question_6", "style_tier"]);
     expect(recommendBodies).toHaveLength(1);
-    expect(recommendBodies[0].criteria.color_family).toBeUndefined();
-    expect(recommendBodies[0].criteria.length).toEqual(["super_short"]);
+    expect(recommendBodies[0].criteria).toMatchObject({ vibe: "option_7", length: ["super_short"], color_family: ["pinks_pastels"] });
+    expect("shape" in recommendBodies[0].criteria).toBe(false);
   });
 
-  it("every screen shows exactly the options the server keeps (Alternative & Edgy, Short)", async () => {
+  it("every screen shows exactly the options the server keeps, three or more after Length (Clean Girl, Short, Nudes, Glossy: v4 skipped Drama)", async () => {
     recommendReply = () => columnar("normal");
     const root = await bootStorefront({ flow: liveFlow() });
-    const { masks, screens } = await playChecked(root, { 0: "Alternative & Edgy", 1: "Short" });
-    expect(screens).toContain("color_family");
-    // Some colors were hidden on this path, and what was sent keeps three.
-    const alt = masks[0];
-    const short = masks[1];
-    expect(fullVisibleBits(v4Full, 3, [alt, short, masks[2]]).length).toBeLessThan(8);
-    const sent = recommendBodies[0].criteria;
-    expect(sent.vibe).toBe("option_7");
-    expect(sent.length).toEqual(["short"]);
+    const { screens } = await playChecked(root, { 0: "Clean Girl & Minimalist", 1: "Short", 3: "Nudes & neutrals", 4: "Classic Glossy" });
+    expect(screens).toEqual(["vibe", "length", "shape", "color_family", "question_6", "style_tier"]);
+    expect(recommendBodies[0].criteria.style_tier).toBeDefined();
   });
-  it("the shape step after Main Character + Short shows what the server keeps", async () => {
+
+  it("Holiday + Medium: four shapes to choose from, so Oval is the shopper's tap (v4 recorded it, item 6)", async () => {
     const root = await bootStorefront({ flow: liveFlow() });
-    await tap(root, "Main Character Energy");
-    await tap(root, "Short");
+    await tap(root, "Holiday-Ready");
+    await tap(root, "Medium");
     await next(root);
-    const mc = 1 << v4Full.questions[0].values.main_character;
-    const short = 1 << v4Full.questions[1].values.short;
-    const shapes: string[] = fullVisibleBits(v4Full, 2, [mc, short]).map((b) => SHAPE_IDS[b]);
-    expect(labels(root)).toEqual([...fixtureFlow[2].options.filter((o) => !o.selectAll && shapes.includes(o.axisValue)).map((o) => o.label), "Open to anything"]);
+    expect(title(root)).toBe("Which shapes are you into?");
+    expect(labels(root)).toEqual(["Almond", "Oval", "Square", "Coffin", "Open to anything"]);
+    // No Round or Squoval: Medium has none (item 4).
+    expect(labels(root)).not.toContain("Round");
   });
 });
 

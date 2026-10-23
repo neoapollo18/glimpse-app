@@ -146,8 +146,9 @@ export function ColumnarMatchingCard({
           <Badge tone={view.enabled ? "success" : undefined}>{view.enabled ? "On" : "Off"}</Badge>
         </InlineStack>
         <Text as="p" variant="bodySm" tone="subdued">
-          Every match has exactly the length, shape and finish the shopper picked and one of their colors, from your
-          product pool. Vibe and drama decide the order. While on, this replaces the ranking above.
+          Every match has exactly the length and shape the shopper picked, from your product pool. Sets that match
+          every answer come first; the rest of the six are the closest, each labeled with what differs (vibe, drama,
+          color or finish). While on, this replaces the ranking above.
         </Text>
         {view.error && (
           <Banner tone="critical">The product pool couldn&rsquo;t be loaded: {view.error}</Banner>
@@ -163,7 +164,7 @@ export function ColumnarMatchingCard({
           helpText={nothingToMatch ? "Sync a pool with products that can be matched first." : undefined}
         />
         <RangeSlider
-          label={`Hide answer options with fewer than ${threshold} sets`}
+          label={`Hide length and shape options with fewer than ${threshold} sets`}
           value={threshold}
           min={1}
           max={20}
@@ -174,7 +175,7 @@ export function ColumnarMatchingCard({
             setMessage(null);
           }}
           disabled={disabled}
-          helpText={`Length, shape and finish options. Every option also needs ${view.fullMatchMin ?? 3} sets that match all of the shopper's answers. A question left with one option or none is skipped.`}
+          helpText="Length and shape options. Color, finish and drama options show when they have at least one set, topped up to three choices. Only a question with nothing to show is skipped, and no answer is ever picked for the shopper."
         />
         {view.vibes.length > 0 && (
           <BlockStack gap="100">
@@ -275,7 +276,8 @@ export function ColumnarMatchingCard({
                 </Button>
               </InlineStack>
               <Text as="p" variant="bodySm" tone="subdued">
-                What shoppers won&rsquo;t see on each length path at this threshold, with how many sets each has.
+                What shoppers won&rsquo;t see on each length path at this threshold, before any color is picked, with
+                how many sets each has.
               </Text>
               <Collapsible open={showHidden} id="columnar-hidden">
                 <BlockStack gap="150">
@@ -288,7 +290,7 @@ export function ColumnarMatchingCard({
                         {e.hidden.length
                           ? e.hidden.map((h) => `${label(h.id)} (${h.count})`).join(", ")
                           : "Nothing hidden"}
-                        {e.skipped ? (e.autoAnswer ? `. Skipped, answered ${label(e.autoAnswer)}` : ". Question skipped") : ""}
+                        {e.skipped ? ". Question skipped" : ""}
                       </Text>
                     </BlockStack>
                   ))}

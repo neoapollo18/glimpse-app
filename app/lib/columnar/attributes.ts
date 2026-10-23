@@ -35,6 +35,9 @@ export interface DerivedProduct {
   length: string | null;
   shape: string | null;
   colors: string[];
+  /** The set's Color_ tag words ("nude", "pink", "gold"), tag order, for
+   * the why-line that describes it. */
+  colorNames: string[];
   finish: string | null;
   /** Finer shopper-facing finish word for the card meta ("Cat eye", "Pearl"). */
   finishLabel: string | null;
@@ -179,10 +182,10 @@ export function deriveProduct(
   if (length === null || length === "conflict") missing.push("length");
   if (shape === null || shape === "conflict") missing.push("shape");
 
-  const colors = [
-    ...new Set(tagValues(tags, "Color_").map((v) => COLOR_TAG_FAMILY[v.toLowerCase()]).filter(Boolean)),
-  ];
+  const colorTags = tagValues(tags, "Color_").map((v) => v.toLowerCase());
+  const colors = [...new Set(colorTags.map((v) => COLOR_TAG_FAMILY[v]).filter(Boolean))];
   if (colors.length === 0) missing.push("color");
+  const colorNames = [...new Set(colorTags.filter((v) => COLOR_TAG_FAMILY[v]).map((v) => (v === "grey" ? "gray" : v)))];
 
   const isChrome = flag(tags, "Is Chrome");
   const isVelvet = flag(tags, "Is Velvet");
@@ -263,6 +266,7 @@ export function deriveProduct(
     length: length === "conflict" ? null : length,
     shape: shape === "conflict" ? null : shape,
     colors,
+    colorNames,
     finish,
     finishLabel,
     isFrench,
@@ -334,7 +338,12 @@ export function splitPool(products: DerivedProduct[]): PoolSplit {
 // store-wide "Summer Shop 2026" collection (184 of 424 sets), which would
 // boost half the pool. Bright colors carry the rest.
 const VACAY_COLLECTIONS = ["euro summer", "siren", "juicy", "vivids"];
-const ALT_COLLECTIONS = ["dark", "fright", "spells"];
+// Alternative & Edgy by collection: the Halloween drops (Fright Night,
+// Spells & Sparkles). The brief's third keyword, "dark", only ever matched
+// a colorway collection named for its shade ("Glossy Dark Maroon", the
+// berry solids such as Berry Baby), which is a color, not a theme; dark
+// sets get the vibe from their Color_Black / Color_Gray tags instead.
+const ALT_COLLECTIONS = ["fright", "spells"];
 
 const anyColor = (p: DerivedProduct, ids: string[]) => p.colors.some((c) => ids.includes(c));
 const inCollection = (p: DerivedProduct, keys: string[]) =>

@@ -2344,6 +2344,16 @@
   font-weight: 600;
 }
 #gleame-quiz-root.gq-boutique .gq-option-any.is-selected { background: var(--gq-tint); }
+/* Logic v6.1 (pool shops): why a step never came ("Super short has one
+   shape..."), under the next step's question. */
+#gleame-quiz-root .gq-step-note {
+  margin: -4px 0 var(--gq-space-3);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--gq-ink-soft);
+  text-align: left;
+}
+#gleame-quiz-root .gq-ci-ask-head .gq-ci-pips { flex: none; align-self: center; }
 /* Glamnetic v3 (pool-engine shops only, .gq-pool): every other boutique
    quiz keeps today's layout. Four photo choices (style) read as squares. */
 #gleame-quiz-root.gq-boutique.gq-pool .gq-option-grid.gq-n-4 .gq-option-img { aspect-ratio: 1 / 1; }
@@ -2815,6 +2825,35 @@
   z-index: 2;
   background: var(--gq-ink);
   color: #ffffff;
+}
+/* Logic v6.1: a closest pick says what differs, quieter than the badge. */
+#gleame-quiz-root .gq-gr-pill--tier {
+  max-width: calc(100% - 24px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: #ffffff;
+  color: var(--gq-ink);
+  border: 1px solid var(--gq-line);
+}
+/* "Next best picks": a full-width row between the perfect matches and
+   the closest picks. */
+#gleame-quiz-root .gq-gr-divider {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 4px 0 -4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gq-ink-soft);
+}
+#gleame-quiz-root .gq-gr-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--gq-line);
 }
 #gleame-quiz-root .gq-gr-see {
   appearance: none;

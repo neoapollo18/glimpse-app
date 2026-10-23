@@ -1,14 +1,18 @@
 // Columnar matching pipeline (Glamnetic recommendation logic v3, brief
-// sections 4-6, fix spec v4). Pure functions of (answers, pool): Step A
-// hard filters, the vibe / drama tiers, Step C soft scoring, Step E "also
-// matched", the branching blocks and the resultKey permalink encoding. The
-// server module (engine.server.ts) adds I/O: the pool load, stock, the
-// Step D ranker and caching.
+// sections 4-6, fix spec v4, logic v6.1). Pure functions of (answers,
+// pool): the length / shape filter, the result tiers, Step C soft
+// scoring, the six picks, the branching blocks and the resultKey permalink
+// encoding. The server module (engine.server.ts) adds I/O: the pool load,
+// stock, the Step D ranker and caching.
 //
-// Length, shape, finish and color are never relaxed (v4 made color hard).
-// Vibe and drama rank the sets that pass, in tiers; the ranker only
-// reorders inside a tier. Branching hides any option that can't leave at
-// least spec.fullMatchMin sets matching every answer.
+// v6.1 (Aaron, 2026-10-22): length and shape are never broken. Every
+// result passes them; the six are filled tier by tier: perfect matches
+// (every answer), then all filters with drama, all filters with vibe,
+// filters only, a different color, a different finish (TIER_IDS). The
+// ranker only reorders inside a tier. Branching never counts vibe or
+// drama: an option shows when the hard answers so far leave it any set
+// (length and shape: spec.threshold sets, so six can always be filled),
+// topped up to three choices where the data has them.
 
 import type { DerivedProduct } from "./attributes";
 import { claimableVibes, vibeMatches } from "./attributes";
@@ -167,18 +171,29 @@ export function activeVibe(answers: ColumnarAnswers, spec: Pick<ColumnarSpec, "v
 export const shapeless = (p: Pick<DerivedProduct, "length" | "shape">): boolean =>
   p.shape === "super_short" && p.length === "super_short";
 
-/** Step A: length, shape, finish and color (at least one picked family).
- * Never relaxed. */
-export function passesHardFilters(p: DerivedProduct, answers: ColumnarAnswers): boolean {
+/** Length and shape: never broken (v6.1). Every result passes these. */
+export function passesKeepFilters(p: DerivedProduct, answers: ColumnarAnswers): boolean {
   const lengths = specific(answers.length);
   if (lengths && !(p.length && lengths.includes(p.length))) return false;
   const shapes = specific(answers.shape);
   if (shapes && !shapeless(p) && !(p.shape && shapes.includes(p.shape))) return false;
-  const finishes = specific(answers.finish);
-  if (finishes && !(p.finish && finishes.includes(p.finish))) return false;
-  const colors = specific(answers.color);
-  if (colors && !p.colors.some((c) => colors.includes(c))) return false;
   return true;
+}
+
+/** The picked colors (at least one family) and finish: what the "Different
+ * color" and "Different finish" tiers relax. */
+export function colorFits(p: DerivedProduct, answers: ColumnarAnswers): boolean {
+  const colors = specific(answers.color);
+  return !colors || p.colors.some((c) => colors.includes(c));
+}
+export function finishFits(p: DerivedProduct, answers: ColumnarAnswers): boolean {
+  const finishes = specific(answers.finish);
+  return !finishes || Boolean(p.finish && finishes.includes(p.finish));
+}
+
+/** All four hard filters: length, shape, finish and color. */
+export function passesHardFilters(p: DerivedProduct, answers: ColumnarAnswers): boolean {
+  return passesKeepFilters(p, answers) && finishFits(p, answers) && colorFits(p, answers);
 }
 
 /** Vibes that gate instead of rank: Lisa's "French tips & ombres only". */
@@ -201,12 +216,12 @@ export function softMatch(
 export type Tier = 1 | 2 | 3 | 4;
 
 /**
- * Tier inside the hard-filtered set: 1 = vibe and drama both fit, 2 = drama
- * only, 3 = vibe only, 4 = neither. Drama outranks vibe: it is the look the
- * shopper asked for in so many words (solid vs full nail art), it shows on
- * the card, and it comes straight from tags, where a vibe is a softer read.
- * A gate vibe swaps the two, since Lisa made French Girl Chic "French tips
- * and ombres only".
+ * Vibe / drama closeness: 1 = both fit, 2 = drama only, 3 = vibe only,
+ * 4 = neither. Drama outranks vibe: it is the look the shopper asked for
+ * in so many words (solid vs full nail art), it shows on the card, and it
+ * comes straight from tags, where a vibe is a softer read. A gate vibe
+ * swaps the two, since Lisa made French Girl Chic "French tips and ombres
+ * only".
  */
 export function tierOf(p: DerivedProduct, answers: ColumnarAnswers, vibe: string | null): Tier {
   const m = softMatch(p, answers, vibe);
@@ -215,6 +230,49 @@ export function tierOf(p: DerivedProduct, answers: ColumnarAnswers, vibe: string
   if (gate ? m.vibe : m.drama) return 2;
   if (gate ? m.drama : m.vibe) return 3;
   return 4;
+}
+
+/**
+ * v6.1 result tiers, named for what the set steps outside of. Every one
+ * keeps length and shape.
+ *   perfect       every answer
+ *   vibe          all four filters and drama; another vibe
+ *   drama         all four filters and vibe; another drama level
+ *   vibe_drama    all four filters only
+ *   color         length, shape and finish; none of the picked colors
+ *   finish        length, shape and color; another finish
+ *   color_finish  length and shape only
+ * Order: as listed (Aaron's item 9), except that a gate vibe (French Girl
+ * Chic) puts "drama" before "vibe", as tierOf does.
+ */
+export const TIER_IDS = ["perfect", "vibe", "drama", "vibe_drama", "color", "finish", "color_finish"] as const;
+export type TierId = (typeof TIER_IDS)[number];
+
+export function tierIdOf(p: DerivedProduct, answers: ColumnarAnswers, vibe: string | null): TierId {
+  const color = colorFits(p, answers);
+  const finish = finishFits(p, answers);
+  if (!color) return finish ? "color" : "color_finish";
+  if (!finish) return "finish";
+  const m = softMatch(p, answers, vibe);
+  if (m.vibe && m.drama) return "perfect";
+  if (!m.vibe && !m.drama) return "vibe_drama";
+  return m.vibe ? "drama" : "vibe";
+}
+
+/** 1 (perfect) to 7 (length and shape only). */
+export function tierRank(id: TierId, vibe: string | null): number {
+  const gate = vibe !== null && GATE_VIBES.includes(vibe);
+  if (gate && id === "vibe") return 3;
+  if (gate && id === "drama") return 2;
+  return TIER_IDS.indexOf(id) + 1;
+}
+
+/** Sort key: the tier, then (in the color / finish tiers, which mix every
+ * vibe and drama fit) the vibe / drama closeness. The ranker never moves a
+ * set across keys. */
+export function tierKeyOf(p: DerivedProduct, answers: ColumnarAnswers, vibe: string | null): number {
+  const rank = tierRank(tierIdOf(p, answers, vibe), vibe);
+  return rank * 10 + (rank >= 5 ? tierOf(p, answers, vibe) : 0);
 }
 
 /** Share of the product's values the shopper picked (a nude-only set beats
@@ -294,32 +352,57 @@ export function stepCOrder(
 }
 
 export interface LadderResult {
-  /** 1 = every shown set matches every answer; 2 = some step outside the
-   * drama picks; 4 = some step outside the vibe (and maybe drama); 5 =
-   * fewer than resultCount sets pass the hard filters. 3 (color relaxed)
-   * is retired: color is a hard filter since fix spec v4. */
-  rung: Rung;
-  /** Sets matching every answer (hard filters, vibe and drama). */
+  /** Sets matching every answer (all four filters, vibe and drama). */
   exactCount: number;
-  /** Sets passing the hard filters (length, shape, finish, color). */
+  /** Sets passing all four hard filters (length, shape, finish, color). */
   hardCount: number;
-  /** The hard-filtered set in tier, then Step C order. The ranker's
-   * candidates and the Also matched row both come from here. */
+  /** Sets passing length and shape: everything the six can come from. */
+  keepCount: number;
+  /** The length / shape set in tier, then Step C order. The ranker's
+   * candidates and the six both come from here. */
   ordered: DerivedProduct[];
+  /** Tier sort key of every set in `ordered` (tierKeyOf), by id. */
+  tiers: Map<string, number>;
   /** Tier of every set in `ordered`, by id. */
-  tiers: Map<string, Tier>;
-  /** What the shown sets step outside of (for the header). */
-  outside: { vibe: boolean; drama: boolean };
-  /** Which answer one tap loosens when nothing matches. */
+  tierIds: Map<string, TierId>;
+  /** Collections too broad to count toward the per-collection cap. */
+  storewide: Set<string>;
+  /** Which answer one tap loosens when nothing passes length and shape. */
   loosen: "finish" | "shape" | "color" | null;
 }
 
+/** Results from one collection (v6.1 item 14). */
+export const COLLECTION_CAP = COLUMNAR_DEFAULTS.collectionCap;
+/** Super Short sets a Super Short + another length shopper always sees
+ * (item 13), when the pool has them. */
+export const SUPER_SHORT_MIN = COLUMNAR_DEFAULTS.superShortMin;
+
 /**
- * Fix spec v4 (replaces the brief's section 5 ladder): every set shown
- * passes the hard filters; vibe and drama order them in tiers (tierOf),
- * Step C's score orders each tier. The French Girl Chic gate holds while
- * at least resultCount French or ombre sets pass, as rung 4 used to; below
- * that, the other sets fill in after them.
+ * Collections that don't count toward the cap: the ones holding more than
+ * storewideCollectionShare of the pool. Glamnetic tags every set with
+ * shop-wide groupings ("Summer Shop 2026", 180 of 416 sets; the "Glam
+ * Icons" core line, 102) next to its real drop or colorway ("Love Notes",
+ * "Velvet Pink"). Capping a 40%-of-the-store grouping at two would only
+ * push perfect matches out; the drops and colorways are what repeats.
+ */
+export function storewideCollections(pool: DerivedProduct[]): Set<string> {
+  const counts = new Map<string, number>();
+  for (const p of pool) for (const c of p.collections) counts.set(c, (counts.get(c) ?? 0) + 1);
+  const limit = pool.length * COLUMNAR_DEFAULTS.storewideCollectionShare;
+  const out = new Set<string>();
+  for (const [c, n] of counts) if (n > limit) out.add(c);
+  return out;
+}
+
+/** The collections a set counts toward for the cap. */
+export const cappedCollections = (p: DerivedProduct, storewide: Set<string>): string[] =>
+  p.collections.filter((c) => !storewide.has(c));
+
+/**
+ * v6.1: every set passing length and shape, in tier order (tierKeyOf),
+ * Step C's score inside each tier. The French Girl Chic gate becomes the
+ * tier swap: French or ombre sets passing all four filters come before the
+ * others that do.
  */
 export function runLadder(
   pool: DerivedProduct[],
@@ -327,140 +410,211 @@ export function runLadder(
   spec: Pick<ColumnarSpec, "weights" | "vibes" | "resultCount">,
 ): LadderResult {
   const vibe = activeVibe(answers, spec);
-  const hard = pool.filter((p) => passesHardFilters(p, answers));
-  const need = spec.resultCount;
-  const gated = vibe && GATE_VIBES.includes(vibe) ? hard.filter((p) => vibeMatches(p, vibe)) : hard;
-  const set = gated.length >= need ? gated : hard;
-  const tiers = new Map<string, Tier>(set.map((p) => [p.id, tierOf(p, answers, vibe)]));
-  const ordered = stepCOrder(set, answers, vibe, spec.weights, (p) => tiers.get(p.id)!).map((s) => s.product);
-
-  // The ranker can only reorder inside a tier, so the top of this order
-  // already says what the grid steps outside of.
-  const top = ordered.slice(0, need);
-  const outside = { vibe: false, drama: false };
-  for (const p of top) {
-    const m = softMatch(p, answers, vibe);
-    if (!m.vibe) outside.vibe = true;
-    if (!m.drama) outside.drama = true;
-  }
-  const rung: Rung = top.length < need ? 5 : outside.vibe ? 4 : outside.drama ? 2 : 1;
+  const keep = pool.filter((p) => passesKeepFilters(p, answers));
+  const tierIds = new Map<string, TierId>(keep.map((p) => [p.id, tierIdOf(p, answers, vibe)]));
+  const tiers = new Map<string, number>(keep.map((p) => [p.id, tierKeyOf(p, answers, vibe)]));
+  const ordered = stepCOrder(keep, answers, vibe, spec.weights, (p) => tiers.get(p.id)!).map((s) => s.product);
 
   let loosen: LadderResult["loosen"] = null;
-  if (ordered.length === 0) {
-    const without = (role: "finish" | "shape" | "color") => {
-      const a = { ...answers };
-      delete a[role];
-      return pool.some((p) => passesHardFilters(p, a));
-    };
-    const candidates = (["finish", "shape", "color"] as const).filter((r) => specific(answers[r]));
-    loosen = candidates.find((r) => without(r)) ?? candidates[0] ?? null;
+  if (ordered.length === 0 && specific(answers.shape)) {
+    const a = { ...answers };
+    delete a.shape;
+    if (pool.some((p) => passesKeepFilters(p, a))) loosen = "shape";
   }
 
   let exactCount = 0;
-  for (const t of tiers.values()) if (t === 1) exactCount++;
-  return { rung, exactCount, hardCount: hard.length, ordered, tiers, outside, loosen };
+  for (const t of tierIds.values()) if (t === "perfect") exactCount++;
+  return {
+    exactCount,
+    hardCount: keep.filter((p) => passesHardFilters(p, answers)).length,
+    keepCount: keep.length,
+    ordered,
+    tiers,
+    tierIds,
+    storewide: storewideCollections(pool),
+    loosen,
+  };
 }
 
-const tierIn = (ladder: Pick<LadderResult, "tiers">, p: DerivedProduct): Tier => ladder.tiers.get(p.id) ?? 4;
+const keyIn = (ladder: Pick<LadderResult, "tiers">, p: DerivedProduct): number => ladder.tiers.get(p.id) ?? 99;
 
 /**
- * The Step D candidate set: every set of a tier the grid can reach (up to
- * the tier of the last grid slot), capped at candidateCount. The ranker
+ * The six, from a tier-ordered list: first come first served, except
+ *   - no more than COLLECTION_CAP from one (counted) collection, unless the
+ *     list can't fill the grid otherwise;
+ *   - a Super Short + another length shopper gets SUPER_SHORT_MIN Super
+ *     Short sets when the list has them: the best ones replace the lowest
+ *     picks.
+ * Returned in list order, so the grid never shows a farther tier above a
+ * closer one.
+ */
+export function pickResults(
+  order: DerivedProduct[],
+  answers: ColumnarAnswers,
+  n: number,
+  storewide: Set<string>,
+): DerivedProduct[] {
+  const pos = new Map(order.map((p, i) => [p.id, i]));
+  const per = new Map<string, number>();
+  const counted = (p: DerivedProduct) => cappedCollections(p, storewide);
+  const fits = (p: DerivedProduct) => counted(p).every((c) => (per.get(c) ?? 0) < COLLECTION_CAP);
+  const add = (p: DerivedProduct, picks: DerivedProduct[]) => {
+    picks.push(p);
+    for (const c of counted(p)) per.set(c, (per.get(c) ?? 0) + 1);
+  };
+  const drop = (i: number, picks: DerivedProduct[]) => {
+    const [p] = picks.splice(i, 1);
+    for (const c of counted(p)) per.set(c, (per.get(c) ?? 0) - 1);
+  };
+  const picks: DerivedProduct[] = [];
+  const capped: DerivedProduct[] = [];
+  for (const p of order) {
+    if (picks.length >= n) break;
+    if (fits(p)) add(p, picks);
+    else capped.push(p);
+  }
+  // Six beats the cap: only when the list ran out.
+  for (const p of capped) {
+    if (picks.length >= n) break;
+    add(p, picks);
+  }
+  picks.sort((a, b) => pos.get(a.id)! - pos.get(b.id)!);
+
+  const lengths = specific(answers.length);
+  if (lengths && lengths.length > 1 && lengths.includes("super_short")) {
+    const isSS = (p: DerivedProduct) => p.length === "super_short";
+    const want = Math.min(SUPER_SHORT_MIN, order.filter(isSS).length);
+    const queue = order.filter((p) => isSS(p) && !picks.includes(p));
+    for (let have = picks.filter(isSS).length; have < want && queue.length; have++) {
+      if (picks.length >= n) {
+        let k = picks.length - 1;
+        while (k >= 0 && isSS(picks[k])) k--;
+        if (k < 0) break;
+        drop(k, picks);
+      }
+      const ok = queue.findIndex(fits);
+      add(queue.splice(ok >= 0 ? ok : 0, 1)[0], picks);
+      picks.sort((a, b) => pos.get(a.id)! - pos.get(b.id)!);
+    }
+  }
+  return picks;
+}
+
+/**
+ * The Step D candidate set: every set of a tier the grid reaches (up to the
+ * tier of the last Step C pick), capped at candidateCount. The ranker
  * never sees a set it could only place above a closer one.
  */
 export function rankerCandidates(
-  ladder: Pick<LadderResult, "ordered" | "tiers">,
+  ladder: Pick<LadderResult, "ordered" | "tiers" | "storewide">,
   spec: Pick<ColumnarSpec, "candidateCount" | "resultCount">,
+  answers: ColumnarAnswers = {},
 ): DerivedProduct[] {
   const n = Math.min(spec.resultCount, ladder.ordered.length);
   if (n === 0) return [];
-  const boundary = tierIn(ladder, ladder.ordered[n - 1]);
-  return ladder.ordered.filter((p) => tierIn(ladder, p) <= boundary).slice(0, Math.max(spec.candidateCount, n));
+  const picks = pickResults(ladder.ordered, answers, n, ladder.storewide);
+  const boundary = Math.max(...picks.map((p) => keyIn(ladder, p)));
+  return ladder.ordered.filter((p) => keyIn(ladder, p) <= boundary).slice(0, Math.max(spec.candidateCount, n));
 }
 
 /**
- * Step D's picks (or the Step C fallback) plus Step E. A valid ranking is
- * exactly n distinct candidates; it then decides the order inside each
- * tier and which sets of the last tier fill the grid, but never the tiers:
- * a closer set it left out is put back ahead of the farther ones.
+ * Step D's picks (or the Step C fallback). A valid ranking is exactly n
+ * distinct candidates; it then orders the sets inside each tier (its picks
+ * first, in its order), never across tiers, and pickResults applies the
+ * collection cap and the Super Short rule to that order like any other.
  */
 export function selectResults(
-  ladder: Pick<LadderResult, "ordered" | "tiers">,
+  ladder: Pick<LadderResult, "ordered" | "tiers" | "storewide">,
   spec: Pick<ColumnarSpec, "resultCount" | "alsoMatchedCount" | "candidateCount">,
   rankedIds?: string[] | null,
+  answers: ColumnarAnswers = {},
 ): { results: DerivedProduct[]; alsoMatched: DerivedProduct[]; usedRanker: boolean } {
-  const candidates = rankerCandidates(ladder, spec);
   const n = Math.min(spec.resultCount, ladder.ordered.length);
-  const byId = new Map(candidates.map((p) => [p.id, p]));
-  let results = ladder.ordered.slice(0, n);
+  let order = ladder.ordered;
   let usedRanker = false;
-  if (n > 0 && rankedIds && rankedIds.length === n && rankedIds.every((id) => byId.has(id)) && new Set(rankedIds).size === n) {
-    const picked = rankedIds.map((id) => byId.get(id)!);
-    const boundary = tierIn(ladder, ladder.ordered[n - 1]);
-    const out: DerivedProduct[] = [];
-    for (let t = 1; t <= boundary; t++) {
-      const mine = picked.filter((p) => tierIn(ladder, p) === t);
-      if (t < boundary) {
-        out.push(...mine, ...candidates.filter((p) => tierIn(ladder, p) === t && !mine.includes(p)));
-      } else {
-        out.push(...mine.slice(0, n - out.length));
-      }
-    }
-    // n distinct candidates always refill the grid; anything else is Step C.
-    if (out.length === n) {
-      results = out;
+  if (n > 0 && rankedIds && rankedIds.length === n && new Set(rankedIds).size === n) {
+    const candidates = new Set(rankerCandidates(ladder, spec, answers).map((p) => p.id));
+    if (rankedIds.every((id) => candidates.has(id))) {
+      const pref = new Map(rankedIds.map((id, i) => [id, i]));
+      const base = new Map(ladder.ordered.map((p, i) => [p.id, i]));
+      const rankOf = (p: DerivedProduct) => pref.get(p.id) ?? n;
+      order = [...ladder.ordered].sort(
+        (a, b) => keyIn(ladder, a) - keyIn(ladder, b) || rankOf(a) - rankOf(b) || base.get(a.id)! - base.get(b.id)!,
+      );
       usedRanker = true;
     }
   }
+  const results = pickResults(order, answers, n, ladder.storewide);
   const shown = new Set(results.map((p) => p.id));
-  const alsoMatched = ladder.ordered.filter((p) => !shown.has(p.id)).slice(0, spec.alsoMatchedCount);
+  const alsoMatched = order.filter((p) => !shown.has(p.id)).slice(0, spec.alsoMatchedCount);
   return { results, alsoMatched, usedRanker };
 }
 
-// ---- Copy (brief section 5 "Copy rules on the results page") ----
+// ---- Copy (brief section 5 "Copy rules on the results page", v6.1) ----
 
 export type AnswerLabels = Record<string, string>;
-const label = (labels: AnswerLabels, id: string) => labels[id] ?? DEFAULT_ANSWER_LABELS[id] ?? id;
 const lower = (s: string) => s.toLowerCase();
 
-/** "short or medium almond or oval" for the header. */
-function pathPhrase(answers: ColumnarAnswers, labels: AnswerLabels): string {
-  const lengths = specific(answers.length)?.map((id) => lower(label(labels, id))) ?? [];
-  const shapes = (specific(answers.shape) ?? [])
-    .filter((id) => id !== "super_short")
-    .map((id) => lower(label(labels, id)));
-  return [lengths.join(" or "), shapes.join(" or ")].filter(Boolean).join(" ");
-}
-
 export interface HeaderCopy {
+  /** What a widget deployed before v6.1 reads: "normal" shows the
+   * merchant's own headline, any other kind shows `text`. */
   kind: "normal" | "relaxed" | "fewer" | "none";
   text: string | null;
+  /** v6.1: "all" = every shown set is a perfect match, "some" = perfect
+   * matches first, then next-best picks, "closest" = none is. The widget
+   * words it from Text & labels; absent when nothing shows. */
+  match?: "all" | "some" | "closest";
+  /** Perfect matches shown. */
+  perfect?: number;
 }
 
-export function headerFor(
-  ladder: Pick<LadderResult, "rung" | "outside">,
-  answers: ColumnarAnswers,
-  labels: AnswerLabels,
-  shown: number,
-): HeaderCopy {
-  if (shown === 0) return { kind: "none", text: "We don't have that combination yet." };
-  // Only vibe and drama ever step outside the picks; never length, shape,
-  // finish or color.
-  const outside = [ladder.outside.vibe ? "vibe" : null, ladder.outside.drama ? "style" : null]
-    .filter(Boolean)
-    .join(" and ");
-  if (ladder.rung === 5 && !outside) {
+/** The results header lines (v6.1 item 12, Aaron's wording where he gave
+ * it). The widget's Text & labels entries (quiz-ui-text.ts) default to the
+ * same strings; `text` carries them for widgets deployed before v6.1. */
+export const HEADER_TEXT = {
+  allSix: "Six sets that match everything you picked",
+  /** Every shown set is perfect, but sold-out sets left fewer than six. */
+  allFew: "Every set here matches everything you picked",
+  some: "{n} perfect matches, plus our next-best picks",
+  someOne: "{n} perfect match, plus our next-best picks",
+  closest: "Nothing matches every pick yet, so here are the closest.",
+  none: "We don't have that combination yet.",
+} as const;
+
+/** Card labels per tier (v6.1 items 8-9); same defaults as the widget's
+ * Text & labels entries. "Different color" and "Different finish" are
+ * Aaron's; the other fallback labels name what differs the same way. */
+export const TIER_LABELS: Record<TierId, string> = {
+  perfect: "Perfect match",
+  vibe: "Different vibe",
+  drama: "Different drama",
+  vibe_drama: "Different vibe and drama",
+  color: "Different color",
+  finish: "Different finish",
+  color_finish: "Different color and finish",
+};
+
+export function headerFor(perfect: number, shown: number, resultCount: number): HeaderCopy {
+  if (shown === 0) return { kind: "none", text: HEADER_TEXT.none };
+  const fewer = shown < resultCount;
+  if (perfect >= shown) {
     return {
-      kind: "fewer",
-      text: `${shown} ${shown === 1 ? "set matches" : "sets match"} exactly. Change an answer above to see more.`,
+      kind: fewer ? "fewer" : "normal",
+      text: shown === 6 ? HEADER_TEXT.allSix : HEADER_TEXT.allFew,
+      match: "all",
+      perfect: shown,
     };
   }
-  if (!outside) return { kind: "normal", text: null };
-  const path = pathPhrase(answers, labels);
-  return {
-    kind: ladder.rung === 5 ? "fewer" : "relaxed",
-    text: `Here's what we have${path ? ` in ${path}` : ""}. A few step outside your ${outside} picks.`,
-  };
+  const kind = fewer ? "fewer" : "relaxed";
+  if (perfect > 0) {
+    return {
+      kind,
+      text: (perfect === 1 ? HEADER_TEXT.someOne : HEADER_TEXT.some).replace("{n}", String(perfect)),
+      match: "some",
+      perfect,
+    };
+  }
+  return { kind, text: HEADER_TEXT.closest, match: "closest", perfect: 0 };
 }
 
 /** Shopper-facing length / shape / finish for the card meta line. A super
@@ -476,53 +630,39 @@ export function metaFor(p: DerivedProduct): { length: string; shape: string; fin
 const wordCount = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
 export const MAX_REASON_WORDS = 14;
 
-/** "glossy short almond" / "velvet super short": only what the set is. */
-function fitPhrase(p: DerivedProduct): string {
-  const m = metaFor(p);
-  return [m.finish, m.length, m.shape].filter(Boolean).map(lower).join(" ");
-}
+const joinAnd = (words: string[]): string =>
+  words.length <= 1 ? words[0] ?? "" : `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`;
 
 /**
- * Templated why-line (the ranker's fallback and the "Also matched" row):
- * the set's exact finish, length and shape, plus the strongest answer it
- * echoes back in the shopper's own words. Names only attributes the set
- * has, a vibe only where Lisa approved it (or the French tip / ombre tags
- * say so), and never hedges on length, shape or finish.
+ * The why-line under a card when the ranker's is missing or fails the
+ * rules (v6.1 item 15): one plain sentence about the set itself, from its
+ * tags: finish, length, shape, colors and one standout detail, e.g. "A
+ * glossy short almond set in nude and white with French tips." It never
+ * echoes the shopper's answers back ("as asked", "you picked"), so it
+ * reads true on every tier, a "Different color" card included.
  */
-export function whyLine(
-  p: DerivedProduct,
-  answers: ColumnarAnswers,
-  labels: AnswerLabels,
-  vibe: string | null,
-): string {
-  const fit = fitPhrase(p);
-  const colorHit = specific(answers.color)?.find((c) => p.colors.includes(c));
-  const dramaHit = specific(answers.drama)?.find((d) => p.drama.includes(d));
-  const color = colorHit ? lower(label(labels, colorHit)) : null;
-  const drama = dramaHit ? lower(label(labels, dramaHit)) : null;
-  const claimVibe = vibe && claimableVibes(p).includes(vibe) ? vibe : null;
-  const lines: string[] = [];
-  if (claimVibe === "french_girl") {
-    lines.push(`${p.isFrench ? "French tips" : "Soft ombre"}, ${fit}, made for ${label(labels, claimVibe)}.`);
-  }
-  if (color && drama) lines.push(`${fit} in ${color}, ${drama} as asked.`);
-  if (color) lines.push(`${fit} in the ${color} you picked.`);
-  if (drama) lines.push(`${fit}, ${drama} like you asked.`);
-  if (claimVibe) lines.push(`${fit}, made for ${label(labels, claimVibe)}.`);
-  // Only answers the shopper actually gave: a surprise or skipped question
-  // was never "chosen", and a super short set has no shape to match.
-  const chosen = (["length", "shape", "finish"] as const).filter((role) => {
-    const have = p[role];
-    if (!have || (role === "shape" && have === "super_short")) return false;
-    return Boolean(specific(answers[role])?.includes(have));
-  });
-  if (chosen.length) {
-    const list = chosen.length === 1 ? chosen[0] : `${chosen.slice(0, -1).join(", ")} and ${chosen[chosen.length - 1]}`;
-    lines.push(`${fit}: exactly the ${list} you chose.`);
-  }
-  lines.push(`${fit}.`);
-  const first = lines.find((l) => wordCount(l) <= MAX_REASON_WORDS) ?? lines[lines.length - 1];
-  return first.charAt(0).toUpperCase() + first.slice(1);
+export function describeSet(p: DerivedProduct): string {
+  const m = metaFor(p);
+  const head = ["A", lower(m.finish), lower(m.length), lower(m.shape), "set"].filter(Boolean).join(" ");
+  const names = p.colorNames.filter((c) => c !== "multicolor");
+  const colors = p.colorNames.includes("multicolor") || names.length > 3 ? "mixed colors" : joinAnd(names);
+  const detail = p.isFrench
+    ? "French tips"
+    : p.isOmbre
+      ? "an ombre fade"
+      : p.is3d
+        ? "3D details"
+        : p.hasGlitter
+          ? "glitter"
+          : p.hasPattern
+            ? "a pattern"
+            : null;
+  const lines = [
+    colors && detail ? `${head} in ${colors} with ${detail}.` : null,
+    colors ? `${head} in ${colors}.` : null,
+    `${head}.`,
+  ].filter((l): l is string => Boolean(l));
+  return lines.find((l) => wordCount(l) <= MAX_REASON_WORDS) ?? lines[lines.length - 1];
 }
 
 // Words a ranker reason may only use when the set actually has them.
@@ -581,17 +721,22 @@ const VIBE_WORDS: Record<string, RegExp> = {
   holiday: /\bholidays?\b|\bfestive\b/i,
 };
 const BANNED_HEDGES = /\b(closest|similar|almost|nearly|close to)\b/i;
+// v6.1 item 15: a reason describes the set; it never parrots the answers
+// back ("as asked", "like you asked", "the nudes you picked").
+const ANSWER_ECHO = /\b(as|like) (you )?(asked|picked|chose|wanted|requested|said)\b|\byou (picked|chose|asked for|wanted|requested|selected)\b/i;
 
 /**
- * Hard constraints on a ranker reason: short, no hedging, and every length,
- * shape, finish, color, drama, vibe or design word it uses must be true of
- * this set (a vibe only where claimableVibes allows it). Anything else is
- * swapped for the templated line.
+ * Hard constraints on a ranker reason: one short sentence, no hedging, no
+ * echo of the answers, and every length, shape, finish, color, drama, vibe
+ * or design word it uses must be true of this set (a vibe only where
+ * claimableVibes allows it). Anything else is swapped for describeSet.
  */
 export function reasonIsValid(reason: unknown, p: DerivedProduct): reason is string {
   if (typeof reason !== "string") return false;
   const full = reason.trim();
-  if (!full || wordCount(full) > MAX_REASON_WORDS || BANNED_HEDGES.test(full)) return false;
+  if (!full || wordCount(full) > MAX_REASON_WORDS || BANNED_HEDGES.test(full) || ANSWER_ECHO.test(full)) return false;
+  // One sentence: nothing after a full stop.
+  if (/[.!?]\s+\S/.test(full)) return false;
   // The set's own name ("Scarlet Pearl") is a name, not an attribute claim.
   const name = p.title.trim();
   const text = name ? full.replace(new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), " ") : full;
@@ -627,7 +772,8 @@ export interface BranchingBlock {
   threshold: number;
   questions: Record<string, { column: BranchColumn; values: Record<string, string> }>;
   pool: { columns: ["length", "shape", "finish"]; rows: Array<[string, string, string]> };
-  /** Fix spec v4: full-match branching (see FullBranching). */
+  /** Fix spec v4 full-match branching, plus the v6.1 rules in full.hard
+   * (see FullBranching). */
   full?: FullBranching;
 }
 
@@ -709,6 +855,10 @@ export interface FullBranchQuestion {
  *              ROLE_VOCAB[column] (bit i = vocab[i]); multi-valued columns
  *              (color, vibe, drama) set several bits. Vibe = approved labels
  *              where present, else the tag rules.
+ *   hard       logic v6.1 (HardBranchRules, hardVisibleBits). A widget
+ *              deployed before v6.1 ignores it and keeps min / threshold /
+ *              thresholdColumns (the v4 rules); a v6.1 widget uses only
+ *              this, with the same rows, columns and questions.
  */
 export interface FullBranching {
   min: number;
@@ -718,6 +868,30 @@ export interface FullBranching {
   columns: FullColumn[];
   questions: FullBranchQuestion[];
   rows: number[][];
+  hard?: HardBranchRules;
+}
+
+/**
+ * Logic v6.1 option visibility. Vibe and drama answers never narrow it.
+ *   filterColumns  earlier answers that narrow the count: the hard ones
+ *                  (length, shape, color, finish)
+ *   keepColumns    never broken in results (length, shape): an option of
+ *                  these needs `threshold` sets on the path of earlier
+ *                  answers to them, so six can always be filled
+ *   threshold      spec.threshold (6)
+ *   minOptions     any other step shows each option with at least one set
+ *                  on the filter path, then tops up to this many (3) with
+ *                  the options that have the most sets on the keep path;
+ *                  an option with no set on the keep path never shows
+ * A step is skipped only with nothing to show (Shape after Super Short
+ * alone: a super short set has no shape), and nothing is ever recorded
+ * for the shopper.
+ */
+export interface HardBranchRules {
+  filterColumns: FullColumn[];
+  keepColumns: FullColumn[];
+  threshold: number;
+  minOptions: number;
 }
 
 const bitOf = (role: ColumnarRole, id: string): number => ROLE_VOCAB[role].indexOf(id);
@@ -777,6 +951,12 @@ export function buildFullBranching(
     columns: [...FULL_COLUMNS],
     questions,
     rows: eligible.filter((p) => p.length && p.shape && p.finish).map(fullRow),
+    hard: {
+      filterColumns: ["length", "shape", "color", "finish"],
+      keepColumns: ["length", "shape"],
+      threshold: spec.threshold,
+      minOptions: COLUMNAR_DEFAULTS.minOptions,
+    },
   };
 }
 
@@ -784,10 +964,11 @@ const uniqueBits = (values: Record<string, number>): number[] =>
   [...new Set(Object.values(values))].sort((a, b) => a - b);
 
 /**
- * Bits of question qi's options to show, given the answers before it:
- * answers[j] is the bit mask of question j's picks (0 = open: surprise,
- * skipped or unanswered). Fewer than two left skips the question (one is
- * recorded for the shopper), as for legacy branching.
+ * Fix spec v4 (what widgets deployed before v6.1 run): bits of question
+ * qi's options to show, given the answers before it: answers[j] is the bit
+ * mask of question j's picks (0 = open: surprise, skipped or unanswered).
+ * Such a widget skips a question with fewer than two left and records a
+ * lone one for the shopper.
  */
 export function fullVisibleBits(b: FullBranching, qi: number, answers: ReadonlyArray<number | null | undefined>): number[] {
   const q = b.questions[qi];
@@ -831,8 +1012,56 @@ export function fullVisibleBits(b: FullBranching, qi: number, answers: ReadonlyA
   return out;
 }
 
-/** An answer as fullVisibleBits takes it: its picks' bits for the
- * question's column, 0 for surprise / skipped. */
+/**
+ * Logic v6.1: bits of question qi's options to show, given the answers
+ * before it (as for fullVisibleBits). The widget runs the same algorithm
+ * (hardVisibleBits in gleame-quiz.js; widget-columnar.test.ts lifts it out
+ * and compares the two on the real pool). [] without b.hard.
+ */
+export function hardVisibleBits(b: FullBranching, qi: number, answers: ReadonlyArray<number | null | undefined>): number[] {
+  const h = b.hard;
+  const q = b.questions[qi];
+  if (!h || !q) return [];
+  const col = (name: FullColumn) => b.columns.indexOf(name);
+  const empty = b.anyIfEmpty.map(col);
+  const passes = (row: number[], c: number, mask: number) =>
+    !mask || (row[c] & mask) !== 0 || (row[c] === 0 && empty.includes(c));
+  const filterConds: Array<[number, number]> = [];
+  const keepConds: Array<[number, number]> = [];
+  for (let j = 0; j < qi && j < b.questions.length; j++) {
+    const m = answers[j] || 0;
+    const c = col(b.questions[j].column);
+    if (!m || c < 0) continue;
+    if (h.filterColumns.includes(b.questions[j].column)) filterConds.push([c, m]);
+    if (h.keepColumns.includes(b.questions[j].column)) keepConds.push([c, m]);
+  }
+  const ci = col(q.column);
+  if (ci < 0) return [];
+  const filtered = b.rows.filter((r) => filterConds.every(([c, m]) => passes(r, c, m)));
+  const kept = b.rows.filter((r) => keepConds.every(([c, m]) => passes(r, c, m)));
+  const count = (rows: number[][], bit: number) => {
+    let n = 0;
+    for (const r of rows) if ((r[ci] & (1 << bit)) !== 0) n++;
+    return n;
+  };
+  const isKeep = h.keepColumns.includes(q.column);
+  const bits = uniqueBits(q.values);
+  const out = bits.filter((bit) => (isKeep ? count(kept, bit) >= h.threshold : count(filtered, bit) >= 1));
+  if (!isKeep && out.length < h.minOptions) {
+    const extra = bits
+      .filter((bit) => !out.includes(bit))
+      .map((bit) => [bit, count(kept, bit)])
+      .filter(([, n]) => n >= 1)
+      .sort((x, y) => y[1] - x[1] || x[0] - y[0])
+      .slice(0, h.minOptions - out.length);
+    for (const [bit] of extra) out.push(bit);
+    out.sort((x, y) => x - y);
+  }
+  return out;
+}
+
+/** An answer as fullVisibleBits / hardVisibleBits take it: its picks' bits
+ * for the question's column, 0 for surprise / skipped. */
 export function fullAnswerMask(q: FullBranchQuestion, a: RoleAnswer | undefined): number {
   if (!Array.isArray(a)) return 0;
   return maskOf(q.column, a);
@@ -859,7 +1088,8 @@ export function countRows(
 }
 
 /** Contract 3, server side: which specific options a question shows, and
- * whether it is skipped (0 or 1 visible). */
+ * whether it is skipped (nothing visible; v6.1 never records a lone option
+ * for the shopper, it shows it). */
 export function branchVisibility(
   rows: Array<[string, string, string]>,
   threshold: number,
@@ -870,24 +1100,26 @@ export function branchVisibility(
   const counts: Record<string, number> = {};
   for (const id of optionIds) counts[id] = countRows(rows, column, id, prior);
   const visible = optionIds.filter((id) => counts[id] >= threshold);
-  return { counts, visible, skipped: visible.length <= 1 };
+  return { counts, visible, skipped: visible.length === 0 };
 }
 
 export interface HiddenLogEntry {
   /** Answer IDs chosen so far, e.g. ["short"] or ["short", "almond"]. */
   path: string[];
   question: "shape" | "finish";
-  /** 0 or 1 options left: the question is skipped... */
+  /** Nothing left: the question is skipped. */
   skipped: boolean;
-  /** ...and with exactly 1, that option is recorded as the answer. */
+  /** Always null since v6.1: a lone option is shown, never recorded. */
   autoAnswer: string | null;
   hidden: Array<{ id: string; count: number }>;
 }
 
 /**
- * What the threshold hides on each single-length path: the shape question,
- * then the finish question per visible shape (or after a skipped shape).
- * Studio shows this so Lisa can see exactly why a tile didn't appear.
+ * What v6.1 hides on each single-length path before any color is picked:
+ * shapes under the threshold, then per shown shape (or after a skipped
+ * shape) the finishes with no set at all. Color picks can narrow the
+ * finish step further. Studio shows this so Lisa can see why a tile
+ * didn't appear.
  */
 export function hiddenOptionsLog(
   spec: Pick<ColumnarSpec, "axes" | "threshold">,
@@ -906,7 +1138,7 @@ export function hiddenOptionsLog(
     path,
     question,
     skipped: v.skipped,
-    autoAnswer: v.visible.length === 1 ? v.visible[0] : null,
+    autoAnswer: null,
     hidden: ids.filter((id) => !v.visible.includes(id)).map((id) => ({ id, count: v.counts[id] })),
   });
   for (const len of lengths) {
@@ -920,14 +1152,13 @@ export function hiddenOptionsLog(
           path: [len, s],
           prior: [lengthPrior, { column: "shape", values: [s] }],
         }));
-      } else if (sv.visible.length === 1) {
-        // One visible shape is recorded as the answer.
-        shapePaths = [{ path: [len, sv.visible[0]], prior: [lengthPrior, { column: "shape", values: sv.visible }] }];
       }
     }
     if (!finishes.length) continue;
     for (const sp of shapePaths) {
-      const fv = branchVisibility(rows, T, "finish", finishes, sp.prior);
+      // A finish shows with any set on the path (color and the fallback
+      // tiers take it from there).
+      const fv = branchVisibility(rows, 1, "finish", finishes, sp.prior);
       out.push(entry(sp.path, "finish", fv, finishes));
     }
   }
@@ -959,54 +1190,75 @@ export function labelsFromFlow(
   return out;
 }
 
-// ---- Assembly: tiers + Step D picks (or fallback) + Step E + copy ----
+// ---- Assembly: tiers + Step D picks (or fallback) + copy ----
 
 export interface AssembledItem {
   product: DerivedProduct;
-  /** The one-line why: the ranker's when it passes reasonIsValid. */
+  /** The one-line why: the ranker's when it passes reasonIsValid, else
+   * describeSet. */
   reason: string;
   meta: { length: string; shape: string; finish: string };
+  /** What the set steps outside of (v6.1); "perfect" for none. */
+  tier: TierId;
 }
 
 export interface AssembledColumnar {
+  /** Analytics: 1 = every shown set is a perfect match; 2 = some step
+   * outside vibe or drama only; 3 = some show another color; 4 = some show
+   * another finish; 5 = fewer than resultCount shown. */
   rung: Rung;
+  /** Perfect matches in the pool for these answers (shown or not). */
   exactCount: number;
   header: HeaderCopy;
+  /** Widgets before v6.1: "Best match" on the first card when it is a
+   * perfect match. A v6.1 widget badges every perfect card instead. */
   bestMatchBadge: boolean;
   results: AssembledItem[];
   alsoMatched: AssembledItem[];
   loosen: "finish" | "shape" | "color" | null;
-  /** True when the ranker's picks were used (false = Step C fallback). */
+  /** True when the ranker's order was used (false = Step C fallback). */
   ranked: boolean;
 }
 
+/** The rung (analytics) of a shown result. */
+export function rungOf(tiers: TierId[], resultCount: number): Rung {
+  if (tiers.length < resultCount) return 5;
+  if (tiers.some((t) => t === "finish" || t === "color_finish")) return 4;
+  if (tiers.includes("color")) return 3;
+  return tiers.every((t) => t === "perfect") ? 1 : 2;
+}
+
 /**
- * Everything after Step D, pure: the ranker's picks when they are exactly
- * the right count from the candidate set (else the top of Step C), held to
- * the tiers; its reasons where they pass the copy rules (else the
- * templated line); and the header.
+ * Everything after Step D, pure: the six from the tiers (the ranker's
+ * order inside each tier when it is valid, else Step C's), its reasons
+ * where they pass the copy rules (else describeSet), the tier of each,
+ * and the header.
  */
 export function assembleColumnar(
   ladder: LadderResult,
   answers: ColumnarAnswers,
   spec: Pick<ColumnarSpec, "resultCount" | "alsoMatchedCount" | "candidateCount" | "vibes">,
-  labels: AnswerLabels,
+  _labels: AnswerLabels,
   ranked?: { ids: string[]; reasons: Record<string, string> } | null,
 ): AssembledColumnar {
-  const { results, alsoMatched, usedRanker } = selectResults(ladder, spec, ranked?.ids ?? null);
-  const vibe = activeVibe(answers, spec);
+  const { results, alsoMatched, usedRanker } = selectResults(ladder, spec, ranked?.ids ?? null, answers);
   const item = (p: DerivedProduct, llmReason: string | undefined): AssembledItem => ({
     product: p,
-    reason: usedRanker && reasonIsValid(llmReason, p) ? llmReason.trim() : whyLine(p, answers, labels, vibe),
+    reason: usedRanker && reasonIsValid(llmReason, p) ? llmReason.trim() : describeSet(p),
     meta: metaFor(p),
+    tier: ladder.tierIds.get(p.id) ?? "color_finish",
   });
+  const items = results.map((p) => item(p, ranked?.reasons[p.id]));
+  const perfect = items.filter((i) => i.tier === "perfect").length;
   return {
-    rung: ladder.rung,
+    rung: rungOf(
+      items.map((i) => i.tier),
+      spec.resultCount,
+    ),
     exactCount: ladder.exactCount,
-    header: headerFor(ladder, answers, labels, results.length),
-    // #1 matches every answer whenever any set does (tier 1 leads).
-    bestMatchBadge: results.length > 0 && tierIn(ladder, results[0]) === 1,
-    results: results.map((p) => item(p, ranked?.reasons[p.id])),
+    header: headerFor(perfect, items.length, spec.resultCount),
+    bestMatchBadge: items.length > 0 && items[0].tier === "perfect",
+    results: items,
     alsoMatched: alsoMatched.map((p) => item(p, undefined)),
     loosen: results.length === 0 ? ladder.loosen : null,
     ranked: usedRanker,

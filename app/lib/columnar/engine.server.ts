@@ -1,11 +1,12 @@
 // Columnar recommendation engine, server side (Glamnetic recommendation
-// logic v3). The pure pipeline (pipeline.ts) does the matching; this module
-// owns the I/O around it:
+// logic v3, v6.1 tiers). The pure pipeline (pipeline.ts) does the
+// matching; this module owns the I/O around it:
 //   - the pool: the shop's spec.pool.handles read from the synced products
 //     table, derived once and cached per shop for a few minutes
 //   - stock: sold-out sets dropped through the shared availability probe
-//   - Step D: one ranker call over the Step C candidates, 4 s budget,
-//     templated why-lines on any failure
+//   - Step D: one ranker call over the Step C candidates, 4 s budget; it
+//     only orders sets inside a tier, and describeSet stands in for any
+//     reason that fails the copy rules
 //   - a 24 h result cache keyed by shop + resultKey (the permalink)
 //   - pool sync from the Shopify collection (Studio only; the storefront
 //     path never calls Shopify for the pool)
@@ -36,12 +37,15 @@ import {
   labelsFromFlow,
   rankerCandidates,
   runLadder,
+  selectResults,
+  TIER_LABELS,
   type AnswerLabels,
   type AssembledItem,
   type BranchingBlock,
   type ColumnarAnswers,
   type HeaderCopy,
   type Rung,
+  type TierId,
 } from "./pipeline";
 import {
   DEFAULT_ANSWER_LABELS,
@@ -272,6 +276,9 @@ export type ColumnarMatch = {
   quantity: number;
   reasons: string[];
   meta: ColumnarMeta;
+  /** v6.1: what the set steps outside of ("perfect" = nothing). The widget
+   * labels the card with it; widgets before v6.1 ignore it. */
+  tier: TierId;
 };
 
 export interface ColumnarResponse {
@@ -393,12 +400,13 @@ function describeAnswers(answers: ColumnarAnswers, labels: AnswerLabels): string
  * Step D: one structured call ranks the Step C candidates and writes a
  * reason per pick. Returns null on timeout, error, or any pick outside the
  * set / short of n: the caller then serves Step C's order (brief 10.10).
- * The candidates carry their tier; selectResults holds the picks to it
- * whatever the model returns.
+ * The candidates carry their tier; selectResults only lets the picks order
+ * sets inside a tier, whatever the model returns.
  */
 async function rankWithLlm(params: {
   candidates: DerivedProduct[];
   tiers: Map<string, number>;
+  tierIds: Map<string, TierId>;
   n: number;
   answers: ColumnarAnswers;
   labels: AnswerLabels;
@@ -406,11 +414,14 @@ async function rankWithLlm(params: {
   timeoutMs: number;
   shopDomain: string;
 }): Promise<{ ids: string[]; reasons: Record<string, string> } | null> {
-  const { candidates, tiers, n, answers, labels, model, timeoutMs, shopDomain } = params;
+  const { candidates, tiers, tierIds, n, answers, labels, model, timeoutMs, shopDomain } = params;
   const label = (id: string) => labels[id] ?? DEFAULT_ANSWER_LABELS[id] ?? id;
+  // Dense tier numbers (1 = closest) over what the candidates span.
+  const keys = [...new Set(candidates.map((p) => tiers.get(p.id) ?? 99))].sort((a, b) => a - b);
   const catalog = candidates.map((p, i) => ({
     id: i,
-    tier: tiers.get(p.id) ?? 4,
+    tier: keys.indexOf(tiers.get(p.id) ?? 99) + 1,
+    differs: tierIds.get(p.id) === "perfect" ? null : TIER_LABELS[tierIds.get(p.id) ?? "color_finish"],
     title: p.title,
     length: p.length ? label(p.length) : null,
     shape: p.shape && p.shape !== "super_short" ? label(p.shape) : null,
@@ -425,14 +436,14 @@ async function rankWithLlm(params: {
   }));
   const system =
     "You rank press-on nail sets for a shopper who just finished a style quiz. " +
-    "Every candidate already has exactly the length, shape and finish the shopper chose, and at least one of their colors. " +
-    "tier says how closely it fits their vibe and drama answers: 1 fits both, higher numbers fit less. " +
+    "Every candidate already has the length and shape the shopper chose. " +
+    "tier says how closely it fits the rest of their answers: 1 is the closest, and differs names what a candidate steps outside of (vibe, drama, color or finish). " +
     `Pick exactly ${n} candidates, best first, and give each a reason.\n` +
     "Rules:\n" +
     "- Use only ids from the candidate list, each at most once.\n" +
     "- Keep tier order: never put a candidate above one with a lower tier, and pick every lower-tier candidate before any higher-tier one.\n" +
-    "- Within a tier, prefer the shopper's colors, then the best variety. Avoid near-identical colorways in the picks.\n" +
-    "- A reason is one line of at most 14 words, written to the shopper, echoing the words of their answers.\n" +
+    "- Within a tier, prefer the best variety: avoid near-identical colorways.\n" +
+    "- A reason is one natural sentence of at most 14 words describing the set itself: its finish, colors and design. Never echo the shopper's answers back (no \"as you asked\", \"you picked\", \"like you wanted\").\n" +
     "- Mention only attributes listed on that candidate: a vibe only if it is in its vibes, a drama level only if it is in its drama, a color only if it is in its color_family. Never say closest, similar or almost.";
   const schema = {
     type: "object",
@@ -533,6 +544,7 @@ function toMatch(
     quantity: 1,
     reasons: [item.reason],
     meta: item.meta,
+    tier: item.tier,
   };
 }
 
@@ -605,9 +617,11 @@ export async function computeColumnarRecommendations(params: {
   let eligible = pool.eligible;
   let ladder = runLadder(eligible, answers, spec);
   for (let round = 0; round < 3; round++) {
-    // The ranker's candidates (a prefix of the order) plus the Also
-    // matched sets that would follow them.
-    const window = ladder.ordered.slice(0, rankerCandidates(ladder, spec).length + spec.alsoMatchedCount);
+    // The ranker's candidates plus the Step C six (a Super Short pick can
+    // come from past the candidates).
+    const window = [
+      ...new Set([...rankerCandidates(ladder, spec, answers), ...selectResults(ladder, spec, null, answers).results]),
+    ];
     const probe = await probeUnavailable(verifiedDomain, pool, window, probed);
     if (!probe || probe.unavailable.size === 0) break;
     eligible = eligible.filter((p) => !probe.unavailable.has(p.id));
@@ -618,7 +632,7 @@ export async function computeColumnarRecommendations(params: {
   // shopper still gets Step C's order with templated reasons. A verified
   // store preview skips it (the route charged the preview cap), so a QA
   // run tests the ranker, not the fallback.
-  const candidates = rankerCandidates(ladder, spec);
+  const candidates = rankerCandidates(ladder, spec, answers);
   const n = Math.min(spec.resultCount, candidates.length);
   const tuning = chatConfig.recommendation_tuning;
   let ranked: { ids: string[]; reasons: Record<string, string> } | null = null;
@@ -644,6 +658,7 @@ export async function computeColumnarRecommendations(params: {
       ranked = await rankWithLlm({
         candidates,
         tiers: ladder.tiers,
+        tierIds: ladder.tierIds,
         n,
         answers,
         labels,
@@ -675,7 +690,7 @@ export async function computeColumnarRecommendations(params: {
     },
   };
   console.log(
-    `[columnar] ${verifiedDomain} ${resultKey}: rung ${out.rung}, exact ${out.exactCount}, shown ${result.matches.length}, ${out.ranked ? "ranked" : "step C order"}`,
+    `[columnar] ${verifiedDomain} ${resultKey}: rung ${out.rung}, exact ${out.exactCount}, shown ${result.matches.length} (${out.results.map((i) => i.tier).join(",")}), ${out.ranked ? "ranked" : "step C order"}`,
   );
   cacheSet(cacheKey, fingerprint, result, wantsRanker && !ranked ? FALLBACK_TTL_MS : RESULT_TTL_MS);
   return result;

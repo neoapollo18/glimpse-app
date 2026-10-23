@@ -1956,7 +1956,14 @@
       var askHead = el('div', 'gq-ci-ask-head');
       askHead.appendChild(el('h3', 'gq-intro-question-title', escapeHtml(q0.prompt)));
       if (screens.length > 1 && config.progressStyle !== 'none') {
-        askHead.appendChild(el('span', 'gq-ci-count', TH('stepCount', '{n} of {total}', { n: 1, total: stepProgress(0).total })));
+        if (poolBoutique()) {
+          // Dots only (logic v6.1): the same row every step shows.
+          var introPips = el('div', 'gq-pips gq-ci-pips');
+          for (var ip = 0; ip < screens.length; ip++) introPips.appendChild(el('span', 'gq-pip' + (ip === 0 ? ' gq-pip--current' : '')));
+          askHead.appendChild(introPips);
+        } else {
+          askHead.appendChild(el('span', 'gq-ci-count', TH('stepCount', '{n} of {total}', { n: 1, total: stepProgress(0).total })));
+        }
       }
       ask.appendChild(askHead);
       if (q0.helperText) ask.appendChild(el('p', 'gq-intro-question-helper', escapeHtml(q0.helperText)));
@@ -2108,7 +2115,7 @@
     var br = branchState(q);
     if (!br) return opts;
     // A question the pool skips shows nothing (same paths as a showIf);
-    // "open to anything" only shows beside two or more real choices.
+    // "open to anything" shows beside any real choice.
     if (br.skip) return [];
     return opts.filter(function(o) { return o.selectAll || br.ok[o.axisValue] === true; });
   }
@@ -2277,6 +2284,89 @@
   }
   // </gleame-full-branching>
 
+  // ---- Logic v6.1 branching (branching.full.hard) ----
+  //
+  // Vibe and drama never narrow an option. An option shows when the hard
+  // answers so far (length, shape, color, finish) leave it a set; length
+  // and shape options need `threshold` sets on the length / shape path,
+  // since results never break those and always show six. Any other step is
+  // topped up to `minOptions` choices with the options that have the most
+  // sets on the length / shape path; one with none there never shows. A
+  // step is skipped only with nothing to show, and nothing is ever picked
+  // for the shopper.
+  // <gleame-hard-branching> Same algorithm as hardVisibleBits in
+  // app/lib/columnar/pipeline.ts; widget-columnar.test.ts runs both on the
+  // real pool. Self-contained so the test can lift it out verbatim.
+  function hardVisibleBits(f, qi, answers) {
+    var h = f.hard;
+    var q = f.questions[qi];
+    if (!h || typeof h !== 'object' || !q) return [];
+    var filterCols = Array.isArray(h.filterColumns) ? h.filterColumns : [];
+    var keepCols = Array.isArray(h.keepColumns) ? h.keepColumns : [];
+    var threshold = Number(h.threshold) >= 1 ? Math.floor(Number(h.threshold)) : 6;
+    var minOptions = Number(h.minOptions) >= 0 ? Math.floor(Number(h.minOptions)) : 3;
+    function col(name) { return f.columns.indexOf(name); }
+    var empty = (Array.isArray(f.anyIfEmpty) ? f.anyIfEmpty : []).map(col);
+    function passes(row, c, mask) {
+      return !mask || (row[c] & mask) !== 0 || (row[c] === 0 && empty.indexOf(c) !== -1);
+    }
+    function uniqueBits(values) {
+      var bits = [];
+      for (var key in values) {
+        if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
+        if (typeof values[key] === 'number' && bits.indexOf(values[key]) === -1) bits.push(values[key]);
+      }
+      return bits.sort(function(a, b) { return a - b; });
+    }
+    function filterRows(rows, conds) {
+      return rows.filter(function(r) {
+        if (!Array.isArray(r)) return false;
+        for (var i = 0; i < conds.length; i++) if (!passes(r, conds[i][0], conds[i][1])) return false;
+        return true;
+      });
+    }
+    var filterConds = [];
+    var keepConds = [];
+    for (var j = 0; j < qi && j < f.questions.length; j++) {
+      var m = answers[j] || 0;
+      var c = col(f.questions[j].column);
+      if (!m || c < 0) continue;
+      if (filterCols.indexOf(f.questions[j].column) !== -1) filterConds.push([c, m]);
+      if (keepCols.indexOf(f.questions[j].column) !== -1) keepConds.push([c, m]);
+    }
+    var ci = col(q.column);
+    if (ci < 0) return [];
+    var filtered = filterRows(f.rows, filterConds);
+    var kept = filterRows(f.rows, keepConds);
+    function count(rows, bit) {
+      var n = 0;
+      for (var i = 0; i < rows.length; i++) if ((rows[i][ci] & (1 << bit)) !== 0) n++;
+      return n;
+    }
+    var isKeep = keepCols.indexOf(q.column) !== -1;
+    var bits = uniqueBits(q.values);
+    var out = bits.filter(function(bit) {
+      return isKeep ? count(kept, bit) >= threshold : count(filtered, bit) >= 1;
+    });
+    if (!isKeep && out.length < minOptions) {
+      var extra = bits
+        .filter(function(bit) { return out.indexOf(bit) === -1; })
+        .map(function(bit) { return [bit, count(kept, bit)]; })
+        .filter(function(e) { return e[1] >= 1; })
+        .sort(function(x, y) { return y[1] - x[1] || x[0] - y[0]; })
+        .slice(0, minOptions - out.length);
+      for (var e = 0; e < extra.length; e++) out.push(extra[e][0]);
+      out.sort(function(x, y) { return x - y; });
+    }
+    return out;
+  }
+  // </gleame-hard-branching>
+
+  function hardBranching() {
+    var f = fullBranching();
+    return f && f.hard && typeof f.hard === 'object' ? f : null;
+  }
+
   // A shopper's answer as fullVisibleBits takes it: the bits of its picks,
   // 0 for open to anything / skipped.
   function fullAnswerBits(fq, a) {
@@ -2307,7 +2397,9 @@
     }
     if (fullMemo.flow !== flow) fullMemo = { flow: flow, bits: {} };
     var sig = fi + '|' + masks.join(',');
-    if (!own(fullMemo.bits, sig)) fullMemo.bits[sig] = fullVisibleBits(f, fi, masks);
+    if (!own(fullMemo.bits, sig)) {
+      fullMemo.bits[sig] = f.hard && typeof f.hard === 'object' ? hardVisibleBits(f, fi, masks) : fullVisibleBits(f, fi, masks);
+    }
     var bits = fullMemo.bits[sig];
     var entry = f.questions[fi];
     var ok = {};
@@ -2319,12 +2411,13 @@
         shown.push(o);
       }
     });
-    return { ok: ok, skip: shown.length < 2, only: shown.length === 1 ? shown[0] : null };
+    return { ok: ok, skip: shown.length === 0, only: null };
   }
 
   // { ok: {axisValue: true}, skip, only } for a branching question, null
-  // for any other. skip = fewer than two specific options left; only =
-  // the single one left, recorded as the shopper's answer.
+  // for any other. skip = nothing left to show. Logic v6.1 (item 6): a
+  // lone option is shown for the shopper to tap, never recorded for them,
+  // so `only` is always null now (it stays in the shape for older code).
   function branchState(q) {
     var full = fullBranching();
     if (full) return fullBranchState(q, full);
@@ -2344,7 +2437,7 @@
         shown.push(o);
       }
     });
-    return { ok: ok, skip: shown.length < 2, only: shown.length === 1 ? shown[0] : null };
+    return { ok: ok, skip: shown.length === 0, only: null };
   }
 
   function clearAnswer(qi) {
@@ -2353,9 +2446,9 @@
     state.answers[qi] = undefined;
   }
 
-  // The pool decides a skipped question's answer: the one option left
-  // (marked auto), or none. A question shown again because an earlier
-  // answer changed drops its auto answer so the shopper picks.
+  // A question the pool skips has no answer, and one shown again because
+  // an earlier answer changed drops any auto answer (a session saved
+  // before v6.1 recorded lone options) so the shopper picks.
   function settleBranchAnswer(qi) {
     var q = flow.questions[qi];
     var br = branchState(q);
@@ -2375,6 +2468,29 @@
   function syncBranchAnswers() {
     if (!branching()) return;
     for (var qi = 0; qi < flow.questions.length; qi++) settleBranchAnswer(qi);
+  }
+
+  // Logic v6.1 item 2: the step right after a Shape step the pool skipped
+  // (Super Short alone has one shape) says why Shape never came. Null on
+  // any other screen.
+  function shapeSkipNote(screenIdx) {
+    var b = branching();
+    if (!b || screenIdx < 1 || !screenFullyHidden(screenIdx - 1)) return null;
+    function columnOf(qi) {
+      var e = branchEntry(flow.questions[qi]);
+      return e ? b.pool.columns[e.col] : null;
+    }
+    var skippedShape = (screens[screenIdx - 1] || []).some(function(qi) { return columnOf(qi) === 'shape'; });
+    if (!skippedShape) return null;
+    for (var qi = 0; qi < flow.questions.length; qi++) {
+      if (columnOf(qi) !== 'length') continue;
+      var ids = answerPoolIds(branchEntry(flow.questions[qi]), state.answers[qi]);
+      var keys = ids ? Object.keys(ids) : [];
+      return keys.length === 1 && keys[0] === 'super_short'
+        ? T('shapeSkipped', 'Super short has one shape, so we skipped that step.')
+        : null;
+    }
+    return null;
   }
 
   // Step counter and pips. With pool branching they count only the
@@ -2552,10 +2668,12 @@
       refreshContinue();
     }
 
+    var skipNote = shapeSkipNote(screenIdx);
     qIdxs.forEach(function(qi, part) {
       var q = flow.questions[qi];
       if (part === 0) {
         body.appendChild(el('h2', 'gq-question-title', escapeHtml(q.prompt)));
+        if (skipNote) body.appendChild(el('p', 'gq-step-note', escapeHtml(skipNote)));
       } else {
         body.appendChild(el('h3', 'gq-question-subtitle', escapeHtml(q.prompt)));
       }
@@ -3027,11 +3145,17 @@
     // nothing (quiz_progress_style, migration 049).
     var progressStyle = (config && config.progressStyle) || 'pips';
     var right = el('div', 'gq-progress-wrap');
-    // Shown steps only when the pool skips some (stepProgress).
-    var prog = stepProgress(isBonus ? screens.length - 1 : stepNumber - 1);
+    // Pool boutique (logic v6.1, item 5): dots only, one per question
+    // screen, a count that never changes mid-quiz; a step the pool skipped
+    // shows as done. Other layouts count shown steps only (stepProgress).
+    var poolDots = poolBoutique();
+    var prog = poolDots
+      ? { n: Math.min(stepNumber, screens.length), total: screens.length }
+      : stepProgress(isBonus ? screens.length - 1 : stepNumber - 1);
     var total = prog.total;
     if (!isBonus) stepNumber = prog.n;
-    if (progressStyle !== 'none') {
+    if (poolDots && progressStyle !== 'none') progressStyle = 'pips';
+    if (progressStyle !== 'none' && !(poolDots && !isBonus)) {
       var boutique = boutiqueActive();
       right.appendChild(el('span', 'gq-step-count',
         isBonus
@@ -3954,6 +4078,8 @@
   }
 
   var HEADER_KINDS = { normal: 1, relaxed: 1, fewer: 1, none: 1 };
+  // Logic v6.1: how the shown sets relate to the answers (HeaderCopy.match).
+  var HEADER_MATCHES = { all: 1, some: 1, closest: 1 };
   // What quiz-recommend accepts as a key (it ignores anything else), so
   // ?r= needs no escaping either.
   var RESULT_KEY_RE = /^[a-z0-9.]{1,64}$/;
@@ -3967,6 +4093,8 @@
       header: {
         kind: own(HEADER_KINDS, h.kind) ? h.kind : 'normal',
         text: typeof h.text === 'string' && h.text.trim() ? h.text.trim() : null,
+        match: own(HEADER_MATCHES, h.match) ? h.match : null,
+        perfect: Number(h.perfect) >= 0 ? Math.floor(Number(h.perfect)) : 0,
       },
       bestMatchBadge: c.bestMatchBadge === true,
       resultKey: typeof c.resultKey === 'string' && RESULT_KEY_RE.test(c.resultKey) ? c.resultKey : null,
@@ -4524,6 +4652,11 @@
     if (hasPhotoNow) gridPendingTryon = null;
     var grid = el('div', 'gq-gr-grid');
     matches.forEach(function(m, i) {
+      // Logic v6.1 item 9: the closest picks sit under their own heading,
+      // after the perfect matches.
+      if (i > 0 && poolTier(matches[i - 1]) === 'perfect' && poolTier(m) && poolTier(m) !== 'perfect') {
+        grid.appendChild(el('div', 'gq-gr-divider', '<span>' + TH('nextBestPicks', 'Next best picks') + '</span>'));
+      }
       grid.appendChild(buildGridCard(m, i, definitive, hasPhotoNow, results, bd, refreshAll, pendingKey, setBar));
     });
     screen.appendChild(grid);
@@ -4552,11 +4685,47 @@
     return screen;
   }
 
-  // The pool engine's header line when it isn't the normal case: colors
-  // or style relaxed, or fewer than six exact matches (contract 4).
+  // The pool engine's header line. Logic v6.1 says how many sets match
+  // every answer, in the merchant's words (Text & labels); an older engine
+  // sends its own line, shown when the result isn't the normal case.
   function resultsNote() {
     var h = state.columnar && state.columnar.header;
-    return h && h.kind !== 'normal' && h.text ? h.text : null;
+    if (!h) return null;
+    var shown = Array.isArray(state.matches) ? state.matches.length : 0;
+    if (h.match && shown > 0) {
+      if (h.match === 'all') {
+        return shown === 6
+          ? T('poolHeaderAll', 'Six sets that match everything you picked')
+          : T('poolHeaderAllFew', 'Every set here matches everything you picked');
+      }
+      if (h.match === 'some') {
+        return h.perfect === 1
+          ? T('poolHeaderSomeOne', '{n} perfect match, plus our next-best picks', { n: h.perfect })
+          : T('poolHeaderSome', '{n} perfect matches, plus our next-best picks', { n: h.perfect });
+      }
+      return T('poolHeaderClosest', 'Nothing matches every pick yet, so here are the closest.');
+    }
+    return h.kind !== 'normal' && h.text ? h.text : null;
+  }
+
+  // Logic v6.1: a pool match's tier (pipeline TIER_IDS), or null for an
+  // older engine's match and every other shop's.
+  var POOL_TIERS = { perfect: 1, vibe: 1, drama: 1, vibe_drama: 1, color: 1, finish: 1, color_finish: 1 };
+  function poolTier(m) {
+    return state.columnar && m && typeof m.tier === 'string' && own(POOL_TIERS, m.tier) ? m.tier : null;
+  }
+
+  // The label on a closest-pick card: what it steps outside of.
+  function tierLabel(tier) {
+    switch (tier) {
+      case 'vibe': return T('tierVibe', 'Different vibe');
+      case 'drama': return T('tierDrama', 'Different drama');
+      case 'vibe_drama': return T('tierVibeDrama', 'Different vibe and drama');
+      case 'color': return T('tierColor', 'Different color');
+      case 'finish': return T('tierFinish', 'Different finish');
+      case 'color_finish': return T('tierColorFinish', 'Different color and finish');
+    }
+    return null;
   }
 
   // Zero exact matches (pool engine): say so plainly and offer one tap
@@ -4913,9 +5082,16 @@
     media.appendChild(img);
     var pick = setBar ? setBar.pickFor(idx) : null;
     if (pick) media.appendChild(pick);
-    // Same claim rule as the featured layout: "Best match" only when the
-    // merchant's rules (or the pool engine's exact rung) put this set first.
-    if (idx === 0 && bestMatchClaim()) {
+    // Logic v6.1 (items 8-10): every perfect match carries the badge and
+    // every closest pick says what differs. Otherwise the featured
+    // layout's claim rule: "Best match" only when the merchant's rules (or
+    // an older pool engine's exact rung) put this set first.
+    var tier = poolTier(m);
+    if (tier === 'perfect') {
+      media.appendChild(el('span', 'gq-pill gq-pill--top gq-gr-pill gq-gr-pill--perfect', TH('perfectMatch', 'Perfect match')));
+    } else if (tier) {
+      media.appendChild(el('span', 'gq-pill gq-gr-pill gq-gr-pill--tier', escapeHtml(tierLabel(tier))));
+    } else if (idx === 0 && bestMatchClaim()) {
       media.appendChild(el('span', 'gq-pill gq-pill--top gq-gr-pill', escapeHtml(results.bestMatchPill || 'Best match')));
     }
     card.appendChild(media);

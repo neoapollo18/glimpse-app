@@ -166,13 +166,39 @@ describe("tag rules", () => {
   });
 });
 
+describe("Alternative & Edgy rule (logic v6.1, item 18)", () => {
+  it("a colorway collection named for its shade is not a theme: Berry Baby is not Alternative & Edgy", () => {
+    const berry = byHandle.get("berry-baby-super-short-press-on-nails")!;
+    expect(berry.collections).toContain("Glossy Dark Maroon");
+    expect(berry.vibeSource).toBe("rules");
+    expect(vibeMatches(berry, "alt_edgy")).toBe(false);
+    // The rest of the Glossy Dark Maroon colorway moves with it.
+    const maroon = derived.filter((p) => p.collections.includes("Glossy Dark Maroon"));
+    expect(maroon).toHaveLength(8);
+    expect(maroon.filter((p) => vibeMatches(p, "alt_edgy"))).toEqual([]);
+  });
+
+  it("dark colors and the Halloween drops still read as Alternative & Edgy", () => {
+    const tags = ["Nail Length_Short", "Nail Shape_Almond", "Finish_Glossy", "_Is Solid_TRUE"];
+    expect(vibeMatches(deriveProduct(product([...tags, "Color_Black"])), "alt_edgy")).toBe(true);
+    expect(vibeMatches(deriveProduct(product([...tags, "Color_Red", "_Nail Collection_Fright Night"])), "alt_edgy")).toBe(true);
+    expect(vibeMatches(deriveProduct(product([...tags, "Color_Red", "_Nail Collection_Spells & Sparkles 2026"])), "alt_edgy")).toBe(true);
+    expect(vibeMatches(deriveProduct(product([...tags, "Color_Red", "_Nail Collection_Glossy Dark Maroon"])), "alt_edgy")).toBe(false);
+  });
+
+  it("keeps the set's color words for the why-line", () => {
+    const p = deriveProduct(product(["Nail Length_Short", "Nail Shape_Almond", "Finish_Glossy", "Color_Nude", "Color_Grey", "Color_Sparkly"]));
+    expect(p.colorNames).toEqual(["nude", "gray"]);
+  });
+});
+
 describe("approved vibe labels (fix spec v4, item 3)", () => {
   const base = ["Nail Length_Short", "Nail Shape_Almond", "Color_Red", "Finish_Glossy", "_Is Solid_TRUE"];
 
   it("a labeled set takes exactly its labels; an unlabeled one keeps the tag rules", () => {
-    const tags = [...base, "_Nail Collection_Glossy Dark Maroon"];
+    const tags = [...base, "_Nail Collection_Fright Night"];
     const ruled = deriveProduct(product(tags));
-    // The "Dark" in a maroon collection's name reads as Alternative & Edgy.
+    // A Halloween drop reads as Alternative & Edgy by rule.
     expect(ruled.vibeSource).toBe("rules");
     expect(ruled.vibes).toContain("alt_edgy");
     const labeled = deriveProduct(product(tags), { vibeLabels: { "test-set": ["holiday", "soft_sweet"] } });
