@@ -170,7 +170,7 @@ describe("computeColumnarRecommendations", () => {
     expect(r.matches).toHaveLength(6);
     expect(r.columnar.rung).toBe(1);
     expect(r.columnar.bestMatchBadge).toBe(true);
-    expect(r.columnar.header).toEqual({ kind: "normal", text: "Six sets that match everything you picked", match: "all", perfect: 6 });
+    expect(r.columnar.header).toEqual({ kind: "normal", text: "Your perfect six. Made for your vibe.", match: "all", perfect: 6 });
     expect(r.matches.map((m) => m.tier)).toEqual(Array(6).fill("perfect"));
     // The Also matched row is retired: the field stays, always empty.
     expect(r.columnar.alsoMatched).toEqual([]);
@@ -278,7 +278,7 @@ describe("computeColumnarRecommendations", () => {
     expect(r.matches[0]).toMatchObject({ productHandle: "miss-minty-short-oval-press-on-nails", tier: "perfect" });
     expect(r.matches.every((m) => m.meta.length === "Short" && m.meta.shape === "Oval")).toBe(true);
     expect(r.matches.slice(1).every((m) => m.tier !== "perfect")).toBe(true);
-    expect(r.columnar.header).toMatchObject({ kind: "relaxed", text: "1 perfect match, plus our next-best picks", match: "some", perfect: 1 });
+    expect(r.columnar.header).toMatchObject({ kind: "relaxed", text: "Your perfect match, plus a few more that would look amazing on you.", match: "some", perfect: 1 });
     expect(r.columnar.rung).toBe(4);
     expect(r.columnar.bestMatchBadge).toBe(true);
     // An off-color set carries the label (item 10).
@@ -291,7 +291,7 @@ describe("computeColumnarRecommendations", () => {
       criteria: { vibe: "french_girl", length: ["medium"], shape: ["coffin"], question_6: ["option_5"], color_family: ["dark_moody"], style_tier: ["art"] },
     });
     expect(closest.matches).toHaveLength(6);
-    expect(closest.columnar.header).toMatchObject({ match: "closest", text: "Nothing matches every pick yet, so here are the closest." });
+    expect(closest.columnar.header).toMatchObject({ match: "closest", text: "Hand-picked for you. Six sets we think you’ll love." });
     expect(closest.columnar.loosen).toBeNull();
   });
 

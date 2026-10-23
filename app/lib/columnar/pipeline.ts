@@ -568,16 +568,17 @@ export interface HeaderCopy {
   perfect?: number;
 }
 
-/** The results header lines (v6.1 item 12, Aaron's wording where he gave
- * it). The widget's Text & labels entries (quiz-ui-text.ts) default to the
- * same strings; `text` carries them for widgets deployed before v6.1. */
+/** The results header lines (v6.1 item 12, copy from the 2026-10-23
+ * Trello card). The widget's Text & labels entries (quiz-ui-text.ts)
+ * default to the same strings; `text` carries them for widgets deployed
+ * before v6.1. */
 export const HEADER_TEXT = {
-  allSix: "Six sets that match everything you picked",
+  allSix: "Your perfect six. Made for your vibe.",
   /** Every shown set is perfect, but sold-out sets left fewer than six. */
   allFew: "Every set here matches everything you picked",
-  some: "{n} perfect matches, plus our next-best picks",
-  someOne: "{n} perfect match, plus our next-best picks",
-  closest: "Nothing matches every pick yet, so here are the closest.",
+  some: "Your perfect matches, plus a few more that would look amazing on you.",
+  someOne: "Your perfect match, plus a few more that would look amazing on you.",
+  closest: "Hand-picked for you. Six sets we think you’ll love.",
   none: "We don't have that combination yet.",
 } as const;
 

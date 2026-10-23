@@ -754,13 +754,13 @@ describe("logic v6.1 results (items 8-10, 12)", () => {
   it("every perfect match carries the badge; the closest picks carry none, all in one grid", async () => {
     const sample = tiered(["perfect", "perfect", "vibe", "drama", "color", "finish"], {
       kind: "relaxed",
-      text: "2 perfect matches, plus our next-best picks",
+      text: "Your perfect matches, plus a few more that would look amazing on you.",
       match: "some",
       perfect: 2,
     });
     const { root } = await bootPreview({ step: "results", sample });
     await wait(20);
-    expect(root.querySelector(".gq-results-headline")!.textContent).toBe("2 perfect matches, plus our next-best picks");
+    expect(root.querySelector(".gq-results-headline")!.textContent).toBe("Your perfect matches, plus a few more that would look amazing on you.");
     expect(pills(root)).toEqual(["Perfect match", "Perfect match", null, null, null, null]);
     expect(root.querySelectorAll(".gq-gr-pill--perfect")).toHaveLength(2);
     // Trello 2026-10-23: no "Different x" labels, no heading splitting the grid.
@@ -776,15 +776,15 @@ describe("logic v6.1 results (items 8-10, 12)", () => {
     const all = tiered(Array(6).fill("perfect"), { kind: "normal", text: "x", match: "all", perfect: 6 });
     let { root } = await bootPreview({ step: "results", sample: all });
     await wait(20);
-    expect(root.querySelector(".gq-results-headline")!.textContent).toBe("Six sets that match everything you picked");
+    expect(root.querySelector(".gq-results-headline")!.textContent).toBe("Your perfect six. Made for your vibe.");
     const one = tiered(["perfect", "color", "color", "color", "color", "color"], { kind: "relaxed", text: "x", match: "some", perfect: 1 });
     ({ root } = await bootPreview({ step: "results", sample: one }));
     await wait(20);
-    expect(root.querySelector(".gq-results-headline")!.textContent).toBe("1 perfect match, plus our next-best picks");
+    expect(root.querySelector(".gq-results-headline")!.textContent).toBe("Your perfect match, plus a few more that would look amazing on you.");
     const none = tiered(["vibe", "vibe", "color", "color", "finish", "color_finish"], { kind: "relaxed", text: "x", match: "closest", perfect: 0 });
     ({ root } = await bootPreview({ step: "results", sample: none }));
     await wait(20);
-    expect(root.querySelector(".gq-results-headline")!.textContent).toBe("Nothing matches every pick yet, so here are the closest.");
+    expect(root.querySelector(".gq-results-headline")!.textContent).toBe("Hand-picked for you. Six sets we think you’ll love.");
     // No perfect match: no badge at all (and no Best match on the first).
     expect(pills(root)).toEqual([null, null, null, null, null, null]);
   });

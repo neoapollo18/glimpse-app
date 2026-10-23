@@ -231,7 +231,7 @@ describe("tiers (items 7-11)", () => {
     expect(tiersOf(out)).toEqual(Array(6).fill("perfect"));
     expect(out.results.every((x) => x.product.handle.startsWith("red-solid"))).toBe(true);
     expect([out.rung, out.exactCount]).toEqual([1, 6]);
-    expect(out.header).toEqual({ kind: "normal", text: "Six sets that match everything you picked", match: "all", perfect: 6 });
+    expect(out.header).toEqual({ kind: "normal", text: "Your perfect six. Made for your vibe.", match: "all", perfect: 6 });
   });
 
   it("fills six in item 9's order: drama, then vibe, then filters only, another color, another finish", () => {
@@ -261,10 +261,10 @@ describe("tiers (items 7-11)", () => {
     ];
     const out = assemble(pool, base);
     expect(tiersOf(out)).toEqual(["perfect", "perfect", "color", "color", "color", "color"]);
-    expect(out.header).toEqual({ kind: "relaxed", text: "2 perfect matches, plus our next-best picks", match: "some", perfect: 2 });
+    expect(out.header).toEqual({ kind: "relaxed", text: "Your perfect matches, plus a few more that would look amazing on you.", match: "some", perfect: 2 });
     expect(out.rung).toBe(3);
     const one = assemble(pool.slice(1), base);
-    expect(one.header.text).toBe("1 perfect match, plus our next-best picks");
+    expect(one.header.text).toBe("Your perfect match, plus a few more that would look amazing on you.");
   });
 
   it("an off-color set shows only as Different color (item 10), and only after every on-color one", () => {

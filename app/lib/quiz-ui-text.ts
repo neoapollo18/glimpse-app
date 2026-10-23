@@ -133,11 +133,11 @@ export const UI_TEXT_ENTRIES: UiTextEntry[] = [
   { key: "zeroEdit", label: "No exact match, nothing to loosen", group: "results", default: "Change an answer above to see what we have.", scope: ["pool"] },
   // Pool-matched quizzes, logic v6.1: the header says how many sets match
   // every answer, and each perfect match carries the badge.
-  { key: "poolHeaderAll", label: "Header: all six match everything", group: "results", default: "Six sets that match everything you picked", scope: ["pool"] },
+  { key: "poolHeaderAll", label: "Header: all six match everything", group: "results", default: "Your perfect six. Made for your vibe.", scope: ["pool"] },
   { key: "poolHeaderAllFew", label: "Header: all match, fewer than six", group: "results", default: "Every set here matches everything you picked", scope: ["pool"], help: "When sold-out sets leave fewer than six." },
-  { key: "poolHeaderSome", label: "Header: some perfect matches", group: "results", default: "{n} perfect matches, plus our next-best picks", vars: ["n"], varHints: { n: "how many sets match every answer" }, scope: ["pool"] },
-  { key: "poolHeaderSomeOne", label: "Header: one perfect match", group: "results", default: "{n} perfect match, plus our next-best picks", vars: ["n"], varHints: { n: "1" }, scope: ["pool"] },
-  { key: "poolHeaderClosest", label: "Header: no perfect match", group: "results", default: "Nothing matches every pick yet, so here are the closest.", scope: ["pool"] },
+  { key: "poolHeaderSome", label: "Header: some perfect matches", group: "results", default: "Your perfect matches, plus a few more that would look amazing on you.", vars: ["n"], varHints: { n: "how many sets match every answer (optional)" }, scope: ["pool"] },
+  { key: "poolHeaderSomeOne", label: "Header: one perfect match", group: "results", default: "Your perfect match, plus a few more that would look amazing on you.", vars: ["n"], varHints: { n: "1 (optional)" }, scope: ["pool"] },
+  { key: "poolHeaderClosest", label: "Header: no perfect match", group: "results", default: "Hand-picked for you. Six sets we think you’ll love.", scope: ["pool"] },
   { key: "perfectMatch", label: "Perfect match badge", group: "results", default: "Perfect match", scope: ["pool"], help: "On every set that matches every answer." },
   { key: "answersRailTitle", label: "Answers panel title", group: "results", default: "Your answers · tap to edit", scope: ["featured"] },
   { key: "answersRailEdit", label: "Edit one answer", group: "results", default: "edit", scope: ["featured"] },

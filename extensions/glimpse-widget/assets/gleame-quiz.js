@@ -4691,15 +4691,15 @@
     if (h.match && shown > 0) {
       if (h.match === 'all') {
         return shown === 6
-          ? T('poolHeaderAll', 'Six sets that match everything you picked')
+          ? T('poolHeaderAll', 'Your perfect six. Made for your vibe.')
           : T('poolHeaderAllFew', 'Every set here matches everything you picked');
       }
       if (h.match === 'some') {
         return h.perfect === 1
-          ? T('poolHeaderSomeOne', '{n} perfect match, plus our next-best picks', { n: h.perfect })
-          : T('poolHeaderSome', '{n} perfect matches, plus our next-best picks', { n: h.perfect });
+          ? T('poolHeaderSomeOne', 'Your perfect match, plus a few more that would look amazing on you.', { n: h.perfect })
+          : T('poolHeaderSome', 'Your perfect matches, plus a few more that would look amazing on you.', { n: h.perfect });
       }
-      return T('poolHeaderClosest', 'Nothing matches every pick yet, so here are the closest.');
+      return T('poolHeaderClosest', 'Hand-picked for you. Six sets we think you’ll love.');
     }
     return h.kind !== 'normal' && h.text ? h.text : null;
   }
