@@ -105,6 +105,7 @@ export const UI_TEXT_ENTRIES: UiTextEntry[] = [
   { key: "tryonWorking", label: "Try-on in progress", group: "photo", default: "Working…" },
   { key: "tryonLimit", label: "Try-on limit reached", group: "photo", default: "Try-on limit reached" },
   { key: "tryonWait", label: "Try-on cooldown", group: "photo", default: "Ready in {s}s…", vars: ["s"] },
+  { key: "tryonFailed", label: "Try-on failed", group: "photo", default: "Couldn’t load, try again" },
   { key: "shadeFromPhoto", label: "Shade source: photo", group: "photo", default: "detected from your photo" },
   { key: "shadeYourPick", label: "Shade source: picked", group: "photo", default: "your pick" },
   {
@@ -131,20 +132,13 @@ export const UI_TEXT_ENTRIES: UiTextEntry[] = [
   { key: "zeroLoosen", label: "No exact match, with a loosen button", group: "results", default: "Open up one answer and we’ll show you what we have.", scope: ["pool"] },
   { key: "zeroEdit", label: "No exact match, nothing to loosen", group: "results", default: "Change an answer above to see what we have.", scope: ["pool"] },
   // Pool-matched quizzes, logic v6.1: the header says how many sets match
-  // every answer, and each card says how it relates to the answers.
+  // every answer, and each perfect match carries the badge.
   { key: "poolHeaderAll", label: "Header: all six match everything", group: "results", default: "Six sets that match everything you picked", scope: ["pool"] },
   { key: "poolHeaderAllFew", label: "Header: all match, fewer than six", group: "results", default: "Every set here matches everything you picked", scope: ["pool"], help: "When sold-out sets leave fewer than six." },
   { key: "poolHeaderSome", label: "Header: some perfect matches", group: "results", default: "{n} perfect matches, plus our next-best picks", vars: ["n"], varHints: { n: "how many sets match every answer" }, scope: ["pool"] },
   { key: "poolHeaderSomeOne", label: "Header: one perfect match", group: "results", default: "{n} perfect match, plus our next-best picks", vars: ["n"], varHints: { n: "1" }, scope: ["pool"] },
   { key: "poolHeaderClosest", label: "Header: no perfect match", group: "results", default: "Nothing matches every pick yet, so here are the closest.", scope: ["pool"] },
   { key: "perfectMatch", label: "Perfect match badge", group: "results", default: "Perfect match", scope: ["pool"], help: "On every set that matches every answer." },
-  { key: "nextBestPicks", label: "Next best picks heading", group: "results", default: "Next best picks", scope: ["pool"] },
-  { key: "tierVibe", label: "Card label: another vibe", group: "results", default: "Different vibe", scope: ["pool"] },
-  { key: "tierDrama", label: "Card label: another drama level", group: "results", default: "Different drama", scope: ["pool"] },
-  { key: "tierVibeDrama", label: "Card label: another vibe and drama", group: "results", default: "Different vibe and drama", scope: ["pool"] },
-  { key: "tierColor", label: "Card label: another color", group: "results", default: "Different color", scope: ["pool"] },
-  { key: "tierFinish", label: "Card label: another finish", group: "results", default: "Different finish", scope: ["pool"] },
-  { key: "tierColorFinish", label: "Card label: another color and finish", group: "results", default: "Different color and finish", scope: ["pool"] },
   { key: "answersRailTitle", label: "Answers panel title", group: "results", default: "Your answers · tap to edit", scope: ["featured"] },
   { key: "answersRailEdit", label: "Edit one answer", group: "results", default: "edit", scope: ["featured"] },
   { key: "saveMatches", label: "Email card title", group: "results", default: "Save your matches", scope: ["grid"] },

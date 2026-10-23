@@ -143,13 +143,19 @@ const json = (body: unknown) => Promise.resolve({ ok: true, status: 200, headers
 
 let CONFIG: ReturnType<typeof makeConfig>;
 let tryonPosts: Array<{ productId: string | null }> = [];
+let tryonFails = false; // quiz-tryon answers 404 (product didn't resolve)
+let tryonDelayMs = 0; // a real render takes seconds, well past the screen swap
 function routedFetch(url: string, init?: { body?: unknown }) {
   if (url.includes("/api/storefront/quiz-config")) return json(CONFIG);
   if (url.includes("/api/storefront/recommendation-config")) return json(FLOW);
   if (url.includes("/api/storefront/quiz-tryon")) {
     const fd = init?.body as FormData;
     tryonPosts.push({ productId: fd && typeof fd.get === "function" ? (fd.get("productId") as string) : null });
-    return json({ tryOnPreview: "AAAA", error: null });
+    const later = new Promise((r) => setTimeout(r, tryonDelayMs));
+    if (tryonFails) {
+      return later.then(() => ({ ok: false, status: 404, headers: { get: () => null }, json: () => Promise.resolve({ error: "Product not available" }) }));
+    }
+    return later.then(() => json({ tryOnPreview: "AAAA", error: null }));
   }
   const pm = /^\/products\/([^/.]+)\.js$/.exec(url);
   if (pm) {
@@ -229,6 +235,8 @@ const realFormData = window.FormData;
 beforeEach(() => {
   sessionStorage.clear();
   tryonPosts = [];
+  tryonFails = false;
+  tryonDelayMs = 0;
   delete (window as any).GLEAME_QUIZ_PREVIEW;
   delete (window as any).GLEAME_QUIZ_BOOT;
   delete (window as any).gleameCamera;
@@ -314,6 +322,81 @@ describe("Try them on me: only offered when the click can work", () => {
     const cards = Array.from(root.querySelectorAll(".gq-gr-card"));
     expect(cards).toHaveLength(3);
     expect(cards.map((c) => Boolean(c.querySelector(".gq-gr-see")))).toEqual([true, false, true]);
+  });
+
+  describe("grid results: See on me renders the card it's on", () => {
+    const grid = () => ({ results: { ...makeConfig(null).results, layout: "grid" } });
+    const camera = () => {
+      (window as any).gleameCamera = {
+        open: (onCapture: (f: File) => void) => onCapture(new File([new Uint8Array([1])], "hand.jpg", { type: "image/jpeg" })),
+      };
+    };
+    beforeEach(() => {
+      tryonDelayMs = 300;
+    });
+    const settle = async () => {
+      for (let i = 0; i < 6; i++) await tick();
+      await wait(SWAP + tryonDelayMs);
+      for (let i = 0; i < 6; i++) await tick();
+    };
+    const cards = (root: HTMLElement) => Array.from(root.querySelectorAll<HTMLElement>(".gq-gr-card"));
+    const see = (card: HTMLElement) => card.querySelector<HTMLButtonElement>(".gq-gr-see");
+    // jsdom never loads images: finish the blur-up reveal by hand.
+    const loaded = (card: HTMLElement) => {
+      const img = card.querySelector<HTMLImageElement>(".gq-media-img")!;
+      (img.onload as () => void)();
+    };
+    const pid = (i: number) => ({ productId: `gid://shopify/Product/${PRODUCTS[i].id}` });
+
+    it("no photo yet: a later card asks for the photo, then renders that card, not the first", async () => {
+      const root = await bootResults(null, [true, true, true], grid());
+      camera();
+      see(cards(root)[2])!.click();
+      await settle();
+      expect(tryonPosts).toEqual([pid(2)]);
+      loaded(cards(root)[2]);
+      expect(cards(root)[2].querySelector(".gq-media--tryon")).not.toBeNull();
+      // The other cards keep their button for the next try-on.
+      expect(cards(root).map((c) => Boolean(see(c)))).toEqual([true, true, false]);
+    });
+
+    it("photo already given: the 2nd and 3rd cards render on tap", async () => {
+      const root = await bootResults(null, [true, true, true], grid());
+      camera();
+      see(cards(root)[0])!.click();
+      await settle();
+      loaded(cards(root)[0]);
+      expect(tryonPosts).toEqual([pid(0)]);
+      see(cards(root)[1])!.click();
+      expect(see(cards(root)[1])!.textContent).toBe("Working…");
+      await settle();
+      loaded(cards(root)[1]);
+      see(cards(root)[2])!.click();
+      await settle();
+      loaded(cards(root)[2]);
+      expect(tryonPosts).toEqual([pid(0), pid(1), pid(2)]);
+      expect(cards(root).map((c) => Boolean(c.querySelector(".gq-media--tryon")))).toEqual([true, true, true]);
+      expect(root.querySelector(".gq-gr-see")).toBeNull();
+    });
+
+    it("a failed render says so and can be retried, the automatic one included", async () => {
+      const root = await bootResults(null, [true, true, true], grid());
+      camera();
+      tryonFails = true;
+      see(cards(root)[1])!.click();
+      await settle();
+      // The automatic run after the photo failed: the card offers a retry.
+      expect(tryonPosts).toEqual([pid(1)]);
+      const retry = see(cards(root)[1])!;
+      expect(retry.textContent).toBe("Couldn’t load, try again");
+      expect(retry.disabled).toBe(false);
+      tryonFails = false;
+      retry.click();
+      await settle();
+      loaded(cards(root)[1]);
+      expect(tryonPosts).toEqual([pid(1), pid(1)]);
+      expect(see(cards(root)[1])).toBeNull();
+    });
   });
 
   it.each([...TEMPLATES, null] as Renderer[])("%s: hidden when the browser can't hand over a photo", async (t) => {

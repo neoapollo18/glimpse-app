@@ -2818,6 +2818,9 @@
 #gleame-quiz-root .gq-gr-link:hover .gq-gr-name { text-decoration: underline; text-underline-offset: 3px; }
 #gleame-quiz-root .gq-gr-body .gq-match-footnote { grid-column: 1 / -1; }
 #gleame-quiz-root .gq-gr-media .gq-media-img { width: 100%; height: 100%; object-fit: cover; }
+/* A try-on keeps the top of the shopper's photo: nails sit at the top of
+   a hand shot, and a centred square crop of a tall render cut them off. */
+#gleame-quiz-root .gq-gr-media.gq-media--tryon .gq-media-img { object-position: 50% 0; }
 #gleame-quiz-root .gq-gr-pill {
   position: absolute;
   top: 12px;
@@ -2825,35 +2828,6 @@
   z-index: 2;
   background: var(--gq-ink);
   color: #ffffff;
-}
-/* Logic v6.1: a closest pick says what differs, quieter than the badge. */
-#gleame-quiz-root .gq-gr-pill--tier {
-  max-width: calc(100% - 24px);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  background: #ffffff;
-  color: var(--gq-ink);
-  border: 1px solid var(--gq-line);
-}
-/* "Next best picks": a full-width row between the perfect matches and
-   the closest picks. */
-#gleame-quiz-root .gq-gr-divider {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin: 4px 0 -4px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--gq-ink-soft);
-}
-#gleame-quiz-root .gq-gr-divider::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: var(--gq-line);
 }
 #gleame-quiz-root .gq-gr-see {
   appearance: none;

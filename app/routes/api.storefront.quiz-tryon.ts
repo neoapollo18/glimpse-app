@@ -5,7 +5,9 @@ import {
   shopHasValidAccess,
   getChatAssistantConfig,
 } from "../lib/supabase.server";
-import { buildCandidatePool } from "../lib/recommendation-engine.server";
+import { buildCandidatePool, type Candidate } from "../lib/recommendation-engine.server";
+import { enabledColumnarSpec } from "../lib/columnar/spec";
+import { poolTryonCandidate } from "../lib/columnar/engine.server";
 import { transformCandidateImage } from "../lib/tryon-transform.server";
 import { checkRateLimit, checkRateLimits, getClientIP, RATE_LIMITS } from "../lib/rate-limiter.server";
 import { isValidImageFile, rejectOversizedBody } from "../lib/storefront-api.server";
@@ -32,6 +34,34 @@ const MAX_BODY_BYTES = MAX_IMAGE_BYTES + 1024 * 1024;
  *                       variantId? (Shopify variant GID) }
  * Response: { tryOnPreview: base64 | null, error: string | null }
  */
+/**
+ * Resolve the requested product/variant through the same scoped pool the
+ * recommendation endpoints use — a GID outside the shop's configured scope
+ * (or another shop's catalog) simply doesn't resolve.
+ */
+async function scopedCandidate(
+  shopDomain: string,
+  chatConfig: Parameters<typeof buildCandidatePool>[1],
+  productId: string,
+  variantId: string | null,
+): Promise<Candidate | null> {
+  const { pool } = await buildCandidatePool(shopDomain, chatConfig);
+  if (!pool) return null;
+  if (variantId) {
+    return pool.candidates.find((c) =>
+      c.product.shopify_id === productId &&
+      c.variant?.shopify_variant_id === variantId
+    ) ?? null;
+  }
+  // No variant requested (product-level matrix rule). Synthesize a
+  // product-level candidate so the transform uses the PRODUCT prompt and
+  // reference images — mirroring how the chat path renders variant:null
+  // rule targets. Grabbing the first variant candidate here would try
+  // the shopper on an arbitrary shade.
+  const inScope = pool.candidates.find((c) => c.product.shopify_id === productId);
+  return inScope ? { product: inScope.product, variant: null } : null;
+}
+
 // CORS preflight — Remix routes OPTIONS to the LOADER, not the action.
 // FormData posts don't preflight today, but any header change would.
 export const loader = async () => {
@@ -137,28 +167,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return json({ error: "Try-on disabled" }, { status: 403, headers: CORS_HEADERS });
     }
 
-    // Resolve the requested product/variant through the same scoped pool the
-    // recommendation endpoints use — a GID outside the shop's configured
-    // scope (or another shop's catalog) simply doesn't resolve.
-    const { pool } = await buildCandidatePool(verifiedDomain, chatConfig);
-    if (!pool) {
-      return json({ error: "Product not available" }, { status: 404, headers: CORS_HEADERS });
-    }
-    let candidate = variantId
-      ? pool.candidates.find((c) =>
-          c.product.shopify_id === productId &&
-          c.variant?.shopify_variant_id === variantId
-        ) ?? null
-      : null;
-    if (!candidate && !variantId) {
-      // No variant requested (product-level matrix rule). Synthesize a
-      // product-level candidate so the transform uses the PRODUCT prompt and
-      // reference images — mirroring how the chat path renders variant:null
-      // rule targets. Grabbing the first variant candidate here would try
-      // the shopper on an arbitrary shade.
-      const inScope = pool.candidates.find((c) => c.product.shopify_id === productId);
-      if (inScope) candidate = { product: inScope.product, variant: null };
-    }
+    // A columnar shop's cards come from its pool (spec.pool.handles), which
+    // can hold sets outside product_scope: resolve there first. Glamnetic's
+    // 200-product selection made 288 of its 416 pool sets 404 here.
+    const columnarSpec = enabledColumnarSpec(chatConfig);
+    const candidate =
+      (columnarSpec
+        ? await poolTryonCandidate(verifiedShop.id, columnarSpec, productId, variantId)
+        : null) ?? (await scopedCandidate(verifiedDomain, chatConfig, productId, variantId));
     if (!candidate) {
       return json({ error: "Product not available" }, { status: 404, headers: CORS_HEADERS });
     }

@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   classifyPhotoAxesForShopDetailed: vi.fn(),
   buildCandidatePool: vi.fn(),
   transformCandidateImage: vi.fn(),
+  poolTryonCandidate: vi.fn(),
 }));
 
 vi.mock("../supabase.server", () => ({
@@ -25,6 +26,7 @@ vi.mock("../photo-axis-classifier.server", () => ({
 }));
 vi.mock("../recommendation-engine.server", () => ({ buildCandidatePool: mocks.buildCandidatePool }));
 vi.mock("../tryon-transform.server", () => ({ transformCandidateImage: mocks.transformCandidateImage }));
+vi.mock("../columnar/engine.server", () => ({ poolTryonCandidate: mocks.poolTryonCandidate }));
 
 import { rejectOversizedBody, CORS_HEADERS } from "../storefront-api.server";
 import { RATE_LIMITS } from "../rate-limiter.server";
@@ -156,6 +158,45 @@ describe("photo routes", () => {
       expect(await res.json()).toEqual({ tryOnPreview: "abc", error: null });
     }
     expect(mocks.transformCandidateImage).toHaveBeenCalledTimes(2);
+  });
+
+  // Glamnetic (2026-10-23): the columnar pool holds sets outside the shop's
+  // product_scope selection; "See on me" on those 404'd.
+  describe("quiz-tryon on a columnar shop", () => {
+    const COLUMNAR = { enabled: true, quiz_tryon_enabled: true, recommendation_tuning: { columnar: { enabled: true } } };
+    const VARIANT = "gid://shopify/ProductVariant/9";
+    const send = () =>
+      quizTryon(args(post("/api/storefront/quiz-tryon",
+        photoForm(new File([jpegBytes], "hand.jpg", { type: "image/jpeg" }), { productId: PRODUCT, variantId: VARIANT }))));
+
+    it("resolves the card's set through the pool, not product_scope", async () => {
+      mocks.getChatAssistantConfig.mockResolvedValue(COLUMNAR);
+      const product = { id: "p-1", shopify_id: PRODUCT };
+      const variant = { id: "v-1", shopify_variant_id: VARIANT };
+      mocks.poolTryonCandidate.mockResolvedValue({ product, variant });
+      const res = await send();
+      expect(res.status).toBe(200);
+      expect(mocks.poolTryonCandidate).toHaveBeenCalledWith(SHOP.id, COLUMNAR.recommendation_tuning.columnar, PRODUCT, VARIANT);
+      expect(mocks.buildCandidatePool).not.toHaveBeenCalled();
+      expect(mocks.transformCandidateImage.mock.calls[0][0]).toMatchObject({ product, variant });
+    });
+
+    it("falls back to the scoped pool, and 404s a set in neither", async () => {
+      mocks.getChatAssistantConfig.mockResolvedValue(COLUMNAR);
+      mocks.poolTryonCandidate.mockResolvedValue(null);
+      mocks.buildCandidatePool.mockResolvedValue({
+        pool: { candidates: [{ product: { shopify_id: PRODUCT }, variant: { shopify_variant_id: VARIANT } }] },
+      });
+      expect((await send()).status).toBe(200);
+      mocks.buildCandidatePool.mockResolvedValue({ pool: { candidates: [] } });
+      expect((await send()).status).toBe(404);
+      expect(mocks.transformCandidateImage).toHaveBeenCalledTimes(1);
+    });
+
+    it("a shop without the columnar spec never reads the pool", async () => {
+      expect((await send()).status).toBe(404); // the default pool has no variant-level candidate
+      expect(mocks.poolTryonCandidate).not.toHaveBeenCalled();
+    });
   });
 });
 

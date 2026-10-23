@@ -4651,12 +4651,8 @@
     var pendingKey = hasPhotoNow ? gridPendingTryon : null;
     if (hasPhotoNow) gridPendingTryon = null;
     var grid = el('div', 'gq-gr-grid');
+    // One grid: perfect matches first, the closest picks right after them.
     matches.forEach(function(m, i) {
-      // Logic v6.1 item 9: the closest picks sit under their own heading,
-      // after the perfect matches.
-      if (i > 0 && poolTier(matches[i - 1]) === 'perfect' && poolTier(m) && poolTier(m) !== 'perfect') {
-        grid.appendChild(el('div', 'gq-gr-divider', '<span>' + TH('nextBestPicks', 'Next best picks') + '</span>'));
-      }
       grid.appendChild(buildGridCard(m, i, definitive, hasPhotoNow, results, bd, refreshAll, pendingKey, setBar));
     });
     screen.appendChild(grid);
@@ -4713,19 +4709,6 @@
   var POOL_TIERS = { perfect: 1, vibe: 1, drama: 1, vibe_drama: 1, color: 1, finish: 1, color_finish: 1 };
   function poolTier(m) {
     return state.columnar && m && typeof m.tier === 'string' && own(POOL_TIERS, m.tier) ? m.tier : null;
-  }
-
-  // The label on a closest-pick card: what it steps outside of.
-  function tierLabel(tier) {
-    switch (tier) {
-      case 'vibe': return T('tierVibe', 'Different vibe');
-      case 'drama': return T('tierDrama', 'Different drama');
-      case 'vibe_drama': return T('tierVibeDrama', 'Different vibe and drama');
-      case 'color': return T('tierColor', 'Different color');
-      case 'finish': return T('tierFinish', 'Different finish');
-      case 'color_finish': return T('tierColorFinish', 'Different color and finish');
-    }
-    return null;
   }
 
   // Zero exact matches (pool engine): say so plainly and offer one tap
@@ -5082,16 +5065,14 @@
     media.appendChild(img);
     var pick = setBar ? setBar.pickFor(idx) : null;
     if (pick) media.appendChild(pick);
-    // Logic v6.1 (items 8-10): every perfect match carries the badge and
-    // every closest pick says what differs. Otherwise the featured
-    // layout's claim rule: "Best match" only when the merchant's rules (or
-    // an older pool engine's exact rung) put this set first.
+    // Logic v6.1: every perfect match carries the badge; a closest pick
+    // carries none. Otherwise the featured layout's claim rule: "Best
+    // match" only when the merchant's rules (or an older pool engine's
+    // exact rung) put this set first.
     var tier = poolTier(m);
     if (tier === 'perfect') {
       media.appendChild(el('span', 'gq-pill gq-pill--top gq-gr-pill gq-gr-pill--perfect', TH('perfectMatch', 'Perfect match')));
-    } else if (tier) {
-      media.appendChild(el('span', 'gq-pill gq-gr-pill gq-gr-pill--tier', escapeHtml(tierLabel(tier))));
-    } else if (idx === 0 && bestMatchClaim()) {
+    } else if (!tier && idx === 0 && bestMatchClaim()) {
       media.appendChild(el('span', 'gq-pill gq-pill--top gq-gr-pill', escapeHtml(results.bestMatchPill || 'Best match')));
     }
     card.appendChild(media);
@@ -5259,48 +5240,70 @@
       if (config.tryonEnabled === false || cached) return;
       // Product not set up for try-on: no "See on me", no transform.
       if (!matchTryonReady(m)) return;
-      // One automatic try-on per photo: the card the shopper tapped, else
-      // the first card (a photo from the photo step).
-      var auto = hasPhotoNow && (pendingKey ? pendingKey === key : idx === 0);
-      if (auto) {
-        media.classList.add('gq-media--working');
-        applyTryonToMedia(media, img, m, idx === 0, function() { media.classList.remove('gq-media--working'); });
-        return;
-      }
-      // "See on me" on every card: with a photo it renders here; without
-      // one it asks for the photo, then renders this card first.
-      if (!(state.hasPhoto && photoFile) && !photoCaptureAvailable()) return;
-      var see = el('button', 'gq-gr-see', EYE_SVG + '<span>' + TH('seeOnMe', 'See on me') + '</span>');
-      see.type = 'button';
-      see.onclick = function(e) {
-        e.stopPropagation();
-        if (see.disabled) return;
-        if (!(state.hasPhoto && photoFile)) {
-          gridPendingTryon = key;
+      var see = null;
+      // Renders this card on the shopper's photo. The button says how it
+      // went; an automatic run that fails leaves one to retry with.
+      function runTryon(isHero) {
+        if (see) {
           see.disabled = true;
-          openPhotoCapture(null, function(shadeChanged) {
-            if (shadeChanged) rerunWithShade();
-            else render('forward');
-          });
-          setTimeout(function() { see.disabled = false; }, 4000);
-          return;
+          see.lastChild.textContent = T('tryonWorking', 'Working…');
         }
-        see.disabled = true;
-        see.lastChild.textContent = T('tryonWorking', 'Working…');
         media.classList.add('gq-media--working');
-        applyTryonToMedia(media, img, m, false, function(ok, limited, capped, retryAfterMs) {
+        applyTryonToMedia(media, img, m, isHero, function(ok, limited, capped, retryAfterMs) {
           media.classList.remove('gq-media--working');
-          if (ok) { if (see.parentNode) see.parentNode.removeChild(see); return; }
-          if (capped) { see.lastChild.textContent = T('tryonLimit', 'Try-on limit reached'); return; }
-          var waitMs = limited ? (retryAfterMs || 30000) : 0;
-          if (limited) see.lastChild.textContent = T('tryonWait', 'Ready in {s}s…', { s: Math.ceil(waitMs / 1000) });
+          if (ok) { if (see && see.parentNode) see.parentNode.removeChild(see); return; }
+          if (!see) addSee();
+          if (capped) {
+            see.disabled = true;
+            see.lastChild.textContent = T('tryonLimit', 'Try-on limit reached');
+            return;
+          }
+          if (!limited) {
+            // Say it failed: reverting straight to "See on me" read as a
+            // button that does nothing.
+            see.disabled = false;
+            see.lastChild.textContent = T('tryonFailed', 'Couldn\u2019t load, try again');
+            return;
+          }
+          var waitMs = retryAfterMs || 30000;
+          see.disabled = true;
+          see.lastChild.textContent = T('tryonWait', 'Ready in {s}s…', { s: Math.ceil(waitMs / 1000) });
           setTimeout(function() {
             see.disabled = false;
             see.lastChild.textContent = T('seeOnMe', 'See on me');
           }, waitMs);
         });
-      };
-      media.appendChild(see);
+      }
+      // "See on me" on every card: with a photo it renders here; without
+      // one it asks for the photo, then renders this card first.
+      function addSee() {
+        see = el('button', 'gq-gr-see', EYE_SVG + '<span>' + TH('seeOnMe', 'See on me') + '</span>');
+        see.type = 'button';
+        see.onclick = function(e) {
+          e.stopPropagation();
+          if (see.disabled) return;
+          if (!(state.hasPhoto && photoFile)) {
+            gridPendingTryon = key;
+            see.disabled = true;
+            openPhotoCapture(null, function(shadeChanged) {
+              if (shadeChanged) rerunWithShade();
+              else render('forward');
+            });
+            setTimeout(function() { see.disabled = false; }, 4000);
+            return;
+          }
+          runTryon(false);
+        };
+        media.appendChild(see);
+      }
+      // One automatic try-on per photo: the card the shopper tapped, else
+      // the first card (a photo from the photo step).
+      if (hasPhotoNow && (pendingKey ? pendingKey === key : idx === 0)) {
+        runTryon(idx === 0);
+        return;
+      }
+      if (!(state.hasPhoto && photoFile) && !photoCaptureAvailable()) return;
+      addSee();
     });
     return card;
   }

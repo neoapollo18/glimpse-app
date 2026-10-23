@@ -751,7 +751,7 @@ describe("logic v6.1 results (items 8-10, 12)", () => {
   const pills = (root: HTMLElement) =>
     Array.from(root.querySelectorAll(".gq-gr-grid .gq-gr-card")).map((c) => c.querySelector(".gq-gr-pill")?.textContent ?? null);
 
-  it("every perfect match carries the badge; the closest picks follow under Next best picks, each labeled", async () => {
+  it("every perfect match carries the badge; the closest picks carry none, all in one grid", async () => {
     const sample = tiered(["perfect", "perfect", "vibe", "drama", "color", "finish"], {
       kind: "relaxed",
       text: "2 perfect matches, plus our next-best picks",
@@ -761,13 +761,13 @@ describe("logic v6.1 results (items 8-10, 12)", () => {
     const { root } = await bootPreview({ step: "results", sample });
     await wait(20);
     expect(root.querySelector(".gq-results-headline")!.textContent).toBe("2 perfect matches, plus our next-best picks");
-    expect(pills(root)).toEqual(["Perfect match", "Perfect match", "Different vibe", "Different drama", "Different color", "Different finish"]);
+    expect(pills(root)).toEqual(["Perfect match", "Perfect match", null, null, null, null]);
     expect(root.querySelectorAll(".gq-gr-pill--perfect")).toHaveLength(2);
-    // One divider, right after the last perfect match, spanning the grid.
+    // Trello 2026-10-23: no "Different x" labels, no heading splitting the grid.
+    expect(root.textContent).not.toMatch(/Different|Next best picks/);
     const grid = root.querySelector(".gq-gr-grid")!;
-    const kids = Array.from(grid.children).map((c) => (c.classList.contains("gq-gr-divider") ? "divider" : "card"));
-    expect(kids).toEqual(["card", "card", "divider", "card", "card", "card", "card"]);
-    expect(grid.querySelector(".gq-gr-divider")!.textContent).toBe("Next best picks");
+    expect(Array.from(grid.children).every((c) => c.classList.contains("gq-gr-card"))).toBe(true);
+    expect(grid.children).toHaveLength(6);
     // The merchant's "Best match" pill gives way to the per-card badges.
     expect(root.textContent).not.toContain("Best match");
   });
@@ -777,7 +777,6 @@ describe("logic v6.1 results (items 8-10, 12)", () => {
     let { root } = await bootPreview({ step: "results", sample: all });
     await wait(20);
     expect(root.querySelector(".gq-results-headline")!.textContent).toBe("Six sets that match everything you picked");
-    expect(root.querySelector(".gq-gr-divider")).toBeNull();
     const one = tiered(["perfect", "color", "color", "color", "color", "color"], { kind: "relaxed", text: "x", match: "some", perfect: 1 });
     ({ root } = await bootPreview({ step: "results", sample: one }));
     await wait(20);
@@ -786,9 +785,8 @@ describe("logic v6.1 results (items 8-10, 12)", () => {
     ({ root } = await bootPreview({ step: "results", sample: none }));
     await wait(20);
     expect(root.querySelector(".gq-results-headline")!.textContent).toBe("Nothing matches every pick yet, so here are the closest.");
-    // No perfect match: no divider above the closest picks, every card labeled.
-    expect(root.querySelector(".gq-gr-divider")).toBeNull();
-    expect(pills(root)).toEqual(["Different vibe", "Different vibe", "Different color", "Different color", "Different finish", "Different color and finish"]);
+    // No perfect match: no badge at all (and no Best match on the first).
+    expect(pills(root)).toEqual([null, null, null, null, null, null]);
   });
 
   it("every new string comes from Text & labels", async () => {
@@ -796,22 +794,19 @@ describe("logic v6.1 results (items 8-10, 12)", () => {
     (config as Record<string, unknown>).uiText = {
       poolHeaderSome: "{n} spot on, then close calls",
       perfectMatch: "Spot on",
-      nextBestPicks: "Close calls",
-      tierColor: "Other shade",
     };
     const sample = tiered(["perfect", "perfect", "perfect", "color", "color", "color"], { kind: "relaxed", text: "x", match: "some", perfect: 3 });
     const { root } = await bootPreview({ step: "results", sample, config });
     await wait(20);
     expect(root.querySelector(".gq-results-headline")!.textContent).toBe("3 spot on, then close calls");
-    expect(pills(root)).toEqual(["Spot on", "Spot on", "Spot on", "Other shade", "Other shade", "Other shade"]);
-    expect(root.querySelector(".gq-gr-divider")!.textContent).toBe("Close calls");
+    expect(pills(root)).toEqual(["Spot on", "Spot on", "Spot on", null, null, null]);
   });
 
   it("a reply from before v6.1 (no tiers) renders as it did: header text, Best match on the first card", async () => {
     const { root } = await bootPreview({ step: "results", sample: columnar("relaxed") });
     await wait(20);
     expect(root.querySelector(".gq-results-headline")!.textContent).toBe(columnar("relaxed").columnar.header.text);
-    expect(root.querySelector(".gq-gr-pill--tier, .gq-gr-divider")).toBeNull();
+    expect(root.querySelector(".gq-gr-pill--perfect")).toBeNull();
   });
 
   it("the landing shows dots for the six steps, not 1 of 6 (item 5)", async () => {

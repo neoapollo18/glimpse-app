@@ -16,11 +16,17 @@
 import {
   supabase,
   getRecommendationFlow,
+  getVariantsForProducts,
   type ChatAssistantConfig,
   type MultiCriteria,
   type RecommendationFlow,
 } from "../supabase.server";
-import { fetchAvailability, extractNumericId } from "../recommendation-engine.server";
+import {
+  fetchAvailability,
+  extractNumericId,
+  type EngineProduct,
+  type EngineVariant,
+} from "../recommendation-engine.server";
 import { RANKER_MODELS, NO_THINKING } from "../llm-recommender.server";
 import { geminiClient, extractGeminiText, stripJsonFences } from "../gemini.server";
 import { checkRateLimit, checkRateLimits, RATE_LIMITS } from "../rate-limiter.server";
@@ -206,6 +212,35 @@ export function getPoolSnapshot(shopId: string, spec: ColumnarSpec): Promise<Poo
     if (poolCache.get(shopId)?.snapshot === snapshot) poolCache.delete(shopId);
   });
   return snapshot;
+}
+
+/**
+ * The product row (and its variant row) behind a served match, for
+ * quiz-tryon. The engine recommends from this pool, not the shop's
+ * product_scope selection, so a card's "See on me" resolves here: a
+ * product outside this shop's eligible pool doesn't resolve (null).
+ */
+export async function poolTryonCandidate(
+  shopId: string,
+  spec: ColumnarSpec,
+  productId: string,
+  variantId: string | null,
+): Promise<{ product: EngineProduct; variant: EngineVariant | null } | null> {
+  const snap = await getPoolSnapshot(shopId, spec);
+  const hit = snap.eligible.find((p) => p.shopifyId === productId);
+  if (!hit) return null;
+  const { data: product, error } = await supabase
+    .from("products")
+    .select("*")
+    .eq("id", hit.id)
+    .eq("shop_id", shopId)
+    .maybeSingle();
+  if (error || !product) return null;
+  if (product.status != null && product.status !== "active") return null;
+  if (!variantId) return { product: product as EngineProduct, variant: null };
+  const variants = (await getVariantsForProducts([hit.id])) as Array<EngineVariant & { status?: string | null }>;
+  const variant = variants.find((v) => v.status !== "deleted" && v.shopify_variant_id === variantId);
+  return variant ? { product: product as EngineProduct, variant } : null;
 }
 
 export function invalidateColumnarCaches(shopId: string, opts: { keepResults?: boolean } = {}): void {
